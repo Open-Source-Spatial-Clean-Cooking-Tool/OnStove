@@ -9,7 +9,7 @@ from rasterio.fill import fillnodata
 from rasterio import features
 import fiona
 import shapely
-from osgeo import gdal
+from osgeo import gdal, osr
 
 
 def proximity_raster(src_filename, dst_filename, values, compression):
@@ -34,8 +34,13 @@ def proximity_raster(src_filename, dst_filename, values, compression):
     dstband = None
     src_ds = None
     dst_ds = None
-    
-    
+
+def raster2array(in_raster):
+    raster = gdal.Open(in_raster)
+    band = raster.GetRasterBand(1)
+    array = band.ReadAsArray()
+    return array
+
 def mask_raster(raster_path, mask_layer, outpul_file, nodata=0, compression='NONE'):
     if isinstance(mask_layer, str):
         with fiona.open(mask_layer, "r") as shapefile:
