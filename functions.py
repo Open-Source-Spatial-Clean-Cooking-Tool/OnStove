@@ -9,6 +9,7 @@ from rasterio.merge import merge
 from rasterio.warp import calculate_default_transform, reproject, Resampling
 from rasterio.fill import fillnodata
 from rasterio import features
+import geopandas as gpd
 import fiona
 import shapely
 from osgeo import gdal, osr
@@ -92,136 +93,27 @@ def sample_raster(path, gdf):
         return [float(val) for val in src.sample([(x.coords.xy[0][0], 
                                                    x.coords.xy[1][0]) for x in 
                                                    gdf['geometry']])]
-def get_targets_costs(targets_path, friction_path):
-   
-    targets = rasterio.open(targets_path)
-    affine = targets.transform
-    targets = targets.read(1)
 
-    friction = rasterio.open(friction_path)
-    costs = costs.read(1)
-
-    target_list = np.argwhere(targets != 0.0)
-    start = tuple(target_list[0].tolist())
-
-    targets = targets.astype(np.int8)
-    costs = costs.astype(np.float16)
-
-    return targets, costs, start, affine
-
-def optimise(targets, costs, start, jupyter=False, animate=False, affine=None, animate_path=None, silent=False):
-
-    max_i = costs.shape[0]
-    max_j = costs.shape[1]
-
-    visited = np.zeros_like(targets, dtype=np.int8)
-    dist = np.full_like(costs, np.nan, dtype=np.float32)
-
-    prev = np.full_like(costs, np.nan, dtype=object)
-
-    dist[start] = 0
-
-    # dist, loc
-    queue = [[0, start]]
-    heapify(queue)
-
-    def zero_and_heap_path(loc):
-        if not dist[loc] == 0:
-            dist[loc] = 0
-            visited[loc] = 1
-
-            heappush(queue, [0, loc])
-            prev_loc = prev[loc]
-
-            if type(prev_loc) == tuple:
-                zero_and_heap_path(prev_loc)
-
-    counter = 0
-    progress = 0
-    max_cells = targets.shape[0] * targets.shape[1]
-    if jupyter:
-        handle = display(Markdown(""), display_id=True)
-
-    while len(queue):
-        current = heappop(queue)
-        current_loc = current[1]
-        current_i = current_loc[0]
-        current_j = current_loc[1]
-        current_dist = dist[current_loc]
-
-        for x in range(-1, 2):
-            for y in range(-1, 2):
-                next_i = current_i + x
-                next_j = current_j + y
-                next_loc = (next_i, next_j)
-
-                # ensure we're within bounds
-                if next_i < 0 or next_j < 0 or next_i >= max_i or next_j >= max_j:
-                    continue
-
-                # ensure we're not looking at the same spot
-                if next_loc == current_loc:
-                    continue
-
-                # skip if we've already set dist to 0
-                if dist[next_loc] == 0:
-                    continue
-
-                # if the location is connected
-                if targets[next_loc]:
-                    prev[next_loc] = current_loc
-                    zero_and_heap_path(next_loc)
-
-                # otherwise it's a normal queue cell
-                else:
-                    dist_add = costs[next_loc]
-                    if x == 0 or y == 0:  # if this cell is  up/down/left/right
-                        dist_add *= 1
-                    else:  # or if it's diagonal
-                        dist_add *= sqrt(2)
-
-                    next_dist = current_dist + dist_add
-
-                    if visited[next_loc]:
-                        if next_dist < dist[next_loc]:
-                            dist[next_loc] = next_dist
-                            prev[next_loc] = current_loc
-                            heappush(queue, [next_dist, next_loc])
-
-                    else:
-                        heappush(queue, [next_dist, next_loc])
-                        visited[next_loc] = 1
-                        dist[next_loc] = next_dist
-                        prev[next_loc] = current_loc
-
-                        counter += 1
-                        progress_new = 100 * counter / max_cells
-                        if int(progress_new) > int(progress):
-                            progress = progress_new
-                            message = f"{progress:.2f} %"
-                            if jupyter:
-                                handle.update(message)
-                            elif not silent:
-                                print(message)
-                            if animate:
-                                i = int(progress)
-                                path = os.path.join(animate_path, f"arr{i:03d}.tif")
-                                save_raster(path, dist, affine)
-
-    return dist
-
-def friction_start_points(friction, start):
+def friction_start_points(friction, in_points, out_raster):
+    start = gpd.read_file(in_points)
+    row_list = []
+    col_list = []
     with rasterio.open(friction) as src:  
-    arr = src.read(1)
-    for index,row in start.iterrows():
-        rows, cols = rasterio.transform.rowcol(src.transform, row["geometry"].x, row["geometry"].y)
-        arr[rows][cols] = 0
+        arr = src.read(1)
+        for index,row in start.iterrows():
+            rows, cols = rasterio.transform.rowcol(src.transform, row["geometry"].x, row["geometry"].y)
+            arr[rows][cols] = 0
         
-        out_meta = src.meta
+            out_meta = src.meta
+               
+            row_list.append(rows)
+            col_list.append(cols)
         
-    with rasterio.open('testar2.tif', 'w', **out_meta) as dst:
+    with rasterio.open(out_raster, 'w', **out_meta) as dst:
         dst.write(arr, indexes = 1)
         dst.close()
+        
+    return row_list, col_list
         
 def merge_rasters(files_path, dst_crs, outpul_file):
     files = glob.glob(files_path)
@@ -246,7 +138,7 @@ def merge_rasters(files_path, dst_crs, outpul_file):
         dest.write(mosaic)
         
         
-def rasterize(vector_layer, raster_extent_path, outpul_file, value,
+def rasterize(vector_layer, raster_extent_path, outpul_file, value=None,
               nodata=None, fill = 1, compression='NONE', dtype=rasterio.uint8, all_touched=False):
     
     vector_layer = vector_layer.rename(columns={'geometry': 'geom'})
