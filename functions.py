@@ -188,9 +188,10 @@ def index(rasters, weights):
 
     return sum(raster) / sum(weights)
 
-def Lpg_transportation_cost(travel_time):
+def lpg_transportation_cost(travel_time):
     
-    """"The cost of transporting LPG. See https://iopscience.iop.org/article/10.1088/1748-9326/6/3/034002/pdf for the formula 
+    """"
+    The cost of transporting LPG. See https://iopscience.iop.org/article/10.1088/1748-9326/6/3/034002/pdf for the formula 
     
     Transportation cost = (2 * diesel consumption per h * national diesel price * travel time)/transported LPG
     
@@ -206,16 +207,9 @@ def Lpg_transportation_cost(travel_time):
     LPG cost in Nepal is assumed to be 19 USD per cylinder (1.34 USD/kg)
     LPG stove efficiency is assumed to be 60%
     
-    Parameters
-    ----------
-    arg1 : national_LPG_price
-        The national LPG price (USD)
-    arg2 : travel_time_raster
-        Hour to travel between each point and the startpoints as array
-    Returns
-    ----------
-    The cost of LPG in each cell per kg
-    
+    :param param1:  travel_time_raster
+                    Hour to travel between each point and the startpoints as array
+    :returns: The cost of LPG in each cell per kg
     """
     with rasterio.open(travel_time) as src:
         trav = src.read(1)
