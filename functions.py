@@ -188,7 +188,7 @@ def index(rasters, weights):
 
     return sum(raster) / sum(weights)
 
-def lpg_transportation_cost(travel_time):
+def Lpg_transportation_cost(travel_time):
     
     """"The cost of transporting LPG. See https://iopscience.iop.org/article/10.1088/1748-9326/6/3/034002/pdf for the formula 
     
