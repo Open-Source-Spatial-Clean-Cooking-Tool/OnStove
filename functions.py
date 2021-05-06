@@ -188,7 +188,7 @@ def index(rasters, weights):
 
     return sum(raster) / sum(weights)
 
-def lpg_transportation_cost(travel_time):
+def LPG_transportation_cost(travel_time):
     
     """"
     The cost of transporting LPG. See https://iopscience.iop.org/article/10.1088/1748-9326/6/3/034002/pdf for the formula 
@@ -209,7 +209,7 @@ def lpg_transportation_cost(travel_time):
     
     :param param1:  travel_time_raster
                     Hour to travel between each point and the startpoints as array
-    :returns: The cost of LPG in each cell per kg
+    :returns:       The cost of LPG in each cell per kg
     """
     with rasterio.open(travel_time) as src:
         trav = src.read(1)
