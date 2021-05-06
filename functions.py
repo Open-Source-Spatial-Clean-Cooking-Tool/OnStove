@@ -1,15 +1,18 @@
 import os
 import glob
 import numpy as np
+from math import sqrt
+from heapq import heapify, heappush, heappop
 import rasterio
 import rasterio.mask
 from rasterio.merge import merge
 from rasterio.warp import calculate_default_transform, reproject, Resampling
 from rasterio.fill import fillnodata
 from rasterio import features
+import geopandas as gpd
 import fiona
 import shapely
-from osgeo import gdal
+from osgeo import gdal, osr
 
 
 def proximity_raster(src_filename, dst_filename, values, compression):
@@ -34,7 +37,6 @@ def proximity_raster(src_filename, dst_filename, values, compression):
     dstband = None
     src_ds = None
     dst_ds = None
-    
     
 def mask_raster(raster_path, mask_layer, outpul_file, nodata=0, compression='NONE'):
     if isinstance(mask_layer, str):
@@ -91,7 +93,27 @@ def sample_raster(path, gdf):
         return [float(val) for val in src.sample([(x.coords.xy[0][0], 
                                                    x.coords.xy[1][0]) for x in 
                                                    gdf['geometry']])]
-          
+
+def friction_start_points(friction, in_points, out_raster):
+    start = gpd.read_file(in_points)
+    row_list = []
+    col_list = []
+    with rasterio.open(friction) as src:  
+        arr = src.read(1)
+        for index,row in start.iterrows():
+            rows, cols = rasterio.transform.rowcol(src.transform, row["geometry"].x, row["geometry"].y)
+            arr[rows][cols] = 0
+        
+            out_meta = src.meta
+               
+            row_list.append(rows)
+            col_list.append(cols)
+        
+    with rasterio.open(out_raster, 'w', **out_meta) as dst:
+        dst.write(arr, indexes = 1)
+        dst.close()
+        
+    return row_list, col_list
         
 def merge_rasters(files_path, dst_crs, outpul_file):
     files = glob.glob(files_path)
@@ -117,7 +139,7 @@ def merge_rasters(files_path, dst_crs, outpul_file):
         
         
 def rasterize(vector_layer, raster_extent_path, outpul_file, value=None,
-              nodata=0, compression='NONE', dtype=rasterio.uint8, all_touched=False):
+              nodata=None, fill = 1, compression='NONE', dtype=rasterio.uint8, all_touched=False):
     
     vector_layer = vector_layer.rename(columns={'geometry': 'geom'})
     if value:
@@ -143,7 +165,7 @@ def rasterize(vector_layer, raster_extent_path, outpul_file, value=None,
                          'compress': compression,
                          'dtype': dtype,
                          "crs": src.crs,
-                         'nodata': nodata})
+                         'nodata': fill})
 
         with rasterio.open(outpul_file, 'w', **out_meta) as dst:
             dst.write(image, indexes=1)
@@ -169,7 +191,3 @@ def index(rasters, weights):
         raster.append(w * r)
 
     return sum(raster) / sum(weights)
-        
-        
-        
-        
