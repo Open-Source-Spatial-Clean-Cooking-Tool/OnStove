@@ -190,8 +190,7 @@ def index(rasters, weights):
 
 def lpg_transportation_cost(travel_time):
     
-    """
-    The cost of transporting LPG. See https://iopscience.iop.org/article/10.1088/1748-9326/6/3/034002/pdf for the formula 
+    """The cost of transporting LPG. See https://iopscience.iop.org/article/10.1088/1748-9326/6/3/034002/pdf for the formula 
     
     Transportation cost = (2 * diesel consumption per h * national diesel price * travel time)/transported LPG
     
