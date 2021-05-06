@@ -48,7 +48,7 @@ def mask_raster(raster_path, mask_layer, outpul_file, nodata=0, compression='NON
         crs = mask_layer.crs
 
     with rasterio.open(raster_path) as src:
-        out_image, out_transform = rasterio.mask.mask(src, shapes, crop=True, nodata=nodata)
+        out_image, out_transform = rasterio.mask.mask(src, shapes, crop=False, nodata=nodata)
         out_meta = src.meta
 
     out_meta.update({"driver": "GTiff",
@@ -153,7 +153,8 @@ def rasterize(vector_layer, raster_extent_path, outpul_file, value=None,
                     shapes,
                     out_shape=src.shape,
                     transform=src.transform,
-                    all_touched=all_touched)
+                    all_touched=all_touched,
+                    fill=nodata)
 
         out_meta = src.meta
 
@@ -168,14 +169,17 @@ def rasterize(vector_layer, raster_extent_path, outpul_file, value=None,
 
         with rasterio.open(outpul_file, 'w', **out_meta) as dst:
             dst.write(image, indexes=1)
-           
-                        
-def normalize(raster_path):
+            
+            
+def normalize(raster_path, limit=float('inf')):
     with rasterio.open(raster_path) as src:
         raster = src.read(1)
         nodata = src.nodata
-
-        raster[raster!=nodata] = raster[raster!=nodata] / (np.nanmax(raster[raster!=nodata]) - np.nanmin(raster[raster!=nodata]))
+        raster[raster>limit] = np.nan
+        min_value = np.nanmin(raster[raster!=nodata])
+        max_value = np.nanmax(raster[raster!=nodata])
+        raster[raster!=nodata] = raster[raster!=nodata] / (max_value - min_value)
+        raster[np.isnan(raster)] = 1
         raster[raster<0] = np.nan
         
     return raster

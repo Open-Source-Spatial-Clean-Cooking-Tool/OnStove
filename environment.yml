@@ -4,6 +4,7 @@ channels:
   - conda-forge
   - defaults
 dependencies:
+  - contextily
   - geopandas
   - json
   - matplotlib
@@ -14,3 +15,5 @@ dependencies:
   - python-decouple
   - rasterio
   - rasterstats
+  - scikit-learn
+  - scikit-image
