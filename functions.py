@@ -46,7 +46,7 @@ def mask_raster(raster_path, mask_layer, outpul_file, nodata=0, compression='NON
         crs = mask_layer.crs
 
     with rasterio.open(raster_path) as src:
-        out_image, out_transform = rasterio.mask.mask(src, shapes, crop=True, nodata=nodata)
+        out_image, out_transform = rasterio.mask.mask(src, shapes, crop=False, nodata=nodata)
         out_meta = src.meta
 
     out_meta.update({"driver": "GTiff",
