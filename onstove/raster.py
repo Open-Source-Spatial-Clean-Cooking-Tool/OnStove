@@ -9,10 +9,12 @@ from rasterio.merge import merge
 from rasterio.warp import calculate_default_transform, reproject, Resampling
 from rasterio.fill import fillnodata
 from rasterio import features
+from rasterio.enums import Resampling as enumsResampling
 import geopandas as gpd
 import fiona
 import shapely
 from osgeo import gdal, osr
+import gzip
 
 
 def proximity_raster(src_filename, dst_filename, values, compression):
@@ -47,9 +49,15 @@ def mask_raster(raster_path, mask_layer, outpul_file, nodata=0, compression='NON
         shapes = [mask_layer.dissolve().geom.loc[0]]
         crs = mask_layer.crs
 
-    with rasterio.open(raster_path) as src:
-        out_image, out_transform = rasterio.mask.mask(src, shapes, crop=False, nodata=nodata)
-        out_meta = src.meta
+    if '.gz' in raster_path:
+        with gzip.open(raster_path) as gzip_infile:
+            with rasterio.open(gzip_infile) as src:
+                out_image, out_transform = rasterio.mask.mask(src, shapes, crop=True, nodata=nodata)
+                out_meta = src.meta
+    else:
+        with rasterio.open(raster_path) as src:
+            out_image, out_transform = rasterio.mask.mask(src, shapes, crop=True, nodata=nodata)
+            out_meta = src.meta
 
     out_meta.update({"driver": "GTiff",
                      "height": out_image.shape[1],
@@ -63,29 +71,52 @@ def mask_raster(raster_path, mask_layer, outpul_file, nodata=0, compression='NON
         dest.write(out_image)
     
     
-def reproject_raster(raster_path, dst_crs, outpul_file, compression='NONE'):
+def reproject_raster(raster_path, dst_crs, outpul_file=None, 
+                     width=None, height=None, method='nearest', 
+                     compression='NONE'):
     with rasterio.open(raster_path) as src:
+        if width and height:
+            width = int(src.width * (src.transform[0] / width))
+            height = int(src.height * (abs(src.transform[4]) / height))
+        else:
+            width = src.width
+            height = src.height
         transform, width, height = calculate_default_transform(
-            src.crs, dst_crs, src.width, src.height, *src.bounds)
-        kwargs = src.meta.copy()
-        kwargs.update({
+            src.crs, dst_crs, 
+            width, 
+            height, 
+            *src.bounds)
+        out_meta = src.meta.copy()
+        out_meta.update({
             'crs': dst_crs,
             'transform': transform,
             'width': width,
             'height': height,
             'compress': compression
         })
-
-        with rasterio.open(outpul_file, 'w', **kwargs) as dst:
-            for i in range(1, src.count + 1):
-                reproject(
-                    source=rasterio.band(src, i),
-                    destination=rasterio.band(dst, i),
+        
+        if outpul_file:
+            with rasterio.open(outpul_file, 'w', **out_meta) as dst:
+                for i in range(1, src.count + 1):
+                    reproject(
+                        source=rasterio.band(src, i),
+                        destination=rasterio.band(dst, i),
+                        src_transform=src.transform,
+                        src_crs=src.crs,
+                        dst_transform=transform,
+                        dst_crs=dst_crs,
+                        resampling=Resampling[method])
+        else:
+            destination = np.full((height, width), src.nodata)
+            reproject(
+                    source=rasterio.band(src, 1),
+                    destination=destination,
                     src_transform=src.transform,
                     src_crs=src.crs,
                     dst_transform=transform,
                     dst_crs=dst_crs,
-                    resampling=Resampling.nearest)
+                    resampling=Resampling[method])
+            return destination, out_meta
          
         
 def sample_raster(path, gdf):
@@ -191,3 +222,74 @@ def index(rasters, weights):
         raster.append(w * r)
 
     return sum(raster) / sum(weights)
+    
+
+def resample(raster_path, height, width, method='bilinear'):
+    with rasterio.open(raster_path) as src:
+
+        # resample data to target shape
+        data = src.read(
+            out_shape=(
+                src.count,
+                int(src.height * (abs(src.transform[4]) / height)),
+                int(src.width * (abs(src.transform[0]) / width))
+            ),
+            resampling=enumsResampling[method]
+        )
+
+        # scale image transform
+        transform = src.transform * src.transform.scale(
+            (src.width / data.shape[-1]),
+            (src.height / data.shape[-2])
+        )
+        return data, transform
+        
+        
+def calibrate_urban(clusters, urban_current, workspace):
+    """
+    Calibrate urban population. Classifies clusters to either urban(2), peri-urban(1) or rural(0). 
+
+    Parameters
+    ----------
+    arg1 : clusters
+        Population clusters with population column
+    arg2 : urban_current
+        Urban ration defined by the user
+    arg3 : workspace
+        Output folder in which the clusters as saved after the urban classification
+
+    Returns
+    ----------
+    Population clusters with an ubran-rural classifcation column 
+    """
+    
+    urban_modelled = 2
+    factor = 1
+    pop_tot = clusters["Population"].sum()
+    i = 0
+    while abs(urban_modelled - urban_current) > 0.01:
+        clusters["IsUrban"] = 0
+        clusters.loc[(clusters["Population"] > 5000 * factor) & 
+                     (clusters["Population"] / clusters["Area"] > 300 * factor), 
+                     "IsUrban"] = 1
+        clusters.loc[(clusters["Population"] > 50000 * factor) & 
+                     (clusters["Population"] / clusters["Area"] > 1500 * factor), 
+                     "IsUrban"] = 2
+        pop_urb = clusters.loc[clusters["IsUrban"] > 1, "Population"].sum()
+        
+        urban_modelled = pop_urb / pop_tot
+        
+        if urban_modelled > urban_current:
+            factor *= 1.1
+        else:
+            factor *= 0.9
+        i=i+1
+        if i > 500:
+            break
+            print(i)
+    
+    clusters.to_file(workspace + r"/clusters.shp") 
+    
+    print("Modelled urban ratio is " + str(round(urban_modelled, 3)) + 
+          "% in comparision to the actual ratio of " + str(urban_current) + 
+          "% after " + str(i) + " iterations.")
