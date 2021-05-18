@@ -40,6 +40,23 @@ def align_raster(raster_1, raster_2, method='nearest', compression='NONE'):
             resampling=Resampling[method])
     return destination, out_meta
 
+def polygonize(raster, mask = None):
+    with rasterio.Env():
+        if type(raster) == str:
+            with rasterio.open(raster) as raster:
+                raster = raster.read(1)
+                raster = raster.astype('float32')
+            
+        results = (
+        {'properties': {'raster_val': v}, 'geometry': s}
+        for i, (s, v) 
+        in enumerate(
+        shapes(raster, mask=mask, transform=src.transform)))
+    
+    geoms = list(results)
+    polygon  = gpd.GeoDataFrame.from_features(geoms)
+    return polygon
+
 def proximity_raster(src_filename, dst_filename, values, compression):
     src_ds = gdal.Open(src_filename)
     srcband=src_ds.GetRasterBand(1)
