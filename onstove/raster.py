@@ -16,6 +16,29 @@ import shapely
 from osgeo import gdal, osr
 import gzip
 
+def align_raster(raster_1, raster_2, method='nearest', compression='NONE'):
+    with rasterio.open(raster_1) as src:
+        raster_1_meta = src.meta
+    with rasterio.open(raster_2) as src:
+        raster_2 = src.read(1)
+        raster_2_meta = src.meta
+
+    out_meta = raster_1_meta.copy()
+    out_meta.update({
+        'transform': raster_1_meta['transform'],
+        'crs': raster_1_meta['crs'],
+        'compress': compression
+    })    
+    destination = np.full((raster_1_meta['height'], raster_1_meta['width']), raster_2_meta['nodata'])
+    reproject(
+            source=raster_2,
+            destination=destination,
+            src_transform=raster_2_meta['transform'],
+            src_crs=raster_2_meta['crs'],
+            dst_transform=raster_1_meta['transform'],
+            dst_crs=raster_1_meta['crs'],
+            resampling=Resampling[method])
+    return destination, out_meta
 
 def proximity_raster(src_filename, dst_filename, values, compression):
     src_ds = gdal.Open(src_filename)
