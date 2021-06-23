@@ -112,24 +112,31 @@ def mask_raster(raster_path, mask_layer, output_file, nodata=0, compression='NON
     with rasterio.open(output_file, "w", **out_meta) as dest:
         dest.write(out_image)
     
-    
+
 def reproject_raster(raster_path, dst_crs, output_file=None, 
                      dst_width=None, dst_height=None, method='nearest', 
                      compression='NONE'):
+    """
+    Resamples and/or reproject a raster layer.
+    """
     with rasterio.open(raster_path) as src:
-
+        # Calculates the new transform, widht and height of 
+        # the reprojected layer
         transform, width, height = calculate_default_transform(
                                                         src.crs, dst_crs, 
                                                         src.width, 
                                                         src.height, 
                                                         *src.bounds)
+        # If a destination cell width and height was provided, then it 
+        # calculates the new boundaries, with, heigh and transform 
+        # depending on the new cell size.
         if dst_width and dst_height:
             bounds = rasterio.transform.array_bounds(height, width, transform)
             width = int(width * (transform[0] / dst_width))
             height = int(height * (abs(transform[4]) / dst_height))
             transform = rasterio.transform.from_origin(bounds[0], bounds[3], 
                                                        dst_width, dst_height)
-        
+        # Updates the metadata
         out_meta = src.meta.copy()
         out_meta.update({
             'crs': dst_crs,
@@ -138,8 +145,9 @@ def reproject_raster(raster_path, dst_crs, output_file=None,
             'height': height,
             'compress': compression
         })
-        
+        # The layer is then reprojected/resampled
         if output_file:
+            # if an output file path was provided, then the layer is saved
             with rasterio.open(output_file, 'w', **out_meta) as dst:
                 for i in range(1, src.count + 1):
                     reproject(
@@ -151,6 +159,8 @@ def reproject_raster(raster_path, dst_crs, output_file=None,
                         dst_crs=dst_crs,
                         resampling=Resampling[method])
         else:
+            # If not outputfile is provided, then a numpy array and the 
+            # metadata if returned
             destination = np.full((height, width), src.nodata)
             reproject(
                     source=rasterio.band(src, 1),
@@ -250,7 +260,7 @@ def rasterize(vector_layer, raster_base_layer, outpul_file=None, value=None,
             return image, out_meta
             
             
-def normalize(raster_path, limit=float('inf'), output_file=None):
+def normalize(raster_path, limit=float('inf'), output_file=None, inverse=False):
     with rasterio.open(raster_path) as src:
         raster = src.read(1)
         nodata = src.nodata
@@ -259,14 +269,19 @@ def normalize(raster_path, limit=float('inf'), output_file=None):
         min_value = np.nanmin(raster[raster!=nodata])
         max_value = np.nanmax(raster[raster!=nodata])
         raster[raster!=nodata] = raster[raster!=nodata] / (max_value - min_value)
-        raster[np.isnan(raster)] = 1
-        raster[raster<0] = np.nan
-        raster = 1 - raster
+        if inverse:
+            raster[np.isnan(raster)] = 1
+            raster[raster<0] = np.nan
+            raster = 1 - raster
+        else:
+            raster[np.isnan(raster)] = 0
+            raster[raster<0] = np.nan
+            
         meta.update(nodata=np.nan, dtype='float32')
         
     if output_file:
         with rasterio.open(output_file, "w", **meta) as dest:
-            dest.write(raster, indexes=1)
+            dest.write(raster.astype('float32'), indexes=1)
     else:
         return raster, meta
         

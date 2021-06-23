@@ -1,5 +1,6 @@
 import os
 import geopandas as gpd
+import re
 
 from .raster import *
 
@@ -10,23 +11,28 @@ class VectorLayer():
     required metadata as layer name, normalization algorithm and 
     distance algorithm.
     """
-    def __init__(self, name, layer_path, conn=None, normalization='MinMax', 
-                 distance='proximity', distance_limit=float('inf')):
+    def __init__(self, name, layer_path, conn=None, query=None,
+                 normalization='MinMax', inverse=False, distance='proximity', 
+                 distance_limit=float('inf')):
         """
         Initializes the class. It recibes the name of the layer, 
-        the path of the layer, a normalizaton algorithm, a distance algorithm 
+        the path of the layer, a normalization algorithm, a distance algorithm 
         and a PostgreSQL connection if the layer needs to be read from a database
         """
         self.name = name
         self.normalization = normalization
         self.distance = distance
         self.distance_limit = distance_limit
+        self.inverse = inverse
+        
         if conn:
             sql = f'SELECT * FROM {layer_path}'
             self.layer = gpd.read_postgis(sql, conn)
         else:
             self.layer = gpd.read_file(layer_path)
-    
+        
+        if query:
+            self.layer = self.layer.query(query)
     
     def __repr__(self):
         return 'VectorLayer(name=%r)' % self.name
@@ -59,12 +65,21 @@ class VectorLayer():
             self.distance_raster_path = output_proximity
                         
     
-    def normalize(self, output_path):
+    def normalize(self, output_path, mask_layer):
         if self.normalization == 'MinMax':
             output_file = os.path.join(output_path, 
                                        self.name + ' - normalized.tif')
             normalize(self.distance_raster_path, limit=self.distance_limit, 
-                      output_file=output_file)
+                      inverse=self.inverse, output_file=output_file)
+            mask_raster(output_file, mask_layer, 
+                        output_file, np.nan, 'DEFLATE')
+    
+    
+    def save(self, output_path):
+        output_file = os.path.join(output_path, 
+                                   self.name + '.gpkg')
+        self.layer.to_file(output_file, driver="GPKG")
+                      
             
                        
 class RasterLayer():
@@ -74,11 +89,14 @@ class RasterLayer():
     normalization algorithm.
     """
     def __init__(self, name, layer_path,
-                 normalization='log'):
+                 normalization='log', inverse=False, 
+                 distance='log', distance_limit=float('inf')):
         self.name = name
         self.normalization = normalization
         self.read_layer(layer_path)
-    
+        self.distance = distance
+        self.distance_limit = distance_limit
+        self.inverse = inverse
     
     def __repr__(self):
         return 'RasterLayer(name=%r)' % self.name
@@ -104,24 +122,57 @@ class RasterLayer():
         self.read_layer(output_file)
         
     
-    def normalize(self, output_path):
-        if self.normalization == 'log':
+    def distance_raster(self, base_layer, output_path, 
+                        mask_layer):
+        if self.distance == 'log':
             layer = self.layer.copy()
             layer[layer==0] = np.nan
             layer[layer>0] = np.log(layer[layer>0])
             layer = np.nan_to_num(layer, nan=0)
             layer[layer<0] = np.nan
-            layer = layer / (np.nanmax(layer) - np.nanmin(layer))
             
             meta = self.meta.copy()
             meta.update(nodata=np.nan, dtype='float64')
-        else:
-            layer = self.layer
-            meta = self.meta
+            
+            output_file = os.path.join(output_path, 
+                                   self.name + ' - log.tif')
+            
+            with rasterio.open(output_file, "w", **meta) as dest:
+                dest.write(layer, indexes=1)
+            
+            mask_raster(output_file, mask_layer, 
+                        output_file, np.nan, 'DEFLATE')
+                        
+            self.distance_raster_path = output_file
+    
+    def normalize(self, output_path, mask_layer):
+        if self.normalization == 'MinMax':
+            # with rasterio.open(self.distance_raster_path) as src:
+                # layer = src.read(1)
+                # meta = src.meta
+            # layer = layer / (np.nanmax(layer) - np.nanmin(layer))
+            
+            # meta.update(nodata=np.nan, dtype='float64')
         
+            # output_file = os.path.join(output_path, 
+                                       # self.name + ' - normalized.tif')
+            # with rasterio.open(output_file, "w", **meta) as dest:
+                # dest.write(layer, indexes=1)
+            
+            # mask_raster(output_file, mask_layer, 
+                        # output_file, np.nan, 'DEFLATE')
+            
+            output_file = os.path.join(output_path, 
+                                       self.name + ' - normalized.tif')
+            normalize(self.distance_raster_path, limit=self.distance_limit, 
+                      inverse=self.inverse, output_file=output_file)
+            mask_raster(output_file, mask_layer, 
+                        output_file, np.nan, 'DEFLATE')
+                    
+    def save(self, output_path):
         output_file = os.path.join(output_path, 
-                                   self.name + ' - normalized.tif')
-        with rasterio.open(output_file, "w", **meta) as dest:
-            dest.write(layer, indexes=1)
+                                   self.name + '.tif')
+        with rasterio.open(output_file, "w", **self.meta) as dest:
+            dest.write(self.layer, indexes=1)
     
     

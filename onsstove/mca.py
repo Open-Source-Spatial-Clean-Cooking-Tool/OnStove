@@ -40,9 +40,10 @@ class MCA():
                                      password=POSTGRES_KEY)
                                      
     
-    def add_layer(self, category, name, layer_path, layer_type, postgres=False,
-                  base_layer=False, resample='nearest', normalization='MinMax', 
-                  distance=None, distance_limit=float('inf')):
+    def add_layer(self, category, name, layer_path, layer_type, query=None,
+                  postgres=False, base_layer=False, resample='nearest', 
+                  normalization='MinMax', inverse=False, distance=None, 
+                  distance_limit=float('inf')):
         """
         Adds a new layer (type VectorLayer or RasterLayer) to the MCA class
 
@@ -54,17 +55,22 @@ class MCA():
             if postgres:
                 layer = VectorLayer(name, layer_path, conn=self.conn,
                                     normalization=normalization, 
-                                    distance=distance)
+                                    distance=distance, 
+                                    distance_limit=distance_limit,
+                                    inverse=inverse, query=query)
             else:
                 layer = VectorLayer(name, layer_path, 
                                     normalization=normalization, 
-                                    distance=distance)
+                                    distance=distance,
+                                    distance_limit=distance_limit,
+                                    inverse=inverse, query=query)
                 
             if layer.layer.crs != self.project_crs:
                 layer.layer.to_crs(self.project_crs, inplace=True)
             
         elif layer_type=='raster':
-            layer = RasterLayer(name, layer_path, normalization)
+            layer = RasterLayer(name, layer_path, 
+                                normalization, inverse=inverse)
             
             if base_layer:
                 self.base_layer_path = layer_path
@@ -106,25 +112,37 @@ class MCA():
     def get_distance_rasters(self, layers='all'):
         if layers=='all':
             for name, layer in self.demand.items():
-                if isinstance(layer, VectorLayer):
-                    output_path = os.path.join('output', 'demand', name)
-                    os.makedirs(output_path, exist_ok=True)
-                    layer.distance_raster(self.base_layer_path, 
-                                          output_path, self.mask_layer)
+                output_path = os.path.join('output', 'demand', name)
+                os.makedirs(output_path, exist_ok=True)
+                layer.distance_raster(self.base_layer_path, 
+                                      output_path, self.mask_layer)
+                                          
+            for name, layer in self.supply.items():
+                output_path = os.path.join('output', 'supply', name)
+                os.makedirs(output_path, exist_ok=True)
+                layer.distance_raster(self.base_layer_path, 
+                                      output_path, self.mask_layer)
             
     
     def normalize_rasters(self, layers='all'):
         if layers=='all':
             for name, layer in self.demand.items():
                 output_path = os.path.join('output', 'demand', name)
-                layer.normalize(output_path)
+                layer.normalize(output_path, self.mask_layer)
+                
+            for name, layer in self.supply.items():
+                output_path = os.path.join('output', 'supply', name)
+                layer.normalize(output_path, self.mask_layer)
     
     
-    def produce_output(self):
+    def save_datasets(self):
         for name, layer in self.demand.items():
-            rasterize(layer['layer'].to_crs(3857), 'data/population_npl_2018-10-01_1km.tif', 
-                      outpul_file='rasterized.tif', nodata=0,
-                      compression='DEFLATE', save=True)
+            output_path = os.path.join('output', 'demand', name)
+            layer.save(output_path)
+            
+        for name, layer in self.supply.items():
+            output_path = os.path.join('output', 'supply', name)
+            layer.save(output_path)
         
         
         
