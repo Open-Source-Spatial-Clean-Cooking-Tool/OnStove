@@ -132,4 +132,7 @@ dmypy.json
 temp/
 data/
 maps/
-local/
+local files/
+output/
+Untitled*
+

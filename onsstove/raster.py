@@ -16,6 +16,7 @@ import shapely
 from osgeo import gdal, osr
 import gzip
 
+
 def align_raster(raster_1, raster_2, method='nearest', compression='NONE'):
     with rasterio.open(raster_1) as src:
         raster_1_meta = src.meta
@@ -73,14 +74,15 @@ def proximity_raster(src_filename, dst_filename, values, compression):
 
     dstband = dst_ds.GetRasterBand(1)
 
-    gdal.ComputeProximity(srcband,dstband,["VALUES={}".format(','.join([str(i) for i in values])),
-                                           "DISTUNITS=GEO"])
+    gdal.ComputeProximity(srcband, dstband,
+                          ["VALUES={}".format(','.join([str(i) for i in values])),
+                           "DISTUNITS=GEO"])
     srcband = None
     dstband = None
     src_ds = None
     dst_ds = None
     
-def mask_raster(raster_path, mask_layer, outpul_file, nodata=0, compression='NONE'):
+def mask_raster(raster_path, mask_layer, output_file, nodata=0, compression='NONE'):
     if isinstance(mask_layer, str):
         with fiona.open(mask_layer, "r") as shapefile:
             shapes = [feature["geometry"] for feature in shapefile]
@@ -107,25 +109,34 @@ def mask_raster(raster_path, mask_layer, outpul_file, nodata=0, compression='NON
                      'nodata': nodata,
                      "crs": crs})
     
-    with rasterio.open(outpul_file, "w", **out_meta) as dest:
+    with rasterio.open(output_file, "w", **out_meta) as dest:
         dest.write(out_image)
     
-    
-def reproject_raster(raster_path, dst_crs, outpul_file=None, 
-                     width=None, height=None, method='nearest', 
+
+def reproject_raster(raster_path, dst_crs, output_file=None, 
+                     dst_width=None, dst_height=None, method='nearest', 
                      compression='NONE'):
+    """
+    Resamples and/or reproject a raster layer.
+    """
     with rasterio.open(raster_path) as src:
-        if width and height:
-            width = int(src.width * (src.transform[0] / width))
-            height = int(src.height * (abs(src.transform[4]) / height))
-        else:
-            width = src.width
-            height = src.height
+        # Calculates the new transform, widht and height of 
+        # the reprojected layer
         transform, width, height = calculate_default_transform(
-            src.crs, dst_crs, 
-            width, 
-            height, 
-            *src.bounds)
+                                                        src.crs, dst_crs, 
+                                                        src.width, 
+                                                        src.height, 
+                                                        *src.bounds)
+        # If a destination cell width and height was provided, then it 
+        # calculates the new boundaries, with, heigh and transform 
+        # depending on the new cell size.
+        if dst_width and dst_height:
+            bounds = rasterio.transform.array_bounds(height, width, transform)
+            width = int(width * (transform[0] / dst_width))
+            height = int(height * (abs(transform[4]) / dst_height))
+            transform = rasterio.transform.from_origin(bounds[0], bounds[3], 
+                                                       dst_width, dst_height)
+        # Updates the metadata
         out_meta = src.meta.copy()
         out_meta.update({
             'crs': dst_crs,
@@ -134,9 +145,10 @@ def reproject_raster(raster_path, dst_crs, outpul_file=None,
             'height': height,
             'compress': compression
         })
-        
-        if outpul_file:
-            with rasterio.open(outpul_file, 'w', **out_meta) as dst:
+        # The layer is then reprojected/resampled
+        if output_file:
+            # if an output file path was provided, then the layer is saved
+            with rasterio.open(output_file, 'w', **out_meta) as dst:
                 for i in range(1, src.count + 1):
                     reproject(
                         source=rasterio.band(src, i),
@@ -147,6 +159,8 @@ def reproject_raster(raster_path, dst_crs, outpul_file=None,
                         dst_crs=dst_crs,
                         resampling=Resampling[method])
         else:
+            # If not outputfile is provided, then a numpy array and the 
+            # metadata if returned
             destination = np.full((height, width), src.nodata)
             reproject(
                     source=rasterio.band(src, 1),
@@ -165,8 +179,11 @@ def sample_raster(path, gdf):
                                                    x.coords.xy[1][0]) for x in 
                                                    gdf['geometry']])]
 
-def friction_start_points(friction, in_points, out_raster):
-    start = gpd.read_file(in_points)
+def friction_start_points(friction, in_points):
+    if isinstance(in_points, str):
+        start = gpd.read_file(in_points)
+    else:
+        start = in_points
     row_list = []
     col_list = []
     with rasterio.open(friction) as src:  
@@ -180,9 +197,9 @@ def friction_start_points(friction, in_points, out_raster):
             row_list.append(rows)
             col_list.append(cols)
         
-    with rasterio.open(out_raster, 'w', **out_meta) as dst:
-        dst.write(arr, indexes = 1)
-        dst.close()
+    # with rasterio.open(out_raster, 'w', **out_meta) as dst:
+        # dst.write(arr, indexes = 1)
+        # dst.close()
         
     return row_list, col_list
         
@@ -206,11 +223,12 @@ def merge_rasters(files_path, dst_crs, outpul_file):
                 )
     
     with rasterio.open(outpul_file, "w", **out_meta) as dest:
-        dest.write(mosaic)
+        dest.write(mosaic, indexes=1)
         
         
-def rasterize(vector_layer, raster_extent_path, outpul_file, value=None,
-              nodata=None, fill = 1, compression='NONE', dtype=rasterio.uint8, all_touched=False):
+def rasterize(vector_layer, raster_base_layer, outpul_file=None, value=None,
+              nodata=-9999, compression='NONE', dtype=rasterio.uint8, 
+              all_touched=True, save=False):
     
     vector_layer = vector_layer.rename(columns={'geometry': 'geom'})
     if value:
@@ -219,7 +237,7 @@ def rasterize(vector_layer, raster_extent_path, outpul_file, value=None,
     else:
         shapes = ((g, 1) for g in vector_layer['geom'].values)
 
-    with rasterio.open(raster_extent_path) as src:
+    with rasterio.open(raster_base_layer) as src:
         image = features.rasterize(
                     shapes,
                     out_shape=src.shape,
@@ -236,24 +254,39 @@ def rasterize(vector_layer, raster_extent_path, outpul_file, value=None,
                          'compress': compression,
                          'dtype': dtype,
                          "crs": src.crs,
-                         'nodata': fill})
+                         'nodata': nodata})
 
-        with rasterio.open(outpul_file, 'w', **out_meta) as dst:
-            dst.write(image, indexes=1)
+        if save:
+            with rasterio.open(outpul_file, 'w', **out_meta) as dst:
+                dst.write(image, indexes=1)
+        else:
+            return image, out_meta
             
             
-def normalize(raster_path, limit=float('inf')):
+def normalize(raster_path, limit=float('inf'), output_file=None, inverse=False):
     with rasterio.open(raster_path) as src:
         raster = src.read(1)
         nodata = src.nodata
+        meta = src.meta
         raster[raster>limit] = np.nan
         min_value = np.nanmin(raster[raster!=nodata])
         max_value = np.nanmax(raster[raster!=nodata])
         raster[raster!=nodata] = raster[raster!=nodata] / (max_value - min_value)
-        raster[np.isnan(raster)] = 1
-        raster[raster<0] = np.nan
+        if inverse:
+            raster[np.isnan(raster)] = 1
+            raster[raster<0] = np.nan
+            raster = 1 - raster
+        else:
+            raster[np.isnan(raster)] = 0
+            raster[raster<0] = np.nan
+            
+        meta.update(nodata=np.nan, dtype='float32')
         
-    return raster
+    if output_file:
+        with rasterio.open(output_file, "w", **meta) as dest:
+            dest.write(raster.astype('float32'), indexes=1)
+    else:
+        return raster, meta
         
         
 def index(rasters, weights):
@@ -328,11 +361,12 @@ def calibrate_urban(clusters, urban_current, workspace):
             break
             print(i)
     
-    clusters.to_file(workspace + r"/clusters.shp") 
+    # clusters.to_file(workspace + r"/clusters.shp") 
     
     print("Modelled urban ratio is " + str(round(urban_modelled, 3)) + 
           "% in comparision to the actual ratio of " + str(urban_current) + 
           "% after " + str(i) + " iterations.")
+
 
 def lpg_transportation_cost(travel_time):
     
@@ -363,3 +397,6 @@ def lpg_transportation_cost(travel_time):
     total_cost = (transport_cost + 1.34)/0.6
     
     return total_cost
+    
+    
+
