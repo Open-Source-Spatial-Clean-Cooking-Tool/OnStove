@@ -179,8 +179,11 @@ def sample_raster(path, gdf):
                                                    x.coords.xy[1][0]) for x in 
                                                    gdf['geometry']])]
 
-def friction_start_points(friction, in_points, out_raster):
-    start = gpd.read_file(in_points)
+def friction_start_points(friction, in_points):
+    if isinstance(in_points, str):
+        start = gpd.read_file(in_points)
+    else:
+        start = in_points
     row_list = []
     col_list = []
     with rasterio.open(friction) as src:  
@@ -194,9 +197,9 @@ def friction_start_points(friction, in_points, out_raster):
             row_list.append(rows)
             col_list.append(cols)
         
-    with rasterio.open(out_raster, 'w', **out_meta) as dst:
-        dst.write(arr, indexes = 1)
-        dst.close()
+    # with rasterio.open(out_raster, 'w', **out_meta) as dst:
+        # dst.write(arr, indexes = 1)
+        # dst.close()
         
     return row_list, col_list
         
