@@ -114,7 +114,7 @@ def mask_raster(raster_path, mask_layer, output_file, nodata=0, compression='NON
     
 
 def reproject_raster(raster_path, dst_crs, output_file=None, 
-                     dst_width=None, dst_height=None, method='nearest', 
+                     cell_width=None, cell_height=None, method='nearest', 
                      compression='NONE'):
     """
     Resamples and/or reproject a raster layer.
@@ -130,12 +130,12 @@ def reproject_raster(raster_path, dst_crs, output_file=None,
         # If a destination cell width and height was provided, then it 
         # calculates the new boundaries, with, heigh and transform 
         # depending on the new cell size.
-        if dst_width and dst_height:
+        if cell_width and cell_height:
             bounds = rasterio.transform.array_bounds(height, width, transform)
-            width = int(width * (transform[0] / dst_width))
-            height = int(height * (abs(transform[4]) / dst_height))
+            width = int(width * (transform[0] / cell_width))
+            height = int(height * (abs(transform[4]) / cell_height))
             transform = rasterio.transform.from_origin(bounds[0], bounds[3], 
-                                                       dst_width, dst_height)
+                                                       cell_width, cell_height)
         # Updates the metadata
         out_meta = src.meta.copy()
         out_meta.update({
