@@ -133,7 +133,8 @@ class MCA():
         datasets = self.get_layers(datasets)
         for category, layers in datasets.items():
             for name, layer in layers.items():
-                output_path = os.path.join('output', category, name)
+                output_path = os.path.join(self.output_directory, 
+                                           category, name)
                 os.makedirs(output_path, exist_ok=True)
                 layer.mask(self.mask_layer, output_path) 
                 if isinstance(layer.friction, RasterLayer):
@@ -148,14 +149,12 @@ class MCA():
         datasets = self.get_layers(datasets)
         for category, layers in datasets.items():
             for name, layer in layers.items():
-                output_path = os.path.join('output', category, name)
+                output_path = os.path.join(self.output_directory,
+                                           category, name)
                 os.makedirs(output_path, exist_ok=True)
-                if isinstance(layer, VectorLayer):
-                    layer.reproject(self.project_crs, output_path)
-                    if isinstance(layer.friction, RasterLayer):
-                        layer.friction.reproject(self.project_crs, output_path)
-                elif isinstance(layer, RasterLayer):
-                    layer.reproject(self.project_crs, output_path)
+                layer.reproject(self.project_crs, output_path)
+                if isinstance(layer.friction, RasterLayer):
+                    layer.friction.reproject(self.project_crs, output_path)
             
             
     def get_distance_rasters(self, datasets='all'):
@@ -165,10 +164,11 @@ class MCA():
         datasets = self.get_layers(datasets)
         for category, layers in datasets.items():
             for name, layer in layers.items():
-                output_path = os.path.join('output', category, name)
+                output_path = os.path.join(self.output_directory, 
+                                           category, name)
                 os.makedirs(output_path, exist_ok=True)
                 layer.get_distance_raster(self.base_layer.path, 
-                                      output_path, self.mask_layer)
+                                          output_path, self.mask_layer)
                 if isinstance(layer.friction, RasterLayer):
                     layer.friction.get_distance_raster(self.base_layer.path, 
                                                    output_path, self.mask_layer)
@@ -181,7 +181,8 @@ class MCA():
         datasets = self.get_layers(datasets)
         for category, layers in datasets.items():
             for name, layer in layers.items():
-                output_path = os.path.join('output', category, name)
+                output_path = os.path.join(self.output_directory, 
+                                           category, name)
                 layer.normalize(output_path, self.mask_layer)
 
     
@@ -192,7 +193,8 @@ class MCA():
         datasets = self.get_layers(datasets)
         for category, layers in datasets.items():
             for name, layer in layers.items():
-                output_path = os.path.join('output', category, name)
+                output_path = os.path.join(self.output_directory, 
+                                           category, name)
                 layer.save(output_path)
         
         
