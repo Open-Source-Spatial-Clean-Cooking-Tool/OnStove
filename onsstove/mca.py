@@ -17,13 +17,15 @@ class MCA():
     conn = None
     base_layer = None
     
-    def __init__(self, project_crs=3857, cell_size=(1000, 1000)):
+    def __init__(self, project_crs=None, cell_size=None, output_directory='output'):
         """
-        Initializes the class and sets empty demand and supply lists.
+        Initializes the class and sets an empty layers dictionaries.
         """
         self.layers = {}
         self.project_crs = project_crs
         self.cell_size = cell_size
+        self.output_directory = output_directory
+        self.mask_layer = None
         
     def get_layers(self, layers):
         if layers=='all':
@@ -57,6 +59,9 @@ class MCA():
         ----------
         arg1 : 
         """
+        output_path = os.path.join(self.output_directory, category, name)
+        os.makedirs(output_path, exist_ok=True)
+        
         if layer_type=='vector':
             if postgres:
                 layer = VectorLayer(category, name, layer_path, conn=self.conn,
@@ -72,26 +77,26 @@ class MCA():
                                     inverse=inverse, query=query)
             
         elif layer_type=='raster':
-            output_path = os.path.join('output', category, name)
             layer = RasterLayer(category, name, layer_path, 
                                 normalization=normalization, inverse=inverse,
-                                distance=distance)
+                                distance=distance, resample=resample)
             
             if base_layer:
-                self.base_layer_path = layer_path
+                if not self.cell_size:
+                    self.cell_size = (layer.meta['transform'][0], 
+                                      abs(layer.meta['transform'][1]))
+                if not self.project_crs:
+                    self.project_crs = layer.meta['crs']
+                    
                 cell_size_diff = abs(self.cell_size[0] - layer.meta['transform'][0]) / \
                                  layer.meta['transform'][0]
                                  
                 if (layer.meta['crs'] != self.project_crs) or (cell_size_diff>0.01):
-                    output_path = os.path.join('output', category, name)
-                    os.makedirs(output_path, exist_ok=True)
-                    layer.reproject(layer_path, self.project_crs, 
+                    layer.reproject(self.project_crs, 
                                     output_path=output_path, 
-                                    dst_width=self.cell_size[0], 
-                                    dst_height=self.cell_size[1], 
+                                    cell_width=self.cell_size[0], 
+                                    cell_height=self.cell_size[1], 
                                     method=resample)
-                    self.base_layer_path = os.path.join(output_path, 
-                                                        name + '.tif')
                     
                 self.base_layer = layer
 
@@ -103,6 +108,10 @@ class MCA():
             
     
     def add_mask_layer(self, name, layer_path, postgres=False):
+        """
+        Adds a vector layer to self.mask_layer, which will be used to mask all 
+        other layers into is boundaries
+        """
         if postgres:
             sql = f'SELECT * FROM {layer_path}'
             self.mask_layer = gpd.read_postgis(sql, self.conn)
@@ -114,57 +123,94 @@ class MCA():
             
      
     def mask_layers(self, datasets='all'):
+        """
+        Uses the previously added mask layer in self.mask_layer to mask all 
+        other layers to its boundaries
+        """
+        if not isinstance(self.mask_layer, gpd.GeoDataFrame):
+            raise Exception('The `mask_layer` attribute is empty, please first ' + \
+            'add a mask layer using the `.add_mask_layer` method.')
         datasets = self.get_layers(datasets)
         for category, layers in datasets.items():
             for name, layer in layers.items():
-                output_path = os.path.join('output', category, name)
+                output_path = os.path.join(self.output_directory, 
+                                           category, name)
                 os.makedirs(output_path, exist_ok=True)
                 layer.mask(self.mask_layer, output_path) 
                 if isinstance(layer.friction, RasterLayer):
                     layer.friction.mask(self.mask_layer, output_path) 
     
-    
-    def reproject_layers(self, datasets='all'):
+
+    def align_layers(self, datasets='all'):
         datasets = self.get_layers(datasets)
         for category, layers in datasets.items():
             for name, layer in layers.items():
-                output_path = os.path.join('output', category, name)
+                output_path = os.path.join(self.output_directory,
+                                           category, name)
                 os.makedirs(output_path, exist_ok=True)
                 if isinstance(layer, VectorLayer):
-                    layer.reproject(self.project_crs, output_path)
                     if isinstance(layer.friction, RasterLayer):
-                        layer.friction.reproject(layer.friction.path, 
-                                                 self.project_crs, output_path)
-                elif isinstance(layer, RasterLayer):
-                    layer.reproject(layer.path, self.project_crs, output_path)
+                        layer.friction.align(self.base_layer.path, output_path)
+                else: 
+                    if name != self.base_layer.name:
+                        layer.align(self.base_layer.path, output_path)
+                    if isinstance(layer.friction, RasterLayer):
+                        layer.friction.align(self.base_layer.path, output_path)
+  
+    def reproject_layers(self, datasets='all'):
+        """
+        Goes through all layer and call their `.reproject` method with the 
+        `project_crs` as argument
+        """
+        datasets = self.get_layers(datasets)
+        for category, layers in datasets.items():
+            for name, layer in layers.items():
+                output_path = os.path.join(self.output_directory,
+                                           category, name)
+                os.makedirs(output_path, exist_ok=True)
+                layer.reproject(self.project_crs, output_path)
+                if isinstance(layer.friction, RasterLayer):
+                    layer.friction.reproject(self.project_crs, output_path)
             
             
     def get_distance_rasters(self, datasets='all'):
+        """
+        Goes through all layer and call their `.distance_raster` method
+        """
         datasets = self.get_layers(datasets)
         for category, layers in datasets.items():
             for name, layer in layers.items():
-                output_path = os.path.join('output', category, name)
+                output_path = os.path.join(self.output_directory, 
+                                           category, name)
                 os.makedirs(output_path, exist_ok=True)
-                layer.distance_raster(self.base_layer_path, 
-                                      output_path, self.mask_layer)
+                layer.get_distance_raster(self.base_layer.path, 
+                                          output_path, self.mask_layer)
                 if isinstance(layer.friction, RasterLayer):
-                    layer.friction.distance_raster(self.base_layer_path, 
+                    layer.friction.get_distance_raster(self.base_layer.path, 
                                                    output_path, self.mask_layer)
             
     
     def normalize_rasters(self, datasets='all'):
+        """
+        Goes through all layer and call their `.normalize` method
+        """
         datasets = self.get_layers(datasets)
         for category, layers in datasets.items():
             for name, layer in layers.items():
-                output_path = os.path.join('output', category, name)
+                output_path = os.path.join(self.output_directory, 
+                                           category, name)
                 layer.normalize(output_path, self.mask_layer)
 
     
     def save_datasets(self, datasets='all'):
+        """
+        Saves all layers that have not been previously saved
+        """
         datasets = self.get_layers(datasets)
         for category, layers in datasets.items():
             for name, layer in layers.items():
-                output_path = os.path.join('output', category, name)
+                output_path = os.path.join(self.output_directory, 
+                                           category, name)
                 layer.save(output_path)
         
         
