@@ -79,7 +79,7 @@ class MCA():
         elif layer_type=='raster':
             layer = RasterLayer(category, name, layer_path, 
                                 normalization=normalization, inverse=inverse,
-                                distance=distance)
+                                distance=distance, resample=resample)
             
             if base_layer:
                 if not self.cell_size:
@@ -140,7 +140,23 @@ class MCA():
                 if isinstance(layer.friction, RasterLayer):
                     layer.friction.mask(self.mask_layer, output_path) 
     
-    
+
+    def align_layers(self, datasets='all'):
+        datasets = self.get_layers(datasets)
+        for category, layers in datasets.items():
+            for name, layer in layers.items():
+                output_path = os.path.join(self.output_directory,
+                                           category, name)
+                os.makedirs(output_path, exist_ok=True)
+                if isinstance(layer, VectorLayer):
+                    if isinstance(layer.friction, RasterLayer):
+                        layer.friction.align(self.base_layer.path, output_path)
+                else: 
+                    if name != self.base_layer.name:
+                        layer.align(self.base_layer.path, output_path)
+                    if isinstance(layer.friction, RasterLayer):
+                        layer.friction.align(self.base_layer.path, output_path)
+  
     def reproject_layers(self, datasets='all'):
         """
         Goes through all layer and call their `.reproject` method with the 

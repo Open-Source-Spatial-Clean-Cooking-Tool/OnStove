@@ -1,6 +1,8 @@
 import os
 import geopandas as gpd
 import re
+import pandas as pd
+import datetime
 from skimage.graph.mcp import MCP_Geometric
 
 from .raster import *
@@ -13,7 +15,7 @@ class Layer():
     def __init__(self, category, name, layer_path=None,
                  conn=None, normalization=None, 
                  inverse=False, distance=None, 
-                 distance_limit=float('inf')):
+                 distance_limit=float('inf'), resample=None):
         self.category = category
         self.name = name
         self.normalization = normalization
@@ -23,6 +25,7 @@ class Layer():
         self.friction = None
         self.distance_raster = None
         self.restrictions = []
+        self.resample = resample
         self.read_layer(layer_path, conn)
         
     
@@ -36,7 +39,9 @@ class Layer():
                f'    - Normalization: {self.normalization}\n' + \
                f'    - Distance method: {self.distance}\n'+ \
                f'    - Distance limit: {self.distance_limit}\n' + \
-               f'    - Inverse: {self.inverse}\n'
+               f'    - Inverse: {self.inverse}\n' + \
+               f'    - Resample: {self.resample}\n' + \
+               f'    - Path: {self.path}'
                
                
     def read_layer(self, layer_path, conn=None):
@@ -156,15 +161,19 @@ class VectorLayer(Layer):
     
     
     def save(self, output_path):
+        for column in self.layer.columns:
+            if isinstance(self.layer[column].iloc[0], datetime.date):
+                self.layer[column] = self.layer[column].astype('datetime64')
         output_file = os.path.join(output_path, 
-                                   self.name + '.gpkg')
+                                   self.name + '.geojson')
         os.makedirs(output_path, exist_ok=True)
-        self.layer.to_file(output_file, driver="GPKG")
+        self.layer.to_file(output_file, driver='GeoJSON')
         self.path = output_file
         
         
-    def add_friction_raster(self, raster_path):
-        self.friction = RasterLayer(self.category, self.name + ' - friction', raster_path)
+    def add_friction_raster(self, raster_path, resample='nearest'):
+        self.friction = RasterLayer(self.category, self.name + ' - friction', 
+                                    raster_path, resample=resample)
         
        
     def add_restricted_areas(self, layer_path, layer_type, **kwargs):
@@ -243,10 +252,10 @@ class RasterLayer(Layer):
             self.distance_raster.mask(mask_layer, output_path)
             
         elif self.distance == 'travel_time':
-            layer, meta = align_raster(self.path, self.friction.path, 
-                                       method='nearest')
-            self.friction.layer = layer
-            self.friction.meta = meta
+            # layer, meta = align_raster(self.path, self.friction.path, 
+                                       # method='nearest')
+            # self.friction.layer = layer
+            # self.friction.meta = meta
             self.travel_time(output_path)
             
             
@@ -264,9 +273,9 @@ class RasterLayer(Layer):
                         output_file, np.nan, 'DEFLATE')
                     
                     
-    def save(self, output_path):
+    def save(self, output_path, sufix=''):
         output_file = os.path.join(output_path, 
-                                   self.name + '.tif')
+                                   self.name + f'{sufix}.tif')
         self.path = output_file
         os.makedirs(output_path, exist_ok=True)
         self.meta.update(dtype=self.layer.dtype)
@@ -274,9 +283,19 @@ class RasterLayer(Layer):
             dest.write(self.layer, indexes=1)
             
             
-    def add_friction_raster(self, raster_path, starting_cells=[1]):
+    def add_friction_raster(self, raster_path, starting_cells=[1], 
+                            resample='nearest'):
         self.starting_cells = starting_cells
         self.friction = RasterLayer(self.category, 
-                                    self.name + ' - friction', raster_path)
+                                    self.name + ' - friction', 
+                                    raster_path, resample=resample)
+                                    
+                                    
+    def align(self, base_layer, output_path):
+        layer, meta = align_raster(base_layer, self.path, 
+                                   method=self.resample)
+        self.layer = layer
+        self.meta = meta
+        self.save(output_path, ' - aligned')
     
     
