@@ -98,12 +98,12 @@ def morbidity(tech, discount_rate, sfu, hhsize):
     paf_ihd = (sfu * (rr_ihd - 1)) / (sfu * (rr_ihd - 1) + 1)
     paf_lc = (sfu * (rr_lc - 1)) / (sfu * (rr_lc - 1) + 1)
 
-    morb_alri = hhsize * paf_alri * incidence_rate_alri
+    morb_alri = hhsize * paf_alri * 0.5
     morb_copd = hhsize * paf_copd * incidence_rate_copd
     morb_ihd = hhsize * paf_ihd * incidence_rate_ihd
     morb_lc = hhsize * paf_lc * incidence_rate_lc
 
-def mortalitly(tech, discount_rate, sfu, hhsize):
+def mortality(tech, discount_rate, sfu, hhsize):
 
         if tech.PM25 < 7.298:
             rr_alri = 1
@@ -130,8 +130,8 @@ def mortalitly(tech, discount_rate, sfu, hhsize):
         paf_ihd = (sfu * (rr_ihd - 1)) / (sfu * (rr_ihd - 1) + 1)
         paf_lc = (sfu * (rr_lc - 1)) / (sfu * (rr_lc - 1) + 1)
 
-        morb_alri = hhsize * paf_alri * mortality_rate_alri
-        morb_copd = hhsize * paf_copd * mortality_rate_copd
+        morb_alri = hhsize * paf_alri * 0.03
+        morb_copd = hhsize * paf_copd * 0.0001
         morb_ihd = hhsize * paf_ihd * mortality_rate_ihd
         morb_lc = hhsize * paf_lc * mortality_rate_lc
 
