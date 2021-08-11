@@ -17,7 +17,7 @@ class Technology():
                  fuel_cost = 0,
                  om_costs = 0, #percentage of investement cost
                  efficiency = 0,#ratio
-                 PM25 = 0): # 24-h PM2.5 concentration
+                 PM_25 = 0): # 24-h PM2.5 concentration
 
         self.tech_life = tech_life
         fuel_cost = fuel_cost,
@@ -45,19 +45,19 @@ traditional_biomass = Technology(tech_life=3,
                         inv_cost = 0.5,
                         om_costs = 138,
                         efficiency = 0.14,
-                        PM25 = 500)
+                        PM_25 = 500)
 
 improved_biomass = Technology(tech_life=6,
                         inv_cost = 20,
                         om_costs = 1.4,
                         efficiency = 0.33,
-                        PM25 = 150)
+                        PM_25 = 150)
 
 lpg = Technology(tech_life=5,
                         inv_cost = 39,
                         om_costs = 3.56,
                         efficiency = 0.58,
-                        PM25 = 10)
+                        PM_25 = 10)
 
 biogas = Technology(tech_life=5,
                         inv_cost = 430,
@@ -72,25 +72,25 @@ electricity = Technology(tech_life=5,
 
 
 def morbidity(tech, discount_rate, sfu, hhsize):
-    if tech.PM25 < 7.298:
+    if tech.PM_25 < 7.298:
         rr_alri = 1
     else:
-        rr_alri = 1 + 2.383 * (1 - exp(-0.004 * (tech.PM25 - 7.298) ** 1.193))
+        rr_alri = 1 + 2.383 * (1 - exp(-0.004 * (tech.PM_25 - 7.298) ** 1.193))
 
-    if tech.PM25 < 7.337:
+    if tech.PM_25 < 7.337:
         rr_copd = 1
     else:
-        rr_copd = 1 + 22.485 * (1 - exp(-0.001 * (tech.PM25 - 7.337) ** 0.694))
+        rr_copd = 1 + 22.485 * (1 - exp(-0.001 * (tech.PM_25 - 7.337) ** 0.694))
 
-    if tech.PM25 < 7.505:
+    if tech.PM_25 < 7.505:
         rr_ihd = 1
     else:
-        rr_ihd = 1 + 2.538 * (1 - exp(-0.081 * (tech.PM25 - 7.505) ** 0.466))
+        rr_ihd = 1 + 2.538 * (1 - exp(-0.081 * (tech.PM_25 - 7.505) ** 0.466))
 
-    if tech.PM25 < 7.345:
+    if tech.PM_25 < 7.345:
         rr_lc = 1
     else:
-        rr_lc = 1 + 152.496 * (1 - exp(-0.000167 * (tech.PM25 - 7.345) ** 0.76))
+        rr_lc = 1 + 152.496 * (1 - exp(-0.000167 * (tech.PM_25 - 7.345) ** 0.76))
 
     paf_alri = (sfu * (rr_alri - 1)) / (sfu * (rr_alri - 1) + 1)
     paf_copd = (sfu * (rr_copd - 1)) / (sfu * (rr_copd - 1) + 1)
@@ -102,7 +102,7 @@ def morbidity(tech, discount_rate, sfu, hhsize):
     morb_ihd = hhsize * paf_ihd * incidence_rate_ihd
     morb_lc = hhsize * paf_lc * incidence_rate_lc
 
-    
+
 
 
                
