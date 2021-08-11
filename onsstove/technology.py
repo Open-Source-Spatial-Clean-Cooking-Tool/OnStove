@@ -46,26 +46,26 @@ traditional_biomass = Technology(tech_life=3,
                         efficiency = 0.14,
                         PM25 = 500)
 
-improved_biomass = Technology(tech_life=,
+improved_biomass = Technology(tech_life=6,
                         inv_cost = 20,
                         om_costs = 1.4,
                         efficiency = 0.33,
                         PM25 = 150)
 
-lpg = Technology(tech_life=,
+lpg = Technology(tech_life=5,
                         inv_cost = 39,
                         om_costs = 3.56,
                         efficiency = 0.58,
                         PM25 = 10)
 
-biogas = Technology(tech_life=,
+biogas = Technology(tech_life=5,
                         inv_cost = 430,
                         om_costs = 0.02,
                         efficiency = 0.5)
 
-electricity = Technology(tech_life=,
+electricity = Technology(tech_life=5,
                         inv_cost = 55,
-                        infra_cost =,
+                        infra_cost =500, #placeholder
                         om_costs = 3.6,
                         efficiency = 0.86)
 
