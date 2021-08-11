@@ -72,6 +72,7 @@ electricity = Technology(tech_life=5,
 
 
 def morbidity(tech, discount_rate, sfu, hhsize):
+
     if tech.pm25 < 7.298:
         rr_alri = 1
     else:
@@ -101,6 +102,8 @@ def morbidity(tech, discount_rate, sfu, hhsize):
     morb_copd = hhsize * paf_copd * incidence_rate_copd
     morb_ihd = hhsize * paf_ihd * incidence_rate_ihd
     morb_lc = hhsize * paf_lc * incidence_rate_lc
+
+    
 
 
 
