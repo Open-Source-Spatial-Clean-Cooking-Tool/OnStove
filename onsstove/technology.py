@@ -25,7 +25,7 @@ class Technology():
         self.infra_cost = infra_cost
         self.om_costs = om_costs
         self.efficiency = efficiency
-        self.pm25 = PM25
+        self.pm25 = pm25
 
 
     def set_default_values(start_year, end_year, discount_rate):
