@@ -398,5 +398,4 @@ def lpg_transportation_cost(travel_time):
     
     return total_cost
     
-    
 

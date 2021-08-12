@@ -6,30 +6,32 @@ import numpy as np
 import datetime
 from math import exp
 
+from .layer import *
+
 
 class Technology():
     """
     Template Layer initializing all needed variables.
     """
     def __init__(self,
+                 tech_name,
                  tech_life = 0, #in years
                  inv_cost = 0, #in USD
                  infra_cost = 0, # cost of additional infrastructure
                  fuel_cost = 0,
-                 time_of_collection = 0,
                  time_of_cooking = 0,
                  om_costs = 0, #percentage of investement cost
                  efficiency = 0,#ratio
                  pm25 = 0): # 24-h PM2.5 concentration
 
+        self.tech_name = tech_name
         self.tech_life = tech_life
-        self.fuel_cost = fuel_cost,
+        self.fuel_cost = fuel_cost
         self.inv_cost = inv_cost
         self.infra_cost = infra_cost
         self.om_costs = om_costs
-        self.efficiency = efficiency
-        self.time_of_collection = time_of_collection
         self.time_of_cooking = time_of_cooking
+        self.efficiency = efficiency
         self.pm25 = pm25
 
 
@@ -51,37 +53,43 @@ traditional_biomass_purchased = Technology(tech_life=3, #placeholder
                         om_costs = 138,
                         fuel_cost = 20, #placeholder
                         efficiency = 0.14,
-                        pm25 = 500)
+                        pm25 = 500,
+                        tech_name = 'purchased traditional_biomass')
 
 traditional_biomass = Technology(tech_life=3, #placeholder
                         inv_cost = 0.5,
                         om_costs = 138,
                         efficiency = 0.14,
-                        pm25 = 500)
+                        pm25 = 500,
+                        tech_name = 'traditional_biomass')
 
 improved_biomass = Technology(tech_life=6,
                         inv_cost = 20,
                         om_costs = 1.4,
                         efficiency = 0.33,
-                        pm25 = 150)
+                        pm25 = 150,
+                        tech_name = 'improved_biomass')
 
 lpg = Technology(tech_life=5,
                         inv_cost = 39,
                         om_costs = 3.56,
                         efficiency = 0.58,
-                        pm25 = 10)
+                        pm25 = 10,
+                        tech_name = 'lpg')
 
 biogas = Technology(tech_life=5, #placeholder
                         inv_cost = 430,
                         om_costs = 0.02,
-                        efficiency = 0.5)
+                        efficiency = 0.5,
+                        tech_name = 'biogas')
 
 electricity = Technology(tech_life=5,
                         inv_cost = 55,
                         infra_cost =500, #placeholder
                         fuel_cost = 0.1, #placeholder
                         om_costs = 3.6,
-                        efficiency = 0.86)
+                        efficiency = 0.86,
+                        tech_name = 'electricity')
 
 
 def morbidity(start_year, end_year, tech, discount_rate, hhsize_R, hhsize_U, sfu = 1):
@@ -140,8 +148,6 @@ def morbidity(start_year, end_year, tech, discount_rate, hhsize_R, hhsize_U, sfu
     coi_copd =
     coi_ihd =
     coi_lc =
-
-
 
     morb_alri_U = hhsize_U * paf_alri * incidence_rate_alri
     morb_copd_U = hhsize_U * paf_copd * incidence_rate_copd
@@ -284,10 +290,18 @@ def mortality(start_year, end_year, tech, discount_rate, hhsize_R, hhsize_U, vsl
 
     return mortality_R, mortality_U
 
+def traveltime_array()
+
 def time_save(tech):
 
-    if tech.time_of_collection == 0:
-        saved_time =
+    if tech.techmane != 'traditional_biomass':
+        time_of_collection = 0
+    else:
+        #Read traveltime for biomass (*2) and add time for actual collection
+
+
+
+
 
 
 
