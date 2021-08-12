@@ -394,13 +394,15 @@ def lpg_transportation_cost(travel_time):
     
     return total_cost
 
-def travel_time(friction):
+def travel_time(friction, starts):
 
     friction *= 1000/60
     friction[np.isnan(friction)] = float('inf')
     mcp = MCP_Geometric(friction, fully_connected=True)
-    row, col = friction_start_points()
+    row, col = friction_start_points(friction, starts)
     pointlist = np.column_stack((row, col))
 
     cumulative_costs, traceback = mcp.find_costs(starts=pointlist)
     cumulative_costs[np.where(cumulative_costs==float('inf'))] = np.nan
+
+    return cumulative_costs

@@ -6,7 +6,7 @@ import numpy as np
 import datetime
 from math import exp
 
-from .layer import *
+from .raster import *
 
 
 class Technology():
