@@ -290,7 +290,6 @@ def mortality(start_year, end_year, tech, discount_rate, hhsize_R, hhsize_U, vsl
 
     return mortality_R, mortality_U
 
-def traveltime_array()
 
 def time_save(tech):
 
