@@ -84,7 +84,32 @@ electricity = Technology(tech_life=5,
                         efficiency = 0.86)
 
 
-def morbidity(start_year, end_year, tech, discount_rate, sfu, hhsize):
+def morbidity(start_year, end_year, tech, discount_rate, hhsize_R, hhsize_U, sfu = 1):
+
+    """
+    Calculates morbidity rate per fuel
+
+    Parameters
+    ----------
+    arg1 : start_year
+        Start year of the analysis
+    arg2 : end_year
+        End year of the analysis
+    arg3: tech
+        Stove type assessed
+    arg4: discount_rate
+        Discount rate to extrapolate costs
+    arg5: hhsize_R
+        Rural household size
+    arg6: hhsize_U
+        Urban household size
+    arg7: sfu
+        Solid fuel users (ration)
+
+    Returns
+    ----------
+    Monetary morbidity for each stove in urban and rural settings
+    """
 
     if tech.pm25 < 7.298:
         rr_alri = 1
@@ -116,10 +141,17 @@ def morbidity(start_year, end_year, tech, discount_rate, sfu, hhsize):
     coi_ihd =
     coi_lc =
 
-    morb_alri = hhsize * paf_alri * 0.5
-    morb_copd = hhsize * paf_copd * incidence_rate_copd
-    morb_ihd = hhsize * paf_ihd * incidence_rate_ihd
-    morb_lc = hhsize * paf_lc * incidence_rate_lc
+
+
+    morb_alri_U = hhsize_U * paf_alri * incidence_rate_alri
+    morb_copd_U = hhsize_U * paf_copd * incidence_rate_copd
+    morb_ihd_U = hhsize_U * paf_ihd * incidence_rate_ihd
+    morb_lc_U = hhsize_U * paf_lc * incidence_rate_lc
+
+    morb_alri_R = hhsize_R * paf_alri * incidence_rate_alri
+    morb_copd_R = hhsize_R * paf_copd * incidence_rate_copd
+    morb_ihd_R = hhsize_R * paf_ihd * incidence_rate_ihd
+    morb_lc_R = hhsize_R * paf_lc * incidence_rate_lc
 
     cl_copd = {1:0.3, 2:0.2, 3:0.17, 4:0.17, 5:0.16}
     cl_alri = {1: 0.7, 2: 0.1, 3: 0.07, 4: 0.07, 5: 0.06}
@@ -127,23 +159,61 @@ def morbidity(start_year, end_year, tech, discount_rate, sfu, hhsize):
     cl_ihd = {1: 0.2, 2: 0.1, 3: 0.24, 4: 0.23, 5: 0.23}
 
     i = 1
-    morb_vector = []
+    morb__U_vector = []
+    morb__R_vector = []
     while i < 6:
-        morbidity_alri = cl_alri[i]*coi_alri*morb_alri/(1+discount_rate)**(end_year-start_year)
-        morbidity_copd = cl_copd[i] * coi_copd * morb_copd / (1 + discount_rate) ** (end_year - start_year)
-        morbidity_lc = cl_lc[i] * coi_lc * morb_lc / (1 + discount_rate) ** (end_year - start_year)
-        morbidity_ihd = cl_ihd[i] * coi_ihd * morb_ihd / (1 + discount_rate) ** (end_year - start_year)
+        morbidity_alri_U = cl_alri[i]*coi_alri*morb_alri_U /(1+discount_rate)**(end_year-start_year)
+        morbidity_copd_U = cl_copd[i] * coi_copd * morb_copd_U / (1 + discount_rate) ** (end_year - start_year)
+        morbidity_lc_U = cl_lc[i] * coi_lc * morb_lc_U / (1 + discount_rate) ** (end_year - start_year)
+        morbidity_ihd_U = cl_ihd[i] * coi_ihd * morb_ihd_U / (1 + discount_rate) ** (end_year - start_year)
 
-        morb_total = morbidity_alri + morbidity_copd + morbidity_lc + morbidity_ihd
+        morb_U_total = morbidity_alri_U + morbidity_copd_U + morbidity_lc_U + morbidity_ihd_U
 
-        morb_vector.append(morb_total)
+        morb__U_vector.append(morb_U_total)
 
-    morbidity = np.sum(morb_vector)
+        morbidity_alri_R = cl_alri[i]*coi_alri*morb_alri_R /(1+discount_rate)**(end_year-start_year)
+        morbidity_copd_R = cl_copd[i] * coi_copd * morb_copd_R / (1 + discount_rate) ** (end_year - start_year)
+        morbidity_lc_R = cl_lc[i] * coi_lc * morb_lc_R / (1 + discount_rate) ** (end_year - start_year)
+        morbidity_ihd_R = cl_ihd[i] * coi_ihd * morb_ihd_R / (1 + discount_rate) ** (end_year - start_year)
 
-    return morbidity
+        morb_R_total = morbidity_alri_R + morbidity_copd_R + morbidity_lc_R + morbidity_ihd_R
+
+        morb__R_vector.append(morb_R_total)
+
+    morbidity_U = np.sum(morb_U_vector)
+    morbidity_R = np.sum(morb_R_vector)
+
+    return morbidity_R, morbidity_U
 
 
-def mortality(start_year, end_year, tech, discount_rate, sfu, hhsize, vsl):
+def mortality(start_year, end_year, tech, discount_rate, hhsize_R, hhsize_U, vsl, sfu=1):
+
+    """
+    Calculates mortality rate per fuel
+
+    Parameters
+    ----------
+    arg1 : start_year
+        Start year of the analysis
+    arg2 : end_year
+        End year of the analysis
+    arg3: tech
+        Stove type assessed
+    arg4: discount_rate
+        Discount rate to extrapolate costs
+    arg5: hhsize_R
+        Rural household size
+    arg6: hhsize_U
+        Urban household size
+    arg7: vsl
+        Value of statistical life
+    arg8: sfu
+        Solid fuel users (ration)
+
+    Returns
+    ----------
+    Monetary mortality for each stove in urban and rural settings
+    """
 
     if tech.pm25 < 7.298:
         rr_alri = 1
@@ -170,10 +240,15 @@ def mortality(start_year, end_year, tech, discount_rate, sfu, hhsize, vsl):
     paf_ihd = (sfu * (rr_ihd - 1)) / (sfu * (rr_ihd - 1) + 1)
     paf_lc = (sfu * (rr_lc - 1)) / (sfu * (rr_lc - 1) + 1)
 
-    mort_alri = hhsize * paf_alri * mortality_rate_alri
-    mort_copd = hhsize * paf_copd * mortality_rate_copd
-    mort_ihd = hhsize * paf_ihd * mortality_rate_ihd
-    mort_lc = hhsize * paf_lc * mortality_rate_lc
+    mort_alri_U = hhsize_U * paf_alri * mortality_rate_alri
+    mort_copd_U = hhsize_U * paf_copd * mortality_rate_copd
+    mort_ihd_U = hhsize_U * paf_ihd * mortality_rate_ihd
+    mort_lc_U = hhsize_U * paf_lc * mortality_rate_lc
+
+    mort_alri_R = hhsize_R * paf_alri * mortality_rate_alri
+    mort_copd_R = hhsize_R * paf_copd * mortality_rate_copd
+    mort_ihd_R = hhsize_R * paf_ihd * mortality_rate_ihd
+    mort_lc_R = hhsize_R * paf_lc * mortality_rate_lc
 
     cl_copd = {1: 0.3, 2: 0.2, 3: 0.17, 4: 0.17, 5: 0.16}
     cl_alri = {1: 0.7, 2: 0.1, 3: 0.07, 4: 0.07, 5: 0.06}
@@ -181,20 +256,33 @@ def mortality(start_year, end_year, tech, discount_rate, sfu, hhsize, vsl):
     cl_ihd = {1: 0.2, 2: 0.1, 3: 0.24, 4: 0.23, 5: 0.23}
 
     i = 1
-    mort_vector = []
+    mort_U_vector = []
+    mort_R_vector = []
     while i < 6:
-        mortality_alri = cl_alri[i] * vsl * mort_alri / (1 + discount_rate) ** (end_year - start_year)
-        mortality_copd = cl_copd[i] * vsl * mort_copd / (1 + discount_rate) ** (end_year - start_year)
-        mortality_lc = cl_lc[i] * vsl * mort_lc / (1 + discount_rate) ** (end_year - start_year)
-        mortality_ihd = cl_ihd[i] * vsl * mort_ihd / (1 + discount_rate) ** (end_year - start_year)
+        mortality_alri_U = cl_alri[i] * vsl * mort_alri_U / (1 + discount_rate) ** (end_year - start_year)
+        mortality_copd_U = cl_copd[i] * vsl * mort_copd_U / (1 + discount_rate) ** (end_year - start_year)
+        mortality_lc_U = cl_lc[i] * vsl * mort_lc_U / (1 + discount_rate) ** (end_year - start_year)
+        mortality_ihd_U = cl_ihd[i] * vsl * mort_ihd_U / (1 + discount_rate) ** (end_year - start_year)
 
-        mort_total = mortality_alri + mortality_copd + mortality_lc + mortality_ihd
+        mort_U_total = mortality_alri_U + mortality_copd_U + mortality_lc_U + mortality_ihd_U
 
-        mort_vector.append(mort_total)
+        mort__U_vector.append(mort_U_total)
 
-    mortality = np.sum(mort_vector)
+        mortality_alri_R = cl_alri[i] * vsl * mort_alri_R / (1 + discount_rate) ** (end_year - start_year)
+        mortality_copd_R = cl_copd[i] * vsl * mort_copd_R / (1 + discount_rate) ** (end_year - start_year)
+        mortality_lc_R = cl_lc[i] * vsl * mort_lc_R / (1 + discount_rate) ** (end_year - start_year)
+        mortality_ihd_R = cl_ihd[i] * vsl * mort_ihd_R / (1 + discount_rate) ** (end_year - start_year)
 
-    return mortality
+        mort_R_total = mortality_alri_R + mortality_copd_R + mortality_lc_R + mortality_ihd_R
+
+        mort__R_vector.append(mort_R_total)
+
+
+
+    mortality_U = np.sum(mort_U_vector)
+    mortality_R = np.sum(mort_R_vector)
+
+    return mortality_R, mortality_U
 
 def time_save(tech):
 
