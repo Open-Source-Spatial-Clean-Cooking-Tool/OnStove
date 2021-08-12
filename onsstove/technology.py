@@ -283,8 +283,6 @@ def mortality(start_year, end_year, tech, discount_rate, hhsize_R, hhsize_U, vsl
 
         mort__R_vector.append(mort_R_total)
 
-
-
     mortality_U = np.sum(mort_U_vector)
     mortality_R = np.sum(mort_R_vector)
 
