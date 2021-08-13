@@ -14,7 +14,9 @@ class Technology():
     Template Layer initializing all needed variables.
     """
     def __init__(self,
-                 name,
+                 name = None,
+                 carbon_intensity = 0,
+                 energy_content = 0,
                  tech_life = 0, #in years
                  inv_cost = 0, #in USD
                  infra_cost = 0, # cost of additional infrastructure
@@ -25,6 +27,8 @@ class Technology():
                  pm25 = 0): # 24-h PM2.5 concentration
 
         self.name = name
+        self.carbon_intensity = carbon_intensity
+        self.energy_content = energy_content
         self.tech_life = tech_life
         self.fuel_cost = fuel_cost
         self.inv_cost = inv_cost
@@ -54,6 +58,8 @@ traditional_biomass_purchased = Technology(tech_life=3, #placeholder
                         fuel_cost = 20, #placeholder
                         efficiency = 0.14,
                         pm25 = 500,
+                        energy_content = 16, #MJ/kg
+                        carbon_intensity = 217, #kg/GJ
                         name = 'purchased_traditional_biomass')
 
 traditional_biomass = Technology(tech_life=3, #placeholder
@@ -61,6 +67,8 @@ traditional_biomass = Technology(tech_life=3, #placeholder
                         om_costs = 138,
                         efficiency = 0.14,
                         pm25 = 500,
+                        energy_content = 16, #MJ/kg
+                        carbon_intensity = 217, #kg/GJ
                         name = 'traditional_biomass')
 
 improved_biomass = Technology(tech_life=6,
@@ -68,6 +76,8 @@ improved_biomass = Technology(tech_life=6,
                         om_costs = 1.4,
                         efficiency = 0.33,
                         pm25 = 150,
+                        energy_content = 16, #MJ/kg
+                        carbon_intensity = 217, #kg/GJ
                         name = 'improved_biomass')
 
 lpg = Technology(tech_life=5,
@@ -75,12 +85,16 @@ lpg = Technology(tech_life=5,
                         om_costs = 3.56,
                         efficiency = 0.58,
                         pm25 = 10,
+                        energy_content = 45.5, #MJ/kg
+                        carbon_intensity = 67, #kg/GJ
                         name = 'lpg')
 
 biogas = Technology(tech_life=5, #placeholder
                         inv_cost = 430,
                         om_costs = 0.02,
                         efficiency = 0.5,
+                        energy_content = 22.8, #MJ/m3
+                        carbon_intensity = 4, #kg/GJ
                         name = 'biogas')
 
 electricity = Technology(tech_life=5,
@@ -89,6 +103,8 @@ electricity = Technology(tech_life=5,
                         fuel_cost = 0.1, #placeholder
                         om_costs = 3.6,
                         efficiency = 0.86,
+                        energy_content = 3.6, # MJ/kWh
+                        carbon_intensity = 160, #kg/GWh
                         name = 'electricity')
 
 
@@ -292,14 +308,20 @@ def mortality(start_year, end_year, tech, discount_rate, hhsize_R, hhsize_U, vsl
 def time_save(tech):
 
     if tech.name == 'biogas':
-        time_of_collection =
+        time_of_collection = 2
     elif tech.name == 'traditional_biomass':
         time_of_collection = 2 * (raster.travel_time(walking_friction, forest)) + 2.2 # 2.2 hrs Medium scenario for Jeiland paper globally, placeholder
     else:
         time_of_collection = 0
 
+
+
         #Read traveltime for biomass (*2) and add time for actual collection
 
+
+def carbon_emissions(tech):
+
+    return
 
 
 
