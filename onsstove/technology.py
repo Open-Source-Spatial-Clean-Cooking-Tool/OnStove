@@ -165,10 +165,10 @@ def morbidity(start_year, end_year, tech, discount_rate, hhsize_R, hhsize_U, sfu
     coi_ihd =
     coi_lc =
 
-    morb_alri_U = hhsize_U * paf_alri * incidence_rate_alri
-    morb_copd_U = hhsize_U * paf_copd * incidence_rate_copd
-    morb_ihd_U = hhsize_U * paf_ihd * incidence_rate_ihd
-    morb_lc_U = hhsize_U * paf_lc * incidence_rate_lc
+    morb_alri_U = hhsize_U * paf_alri * 5
+    morb_copd_U = hhsize_U * paf_copd * 12
+    morb_ihd_U = hhsize_U * paf_ihd * 50
+    morb_lc_U = hhsize_U * paf_lc * 7
 
     morb_alri_R = hhsize_R * paf_alri * incidence_rate_alri
     morb_copd_R = hhsize_R * paf_copd * incidence_rate_copd
