@@ -304,7 +304,7 @@ def mortality(start_year, end_year, tech, discount_rate, hhsize_R, hhsize_U, vsl
 
     return mortality_R, mortality_U
 
-def time_save(tech):
+def time_save(tech, value_of_time):
 
     if tech.name == 'biogas':
         time_of_collection = 2
@@ -313,14 +313,17 @@ def time_save(tech):
     else:
         time_of_collection = 0
 
+    time = time_of_collection + tech.time_of_cooking
+    time_value = time * value_of_time
 
-
-        #Read traveltime for biomass (*2) and add time for actual collection
+    return time_value
 
 
 def carbon_emissions(tech):
 
-    return
+    carb = 5 * FuelU * (tech.carbon_intensity * tech.energy_content / tech.efficiency)
+
+    return carb
 
 
 
