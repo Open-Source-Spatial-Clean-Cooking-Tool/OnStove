@@ -155,25 +155,25 @@ def morbidity(start_year, end_year, tech, discount_rate, hhsize_R, hhsize_U, sfu
     else:
         rr_lc = 1 + 152.496 * (1 - exp(-0.000167 * (tech.pm25 - 7.345) ** 0.76))
 
-    paf_alri = (sfu * (rr_alri - 1)) / (sfu * (rr_alri - 1) + 1)
+    paf_alri = (sfu * (rr_alri - 1)) / (sfu * (rr_alri - 1) + 1) #sfu is one.
     paf_copd = (sfu * (rr_copd - 1)) / (sfu * (rr_copd - 1) + 1)
     paf_ihd = (sfu * (rr_ihd - 1)) / (sfu * (rr_ihd - 1) + 1)
     paf_lc = (sfu * (rr_lc - 1)) / (sfu * (rr_lc - 1) + 1)
 
-    coi_alri =
-    coi_copd =
-    coi_ihd =
-    coi_lc =
+    coi_alri = 38 #Nepal mean in CCA doc, add as user input
+    coi_copd = 37 #Nepal value in CCA doc, add as user input
+    coi_ihd = 1010 #mean value in CCA doc, add as user input
+    coi_lc = 1010 #mean value in CCA doc, add as user input
 
-    morb_alri_U = hhsize_U * paf_alri * 5
+    morb_alri_U = hhsize_U * paf_alri * 5 #add hhsize_U and hhsize_R as inputs as user input
     morb_copd_U = hhsize_U * paf_copd * 12
     morb_ihd_U = hhsize_U * paf_ihd * 50
     morb_lc_U = hhsize_U * paf_lc * 7
 
-    morb_alri_R = hhsize_R * paf_alri * incidence_rate_alri
-    morb_copd_R = hhsize_R * paf_copd * incidence_rate_copd
-    morb_ihd_R = hhsize_R * paf_ihd * incidence_rate_ihd
-    morb_lc_R = hhsize_R * paf_lc * incidence_rate_lc
+    morb_alri_R = hhsize_R * paf_alri * 5 #Add incidence rate per disease as input
+    morb_copd_R = hhsize_R * paf_copd * 12
+    morb_ihd_R = hhsize_R * paf_ihd * 50
+    morb_lc_R = hhsize_R * paf_lc * 7
 
     cl_copd = {1:0.3, 2:0.2, 3:0.17, 4:0.17, 5:0.16}
     cl_alri = {1: 0.7, 2: 0.1, 3: 0.07, 4: 0.07, 5: 0.06}
@@ -262,20 +262,22 @@ def mortality(start_year, end_year, tech, discount_rate, hhsize_R, hhsize_U, vsl
     paf_ihd = (sfu * (rr_ihd - 1)) / (sfu * (rr_ihd - 1) + 1)
     paf_lc = (sfu * (rr_lc - 1)) / (sfu * (rr_lc - 1) + 1)
 
-    mort_alri_U = hhsize_U * paf_alri * mortality_rate_alri
-    mort_copd_U = hhsize_U * paf_copd * mortality_rate_copd
-    mort_ihd_U = hhsize_U * paf_ihd * mortality_rate_ihd
-    mort_lc_U = hhsize_U * paf_lc * mortality_rate_lc
+    mort_alri_U = hhsize_U * paf_alri * 22 #Mortality rate per country --> add as input
+    mort_copd_U = hhsize_U * paf_copd * 95
+    mort_ihd_U = hhsize_U * paf_ihd * 69
+    mort_lc_U = hhsize_U * paf_lc * 13
 
-    mort_alri_R = hhsize_R * paf_alri * mortality_rate_alri
-    mort_copd_R = hhsize_R * paf_copd * mortality_rate_copd
-    mort_ihd_R = hhsize_R * paf_ihd * mortality_rate_ihd
-    mort_lc_R = hhsize_R * paf_lc * mortality_rate_lc
+    mort_alri_R = hhsize_R * paf_alri * 22
+    mort_copd_R = hhsize_R * paf_copd * 95
+    mort_ihd_R = hhsize_R * paf_ihd * 69
+    mort_lc_R = hhsize_R * paf_lc * 13
 
     cl_copd = {1: 0.3, 2: 0.2, 3: 0.17, 4: 0.17, 5: 0.16}
     cl_alri = {1: 0.7, 2: 0.1, 3: 0.07, 4: 0.07, 5: 0.06}
     cl_lc = {1: 0.2, 2: 0.1, 3: 0.24, 4: 0.23, 5: 0.23}
     cl_ihd = {1: 0.2, 2: 0.1, 3: 0.24, 4: 0.23, 5: 0.23}
+
+    vsl = 45000 # South Asia mean accroding to CCA doc, add as input
 
     i = 1
     mort_U_vector = []
