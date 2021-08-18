@@ -316,14 +316,14 @@ def time_save(tech, value_of_time):
         time_of_collection = 0
 
     time = time_of_collection + tech.time_of_cooking
-    time_value = time * value_of_time
+    time_value = time * value_of_time #Let users choose value_of_time
 
     return time_value
 
 
 def carbon_emissions(tech):
 
-    carb = 5 * FuelU * (tech.carbon_intensity * tech.energy_content / tech.efficiency)
+    carb = 5 * (3.64 / tech.efficiency) / tech.energy_content * (tech.carbon_intensity * tech.energy_content / tech.efficiency) #5 USD/MT is average social cost of carbon emissions in Nepal according to https://www.nature.com/articles/s41558-018-0282-y.pdf, 3.64 MJ to cook based on https://iopscience.iop.org/article/10.1088/1748-9326/aa6fd0/meta
 
     return carb
 
