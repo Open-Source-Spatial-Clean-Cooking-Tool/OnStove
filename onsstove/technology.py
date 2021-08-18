@@ -342,14 +342,14 @@ def fuel_cost(tech):
 
     return (tech.fuel_cost * 3.64)/tech.efficienciy
 
-def meals_per_year(tech, discount_rate):
+def meals_per_year(tech, discount_rate, meals_per_year):
 
     end_year = tech.end_year
     start_year = tech.start_year
     proj_life = end_year - start_year
     year = np.arange(proj_life)
 
-    ml = 730
+    ml = meals_per_year
 
     r = []
     i = 0
@@ -366,3 +366,17 @@ def meals_per_year(tech, discount_rate):
     discounted_meals = meals_per_year / discount_factor
 
     return discounted_meals
+
+def operation_and_maintenance(tech):
+    end_year = tech.end_year
+    start_year = tech.start_year
+    proj_life = end_year - start_year
+
+    total_om_cost = (tech.cap_cost * tech.self.om_costs)
+
+    operation_and_maintenance = np.ones(proj_life)
+    for s in range(1):
+        operation_and_maintenance[s] = 0
+    operation_and_maintenance = np.outer(total_om_cost, operation_and_maintenance)
+
+    return operation_and_maintenance
