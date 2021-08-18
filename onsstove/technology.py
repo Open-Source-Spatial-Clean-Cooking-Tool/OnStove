@@ -342,18 +342,27 @@ def fuel_cost(tech):
 
     return (tech.fuel_cost * 3.64)/tech.efficienciy
 
+def meals_per_year(tech, discount_rate):
 
+    end_year = tech.end_year
+    start_year = tech.start_year
+    proj_life = end_year - start_year
+    year = np.arange(proj_life)
 
+    ml = 730
 
+    r = []
+    i = 0
+    while i < proj_life:
+        r.append(ml)
+        i = i + 1
 
+    meals_per_year = pd.Series(r)
+    meals_per_year = np.outer(np.asarray(meals_per_year), np.ones(project_life))
 
+    for s in range(1):
+        meals_per_year[:, s] = 0
+    discount_factor = (1 + discount_rate) ** year
+    discounted_meals = meals_per_year / discount_factor
 
-
-
-
-
-
-
-               
-
-    
+    return discounted_meals
