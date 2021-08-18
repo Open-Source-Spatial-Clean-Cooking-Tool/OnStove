@@ -55,7 +55,7 @@ Technology.set_default_values(start_year = start_year,
 traditional_biomass_purchased = Technology(tech_life=3, #placeholder
                         inv_cost = 0.5,
                         om_costs = 138,
-                        fuel_cost = 20, #placeholder
+                        fuel_cost = 0.006, #Francecso's paper
                         efficiency = 0.14,
                         pm25 = 500,
                         energy_content = 16, #MJ/kg
@@ -80,11 +80,22 @@ improved_biomass = Technology(tech_life=6,
                         carbon_intensity = 217, #kg/GJ
                         name = 'improved_biomass')
 
+improved_biomass_purchased = Technology(tech_life=6,
+                        inv_cost = 20,
+                        om_costs = 1.4,
+                        efficiency = 0.33,
+                        fuel_cost = 0.006, #Francecso's paper
+                        pm25 = 150,
+                        energy_content = 16, #MJ/kg
+                        carbon_intensity = 217, #kg/GJ
+                        name = 'improved_biomass_purchased')
+
 lpg = Technology(tech_life=5,
                         inv_cost = 39,
                         om_costs = 3.56,
                         efficiency = 0.58,
                         pm25 = 10,
+                        fuel_cost = 0.049,
                         energy_content = 45.5, #MJ/kg
                         carbon_intensity = 67, #kg/GJ
                         name = 'lpg')
@@ -100,7 +111,7 @@ biogas = Technology(tech_life=5, #placeholder
 electricity = Technology(tech_life=5,
                         inv_cost = 55,
                         infra_cost =500, #placeholder
-                        fuel_cost = 0.1, #placeholder
+                        fuel_cost = 0.059, #placeholder
                         om_costs = 3.6,
                         efficiency = 0.86,
                         energy_content = 3.6, # MJ/kWh
@@ -310,13 +321,13 @@ def time_save(tech, value_of_time):
 
     if tech.name == 'biogas':
         time_of_collection = 2
-    elif tech.name == 'traditional_biomass':
+    elif tech.name == 'traditional_biomass' or tech.name == 'improved_biomass':
         time_of_collection = 2 * (raster.travel_time(walking_friction, forest)) + 2.2 # 2.2 hrs Medium scenario for Jeiland paper globally, placeholder
     else:
         time_of_collection = 0
 
     time = time_of_collection + tech.time_of_cooking
-    time_value = time * value_of_time #Let users choose value_of_time
+    time_value = time * value_of_time
 
     return time_value
 
@@ -326,6 +337,12 @@ def carbon_emissions(tech):
     carb = 5 * (3.64 / tech.efficiency) / tech.energy_content * (tech.carbon_intensity * tech.energy_content / tech.efficiency) #5 USD/MT is average social cost of carbon emissions in Nepal according to https://www.nature.com/articles/s41558-018-0282-y.pdf, 3.64 MJ to cook based on https://iopscience.iop.org/article/10.1088/1748-9326/aa6fd0/meta
 
     return carb
+
+def fuel_cost(tech):
+
+    return (tech.fuel_cost * 3.64)/tech.efficienciy
+
+
 
 
 
