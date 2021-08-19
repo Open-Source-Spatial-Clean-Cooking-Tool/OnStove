@@ -123,7 +123,8 @@ electricity = Technology(tech_life=5,
                         name = 'electricity')
 
 
-def morbidity(start_year, end_year, tech, discount_rate_social, hhsize_R, hhsize_U, sfu = 1):
+def morbidity(start_year, end_year, tech, discount_rate_social, hhsize_R, hhsize_U, coi_alri, coi_lc, coi_copd,
+              coi_ihd, inci_alri, inci_lc, inci_copd, inci_ihd,sfu = 1):
 
     """
     Calculates morbidity rate per fuel
@@ -175,20 +176,15 @@ def morbidity(start_year, end_year, tech, discount_rate_social, hhsize_R, hhsize
     paf_ihd = (sfu * (rr_ihd - 1)) / (sfu * (rr_ihd - 1) + 1)
     paf_lc = (sfu * (rr_lc - 1)) / (sfu * (rr_lc - 1) + 1)
 
-    coi_alri = 38 #Nepal mean in CCA doc, add as user input
-    coi_copd = 37 #Nepal value in CCA doc, add as user input
-    coi_ihd = 1010 #mean value in CCA doc, add as user input
-    coi_lc = 1010 #mean value in CCA doc, add as user input
+    morb_alri_U = hhsize_U * paf_alri * inci_alri
+    morb_copd_U = hhsize_U * paf_copd * inci_copd
+    morb_ihd_U = hhsize_U * paf_ihd * inci_ihd
+    morb_lc_U = hhsize_U * paf_lc * inci_lc
 
-    morb_alri_U = hhsize_U * paf_alri * 5 #add hhsize_U and hhsize_R as inputs as user input
-    morb_copd_U = hhsize_U * paf_copd * 12
-    morb_ihd_U = hhsize_U * paf_ihd * 50
-    morb_lc_U = hhsize_U * paf_lc * 7
-
-    morb_alri_R = hhsize_R * paf_alri * 5 #Add incidence rate per disease as input
-    morb_copd_R = hhsize_R * paf_copd * 12
-    morb_ihd_R = hhsize_R * paf_ihd * 50
-    morb_lc_R = hhsize_R * paf_lc * 7
+    morb_alri_R = hhsize_R * paf_alri * inci_alri
+    morb_copd_R = hhsize_R * paf_copd * inci_copd
+    morb_ihd_R = hhsize_R * paf_ihd * inci_ihd
+    morb_lc_R = hhsize_R * paf_lc * inci_lc
 
     cl_copd = {1:0.3, 2:0.2, 3:0.17, 4:0.17, 5:0.16}
     cl_alri = {1: 0.7, 2: 0.1, 3: 0.07, 4: 0.07, 5: 0.06}
@@ -196,8 +192,8 @@ def morbidity(start_year, end_year, tech, discount_rate_social, hhsize_R, hhsize
     cl_ihd = {1: 0.2, 2: 0.1, 3: 0.24, 4: 0.23, 5: 0.23}
 
     i = 1
-    morb__U_vector = []
-    morb__R_vector = []
+    morb_U_vector = []
+    morb_R_vector = []
     while i < 6:
         morbidity_alri_U = cl_alri[i]*coi_alri*morb_alri_U /(1+discount_rate_social)**(end_year-start_year)
         morbidity_copd_U = cl_copd[i] * coi_copd * morb_copd_U / (1 + discount_rate_social) ** (end_year - start_year)
@@ -206,7 +202,7 @@ def morbidity(start_year, end_year, tech, discount_rate_social, hhsize_R, hhsize
 
         morb_U_total = morbidity_alri_U + morbidity_copd_U + morbidity_lc_U + morbidity_ihd_U
 
-        morb__U_vector.append(morb_U_total)
+        morb_U_vector.append(morb_U_total)
 
         morbidity_alri_R = cl_alri[i]*coi_alri*morb_alri_R /(1+discount_rate_social)**(end_year-start_year)
         morbidity_copd_R = cl_copd[i] * coi_copd * morb_copd_R / (1 + discount_rate_social) ** (end_year - start_year)
@@ -215,7 +211,7 @@ def morbidity(start_year, end_year, tech, discount_rate_social, hhsize_R, hhsize
 
         morb_R_total = morbidity_alri_R + morbidity_copd_R + morbidity_lc_R + morbidity_ihd_R
 
-        morb__R_vector.append(morb_R_total)
+        morb_R_vector.append(morb_R_total)
 
     morbidity_U = np.sum(morb_U_vector)
     morbidity_R = np.sum(morb_R_vector)
@@ -223,7 +219,8 @@ def morbidity(start_year, end_year, tech, discount_rate_social, hhsize_R, hhsize
     return morbidity_R, morbidity_U
 
 
-def mortality(start_year, end_year, tech, discount_rate_social, hhsize_R, hhsize_U, vsl, sfu=1):
+def mortality(start_year, end_year, tech, discount_rate_social, hhsize_R, hhsize_U, vsl, mort_ihd, mort_lc,
+    mort_alri, mort_copd, sfu=1):
 
     """
     Calculates mortality rate per fuel
@@ -277,22 +274,20 @@ def mortality(start_year, end_year, tech, discount_rate_social, hhsize_R, hhsize
     paf_ihd = (sfu * (rr_ihd - 1)) / (sfu * (rr_ihd - 1) + 1)
     paf_lc = (sfu * (rr_lc - 1)) / (sfu * (rr_lc - 1) + 1)
 
-    mort_alri_U = hhsize_U * paf_alri * 22 #Mortality rate per country --> add as input
-    mort_copd_U = hhsize_U * paf_copd * 95
-    mort_ihd_U = hhsize_U * paf_ihd * 69
-    mort_lc_U = hhsize_U * paf_lc * 13
+    mort_alri_U = hhsize_U * paf_alri * mort_alri
+    mort_copd_U = hhsize_U * paf_copd * mort_copd
+    mort_ihd_U = hhsize_U * paf_ihd * mort_ihd
+    mort_lc_U = hhsize_U * paf_lc * mort_lc
 
-    mort_alri_R = hhsize_R * paf_alri * 22
-    mort_copd_R = hhsize_R * paf_copd * 95
-    mort_ihd_R = hhsize_R * paf_ihd * 69
-    mort_lc_R = hhsize_R * paf_lc * 13
+    mort_alri_R = hhsize_R * paf_alri * mort_alri
+    mort_copd_R = hhsize_R * paf_copd * mort_copd
+    mort_ihd_R = hhsize_R * paf_ihd * mort_ihd
+    mort_lc_R = hhsize_R * paf_lc * mort_lc
 
     cl_copd = {1: 0.3, 2: 0.2, 3: 0.17, 4: 0.17, 5: 0.16}
     cl_alri = {1: 0.7, 2: 0.1, 3: 0.07, 4: 0.07, 5: 0.06}
     cl_lc = {1: 0.2, 2: 0.1, 3: 0.24, 4: 0.23, 5: 0.23}
     cl_ihd = {1: 0.2, 2: 0.1, 3: 0.24, 4: 0.23, 5: 0.23}
-
-    #vsl = 45000 # South Asia mean accroding to CCA doc, add as input
 
     i = 1
     mort_U_vector = []
@@ -305,7 +300,7 @@ def mortality(start_year, end_year, tech, discount_rate_social, hhsize_R, hhsize
 
         mort_U_total = mortality_alri_U + mortality_copd_U + mortality_lc_U + mortality_ihd_U
 
-        mort__U_vector.append(mort_U_total)
+        mort_U_vector.append(mort_U_total)
 
         mortality_alri_R = cl_alri[i] * vsl * mort_alri_R / (1 + discount_rate_social) ** (end_year - start_year)
         mortality_copd_R = cl_copd[i] * vsl * mort_copd_R / (1 + discount_rate_social) ** (end_year - start_year)
@@ -314,7 +309,7 @@ def mortality(start_year, end_year, tech, discount_rate_social, hhsize_R, hhsize
 
         mort_R_total = mortality_alri_R + mortality_copd_R + mortality_lc_R + mortality_ihd_R
 
-        mort__R_vector.append(mort_R_total)
+        mort_R_vector.append(mort_R_total)
 
     mortality_U = np.sum(mort_U_vector)
     mortality_R = np.sum(mort_R_vector)
