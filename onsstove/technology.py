@@ -317,7 +317,7 @@ def mortality(start_year, end_year, tech, discount_rate, hhsize_R, hhsize_U, vsl
 
     return mortality_R, mortality_U
 
-def time_save(tech, value_of_time):
+def time_save(tech, value_of_time, walking_friction, forest):
 
     if tech.name == 'biogas':
         time_of_collection = 2
@@ -342,41 +342,108 @@ def fuel_cost(tech):
 
     return (tech.fuel_cost * 3.64)/tech.efficienciy
 
-def meals_per_year(tech, discount_rate, meals_per_year):
 
-    end_year = tech.end_year
-    start_year = tech.start_year
-    proj_life = end_year - start_year
+def discount_factor(discount_rate, tech):
+    if tech.start_year == tech.end_year:
+        proj_life = 1
+    else:
+        proj_life = tech.end_year - tech.start_year
+
     year = np.arange(proj_life)
 
-    ml = meals_per_year
+    discount_factor = (1 + self.discount_rate) ** year
 
-    r = []
-    i = 0
-    while i < proj_life:
-        r.append(ml)
-        i = i + 1
+    return discount_factor, proj_life
 
-    meals_per_year = pd.Series(r)
-    meals_per_year = np.outer(np.asarray(meals_per_year), np.ones(project_life))
 
-    for s in range(1):
-        meals_per_year[:, s] = 0
-    discount_factor = (1 + discount_rate) ** year
-    discounted_meals = meals_per_year / discount_factor
+def discounted_meals(meals_per_year, discount, tech):
+    discount_factor, proj_life = discount_factor(discount, tech)
 
-    return discounted_meals
+    energy = meals_per_year * 3.64 / tech.efficiency
 
-def operation_and_maintenance(tech):
-    end_year = tech.end_year
-    start_year = tech.start_year
-    proj_life = end_year - start_year
+    energy_needed = energy * np.ones(proj_life)
 
-    total_om_cost = (tech.cap_cost * tech.self.om_costs)
+    if proj_life > 1:
+        energy_needed[0] = 0
 
-    operation_and_maintenance = np.ones(proj_life)
-    for s in range(1):
-        operation_and_maintenance[s] = 0
-    operation_and_maintenance = np.outer(total_om_cost, operation_and_maintenance)
+    discounted_energy = energy_needed / discount_factor
 
-    return operation_and_maintenance
+    return discounted_energy
+
+
+def discounted_inv(discount, tech):
+    discount_factor, proj_life = discount_factor(discount, tech)
+
+    investments = np.zeros(project_life)
+    investments[0] = tech.inv_cost
+
+    if proj_life > tech.tech_life:
+        investments[tech.tech_life] = tech.inv_cost
+
+    discounted_investments = investments / discount_factor
+
+    return discounted_investments
+
+
+def discounted_om(discount, tech):
+    discount_factor, proj_life = discount_factor(discount, tech)
+
+    operation_and_maintenance = tech.om_costs * np.ones(project_life)
+
+    if proj_life > 1:
+        operation_and_maintenance[0] = 0
+
+        if proj_life > tech.tech_life:
+            operation_and_maintenance[tech.tech_life] = 0
+
+    discounted_om_cost = operation_and_maintenance / discount_factor
+
+    return discounted_om_cost
+
+
+def salvage(discount, tech):
+    discount_factor, proj_life = discount_factor(discount, tech)
+
+    salvage = np.zeros(project_life)
+    used_life = project_life
+
+    if proj_life > tech.tech_life:
+        used_life = project_life - tech.tech_life
+
+    salvage[-1] = tech.inv_cost * (1 - used_life / tech.tech_life)
+
+    discounted_salvage = salvage / discount_factor
+
+    return discounted_salvage
+
+
+def discounted_fuel_cost(discount, tech, road_friction, LPG):
+    discount_factor, proj_life = discount_factor(discount, tech)
+
+    if tech.name == 'electricity' or tech.name == 'improved_biomass_purchased' or tech.name == 'purchased_traditional_biomass':
+        fuel_cost = tech.fuel_cost * np.ones(project_life)
+    elif tech.name == 'lpg':
+        fuel_cost = raster.lpg_transportation_cost(raster.travel_time(road_friction, LPG))
+    else:
+        fuel_cost = 0
+
+    fuel_cost_discounted = fuel_cost / discount_factor
+
+    return fuel_cost_discounted
+
+def lccm(discount, tech, meals_per_year, road_friction, lpg)
+
+    lccm = (discounted_inv(discount, tech) + discounted_om(discount, tech) + \
+            discounted_fuel_cost(discount, tech, road_friction, lpg) - salvage(discount, tech))/ \
+           discounted_meals(meals_per_year, discount, tech)
+
+    return lccm
+
+
+
+
+
+
+
+
+
