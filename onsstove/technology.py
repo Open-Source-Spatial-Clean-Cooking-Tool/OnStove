@@ -412,14 +412,14 @@ def salvage(discount, tech):
     return discounted_salvage
 
 
-def discounted_fuel_cost(discount, tech, road_friction, LPG):
+def discounted_fuel_cost(discount, tech, road_friction, lpg, meals_per_year):
 
     discount_factor, proj_life = discount_factor(discount, tech)
 
     if tech.name == 'electricity' or tech.name == 'improved_biomass_purchased' or tech.name == 'purchased_traditional_biomass':
-        fuel_cost = tech.fuel_cost * np.ones(project_life)
+        fuel_cost = (tech.fuel_cost * discounted_meals(meals_per_year, discount, tech)) * np.ones(project_life) / tech.efficiency
     elif tech.name == 'lpg':
-        fuel_cost = raster.lpg_transportation_cost(raster.travel_time(road_friction, LPG))
+        fuel_cost = (tech.fuel_cost * discounted_meals(meals_per_year, discount, tech)) * raster.lpg_transportation_cost(raster.travel_time(road_friction, lpg)) / tech.efficiency
     else:
         fuel_cost = 0
 
@@ -427,7 +427,7 @@ def discounted_fuel_cost(discount, tech, road_friction, LPG):
 
     return fuel_cost_discounted
 
-def lccm(discount, tech, meals_per_year, road_friction, lpg)
+def lccm(discount, tech, meals_per_year, road_friction, lpg):
 
     lccm = (discounted_inv(discount, tech) + discounted_om(discount, tech) + \
             discounted_fuel_cost(discount, tech, road_friction, lpg) - salvage(discount, tech))/ \
