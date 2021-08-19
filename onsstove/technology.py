@@ -39,18 +39,22 @@ class Technology():
         self.pm25 = pm25
 
 
-    def set_default_values(start_year, end_year, discount_rate):
-        self.discount_rate = discount_rate
+    def set_default_values(start_year, end_year, discount_rate_social, discount_rate_tech):
+        self.discount_rate_social = discount_rate_social
         self.start_year = start_year
         self.end_year = end_year
+        self.discount_rate_tech = discount_rate_tech
+
 
     start_year = 2020
     end_year=2030
-    discount_rate = 0.08
+    discount_rate_tech = 0.08
+    discount_rate_social = 0.04
 
 Technology.set_default_values(start_year = start_year,
                               end_year = end_year,
-                              discount_rate = discount_rate)
+                              discount_rate_tech = discount_rate_tech,
+                              discount_rate_social = discount_rate_social)
 
 traditional_biomass_purchased = Technology(tech_life=3, #placeholder
                         inv_cost = 0.5,
@@ -119,7 +123,7 @@ electricity = Technology(tech_life=5,
                         name = 'electricity')
 
 
-def morbidity(start_year, end_year, tech, discount_rate, hhsize_R, hhsize_U, sfu = 1):
+def morbidity(start_year, end_year, tech, discount_rate_social, hhsize_R, hhsize_U, sfu = 1):
 
     """
     Calculates morbidity rate per fuel
@@ -195,19 +199,19 @@ def morbidity(start_year, end_year, tech, discount_rate, hhsize_R, hhsize_U, sfu
     morb__U_vector = []
     morb__R_vector = []
     while i < 6:
-        morbidity_alri_U = cl_alri[i]*coi_alri*morb_alri_U /(1+discount_rate)**(end_year-start_year)
-        morbidity_copd_U = cl_copd[i] * coi_copd * morb_copd_U / (1 + discount_rate) ** (end_year - start_year)
-        morbidity_lc_U = cl_lc[i] * coi_lc * morb_lc_U / (1 + discount_rate) ** (end_year - start_year)
-        morbidity_ihd_U = cl_ihd[i] * coi_ihd * morb_ihd_U / (1 + discount_rate) ** (end_year - start_year)
+        morbidity_alri_U = cl_alri[i]*coi_alri*morb_alri_U /(1+discount_rate_social)**(end_year-start_year)
+        morbidity_copd_U = cl_copd[i] * coi_copd * morb_copd_U / (1 + discount_rate_social) ** (end_year - start_year)
+        morbidity_lc_U = cl_lc[i] * coi_lc * morb_lc_U / (1 + discount_rate_social) ** (end_year - start_year)
+        morbidity_ihd_U = cl_ihd[i] * coi_ihd * morb_ihd_U / (1 + discount_rate_social) ** (end_year - start_year)
 
         morb_U_total = morbidity_alri_U + morbidity_copd_U + morbidity_lc_U + morbidity_ihd_U
 
         morb__U_vector.append(morb_U_total)
 
-        morbidity_alri_R = cl_alri[i]*coi_alri*morb_alri_R /(1+discount_rate)**(end_year-start_year)
-        morbidity_copd_R = cl_copd[i] * coi_copd * morb_copd_R / (1 + discount_rate) ** (end_year - start_year)
-        morbidity_lc_R = cl_lc[i] * coi_lc * morb_lc_R / (1 + discount_rate) ** (end_year - start_year)
-        morbidity_ihd_R = cl_ihd[i] * coi_ihd * morb_ihd_R / (1 + discount_rate) ** (end_year - start_year)
+        morbidity_alri_R = cl_alri[i]*coi_alri*morb_alri_R /(1+discount_rate_social)**(end_year-start_year)
+        morbidity_copd_R = cl_copd[i] * coi_copd * morb_copd_R / (1 + discount_rate_social) ** (end_year - start_year)
+        morbidity_lc_R = cl_lc[i] * coi_lc * morb_lc_R / (1 + discount_rate_social) ** (end_year - start_year)
+        morbidity_ihd_R = cl_ihd[i] * coi_ihd * morb_ihd_R / (1 + discount_rate_social) ** (end_year - start_year)
 
         morb_R_total = morbidity_alri_R + morbidity_copd_R + morbidity_lc_R + morbidity_ihd_R
 
@@ -219,7 +223,7 @@ def morbidity(start_year, end_year, tech, discount_rate, hhsize_R, hhsize_U, sfu
     return morbidity_R, morbidity_U
 
 
-def mortality(start_year, end_year, tech, discount_rate, hhsize_R, hhsize_U, vsl, sfu=1):
+def mortality(start_year, end_year, tech, discount_rate_social, hhsize_R, hhsize_U, vsl, sfu=1):
 
     """
     Calculates mortality rate per fuel
@@ -288,25 +292,25 @@ def mortality(start_year, end_year, tech, discount_rate, hhsize_R, hhsize_U, vsl
     cl_lc = {1: 0.2, 2: 0.1, 3: 0.24, 4: 0.23, 5: 0.23}
     cl_ihd = {1: 0.2, 2: 0.1, 3: 0.24, 4: 0.23, 5: 0.23}
 
-    vsl = 45000 # South Asia mean accroding to CCA doc, add as input
+    #vsl = 45000 # South Asia mean accroding to CCA doc, add as input
 
     i = 1
     mort_U_vector = []
     mort_R_vector = []
     while i < 6:
-        mortality_alri_U = cl_alri[i] * vsl * mort_alri_U / (1 + discount_rate) ** (end_year - start_year)
-        mortality_copd_U = cl_copd[i] * vsl * mort_copd_U / (1 + discount_rate) ** (end_year - start_year)
-        mortality_lc_U = cl_lc[i] * vsl * mort_lc_U / (1 + discount_rate) ** (end_year - start_year)
-        mortality_ihd_U = cl_ihd[i] * vsl * mort_ihd_U / (1 + discount_rate) ** (end_year - start_year)
+        mortality_alri_U = cl_alri[i] * vsl * mort_alri_U / (1 + discount_rate_social) ** (end_year - start_year)
+        mortality_copd_U = cl_copd[i] * vsl * mort_copd_U / (1 + discount_rate_social) ** (end_year - start_year)
+        mortality_lc_U = cl_lc[i] * vsl * mort_lc_U / (1 + discount_rate_social) ** (end_year - start_year)
+        mortality_ihd_U = cl_ihd[i] * vsl * mort_ihd_U / (1 + discount_rate_social) ** (end_year - start_year)
 
         mort_U_total = mortality_alri_U + mortality_copd_U + mortality_lc_U + mortality_ihd_U
 
         mort__U_vector.append(mort_U_total)
 
-        mortality_alri_R = cl_alri[i] * vsl * mort_alri_R / (1 + discount_rate) ** (end_year - start_year)
-        mortality_copd_R = cl_copd[i] * vsl * mort_copd_R / (1 + discount_rate) ** (end_year - start_year)
-        mortality_lc_R = cl_lc[i] * vsl * mort_lc_R / (1 + discount_rate) ** (end_year - start_year)
-        mortality_ihd_R = cl_ihd[i] * vsl * mort_ihd_R / (1 + discount_rate) ** (end_year - start_year)
+        mortality_alri_R = cl_alri[i] * vsl * mort_alri_R / (1 + discount_rate_social) ** (end_year - start_year)
+        mortality_copd_R = cl_copd[i] * vsl * mort_copd_R / (1 + discount_rate_social) ** (end_year - start_year)
+        mortality_lc_R = cl_lc[i] * vsl * mort_lc_R / (1 + discount_rate_social) ** (end_year - start_year)
+        mortality_ihd_R = cl_ihd[i] * vsl * mort_ihd_R / (1 + discount_rate_social) ** (end_year - start_year)
 
         mort_R_total = mortality_alri_R + mortality_copd_R + mortality_lc_R + mortality_ihd_R
 
@@ -338,7 +342,7 @@ def carbon_emissions(tech):
 
     return carb
 
-def discount_factor(discount_rate, tech):
+def discount_factor(discount_rate_tech, tech):
     if tech.start_year == tech.end_year:
         proj_life = 1
     else:
@@ -346,13 +350,13 @@ def discount_factor(discount_rate, tech):
 
     year = np.arange(proj_life)
 
-    discount_factor = (1 + self.discount_rate) ** year
+    discount_factor = (1 + discount_rate_tech) ** year
 
     return discount_factor, proj_life
 
 
-def discounted_meals(meals_per_year, discount, tech):
-    discount_factor, proj_life = discount_factor(discount, tech)
+def discounted_meals(meals_per_year, discount_rate_tech, tech):
+    discount_factor, proj_life = discount_factor(discount_rate_tech, tech)
 
     energy = meals_per_year * 3.64 / tech.efficiency
 
@@ -366,8 +370,8 @@ def discounted_meals(meals_per_year, discount, tech):
     return discounted_energy
 
 
-def discounted_inv(discount, tech):
-    discount_factor, proj_life = discount_factor(discount, tech)
+def discounted_inv(discount_rate_tech, tech):
+    discount_factor, proj_life = discount_factor(discount_rate_tech, tech)
 
     investments = np.zeros(project_life)
     investments[0] = tech.inv_cost
@@ -380,8 +384,8 @@ def discounted_inv(discount, tech):
     return discounted_investments
 
 
-def discounted_om(discount, tech):
-    discount_factor, proj_life = discount_factor(discount, tech)
+def discounted_om(discount_rate_tech, tech):
+    discount_factor, proj_life = discount_factor(discount_rate_tech, tech)
 
     operation_and_maintenance = tech.om_costs * np.ones(project_life)
 
@@ -396,8 +400,8 @@ def discounted_om(discount, tech):
     return discounted_om_cost
 
 
-def salvage(discount, tech):
-    discount_factor, proj_life = discount_factor(discount, tech)
+def salvage(discount_rate_tech, tech):
+    discount_factor, proj_life = discount_factor(discount_rate_tech, tech)
 
     salvage = np.zeros(project_life)
     used_life = project_life
@@ -412,14 +416,14 @@ def salvage(discount, tech):
     return discounted_salvage
 
 
-def discounted_fuel_cost(discount, tech, road_friction, lpg, meals_per_year):
+def discounted_fuel_cost(discount_rate_tech, tech, road_friction, lpg, meals_per_year):
 
-    discount_factor, proj_life = discount_factor(discount, tech)
+    discount_factor, proj_life = discount_factor(discount_rate_tech, tech)
 
     if tech.name == 'electricity' or tech.name == 'improved_biomass_purchased' or tech.name == 'purchased_traditional_biomass':
-        fuel_cost = (tech.fuel_cost * discounted_meals(meals_per_year, discount, tech)) * np.ones(project_life) / tech.efficiency
+        fuel_cost = (tech.fuel_cost * discounted_meals(meals_per_year, discount_rate_tech, tech)) * np.ones(project_life) / tech.efficiency
     elif tech.name == 'lpg':
-        fuel_cost = (tech.fuel_cost * discounted_meals(meals_per_year, discount, tech)) * raster.lpg_transportation_cost(raster.travel_time(road_friction, lpg)) / tech.efficiency
+        fuel_cost = (tech.fuel_cost * discounted_meals(meals_per_year, discount_rate_tech, tech)) * raster.lpg_transportation_cost(raster.travel_time(road_friction, lpg)) / tech.efficiency
     else:
         fuel_cost = 0
 
@@ -427,13 +431,31 @@ def discounted_fuel_cost(discount, tech, road_friction, lpg, meals_per_year):
 
     return fuel_cost_discounted
 
-def lccm(discount, tech, meals_per_year, road_friction, lpg):
+def cost(discount_rate_tech, tech, meals_per_year, road_friction, lpg):
 
-    lccm = (discounted_inv(discount, tech) + discounted_om(discount, tech) + \
-            discounted_fuel_cost(discount, tech, road_friction, lpg) - salvage(discount, tech))/ \
-           discounted_meals(meals_per_year, discount, tech)
+    cost = (discounted_inv(discount_rate_tech, tech) + discounted_om(discount_rate_tech, tech) + \
+            discounted_fuel_cost(discount_rate_tech, tech, road_friction, lpg) - salvage(discount_rate_tech, tech))/ \
+           discounted_meals(meals_per_year, discount_rate_tech, tech)
+
+    return cost
+
+def benefit(start_year, end_year, tech, discount_rate_social, hhsize_R, hhsize_U, vsl,  value_of_time, walking_friction, forest, sfu = 1):
+
+    benefit = morbidity(start_year, end_year, tech, discount_rate_social, hhsize_R, hhsize_U, sfu) + \
+              mortality(start_year, end_year, tech, discount_rate_social, hhsize_R, hhsize_U, vsl, sfu) + \
+              time_save(tech, value_of_time, walking_friction, forest) + carbon_emissions(tech)
+
+    return benefit
+
+def lccm(discount_rate_tech, tech, meals_per_year, road_friction, lpg,start_year, end_year, discount_rate_social,
+         hhsize_R, hhsize_U, vsl,  value_of_time, walking_friction, forest, sfu = 1):
+
+    lccm = benefit(start_year, end_year, tech, discount_rate_social, hhsize_R, hhsize_U, vsl,  value_of_time,
+                   walking_friction, forest, sfu) - cost(discount_rate_tech, tech, meals_per_year, road_friction, lpg)
 
     return lccm
+
+
 
 
 
