@@ -1,8 +1,7 @@
 import onsstove.technology
 
 
-specs_data = pd.read_excel(specs_path, sheet_name='CountryData')
-
+specs_data = pd.read_excel('path_to_file', sheet_name='CountryData')
 
 country = specs_data.iloc[0]['Country']
 iso_code = specs_data.iloc[0]['iso_code']
