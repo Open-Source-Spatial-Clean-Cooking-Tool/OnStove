@@ -338,11 +338,6 @@ def carbon_emissions(tech):
 
     return carb
 
-def fuel_cost(tech):
-
-    return (tech.fuel_cost * 3.64)/tech.efficienciy
-
-
 def discount_factor(discount_rate, tech):
     if tech.start_year == tech.end_year:
         proj_life = 1
@@ -418,6 +413,7 @@ def salvage(discount, tech):
 
 
 def discounted_fuel_cost(discount, tech, road_friction, LPG):
+
     discount_factor, proj_life = discount_factor(discount, tech)
 
     if tech.name == 'electricity' or tech.name == 'improved_biomass_purchased' or tech.name == 'purchased_traditional_biomass':
