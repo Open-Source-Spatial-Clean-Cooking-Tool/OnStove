@@ -196,11 +196,7 @@ def friction_start_points(friction, in_points):
                
             row_list.append(rows)
             col_list.append(cols)
-        
-    # with rasterio.open(out_raster, 'w', **out_meta) as dst:
-        # dst.write(arr, indexes = 1)
-        # dst.close()
-        
+
     return row_list, col_list
         
 def merge_rasters(files_path, dst_crs, outpul_file):
@@ -318,7 +314,7 @@ def resample(raster_path, height, width, method='bilinear'):
         return data, transform
         
         
-def calibrate_urban(clusters, urban_current, workspace):
+def calibrate_urban(clusters, urban_current):
     """
     Calibrate urban population. Classifies clusters to either urban(2), peri-urban(1) or rural(0). 
 
@@ -397,6 +393,16 @@ def lpg_transportation_cost(travel_time):
     total_cost = (transport_cost + 1.34)/0.6
     
     return total_cost
-    
-    
 
+def travel_time(friction, starts):
+
+    friction *= 1000/60
+    friction[np.isnan(friction)] = float('inf')
+    mcp = MCP_Geometric(friction, fully_connected=True)
+    row, col = friction_start_points(friction, starts)
+    pointlist = np.column_stack((row, col))
+
+    cumulative_costs, traceback = mcp.find_costs(starts=pointlist)
+    cumulative_costs[np.where(cumulative_costs==float('inf'))] = np.nan
+
+    return cumulative_costs

@@ -47,7 +47,7 @@ class Layer():
     def read_layer(self, layer_path, conn=None):
         pass
         
-    
+
     def travel_time(self, output_path):
         self.friction.layer *= 1000/60 # to convert to hours per kilometer
         self.friction.layer[np.isnan(self.friction.layer)] = float('inf')
@@ -57,10 +57,10 @@ class Layer():
         # TODO: create method for restricted areas
         cumulative_costs, traceback = mcp.find_costs(starts=pointlist)
         cumulative_costs[np.where(cumulative_costs==float('inf'))] = np.nan
-        
-        self.distance_raster = RasterLayer(self.category, 
+
+        self.distance_raster = RasterLayer(self.category,
                                            self.name + ' - traveltime')
-                                           
+
         self.distance_raster.layer = cumulative_costs
         self.distance_raster.meta = self.friction.meta.copy()
         self.distance_raster.save(output_path)
