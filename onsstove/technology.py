@@ -442,13 +442,14 @@ def benefit(start_year, end_year, tech, discount_rate_social, hhsize_R, hhsize_U
 
     return benefit
 
-def lccm(discount_rate_tech, tech, meals_per_year, road_friction, lpg,start_year, end_year, discount_rate_social,
+def net_costs(discount_rate_tech, tech, meals_per_year, road_friction, lpg,start_year, end_year, discount_rate_social,
          hhsize_R, hhsize_U, vsl,  value_of_time, walking_friction, forest, sfu = 1):
 
-    lccm = benefit(start_year, end_year, tech, discount_rate_social, hhsize_R, hhsize_U, vsl,  value_of_time,
-                   walking_friction, forest, sfu) - cost(discount_rate_tech, tech, meals_per_year, road_friction, lpg)
+    net_costs = cost(discount_rate_tech, tech, meals_per_year, road_friction, lpg) -  \
+                benefit(start_year, end_year, tech, discount_rate_social, hhsize_R, hhsize_U, vsl,  value_of_time,
+                        walking_friction, forest, sfu)
 
-    return lccm
+    return net_costs
 
 
 
