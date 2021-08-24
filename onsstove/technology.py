@@ -351,7 +351,7 @@ def discount_factor(discount_rate_tech, tech):
 
 
 def discounted_meals(meals_per_year, discount_rate_tech, tech):
-    discount_factor, proj_life = discount_factor(discount_rate_tech, tech)
+    discount_rate, proj_life = discount_factor(discount_rate_tech, tech)
 
     energy = meals_per_year * 3.64 / tech.efficiency
 
@@ -360,13 +360,13 @@ def discounted_meals(meals_per_year, discount_rate_tech, tech):
     if proj_life > 1:
         energy_needed[0] = 0
 
-    discounted_energy = energy_needed / discount_factor
+    discounted_energy = energy_needed / discount_rate
 
     return discounted_energy
 
 
 def discounted_inv(discount_rate_tech, tech):
-    discount_factor, proj_life = discount_factor(discount_rate_tech, tech)
+    discount_rate, proj_life = discount_factor(discount_rate_tech, tech)
 
     investments = np.zeros(project_life)
     investments[0] = tech.inv_cost
@@ -374,13 +374,13 @@ def discounted_inv(discount_rate_tech, tech):
     if proj_life > tech.tech_life:
         investments[tech.tech_life] = tech.inv_cost
 
-    discounted_investments = investments / discount_factor
+    discounted_investments = investments / discount_rate
 
     return discounted_investments
 
 
 def discounted_om(discount_rate_tech, tech):
-    discount_factor, proj_life = discount_factor(discount_rate_tech, tech)
+    discount_rate, proj_life = discount_factor(discount_rate_tech, tech)
 
     operation_and_maintenance = tech.om_costs * np.ones(project_life)
 
@@ -390,13 +390,13 @@ def discounted_om(discount_rate_tech, tech):
         if proj_life > tech.tech_life:
             operation_and_maintenance[tech.tech_life] = 0
 
-    discounted_om_cost = operation_and_maintenance / discount_factor
+    discounted_om_cost = operation_and_maintenance / discount_rate
 
     return discounted_om_cost
 
 
 def salvage(discount_rate_tech, tech):
-    discount_factor, proj_life = discount_factor(discount_rate_tech, tech)
+    discount_rate, proj_life = discount_factor(discount_rate_tech, tech)
 
     salvage = np.zeros(project_life)
     used_life = project_life
@@ -406,14 +406,14 @@ def salvage(discount_rate_tech, tech):
 
     salvage[-1] = tech.inv_cost * (1 - used_life / tech.tech_life)
 
-    discounted_salvage = salvage / discount_factor
+    discounted_salvage = salvage / discount_rate
 
     return discounted_salvage
 
 
 def discounted_fuel_cost(discount_rate_tech, tech, road_friction, lpg, meals_per_year):
 
-    discount_factor, proj_life = discount_factor(discount_rate_tech, tech)
+    discount_rate, proj_life = discount_factor(discount_rate_tech, tech)
 
     if tech.name == 'electricity' or tech.name == 'improved_biomass_purchased' or tech.name == 'purchased_traditional_biomass':
         fuel_cost = (tech.fuel_cost * discounted_meals(meals_per_year, discount_rate_tech, tech)) * np.ones(project_life) / tech.efficiency
@@ -422,7 +422,7 @@ def discounted_fuel_cost(discount_rate_tech, tech, road_friction, lpg, meals_per
     else:
         fuel_cost = 0
 
-    fuel_cost_discounted = fuel_cost / discount_factor
+    fuel_cost_discounted = fuel_cost / discount_rate
 
     return fuel_cost_discounted
 
