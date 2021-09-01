@@ -4,11 +4,12 @@ import pandas as pd
 import geopandas as gpd
 import numpy as np
 
+import onsstove.technology
 from .raster import *
 from .layer import VectorLayer, RasterLayer
 
 
-class MCA():
+class OnSSTOVE():
     """
     Class containing the methods to perform a Multi Criteria Analysis
     of clean cooking access potential. It calculates a Clean Cooking Demand 
@@ -16,6 +17,9 @@ class MCA():
     """
     conn = None
     base_layer = None
+
+    population = 'path_to_file'
+
     
     def __init__(self, project_crs=None, cell_size=None, output_directory='output'):
         """
