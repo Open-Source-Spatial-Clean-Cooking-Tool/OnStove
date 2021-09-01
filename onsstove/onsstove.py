@@ -69,7 +69,7 @@ class OnSSTOVE():
                     else:
                         raise ValueError("Config file data type not recognised.")
 
-        return config
+        self.specs = config
 
     def add_layer(self, category, name, layer_path, layer_type, query=None,
                   postgres=False, base_layer=False, resample='nearest', 
