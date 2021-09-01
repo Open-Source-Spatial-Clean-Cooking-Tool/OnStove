@@ -210,6 +210,7 @@ class OnSSTOVE():
                 
     def population_to_dataframe(self, layer):
         """
+        Takes a population `RasterLayer` as input and extracts the populated points to a GeoDataFrame that is saved in `OnSSTOVE.df`.
         """
         self.rows, self.cols = np.where(~np.isnan(layer.layer))
         x, y = rasterio.transform.xy(layer.meta['transform'], 
@@ -222,6 +223,7 @@ class OnSSTOVE():
     
     def raster_to_dataframe(self, layer, method='sample'):
         """
+        Takes a RasterLayer and a method (sample or read), gets the values from the raster layer using the population points previously extracted and saves the values in a new column of OnSSTOVE.df
         """
         if method=='sample':
             self.df[layer.name] = sample_raster(layer.path, self.df)
