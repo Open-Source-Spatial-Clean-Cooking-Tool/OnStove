@@ -87,15 +87,15 @@ class Technology():
              rr_lc = 1 + 152.496 * (1 - exp(-0.000167 * (self.pm25 - 7.345) ** 0.76))
 
          return rr_alri, rr_copd, rr_ihd, rr_lc
-      
-    @staticmethod
-    def paf(rr, sfu):
+
+    @classmethod
+    def paf(self, rr, sfu):
 
         paf = (sfu * (rr - 1)) / (sfu * (rr - 1) + 1)
 
         return paf
-    
-    def morbidity(self, social_specs_file):
+
+    def morbidity(self, social_specs_file, paf_0_alri, paf_0_copd, paf_0_lc, paf_0_ihd):
         """
         Calculates morbidity rate per fuel
 
@@ -105,20 +105,21 @@ class Technology():
         """
 
         rr_alri, rr_copd, rr_ihd, rr_lc = relative_risk(self)
-        paf_alri = (sfu * (rr_alri - 1)) / (sfu * (rr_alri - 1) + 1)
-        paf_copd = (sfu * (rr_copd - 1)) / (sfu * (rr_copd - 1) + 1)
-        paf_ihd = (sfu * (rr_ihd - 1)) / (sfu * (rr_ihd - 1) + 1)
-        paf_lc = (sfu * (rr_lc - 1)) / (sfu * (rr_lc - 1) + 1)
 
-        morb_alri_U = social_specs_file["Urban_Hhsize"] * paf_alri * social_specs_file["Morb_ALRI"]
-        morb_copd_U = social_specs_file["Urban_Hhsize"] * paf_copd * social_specs_file["Morb_COPD"]
-        morb_ihd_U = social_specs_file["Urban_Hhsize"] * paf_ihd * social_specs_file["Morb_IHD"]
-        morb_lc_U = social_specs_file["Urban_Hhsize"] * paf_lc * social_specs_file["Morb_LC"]
+        paf_alri = paf(rr_alri, sfu)
+        paf_copd = paf(rr_copd, sfu)
+        paf_ihd = paf(rr_ihd, sfu)
+        paf_lc = paf(rr_lc, sfu)
 
-        morb_alri_R = social_specs_file["Rural_Hhsize"] * paf_alri * social_specs_file["Morb_ALRI"]
-        morb_copd_R = social_specs_file["Rural_Hhsize"] * paf_copd * social_specs_file["Morb_COPD"]
-        morb_ihd_R = social_specs_file["Rural_Hhsize"] * paf_ihd * social_specs_file["Morb_IHD"]
-        morb_lc_R = social_specs_file["Rural_Hhsize"] * paf_lc * social_specs_file["Morb_LC"]
+        morb_alri_U = social_specs_file["Urban_Hhsize"] * (paf_0_alri - paf_alri) * social_specs_file["Morb_ALRI"]
+        morb_copd_U = social_specs_file["Urban_Hhsize"] * (paf_0_copd - paf_copd) * social_specs_file["Morb_COPD"]
+        morb_ihd_U = social_specs_file["Urban_Hhsize"] * (paf_0_ihd - paf_ihd) * social_specs_file["Morb_IHD"]
+        morb_lc_U = social_specs_file["Urban_Hhsize"] * (paf_0_lc - paf_lc) * social_specs_file["Morb_LC"]
+
+        morb_alri_R = social_specs_file["Rural_Hhsize"] * (paf_0_alri - paf_alri) * social_specs_file["Morb_ALRI"]
+        morb_copd_R = social_specs_file["Rural_Hhsize"] * (paf_0_copd - paf_copd) * social_specs_file["Morb_COPD"]
+        morb_ihd_R = social_specs_file["Rural_Hhsize"] * (paf_0_ihd - paf_ihd)  * social_specs_file["Morb_IHD"]
+        morb_lc_R = social_specs_file["Rural_Hhsize"] * (paf_0_lc - paf_lc)  * social_specs_file["Morb_LC"]
 
         cl_copd = {1: 0.3, 2: 0.2, 3: 0.17, 4: 0.17, 5: 0.16}
         cl_alri = {1: 0.7, 2: 0.1, 3: 0.07, 4: 0.07, 5: 0.06}
