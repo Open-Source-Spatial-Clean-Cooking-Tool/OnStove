@@ -64,6 +64,7 @@ class Technology():
         else:
             raise KeyError(idx)
 
+
     def relative_risk(self):
          if self.pm25 < 7.298:
              rr_alri = 1
@@ -85,10 +86,15 @@ class Technology():
          else:
              rr_lc = 1 + 152.496 * (1 - exp(-0.000167 * (self.pm25 - 7.345) ** 0.76))
 
-         return rr_alri, rr_copd, rr_ihd, rr_lc
+         return rr_alri, rr_copd, rr_ihd, rr_l
+      
+    @staticmethod
+    def paf(rr, sfu):
 
+        paf = (sfu * (rr - 1)) / (sfu * (rr - 1) + 1)
 
-
+        return paf
+    
 def morbidity(start_year, end_year, tech, discount_rate_social, hhsize_R, hhsize_U, coi_alri, coi_lc, coi_copd,
               coi_ihd, inci_alri, inci_lc, inci_copd, inci_ihd, sfu=1):
     """
