@@ -1,10 +1,11 @@
 import os
 import psycopg2
 import pandas as pd
+import pandas as pd
 import geopandas as gpd
 import numpy as np
 
-import onsstove.technology
+# import onsstove.technology
 from .raster import *
 from .layer import VectorLayer, RasterLayer
 
@@ -30,6 +31,7 @@ class OnSSTOVE():
         self.cell_size = cell_size
         self.output_directory = output_directory
         self.mask_layer = None
+       
         
     def get_layers(self, layers):
         if layers=='all':
@@ -204,6 +206,29 @@ class OnSSTOVE():
                 output_path = os.path.join(self.output_directory, 
                                            category, name)
                 layer.normalize(output_path, self.mask_layer)
+                
+                
+    def population_to_dataframe(self, layer):
+        """
+        Takes a population `RasterLayer` as input and extracts the populated points to a GeoDataFrame that is saved in `OnSSTOVE.df`.
+        """
+        self.rows, self.cols = np.where(~np.isnan(layer.layer))
+        x, y = rasterio.transform.xy(layer.meta['transform'], 
+                                     self.rows, self.cols, 
+                                     offset='center')
+        
+        self.df = gpd.GeoDataFrame({'geometry': gpd.points_from_xy(x, y),
+                                    'Pop': layer.layer[self.rows, self.cols]})
+                                  
+    
+    def raster_to_dataframe(self, layer, method='sample'):
+        """
+        Takes a RasterLayer and a method (sample or read), gets the values from the raster layer using the population points previously extracted and saves the values in a new column of OnSSTOVE.df
+        """
+        if method=='sample':
+            self.df[layer.name] = sample_raster(layer.path, self.df)
+        elif method=='read':
+            self.df[layer.name] = layer.layer[self.rows, self.cols]
 
     
     def save_datasets(self, datasets='all'):
