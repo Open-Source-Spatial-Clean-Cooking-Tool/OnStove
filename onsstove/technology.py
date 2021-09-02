@@ -64,22 +64,29 @@ class Technology():
         else:
             raise KeyError(idx)
 
-    # def set_default_values(start_year, end_year, discount_rate_social, discount_rate_tech):
-    #     self.discount_rate_social = discount_rate_social
-    #     self.start_year = start_year
-    #     self.end_year = end_year
-    #     self.discount_rate_tech = discount_rate_tech
+    def relative_risk(self):
+         if self.pm25 < 7.298:
+             rr_alri = 1
+         else:
+             rr_alri = 1 + 2.383 * (1 - exp(-0.004 * (self.pm25 - 7.298) ** 1.193))
 
+         if self.pm25 < 7.337:
+             rr_copd = 1
+         else:
+             rr_copd = 1 + 22.485 * (1 - exp(-0.001 * (self.pm25 - 7.337) ** 0.694))
 
-#     start_year = 2020
-#     end_year=2030
-#     discount_rate_tech = 0.08
-#     discount_rate_social = 0.04
-#
-# Technology.set_default_values(start_year = start_year,
-#                               end_year = end_year,
-#                               discount_rate_tech = discount_rate_tech,
-#                               discount_rate_social = discount_rate_social)
+         if self.pm25 < 7.505:
+             rr_ihd = 1
+         else:
+             rr_ihd = 1 + 2.538 * (1 - exp(-0.081 * (self.pm25 - 7.505) ** 0.466))
+
+         if self.pm25 < 7.345:
+             rr_lc = 1
+         else:
+             rr_lc = 1 + 152.496 * (1 - exp(-0.000167 * (self.pm25 - 7.345) ** 0.76))
+
+         return rr_alri, rr_copd, rr_ihd, rr_lc
+
 
 
 def morbidity(start_year, end_year, tech, discount_rate_social, hhsize_R, hhsize_U, coi_alri, coi_lc, coi_copd,
