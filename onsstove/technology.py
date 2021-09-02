@@ -14,17 +14,17 @@ class Technology():
     Template Layer initializing all needed variables.
     """
     def __init__(self,
-                 name = None,
-                 carbon_intensity = 0,
-                 energy_content = 0,
-                 tech_life = 0, #in years
-                 inv_cost = 0, #in USD
-                 infra_cost = 0, # cost of additional infrastructure
-                 fuel_cost = 0,
-                 time_of_cooking = 0,
-                 om_costs = 0, #percentage of investement cost
-                 efficiency = 0,#ratio
-                 pm25 = 0): # 24-h PM2.5 concentration
+                 name=None,
+                 carbon_intensity=0,
+                 energy_content=0,
+                 tech_life=0,  # in years
+                 inv_cost=0,  # in USD
+                 infra_cost=0,  # cost of additional infrastructure
+                 fuel_cost=0,
+                 time_of_cooking=0,
+                 om_cost=0,  # percentage of investement cost
+                 efficiency=0,  # ratio
+                 pm25=0):  # 24-h PM2.5 concentration
 
         self.name = name
         self.carbon_intensity = carbon_intensity
@@ -33,99 +33,57 @@ class Technology():
         self.fuel_cost = fuel_cost
         self.inv_cost = inv_cost
         self.infra_cost = infra_cost
-        self.om_costs = om_costs
+        self.om_cost = om_cost
         self.time_of_cooking = time_of_cooking
         self.efficiency = efficiency
         self.pm25 = pm25
 
+    def __setitem__(self, idx, value):
+        if idx == 'name':
+            self.name = value
+        elif idx == 'energy_content':
+            self.energy_content = value
+        elif idx == 'carbon_intensity':
+            self.carbon_intensity = value
+        elif idx == 'fuel_cost':
+            self.fuel_cost = value
+        elif idx == 'tech_life':
+            self.tech_life = value
+        elif idx == 'inv_cost':
+            self.inv_cost = value
+        elif idx == 'infra_cost':
+            self.infra_cost = value
+        elif idx == 'om_cost':
+            self.om_cost = value
+        elif idx == 'time_of_cooking':
+            self.time_of_cooking = value
+        elif idx == 'efficiency':
+            self.efficiency = value
+        elif idx == 'pm25':
+            self.pm25 = value
+        else:
+            raise KeyError(idx)
 
-    def set_default_values(start_year, end_year, discount_rate_social, discount_rate_tech):
-        self.discount_rate_social = discount_rate_social
-        self.start_year = start_year
-        self.end_year = end_year
-        self.discount_rate_tech = discount_rate_tech
+    # def set_default_values(start_year, end_year, discount_rate_social, discount_rate_tech):
+    #     self.discount_rate_social = discount_rate_social
+    #     self.start_year = start_year
+    #     self.end_year = end_year
+    #     self.discount_rate_tech = discount_rate_tech
 
 
-    start_year = 2020
-    end_year=2030
-    discount_rate_tech = 0.08
-    discount_rate_social = 0.04
-
-Technology.set_default_values(start_year = start_year,
-                              end_year = end_year,
-                              discount_rate_tech = discount_rate_tech,
-                              discount_rate_social = discount_rate_social)
-
-traditional_biomass_purchased = Technology(tech_life=3, #placeholder
-                        inv_cost = 0.5,
-                        om_costs = 138,
-                        fuel_cost = 0.006, #Francecso's paper
-                        efficiency = 0.14,
-                        pm25 = 500,
-                        energy_content = 16, #MJ/kg
-                        carbon_intensity = 217, #kg/GJ
-                        name = 'purchased_traditional_biomass')
-
-traditional_biomass = Technology(tech_life=3, #placeholder
-                        inv_cost = 0.5,
-                        om_costs = 138,
-                        efficiency = 0.14,
-                        pm25 = 500,
-                        energy_content = 16, #MJ/kg
-                        carbon_intensity = 217, #kg/GJ
-                        name = 'traditional_biomass')
-
-improved_biomass = Technology(tech_life=6,
-                        inv_cost = 20,
-                        om_costs = 1.4,
-                        efficiency = 0.33,
-                        pm25 = 150,
-                        energy_content = 16, #MJ/kg
-                        carbon_intensity = 217, #kg/GJ
-                        name = 'improved_biomass')
-
-improved_biomass_purchased = Technology(tech_life=6,
-                        inv_cost = 20,
-                        om_costs = 1.4,
-                        efficiency = 0.33,
-                        fuel_cost = 0.006, #Francecso's paper
-                        pm25 = 150,
-                        energy_content = 16, #MJ/kg
-                        carbon_intensity = 217, #kg/GJ
-                        name = 'improved_biomass_purchased')
-
-lpg = Technology(tech_life=5,
-                        inv_cost = 39,
-                        om_costs = 3.56,
-                        efficiency = 0.58,
-                        pm25 = 10,
-                        fuel_cost = 0.049,
-                        energy_content = 45.5, #MJ/kg
-                        carbon_intensity = 67, #kg/GJ
-                        name = 'lpg')
-
-biogas = Technology(tech_life=5, #placeholder
-                        inv_cost = 430,
-                        om_costs = 0.02,
-                        efficiency = 0.5,
-                        energy_content = 22.8, #MJ/m3
-                        carbon_intensity = 4, #kg/GJ
-                        name = 'biogas')
-
-electricity = Technology(tech_life=5,
-                        inv_cost = 55,
-                        infra_cost =500, #placeholder
-                        fuel_cost = 0.059, #placeholder
-                        om_costs = 3.6,
-                        efficiency = 0.86,
-                        energy_content = 3.6, # MJ/kWh
-                        carbon_intensity = 160, #kg/GWh
-                        name = 'electricity')
+#     start_year = 2020
+#     end_year=2030
+#     discount_rate_tech = 0.08
+#     discount_rate_social = 0.04
+#
+# Technology.set_default_values(start_year = start_year,
+#                               end_year = end_year,
+#                               discount_rate_tech = discount_rate_tech,
+#                               discount_rate_social = discount_rate_social)
 
 
 def morbidity(start_year, end_year, tech, discount_rate_social, hhsize_R, hhsize_U, coi_alri, coi_lc, coi_copd,
-              coi_ihd, inci_alri, inci_lc, inci_copd, inci_ihd,sfu = 1):
-
+              coi_ihd, inci_alri, inci_lc, inci_copd, inci_ihd, sfu=1):
     """
     Calculates morbidity rate per fuel
 
@@ -171,7 +129,7 @@ def morbidity(start_year, end_year, tech, discount_rate_social, hhsize_R, hhsize
     else:
         rr_lc = 1 + 152.496 * (1 - exp(-0.000167 * (tech.pm25 - 7.345) ** 0.76))
 
-    paf_alri = (sfu * (rr_alri - 1)) / (sfu * (rr_alri - 1) + 1) #sfu is one.
+    paf_alri = (sfu * (rr_alri - 1)) / (sfu * (rr_alri - 1) + 1)  # sfu is one.
     paf_copd = (sfu * (rr_copd - 1)) / (sfu * (rr_copd - 1) + 1)
     paf_ihd = (sfu * (rr_ihd - 1)) / (sfu * (rr_ihd - 1) + 1)
     paf_lc = (sfu * (rr_lc - 1)) / (sfu * (rr_lc - 1) + 1)
@@ -186,7 +144,7 @@ def morbidity(start_year, end_year, tech, discount_rate_social, hhsize_R, hhsize
     morb_ihd_R = hhsize_R * paf_ihd * inci_ihd
     morb_lc_R = hhsize_R * paf_lc * inci_lc
 
-    cl_copd = {1:0.3, 2:0.2, 3:0.17, 4:0.17, 5:0.16}
+    cl_copd = {1: 0.3, 2: 0.2, 3: 0.17, 4: 0.17, 5: 0.16}
     cl_alri = {1: 0.7, 2: 0.1, 3: 0.07, 4: 0.07, 5: 0.06}
     cl_lc = {1: 0.2, 2: 0.1, 3: 0.24, 4: 0.23, 5: 0.23}
     cl_ihd = {1: 0.2, 2: 0.1, 3: 0.24, 4: 0.23, 5: 0.23}
@@ -195,7 +153,7 @@ def morbidity(start_year, end_year, tech, discount_rate_social, hhsize_R, hhsize
     morb_U_vector = []
     morb_R_vector = []
     while i < 6:
-        morbidity_alri_U = cl_alri[i]*coi_alri*morb_alri_U /(1+discount_rate_social)**(end_year-start_year)
+        morbidity_alri_U = cl_alri[i] * coi_alri * morb_alri_U / (1 + discount_rate_social) ** (end_year - start_year)
         morbidity_copd_U = cl_copd[i] * coi_copd * morb_copd_U / (1 + discount_rate_social) ** (end_year - start_year)
         morbidity_lc_U = cl_lc[i] * coi_lc * morb_lc_U / (1 + discount_rate_social) ** (end_year - start_year)
         morbidity_ihd_U = cl_ihd[i] * coi_ihd * morb_ihd_U / (1 + discount_rate_social) ** (end_year - start_year)
@@ -204,7 +162,7 @@ def morbidity(start_year, end_year, tech, discount_rate_social, hhsize_R, hhsize
 
         morb_U_vector.append(morb_U_total)
 
-        morbidity_alri_R = cl_alri[i]*coi_alri*morb_alri_R /(1+discount_rate_social)**(end_year-start_year)
+        morbidity_alri_R = cl_alri[i] * coi_alri * morb_alri_R / (1 + discount_rate_social) ** (end_year - start_year)
         morbidity_copd_R = cl_copd[i] * coi_copd * morb_copd_R / (1 + discount_rate_social) ** (end_year - start_year)
         morbidity_lc_R = cl_lc[i] * coi_lc * morb_lc_R / (1 + discount_rate_social) ** (end_year - start_year)
         morbidity_ihd_R = cl_ihd[i] * coi_ihd * morb_ihd_R / (1 + discount_rate_social) ** (end_year - start_year)
@@ -220,8 +178,7 @@ def morbidity(start_year, end_year, tech, discount_rate_social, hhsize_R, hhsize
 
 
 def mortality(start_year, end_year, tech, discount_rate_social, hhsize_R, hhsize_U, vsl, mort_ihd, mort_lc,
-    mort_alri, mort_copd, sfu=1):
-
+              mort_alri, mort_copd, sfu=1):
     """
     Calculates mortality rate per fuel
 
@@ -316,12 +273,13 @@ def mortality(start_year, end_year, tech, discount_rate_social, hhsize_R, hhsize
 
     return mortality_R, mortality_U
 
-def time_save(tech, value_of_time, walking_friction, forest):
 
+def time_save(tech, value_of_time, walking_friction, forest):
     if tech.name == 'biogas':
         time_of_collection = 2
     elif tech.name == 'traditional_biomass' or tech.name == 'improved_biomass':
-        time_of_collection = 2 * (raster.travel_time(walking_friction, forest)) + 2.2 # 2.2 hrs Medium scenario for Jeiland paper globally, placeholder
+        time_of_collection = 2 * (raster.travel_time(walking_friction,
+                                                     forest)) + 2.2  # 2.2 hrs Medium scenario for Jeiland paper globally, placeholder
     else:
         time_of_collection = 0
 
@@ -332,10 +290,11 @@ def time_save(tech, value_of_time, walking_friction, forest):
 
 
 def carbon_emissions(tech):
-
-    carb = 5 * (3.64 / tech.efficiency) / tech.energy_content * (tech.carbon_intensity * tech.energy_content / tech.efficiency) #5 USD/MT is average social cost of carbon emissions in Nepal according to https://www.nature.com/articles/s41558-018-0282-y.pdf, 3.64 MJ to cook based on https://iopscience.iop.org/article/10.1088/1748-9326/aa6fd0/meta
+    carb = 5 * (3.64 / tech.efficiency) / tech.energy_content * (
+                tech.carbon_intensity * tech.energy_content / tech.efficiency)  # 5 USD/MT is average social cost of carbon emissions in Nepal according to https://www.nature.com/articles/s41558-018-0282-y.pdf, 3.64 MJ to cook based on https://iopscience.iop.org/article/10.1088/1748-9326/aa6fd0/meta
 
     return carb
+
 
 def discount_factor(discount_rate_tech, tech):
     if tech.start_year == tech.end_year:
@@ -412,13 +371,15 @@ def salvage(discount_rate_tech, tech):
 
 
 def discounted_fuel_cost(discount_rate_tech, tech, road_friction, lpg, meals_per_year):
-
     discount_rate, proj_life = discount_factor(discount_rate_tech, tech)
 
     if tech.name == 'electricity' or tech.name == 'improved_biomass_purchased' or tech.name == 'purchased_traditional_biomass':
-        fuel_cost = (tech.fuel_cost * discounted_meals(meals_per_year, discount_rate_tech, tech)) * np.ones(project_life) / tech.efficiency
+        fuel_cost = (tech.fuel_cost * discounted_meals(meals_per_year, discount_rate_tech, tech)) * np.ones(
+            project_life) / tech.efficiency
     elif tech.name == 'lpg':
-        fuel_cost = (tech.fuel_cost * discounted_meals(meals_per_year, discount_rate_tech, tech)) * raster.lpg_transportation_cost(raster.travel_time(road_friction, lpg)) / tech.efficiency
+        fuel_cost = (tech.fuel_cost * discounted_meals(meals_per_year, discount_rate_tech,
+                                                       tech)) * raster.lpg_transportation_cost(
+            raster.travel_time(road_friction, lpg)) / tech.efficiency
     else:
         fuel_cost = 0
 
@@ -426,38 +387,28 @@ def discounted_fuel_cost(discount_rate_tech, tech, road_friction, lpg, meals_per
 
     return fuel_cost_discounted
 
-def cost(discount_rate_tech, tech, meals_per_year, road_friction, lpg):
 
+def cost(discount_rate_tech, tech, meals_per_year, road_friction, lpg):
     cost = (discounted_inv(discount_rate_tech, tech) + discounted_om(discount_rate_tech, tech) + \
-            discounted_fuel_cost(discount_rate_tech, tech, road_friction, lpg) - salvage(discount_rate_tech, tech))/ \
+            discounted_fuel_cost(discount_rate_tech, tech, road_friction, lpg) - salvage(discount_rate_tech, tech)) / \
            discounted_meals(meals_per_year, discount_rate_tech, tech)
 
     return cost
 
-def benefit(start_year, end_year, tech, discount_rate_social, hhsize_R, hhsize_U, vsl,  value_of_time, walking_friction, forest, sfu = 1):
 
+def benefit(start_year, end_year, tech, discount_rate_social, hhsize_R, hhsize_U, vsl, value_of_time, walking_friction,
+            forest, sfu=1):
     benefit = morbidity(start_year, end_year, tech, discount_rate_social, hhsize_R, hhsize_U, sfu) + \
               mortality(start_year, end_year, tech, discount_rate_social, hhsize_R, hhsize_U, vsl, sfu) + \
               time_save(tech, value_of_time, walking_friction, forest) + carbon_emissions(tech)
 
     return benefit
 
-def net_costs(discount_rate_tech, tech, meals_per_year, road_friction, lpg,start_year, end_year, discount_rate_social,
-         hhsize_R, hhsize_U, vsl,  value_of_time, walking_friction, forest, sfu = 1):
 
-    net_costs = cost(discount_rate_tech, tech, meals_per_year, road_friction, lpg) -  \
-                benefit(start_year, end_year, tech, discount_rate_social, hhsize_R, hhsize_U, vsl,  value_of_time,
+def net_costs(discount_rate_tech, tech, meals_per_year, road_friction, lpg, start_year, end_year, discount_rate_social,
+              hhsize_R, hhsize_U, vsl, value_of_time, walking_friction, forest, sfu=1):
+    net_costs = cost(discount_rate_tech, tech, meals_per_year, road_friction, lpg) - \
+                benefit(start_year, end_year, tech, discount_rate_social, hhsize_R, hhsize_U, vsl, value_of_time,
                         walking_friction, forest, sfu)
 
     return net_costs
-
-
-
-
-
-
-
-
-
-
-
