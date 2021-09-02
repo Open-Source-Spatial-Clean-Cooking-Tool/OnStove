@@ -64,24 +64,13 @@ class Technology():
         else:
             raise KeyError(idx)
 
-    # def set_default_values(start_year, end_year, discount_rate_social, discount_rate_tech):
-    #     self.discount_rate_social = discount_rate_social
-    #     self.start_year = start_year
-    #     self.end_year = end_year
-    #     self.discount_rate_tech = discount_rate_tech
+    @staticmethod
+    def paf(rr, sfu):
 
+        paf = (sfu * (rr - 1)) / (sfu * (rr - 1) + 1)
 
-#     start_year = 2020
-#     end_year=2030
-#     discount_rate_tech = 0.08
-#     discount_rate_social = 0.04
-#
-# Technology.set_default_values(start_year = start_year,
-#                               end_year = end_year,
-#                               discount_rate_tech = discount_rate_tech,
-#                               discount_rate_social = discount_rate_social)
-
-
+        return paf
+    
 def morbidity(start_year, end_year, tech, discount_rate_social, hhsize_R, hhsize_U, coi_alri, coi_lc, coi_copd,
               coi_ihd, inci_alri, inci_lc, inci_copd, inci_ihd, sfu=1):
     """
