@@ -104,12 +104,12 @@ class Technology():
         Monetary mortality for each stove in urban and rural settings
         """
 
-        rr_alri, rr_copd, rr_ihd, rr_lc = relative_risk(self)
+        rr_alri, rr_copd, rr_ihd, rr_lc = self.relative_risk(self)
 
-        paf_alri = paf(rr_alri, sfu)
-        paf_copd = paf(rr_copd, sfu)
-        paf_ihd = paf(rr_ihd, sfu)
-        paf_lc = paf(rr_lc, sfu)
+        paf_alri = self.paf(rr_alri, sfu)
+        paf_copd = self.paf(rr_copd, sfu)
+        paf_ihd = self.paf(rr_ihd, sfu)
+        paf_lc = self.paf(rr_lc, sfu)
 
         mort_alri_U = social_specs_file["Urban_Hhsize"] * (paf_0_alri - paf_alri) * social_specs_file["Mort_ALRI"]
         mort_copd_U = social_specs_file["Urban_Hhsize"] * (paf_0_copd - paf_copd) * social_specs_file["Mort_COPD"]
