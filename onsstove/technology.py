@@ -64,6 +64,30 @@ class Technology():
         else:
             raise KeyError(idx)
 
+
+    def relative_risk(self):
+         if self.pm25 < 7.298:
+             rr_alri = 1
+         else:
+             rr_alri = 1 + 2.383 * (1 - exp(-0.004 * (self.pm25 - 7.298) ** 1.193))
+
+         if self.pm25 < 7.337:
+             rr_copd = 1
+         else:
+             rr_copd = 1 + 22.485 * (1 - exp(-0.001 * (self.pm25 - 7.337) ** 0.694))
+
+         if self.pm25 < 7.505:
+             rr_ihd = 1
+         else:
+             rr_ihd = 1 + 2.538 * (1 - exp(-0.081 * (self.pm25 - 7.505) ** 0.466))
+
+         if self.pm25 < 7.345:
+             rr_lc = 1
+         else:
+             rr_lc = 1 + 152.496 * (1 - exp(-0.000167 * (self.pm25 - 7.345) ** 0.76))
+
+         return rr_alri, rr_copd, rr_ihd, rr_l
+      
     @staticmethod
     def paf(rr, sfu):
 
