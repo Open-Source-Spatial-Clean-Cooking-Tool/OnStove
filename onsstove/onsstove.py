@@ -260,11 +260,13 @@ class OnSSTOVE():
         i = 0
         while abs(urban_modelled - urban_current) > 0.01:
 
-            self.df["IsUrban"] = 0
-            self.df.loc[(self.df["Population"] > 300 * factor), "IsUrban"] = 1
-            self.df.loc[(self.df["Population"] > 1500 * factor), "IsUrban"] = 2
+            self.gdf["IsUrban"] = 0
+            self.gdf.loc[(self.gdf["Population"] > 5000 * factor) & (
+                    self.gdf["Population"] / self.cell_size > 350 * factor), "IsUrban"] = 1
+            self.gdf.loc[(self.gdf["Population"] > 50000 * factor) & (
+                    self.gdf["Population"] / self.cell_size > 1500 * factor), "IsUrban"] = 2
 
-            pop_urb = self.df.loc[clusters["IsUrban"] > 1, "Calibrated_pop"].sum()
+            pop_urb = self.gdf.loc[clusters["IsUrban"] > 1, "Calibrated_pop"].sum()
 
             urban_modelled = pop_urb / pop_tot
 
@@ -275,7 +277,6 @@ class OnSSTOVE():
             i = i + 1
             if i > 500:
                 break
-
 
     def save_datasets(self, datasets='all'):
         """
