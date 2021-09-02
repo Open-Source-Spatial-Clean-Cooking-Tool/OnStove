@@ -3,6 +3,7 @@ import psycopg2
 import pandas as pd
 import geopandas as gpd
 import numpy as np
+from typing import Dict
 
 import onsstove.technology
 from .raster import *
