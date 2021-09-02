@@ -218,7 +218,7 @@ class OnSSTOVE():
                                      offset='center')
         
         self.df = gpd.GeoDataFrame({'geometry': gpd.points_from_xy(x, y),
-                                    layer.name: layer.layer[self.rows, self.cols]})
+                                    'Pop': layer.layer[self.rows, self.cols]})
                                   
     
     def raster_to_dataframe(self, layer, method='sample'):
