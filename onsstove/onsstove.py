@@ -250,7 +250,33 @@ class OnSSTOVE():
         elif method=='read':
             self.df[layer.name] = layer.layer[self.rows, self.cols]
 
-    
+    def calibrate_urban(self):
+
+        urban_modelled = 2
+        factor = 1
+        pop_tot = self.specs["Population_start_year"]
+        urban_current = self.specs["Urban_start"]
+
+        i = 0
+        while abs(urban_modelled - urban_current) > 0.01:
+
+            self.df["IsUrban"] = 0
+            self.df.loc[(self.df["Population"] > 300 * factor), "IsUrban"] = 1
+            self.df.loc[(self.df["Population"] > 1500 * factor), "IsUrban"] = 2
+
+            pop_urb = self.df.loc[clusters["IsUrban"] > 1, "Calibrated_pop"].sum()
+
+            urban_modelled = pop_urb / pop_tot
+
+            if urban_modelled > urban_current:
+                factor *= 1.1
+            else:
+                factor *= 0.9
+            i = i + 1
+            if i > 500:
+                break
+
+
     def save_datasets(self, datasets='all'):
         """
         Saves all layers that have not been previously saved
