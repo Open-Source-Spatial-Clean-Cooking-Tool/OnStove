@@ -4,7 +4,7 @@ import pandas as pd
 import pandas as pd
 import geopandas as gpd
 import numpy as np
-from typing import Dict
+from typing import Dict, Any
 
 # import onsstove.technology
 from .raster import *
@@ -149,10 +149,10 @@ class OnSSTOVE():
 
     def calibrate_pop(self):
 
-        total_gis_pop = self.df["Pop"].sum()
+        total_gis_pop = self.gdf["Pop"].sum()
         calibration_factor = self.specs["Population_start_year"] / total_gis_pop
 
-        self.df["Calibrated_pop"] = self.df["Pop"] * calibration_factor
+        self.gdf["Calibrated_pop"] = self.gdf["Pop"] * calibration_factor
             
      
     def mask_layers(self, datasets='all'):
@@ -237,25 +237,25 @@ class OnSSTOVE():
                 
     def population_to_dataframe(self, layer):
         """
-        Takes a population `RasterLayer` as input and extracts the populated points to a GeoDataFrame that is saved in `OnSSTOVE.df`.
+        Takes a population `RasterLayer` as input and extracts the populated points to a GeoDataFrame that is saved in `OnSSTOVE.gdf`.
         """
         self.rows, self.cols = np.where(~np.isnan(layer.layer))
         x, y = rasterio.transform.xy(layer.meta['transform'], 
                                      self.rows, self.cols, 
                                      offset='center')
         
-        self.df = gpd.GeoDataFrame({'geometry': gpd.points_from_xy(x, y),
+        self.gdf = gpd.GeoDataFrame({'geometry': gpd.points_from_xy(x, y),
                                     'Pop': layer.layer[self.rows, self.cols]})
                                   
     
     def raster_to_dataframe(self, layer, method='sample'):
         """
-        Takes a RasterLayer and a method (sample or read), gets the values from the raster layer using the population points previously extracted and saves the values in a new column of OnSSTOVE.df
+        Takes a RasterLayer and a method (sample or read), gets the values from the raster layer using the population points previously extracted and saves the values in a new column of OnSSTOVE.gdf
         """
         if method=='sample':
-            self.df[layer.name] = sample_raster(layer.path, self.df)
+            self.gdf[layer.name] = sample_raster(layer.path, self.gdf)
         elif method=='read':
-            self.df[layer.name] = layer.layer[self.rows, self.cols]
+            self.gdf[layer.name] = layer.layer[self.rows, self.cols]
 
     
     def save_datasets(self, datasets='all'):
