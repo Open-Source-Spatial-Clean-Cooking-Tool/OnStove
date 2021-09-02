@@ -133,7 +133,7 @@ class Technology():
             morbidity_alri_U = cl_alri[i] * social_specs_file["COI_ALRI"] * morb_alri_U / (1 + social_specs_file["Discount_rate"]) ** (i-1)
             morbidity_copd_U = cl_copd[i] * social_specs_file["COI_COPD"] * morb_copd_U / (1 + social_specs_file["Discount_rate"]) ** (i-1)
             morbidity_lc_U = cl_lc[i] * social_specs_file["COI_LC"] * morb_lc_U / (1 + social_specs_file["Discount_rate"]) ** (i-1)
-            morbidity_ihd_U = cl_ihd[i] * social_specs_file["COI_IHD"] * morb_ihd_U / (1 + social_specs_file["Discount_rate"]["Discount_rate"]) ** (i-1)
+            morbidity_ihd_U = cl_ihd[i] * social_specs_file["COI_IHD"] * morb_ihd_U / (1 + social_specs_file["Discount_rate"]) ** (i-1)
 
             morb_U_total = (1 + social_specs_file["Health_spillovers_parameter"]) *(morbidity_alri_U + morbidity_copd_U + morbidity_lc_U + morbidity_ihd_U)
 
@@ -153,104 +153,6 @@ class Technology():
 
         self.urban_morbidity = morbidity_U
         self.rural_morbidity = morbidity_R
-
-
-def mortality(start_year, end_year, tech, discount_rate_social, hhsize_R, hhsize_U, vsl, mort_ihd, mort_lc,
-              mort_alri, mort_copd, sfu=1):
-    """
-    Calculates mortality rate per fuel
-
-    Parameters
-    ----------
-    arg1 : start_year
-        Start year of the analysis
-    arg2 : end_year
-        End year of the analysis
-    arg3: tech
-        Stove type assessed
-    arg4: discount_rate
-        Discount rate to extrapolate costs
-    arg5: hhsize_R
-        Rural household size
-    arg6: hhsize_U
-        Urban household size
-    arg7: vsl
-        Value of statistical life
-    arg8: sfu
-        Solid fuel users (ration)
-
-    Returns
-    ----------
-    Monetary mortality for each stove in urban and rural settings
-    """
-
-    if tech.pm25 < 7.298:
-        rr_alri = 1
-    else:
-        rr_alri = 1 + 2.383 * (1 - exp(-0.004 * (tech.pm25 - 7.298) ** 1.193))
-
-    if tech.pm25 < 7.337:
-        rr_copd = 1
-    else:
-        rr_copd = 1 + 22.485 * (1 - exp(-0.001 * (tech.pm25 - 7.337) ** 0.694))
-
-    if tech.pm25 < 7.505:
-        rr_ihd = 1
-    else:
-        rr_ihd = 1 + 2.538 * (1 - exp(-0.081 * (tech.pm25 - 7.505) ** 0.466))
-
-    if tech.pm25 < 7.345:
-        rr_lc = 1
-    else:
-        rr_lc = 1 + 152.496 * (1 - exp(-0.000167 * (tech.pm25 - 7.345) ** 0.76))
-
-    paf_alri = (sfu * (rr_alri - 1)) / (sfu * (rr_alri - 1) + 1)
-    paf_copd = (sfu * (rr_copd - 1)) / (sfu * (rr_copd - 1) + 1)
-    paf_ihd = (sfu * (rr_ihd - 1)) / (sfu * (rr_ihd - 1) + 1)
-    paf_lc = (sfu * (rr_lc - 1)) / (sfu * (rr_lc - 1) + 1)
-
-    mort_alri_U = hhsize_U * paf_alri * mort_alri
-    mort_copd_U = hhsize_U * paf_copd * mort_copd
-    mort_ihd_U = hhsize_U * paf_ihd * mort_ihd
-    mort_lc_U = hhsize_U * paf_lc * mort_lc
-
-    mort_alri_R = hhsize_R * paf_alri * mort_alri
-    mort_copd_R = hhsize_R * paf_copd * mort_copd
-    mort_ihd_R = hhsize_R * paf_ihd * mort_ihd
-    mort_lc_R = hhsize_R * paf_lc * mort_lc
-
-    cl_copd = {1: 0.3, 2: 0.2, 3: 0.17, 4: 0.17, 5: 0.16}
-    cl_alri = {1: 0.7, 2: 0.1, 3: 0.07, 4: 0.07, 5: 0.06}
-    cl_lc = {1: 0.2, 2: 0.1, 3: 0.24, 4: 0.23, 5: 0.23}
-    cl_ihd = {1: 0.2, 2: 0.1, 3: 0.24, 4: 0.23, 5: 0.23}
-
-    i = 1
-    mort_U_vector = []
-    mort_R_vector = []
-    while i < 6:
-        mortality_alri_U = cl_alri[i] * vsl * mort_alri_U / (1 + discount_rate_social) ** (end_year - start_year)
-        mortality_copd_U = cl_copd[i] * vsl * mort_copd_U / (1 + discount_rate_social) ** (end_year - start_year)
-        mortality_lc_U = cl_lc[i] * vsl * mort_lc_U / (1 + discount_rate_social) ** (end_year - start_year)
-        mortality_ihd_U = cl_ihd[i] * vsl * mort_ihd_U / (1 + discount_rate_social) ** (end_year - start_year)
-
-        mort_U_total = mortality_alri_U + mortality_copd_U + mortality_lc_U + mortality_ihd_U
-
-        mort_U_vector.append(mort_U_total)
-
-        mortality_alri_R = cl_alri[i] * vsl * mort_alri_R / (1 + discount_rate_social) ** (end_year - start_year)
-        mortality_copd_R = cl_copd[i] * vsl * mort_copd_R / (1 + discount_rate_social) ** (end_year - start_year)
-        mortality_lc_R = cl_lc[i] * vsl * mort_lc_R / (1 + discount_rate_social) ** (end_year - start_year)
-        mortality_ihd_R = cl_ihd[i] * vsl * mort_ihd_R / (1 + discount_rate_social) ** (end_year - start_year)
-
-        mort_R_total = mortality_alri_R + mortality_copd_R + mortality_lc_R + mortality_ihd_R
-
-        mort_R_vector.append(mort_R_total)
-
-    mortality_U = np.sum(mort_U_vector)
-    mortality_R = np.sum(mort_R_vector)
-
-    return mortality_R, mortality_U
-
 
 def time_save(tech, value_of_time, walking_friction, forest):
     if tech.name == 'biogas':
@@ -272,20 +174,6 @@ def carbon_emissions(tech):
                 tech.carbon_intensity * tech.energy_content / tech.efficiency)  # 5 USD/MT is average social cost of carbon emissions in Nepal according to https://www.nature.com/articles/s41558-018-0282-y.pdf, 3.64 MJ to cook based on https://iopscience.iop.org/article/10.1088/1748-9326/aa6fd0/meta
 
     return carb
-
-
-def discount_factor(discount_rate_tech, tech):
-    if tech.start_year == tech.end_year:
-        proj_life = 1
-    else:
-        proj_life = tech.end_year - tech.start_year
-
-    year = np.arange(proj_life)
-
-    discount_factor = (1 + discount_rate_tech) ** year
-
-    return discount_factor, proj_life
-
 
 def discounted_meals(meals_per_year, discount_rate_tech, tech):
     discount_rate, proj_life = discount_factor(discount_rate_tech, tech)
