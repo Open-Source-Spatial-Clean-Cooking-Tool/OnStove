@@ -238,6 +238,27 @@ class OnSSTOVE():
                     layer.friction.get_distance_raster(self.base_layer.path,
                                                        output_path, self.mask_layer)
 
+    def distance_to_electricity(self, hv_lines=None, mv_lines=None, transformers=None):
+        """
+        Cals the get_distance_raster method for the HV. MV and Transformers
+        layers (if available) and converts the output to a column in the
+        main gdf
+        """
+        if (not hv_lines) and (not mv_lines) and (not transformers):
+            raise ValueError("You MUST provide at least one of the following datasets: hv_lines, mv_lines or "
+                             "transformers.")
+
+        for layer in [hv_lines, mv_lines, transformers]:
+            if layer:
+                output_path = os.path.join(self.output_directory,
+                                           layer.category,
+                                           layer.name)
+                layer.get_distance_raster(self.base_layer.path,
+                                          output_path,
+                                          self.mask_layer.layer)
+                layer.distance_raster.layer /= 1000 # to convert from meters to km
+                self.raster_to_dataframe(layer.distance_raster, method='read')
+
     def normalize_rasters(self, datasets='all'):
         """
         Goes through all layer and call their `.normalize` method
@@ -251,7 +272,8 @@ class OnSSTOVE():
 
     def population_to_dataframe(self, layer):
         """
-        Takes a population `RasterLayer` as input and extracts the populated points to a GeoDataFrame that is saved in `OnSSTOVE.gdf`.
+        Takes a population `RasterLayer` as input and extracts the populated points to a GeoDataFrame that is
+        saved in `OnSSTOVE.gdf`.
         """
         self.rows, self.cols = np.where(~np.isnan(layer.layer))
         x, y = rasterio.transform.xy(layer.meta['transform'],
