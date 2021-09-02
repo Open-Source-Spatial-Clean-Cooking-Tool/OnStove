@@ -52,8 +52,27 @@ class OnSSTOVE():
         self.conn = psycopg2.connect(database=db, 
                                      user=POSTGRES_USER, 
                                      password=POSTGRES_KEY)
-                                     
-    
+
+    def read_scenario_data(path_to_config: str) -> Dict[str, Any]:
+        """Reads the scenario data into a dictionary
+        """
+        config = {}  # typing: Dict[str, Any]
+        with open(path_to_config, 'r') as csvfile:
+            reader = DictReader(csvfile, delimiter=';')
+            config_file = list(reader)
+            for row in config_file:
+                if row['Value']:
+                    if row['data_type'] == 'int':
+                        config[row['Param']] = int(row['Value'])
+                    elif row['data_type'] == 'float':
+                        config[row['Param']] = float(row['Value'])
+                    elif row['data_type'] == 'string':
+                        config[row['Param']] = str(row['Value'])
+                    else:
+                        raise ValueError("Config file data type not recognised.")
+
+        self.specs = config
+
     def add_layer(self, category, name, layer_path, layer_type, query=None,
                   postgres=False, base_layer=False, resample='nearest', 
                   normalization=None, inverse=False, distance=None, 
