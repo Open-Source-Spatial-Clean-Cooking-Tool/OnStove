@@ -94,6 +94,25 @@ class Technology():
         paf = (sfu * (rr - 1)) / (sfu * (rr - 1) + 1)
 
         return paf
+
+    @staticmethod
+    def discount_factor(self, specs_file):
+        '''
+
+        :param self:
+        :param specs_file: social specs file
+        :return: discount factor to be used for all costs in the net benefit fucntion and the years of analysis
+        '''
+        if specs_file["Start_year"] == specs_file["End_year"]:
+            proj_life = 1
+        else:
+            proj_life = specs_file["End_year"] - specs_file["Start_year"]
+
+        year = np.arange(proj_life)
+
+        discount_factor = (1 + discount_rate_tech) ** year
+
+        return discount_factor, proj_life
     
 def morbidity(start_year, end_year, tech, discount_rate_social, hhsize_R, hhsize_U, coi_alri, coi_lc, coi_copd,
               coi_ihd, inci_alri, inci_lc, inci_copd, inci_ihd, sfu=1):
