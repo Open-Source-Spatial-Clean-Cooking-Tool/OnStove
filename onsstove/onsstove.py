@@ -124,6 +124,13 @@ class OnSSTOVE():
             
         if self.mask_layer.crs != self.project_crs:
             self.mask_layer.to_crs(self.project_crs, inplace=True)
+
+    def calibrate_pop(self):
+
+        total_gis_pop = self.df["Pop"].sum()
+        calibration_factor = self.specs["Population_start_year"] / total_gis_pop
+
+        self.df["Calibrated_pop"] = self.df["Pop"] * calibration_factor
             
      
     def mask_layers(self, datasets='all'):
