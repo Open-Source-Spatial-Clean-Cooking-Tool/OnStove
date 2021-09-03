@@ -115,6 +115,19 @@ class Technology():
 
         return discount_factor, proj_life
 
+    @classmethod
+    def carb(self):
+
+        carb = (3.64 / self.efficiency) / self.energy_content * (self.carbon_intensity * self.energy_content / self.efficiency)
+
+        return carb
+
+    def carbon_emissions(self, specs_file, carb):
+
+        carbon = specs_file["Cost of carbon emissions"] * (carb - self.carb)
+
+        self.decreased_carbon_emissions = carbon
+
     def mortality(self, social_specs_file, paf_0_alri, paf_0_copd, paf_0_lc, paf_0_ihd):
         """
         Calculates mortality rate per fuel
@@ -313,13 +326,6 @@ def time_save(tech, value_of_time, walking_friction, forest):
     time_value = time * value_of_time
 
     return time_value
-
-
-def carbon_emissions(tech):
-    carb = 5 * (3.64 / tech.efficiency) / tech.energy_content * (
-                tech.carbon_intensity * tech.energy_content / tech.efficiency)  # 5 USD/MT is average social cost of carbon emissions in Nepal according to https://www.nature.com/articles/s41558-018-0282-y.pdf, 3.64 MJ to cook based on https://iopscience.iop.org/article/10.1088/1748-9326/aa6fd0/meta
-
-    return carb
 
 def discounted_meals(meals_per_year, discount_rate_tech, tech):
     discount_rate, proj_life = discount_factor(discount_rate_tech, tech)
