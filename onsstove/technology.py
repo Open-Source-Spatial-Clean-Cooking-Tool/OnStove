@@ -110,7 +110,7 @@ class Technology():
 
         year = np.arange(proj_life)
 
-        discount_factor = (1 + discount_rate_tech) ** year
+        discount_factor = (1 + specs_file["Discount_rate_tech"]) ** year
 
         return discount_factor, proj_life
     
