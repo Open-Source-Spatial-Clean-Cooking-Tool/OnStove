@@ -235,6 +235,26 @@ class Technology():
         self.urban_morbidity = morbidity_U
         self.rural_morbidity = morbidity_R
 
+    def salvage(discount_rate_tech, tech):
+        """
+        Calculates discounted salvage cost assuming straight-line depreciation
+
+        Returns
+        ----------
+        discounted salvage cost
+        """
+
+        discount_rate, proj_life = discount_factor(discount_rate_tech, tech)
+
+        salvage = np.zeros(proj_life)
+        used_life = proj_life % self.tech_life
+
+        salvage[-1] = tech.inv_cost * (1 - used_life / self.tech_life)
+
+        discounted_salvage = salvage.sum() / discount_rate
+
+        self.discounted_salvage_cost = discounted_salvage
+
     def discounted_om(self, specs_file):
         """
         Calls discount_factor function and creates discounted OM costs.
@@ -279,6 +299,7 @@ class Technology():
 
         self.discounted_investments = discounted_investments
 
+
 def time_save(tech, value_of_time, walking_friction, forest):
     if tech.name == 'biogas':
         time_of_collection = 2
@@ -313,22 +334,6 @@ def discounted_meals(meals_per_year, discount_rate_tech, tech):
     discounted_energy = energy_needed / discount_rate
 
     return discounted_energy
-
-def salvage(discount_rate_tech, tech):
-    discount_rate, proj_life = discount_factor(discount_rate_tech, tech)
-
-    salvage = np.zeros(project_life)
-    used_life = project_life
-
-    if proj_life > tech.tech_life:
-        used_life = project_life - tech.tech_life
-
-    salvage[-1] = tech.inv_cost * (1 - used_life / tech.tech_life)
-
-    discounted_salvage = salvage / discount_rate
-
-    return discounted_salvage
-
 
 def discounted_fuel_cost(discount_rate_tech, tech, road_friction, lpg, meals_per_year):
     discount_rate, proj_life = discount_factor(discount_rate_tech, tech)
