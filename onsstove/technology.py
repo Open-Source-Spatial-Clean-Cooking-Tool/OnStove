@@ -114,33 +114,6 @@ class Technology():
         discount_factor = (1 + specs_file["Discount_rate_tech"]) ** year
 
         return discount_factor, proj_life
-    
-def morbidity(start_year, end_year, tech, discount_rate_social, hhsize_R, hhsize_U, coi_alri, coi_lc, coi_copd,
-              coi_ihd, inci_alri, inci_lc, inci_copd, inci_ihd, sfu=1):
-    """
-    Calculates morbidity rate per fuel
-
-    Parameters
-    ----------
-    arg1 : start_year
-        Start year of the analysis
-    arg2 : end_year
-        End year of the analysis
-    arg3: tech
-        Stove type assessed
-    arg4: discount_rate
-        Discount rate to extrapolate costs
-    arg5: hhsize_R
-        Rural household size
-    arg6: hhsize_U
-        Urban household size
-    arg7: sfu
-        Solid fuel users (ration)
-
-    Returns
-    ----------
-    Monetary morbidity for each stove in urban and rural settings
-    """
 
     def mortality(self, social_specs_file, paf_0_alri, paf_0_copd, paf_0_lc, paf_0_ihd):
         """
