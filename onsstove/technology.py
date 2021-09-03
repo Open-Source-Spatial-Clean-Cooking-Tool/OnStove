@@ -235,17 +235,13 @@ class Technology():
         self.urban_morbidity = morbidity_U
         self.rural_morbidity = morbidity_R
 
-
-
     def discounted_om(self, specs_file):
         """
-         Calls discount_factor function and creates discounted OM costs.
-         Returns
-         ----------
-         discountedOM costs for each stove during the project lifetime
-         """
-
-
+        Calls discount_factor function and creates discounted OM costs.
+        Returns
+        ----------
+        discountedOM costs for each stove during the project lifetime
+        """
         discount_rate, proj_life = discount_factor(self, specs_file)
 
         operation_and_maintenance = self.om_costs * np.ones(proj_life) * self.inv_cost
@@ -260,6 +256,28 @@ class Technology():
 
         self.discounted_om_costs = discounted_om_cost
 
+    def discounted_inv(self, specs_file):
+        """
+        Calls discount_factor function and creates discounted investment cost. Uses proj_life and tech_life to determine
+        number of necessary re-investments
+
+        Returns
+        ----------
+        discounted investment cost for each stove during the project lifetime
+        """
+        discount_rate, proj_life = discount_factor(self, specs_file)
+    
+        investments = np.zeros(proj_life)
+        investments[0] = self.inv_cost
+
+        i = self.tech_life
+        while i < proj_life:
+            investments[i] = self.inv_cost
+            i = i + self.tech_life
+
+        discounted_investments = investments.sum() / discount_rate
+
+        self.discounted_investments = discounted_investments
 
 def time_save(tech, value_of_time, walking_friction, forest):
     if tech.name == 'biogas':
@@ -295,20 +313,6 @@ def discounted_meals(meals_per_year, discount_rate_tech, tech):
     discounted_energy = energy_needed / discount_rate
 
     return discounted_energy
-
-
-def discounted_inv(discount_rate_tech, tech):
-    discount_rate, proj_life = discount_factor(discount_rate_tech, tech)
-
-    investments = np.zeros(project_life)
-    investments[0] = tech.inv_cost
-
-    if proj_life > tech.tech_life:
-        investments[tech.tech_life] = tech.inv_cost
-
-    discounted_investments = investments / discount_rate
-
-    return discounted_investments
 
 def salvage(discount_rate_tech, tech):
     discount_rate, proj_life = discount_factor(discount_rate_tech, tech)
