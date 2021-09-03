@@ -9,10 +9,11 @@ from math import exp
 from .raster import *
 
 
-class Technology():
+class Technology:
     """
-    Template Layer initializing all needed variables.
+    Standard technology class.
     """
+
     def __init__(self,
                  name=None,
                  carbon_intensity=0,
@@ -37,6 +38,8 @@ class Technology():
         self.time_of_cooking = time_of_cooking
         self.efficiency = efficiency
         self.pm25 = pm25
+        self.time_of_collection = None
+        self.fuel_use = None
 
     def __setitem__(self, idx, value):
         if idx == 'name':
@@ -61,32 +64,35 @@ class Technology():
             self.efficiency = value
         elif idx == 'pm25':
             self.pm25 = value
+        elif idx == 'time_of_collection':
+            self.time_of_collection = value
+        elif idx == 'fuel_use':
+            self.fuel_use = value
         else:
             raise KeyError(idx)
 
-
     def relative_risk(self):
-         if self.pm25 < 7.298:
-             rr_alri = 1
-         else:
-             rr_alri = 1 + 2.383 * (1 - exp(-0.004 * (self.pm25 - 7.298) ** 1.193))
+        if self.pm25 < 7.298:
+            rr_alri = 1
+        else:
+            rr_alri = 1 + 2.383 * (1 - exp(-0.004 * (self.pm25 - 7.298) ** 1.193))
 
-         if self.pm25 < 7.337:
-             rr_copd = 1
-         else:
-             rr_copd = 1 + 22.485 * (1 - exp(-0.001 * (self.pm25 - 7.337) ** 0.694))
+        if self.pm25 < 7.337:
+            rr_copd = 1
+        else:
+            rr_copd = 1 + 22.485 * (1 - exp(-0.001 * (self.pm25 - 7.337) ** 0.694))
 
-         if self.pm25 < 7.505:
-             rr_ihd = 1
-         else:
-             rr_ihd = 1 + 2.538 * (1 - exp(-0.081 * (self.pm25 - 7.505) ** 0.466))
+        if self.pm25 < 7.505:
+            rr_ihd = 1
+        else:
+            rr_ihd = 1 + 2.538 * (1 - exp(-0.081 * (self.pm25 - 7.505) ** 0.466))
 
-         if self.pm25 < 7.345:
-             rr_lc = 1
-         else:
-             rr_lc = 1 + 152.496 * (1 - exp(-0.000167 * (self.pm25 - 7.345) ** 0.76))
+        if self.pm25 < 7.345:
+            rr_lc = 1
+        else:
+            rr_lc = 1 + 152.496 * (1 - exp(-0.000167 * (self.pm25 - 7.345) ** 0.76))
 
-         return rr_alri, rr_copd, rr_ihd, rr_lc
+        return rr_alri, rr_copd, rr_ihd, rr_lc
 
     @classmethod
     def paf(self, rr, sfu):
@@ -94,7 +100,6 @@ class Technology():
         paf = (sfu * (rr - 1)) / (sfu * (rr - 1) + 1)
 
         return paf
-
 
     @staticmethod
     def discount_factor(self, specs_file):
@@ -150,22 +155,31 @@ class Technology():
         mort_U_vector = []
         mort_R_vector = []
         while i < 6:
+            mortality_alri_U = cl_alri[i] * social_specs_file["VSL"] * mort_alri_U / (
+                    1 + social_specs_file["Discount_rate"]) ** (i - 1)
+            mortality_copd_U = cl_copd[i] * social_specs_file["VSL"] * mort_copd_U / (
+                    1 + social_specs_file["Discount_rate"]) ** (i - 1)
+            mortality_lc_U = cl_lc[i] * social_specs_file["VSL"] * mort_lc_U / (
+                    1 + social_specs_file["Discount_rate"]) ** (i - 1)
+            mortality_ihd_U = cl_ihd[i] * social_specs_file["VSL"] * mort_ihd_U / (
+                    1 + social_specs_file["Discount_rate"]) ** (i - 1)
 
-            mortality_alri_U = cl_alri[i] * social_specs_file["VSL"] * mort_alri_U / (1 + social_specs_file["Discount_rate"]) ** (i-1)
-            mortality_copd_U = cl_copd[i] * social_specs_file["VSL"] * mort_copd_U / (1 + social_specs_file["Discount_rate"]) ** (i-1)
-            mortality_lc_U = cl_lc[i] * social_specs_file["VSL"] * mort_lc_U / (1 + social_specs_file["Discount_rate"]) ** (i-1)
-            mortality_ihd_U = cl_ihd[i] * social_specs_file["VSL"] * mort_ihd_U / (1 + social_specs_file["Discount_rate"]) ** (i-1)
-
-            mort_U_total = (1 + social_specs_file["Health_spillovers_parameter"]) *(mortality_alri_U + mortality_copd_U + mortality_lc_U + mortality_ihd_U)
+            mort_U_total = (1 + social_specs_file["Health_spillovers_parameter"]) * (
+                    mortality_alri_U + mortality_copd_U + mortality_lc_U + mortality_ihd_U)
 
             mort_U_vector.append(mort_U_total)
 
-            mortality_alri_R = cl_alri[i] * social_specs_file["VSL"] * mort_alri_R / (1 + social_specs_file["Discount_rate"]) ** (i-1)
-            mortality_copd_R = cl_copd[i] * social_specs_file["VSL"] * mort_copd_R / (1 + social_specs_file["Discount_rate"]) ** (i-1)
-            mortality_lc_R = cl_lc[i] * social_specs_file["VLS"] * mort_lc_R / (1 + social_specs_file["Discount_rate"]) ** (i-1)
-            mortality_ihd_R = cl_ihd[i] * social_specs_file["VSL"] * mort_ihd_R / (1 + social_specs_file["Discount_rate"]) ** (i-1)
+            mortality_alri_R = cl_alri[i] * social_specs_file["VSL"] * mort_alri_R / (
+                    1 + social_specs_file["Discount_rate"]) ** (i - 1)
+            mortality_copd_R = cl_copd[i] * social_specs_file["VSL"] * mort_copd_R / (
+                    1 + social_specs_file["Discount_rate"]) ** (i - 1)
+            mortality_lc_R = cl_lc[i] * social_specs_file["VLS"] * mort_lc_R / (
+                    1 + social_specs_file["Discount_rate"]) ** (i - 1)
+            mortality_ihd_R = cl_ihd[i] * social_specs_file["VSL"] * mort_ihd_R / (
+                    1 + social_specs_file["Discount_rate"]) ** (i - 1)
 
-            mort_R_total = (1 + social_specs_file["Health_spillovers_parameter"]) * (mortality_alri_R + mortality_copd_R + mortality_lc_R + mortality_ihd_R)
+            mort_R_total = (1 + social_specs_file["Health_spillovers_parameter"]) * (
+                    mortality_alri_R + mortality_copd_R + mortality_lc_R + mortality_ihd_R)
 
             mort_R_vector.append(mort_R_total)
 
@@ -198,8 +212,8 @@ class Technology():
 
         morb_alri_R = social_specs_file["Rural_Hhsize"] * (paf_0_alri - paf_alri) * social_specs_file["Morb_ALRI"]
         morb_copd_R = social_specs_file["Rural_Hhsize"] * (paf_0_copd - paf_copd) * social_specs_file["Morb_COPD"]
-        morb_ihd_R = social_specs_file["Rural_Hhsize"] * (paf_0_ihd - paf_ihd)  * social_specs_file["Morb_IHD"]
-        morb_lc_R = social_specs_file["Rural_Hhsize"] * (paf_0_lc - paf_lc)  * social_specs_file["Morb_LC"]
+        morb_ihd_R = social_specs_file["Rural_Hhsize"] * (paf_0_ihd - paf_ihd) * social_specs_file["Morb_IHD"]
+        morb_lc_R = social_specs_file["Rural_Hhsize"] * (paf_0_lc - paf_lc) * social_specs_file["Morb_LC"]
 
         cl_copd = {1: 0.3, 2: 0.2, 3: 0.17, 4: 0.17, 5: 0.16}
         cl_alri = {1: 0.7, 2: 0.1, 3: 0.07, 4: 0.07, 5: 0.06}
@@ -210,22 +224,31 @@ class Technology():
         morb_U_vector = []
         morb_R_vector = []
         while i < 6:
+            morbidity_alri_U = cl_alri[i] * social_specs_file["COI_ALRI"] * morb_alri_U / (
+                    1 + social_specs_file["Discount_rate"]) ** (i - 1)
+            morbidity_copd_U = cl_copd[i] * social_specs_file["COI_COPD"] * morb_copd_U / (
+                    1 + social_specs_file["Discount_rate"]) ** (i - 1)
+            morbidity_lc_U = cl_lc[i] * social_specs_file["COI_LC"] * morb_lc_U / (
+                    1 + social_specs_file["Discount_rate"]) ** (i - 1)
+            morbidity_ihd_U = cl_ihd[i] * social_specs_file["COI_IHD"] * morb_ihd_U / (
+                    1 + social_specs_file["Discount_rate"]) ** (i - 1)
 
-            morbidity_alri_U = cl_alri[i] * social_specs_file["COI_ALRI"] * morb_alri_U / (1 + social_specs_file["Discount_rate"]) ** (i-1)
-            morbidity_copd_U = cl_copd[i] * social_specs_file["COI_COPD"] * morb_copd_U / (1 + social_specs_file["Discount_rate"]) ** (i-1)
-            morbidity_lc_U = cl_lc[i] * social_specs_file["COI_LC"] * morb_lc_U / (1 + social_specs_file["Discount_rate"]) ** (i-1)
-            morbidity_ihd_U = cl_ihd[i] * social_specs_file["COI_IHD"] * morb_ihd_U / (1 + social_specs_file["Discount_rate"]) ** (i-1)
-
-            morb_U_total = (1 + social_specs_file["Health_spillovers_parameter"]) *(morbidity_alri_U + morbidity_copd_U + morbidity_lc_U + morbidity_ihd_U)
+            morb_U_total = (1 + social_specs_file["Health_spillovers_parameter"]) * (
+                    morbidity_alri_U + morbidity_copd_U + morbidity_lc_U + morbidity_ihd_U)
 
             morb_U_vector.append(morb_U_total)
 
-            morbidity_alri_R = cl_alri[i] * social_specs_file["COI_ALRI"] * morb_alri_R / (1 + social_specs_file["Discount_rate"]) ** (i-1)
-            morbidity_copd_R = cl_copd[i] * social_specs_file["COI_COPD"] * morb_copd_R / (1 + social_specs_file["Discount_rate"]) ** (i-1)
-            morbidity_lc_R = cl_lc[i] * social_specs_file["COI_LC"] * morb_lc_R / (1 + social_specs_file["Discount_rate"]) ** (i-1)
-            morbidity_ihd_R = cl_ihd[i] * social_specs_file["COI_IHD"] * morb_ihd_R / (1 + social_specs_file["Discount_rate"]) ** (i-1)
+            morbidity_alri_R = cl_alri[i] * social_specs_file["COI_ALRI"] * morb_alri_R / (
+                    1 + social_specs_file["Discount_rate"]) ** (i - 1)
+            morbidity_copd_R = cl_copd[i] * social_specs_file["COI_COPD"] * morb_copd_R / (
+                    1 + social_specs_file["Discount_rate"]) ** (i - 1)
+            morbidity_lc_R = cl_lc[i] * social_specs_file["COI_LC"] * morb_lc_R / (
+                    1 + social_specs_file["Discount_rate"]) ** (i - 1)
+            morbidity_ihd_R = cl_ihd[i] * social_specs_file["COI_IHD"] * morb_ihd_R / (
+                    1 + social_specs_file["Discount_rate"]) ** (i - 1)
 
-            morb_R_total = (1 + social_specs_file["Health_spillovers_parameter"]) * (morbidity_alri_R + morbidity_copd_R + morbidity_lc_R + morbidity_ihd_R)
+            morb_R_total = (1 + social_specs_file["Health_spillovers_parameter"]) * (
+                    morbidity_alri_R + morbidity_copd_R + morbidity_lc_R + morbidity_ihd_R)
 
             morb_R_vector.append(morb_R_total)
 
@@ -234,6 +257,7 @@ class Technology():
 
         self.urban_morbidity = morbidity_U
         self.rural_morbidity = morbidity_R
+
 
 def time_save(tech, value_of_time, walking_friction, forest):
     if tech.name == 'biogas':
@@ -252,9 +276,10 @@ def time_save(tech, value_of_time, walking_friction, forest):
 
 def carbon_emissions(tech):
     carb = 5 * (3.64 / tech.efficiency) / tech.energy_content * (
-                tech.carbon_intensity * tech.energy_content / tech.efficiency)  # 5 USD/MT is average social cost of carbon emissions in Nepal according to https://www.nature.com/articles/s41558-018-0282-y.pdf, 3.64 MJ to cook based on https://iopscience.iop.org/article/10.1088/1748-9326/aa6fd0/meta
+            tech.carbon_intensity * tech.energy_content / tech.efficiency)  # 5 USD/MT is average social cost of carbon emissions in Nepal according to https://www.nature.com/articles/s41558-018-0282-y.pdf, 3.64 MJ to cook based on https://iopscience.iop.org/article/10.1088/1748-9326/aa6fd0/meta
 
     return carb
+
 
 def discounted_meals(meals_per_year, discount_rate_tech, tech):
     discount_rate, proj_life = discount_factor(discount_rate_tech, tech)
@@ -359,3 +384,84 @@ def net_costs(discount_rate_tech, tech, meals_per_year, road_friction, lpg, star
                         walking_friction, forest, sfu)
 
     return net_costs
+
+
+class LPG(Technology):
+    """
+    LPG technology class. Inherits all functionality from the standard
+    Technology class
+    """
+
+    def __init__(self,
+                 name=None,
+                 carbon_intensity=0,
+                 energy_content=0,
+                 tech_life=0,  # in years
+                 inv_cost=0,  # in USD
+                 infra_cost=0,  # cost of additional infrastructure
+                 fuel_cost=0,
+                 time_of_cooking=0,
+                 om_cost=0,  # percentage of investement cost
+                 efficiency=0,  # ratio
+                 pm25=0,
+                 travel_time=None,
+                 truck_capacity=2000,
+                 diesel_price=0.88,
+                 diesel_per_hour=14):
+        super().__init__(name, carbon_intensity, energy_content, tech_life,
+                         inv_cost, infra_cost, fuel_cost, time_of_cooking,
+                         om_cost, efficiency, pm25)
+        self.travel_time = travel_time
+        self.truck_capacity = truck_capacity
+        self.diesel_price = diesel_price
+        self.diesel_per_hour = diesel_per_hour
+        self.transport_cost = None
+
+    def transportation_cost(self):
+        """The cost of transporting LPG. See https://iopscience.iop.org/article/10.1088/1748-9326/6/3/034002/pdf for the formula
+
+        Transportation cost = (2 * diesel consumption per h * national diesel price * travel time)/transported LPG
+
+        Total cost = (LPG cost + Transportation cost)/efficiency of LPG stoves
+
+
+        Each truck is assumed to transport 2,000 kg LPG
+        (3.5 MT truck https://www.wlpga.org/wp-content/uploads/2019/09/2019-Guide-to-Good-Industry-Practices-for-LPG-Cylinders-in-the-
+        Distribution-Channel.pdf)
+        National diesel price in Nepal is assumed to be 0.88 USD/l
+        Diesel consumption per h is assumed to be 14 l/h (14 l/100km)
+        (https://www.iea.org/reports/fuel-consumption-of-cars-and-vans)
+        LPG cost in Nepal is assumed to be 19 USD per cylinder (1.34 USD/kg)
+        LPG stove efficiency is assumed to be 60%
+
+        :param param1:  travel_time_raster
+                        Hour to travel between each point and the startpoints as array
+        :returns:       The cost of LPG in each cell per kg
+        """
+        transport_cost = (2 * self.diesel_per_hour * self.diesel_price * self.travel_time.layer) / self.truck_capacity
+        self.transport_cost = transport_cost
+
+
+class Biomass(Technology):
+    """
+    LPG technology class. Inherits all functionality from the standard
+    Technology class
+    """
+
+    def __init__(self,
+                 name=None,
+                 carbon_intensity=0,
+                 energy_content=0,
+                 tech_life=0,  # in years
+                 inv_cost=0,  # in USD
+                 infra_cost=0,  # cost of additional infrastructure
+                 fuel_cost=0,
+                 time_of_cooking=0,
+                 om_cost=0,  # percentage of investement cost
+                 efficiency=0,  # ratio
+                 pm25=0,
+                 travel_time=None):
+        super().__init__(name, carbon_intensity, energy_content, tech_life,
+                         inv_cost, infra_cost, fuel_cost, time_of_cooking,
+                         om_cost, efficiency, pm25)
+        self.travel_time = travel_time
