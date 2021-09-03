@@ -104,7 +104,7 @@ class Technology():
         Monetary morbidity for each stove in urban and rural settings
         """
 
-        rr_alri, rr_copd, rr_ihd, rr_lc = self.relative_risk(self)
+        rr_alri, rr_copd, rr_ihd, rr_lc = self.relative_risk()
 
         paf_alri = self.paf(rr_alri, sfu)
         paf_copd = self.paf(rr_copd, sfu)
