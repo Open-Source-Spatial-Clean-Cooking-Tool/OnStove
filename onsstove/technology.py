@@ -235,6 +235,31 @@ class Technology():
         self.urban_morbidity = morbidity_U
         self.rural_morbidity = morbidity_R
 
+    def discounted_inv(self, specs_file):
+        """
+         Calls discount_factor function and creates discounted investment cost. Uses proj_life and tech_life to determine
+         number of necessary re-investments
+
+         Returns
+         ----------
+         discounted investment cost for each stove during the project lifetime
+         """
+
+
+        discount_rate, proj_life = discount_factor(self, specs_file)
+
+        investments = np.zeros(proj_life)
+        investments[0] = self.inv_cost
+
+        i = self.tech_life
+        while i <= proj_life:
+            investments[i] = self.inv_cost
+            i = i + self.tech_life
+
+        discounted_investments = investments.sum() / discount_rate
+
+        self.discounted_investments = discounted_investments
+
 def time_save(tech, value_of_time, walking_friction, forest):
     if tech.name == 'biogas':
         time_of_collection = 2
