@@ -88,7 +88,7 @@ def mask_raster(raster_path, mask_layer, output_file, nodata=0, compression='NON
             shapes = [feature["geometry"] for feature in shapefile]
             crs = 'EPSG:4326'
     else:
-        shapes = [mask_layer.dissolve().geom.loc[0]]
+        shapes = [mask_layer.dissolve().geometry.loc[0]]
         crs = mask_layer.crs
 
     if '.gz' in raster_path:
