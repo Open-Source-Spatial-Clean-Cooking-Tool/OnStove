@@ -21,8 +21,10 @@ class Technology():
                  inv_cost=0,  # in USD
                  infra_cost=0,  # cost of additional infrastructure
                  fuel_cost=0,
-                 time_of_cooking=0,
-                 om_cost=0,  # percentage of investement cost
+                 time_of_cooking = 0,
+                 time_of_collection = 0,
+                 fuel_use = 0,
+                 om_cost = 0,  # percentage of investement cost
                  efficiency=0,  # ratio
                  pm25=0):  # 24-h PM2.5 concentration
 
@@ -35,6 +37,8 @@ class Technology():
         self.infra_cost = infra_cost
         self.om_cost = om_cost
         self.time_of_cooking = time_of_cooking
+        self.time_of_collection = time_of_collection
+        self.fuel_use = fuel_use
         self.efficiency = efficiency
         self.pm25 = pm25
 
@@ -61,6 +65,10 @@ class Technology():
             self.efficiency = value
         elif idx == 'pm25':
             self.pm25 = value
+        elif idx == 'time_of_collection':
+            self.time_of_collection = value
+        elif idx == 'fuel_use':
+            self.fuel_use = value
         else:
             raise KeyError(idx)
 
@@ -235,6 +243,17 @@ class Technology():
         self.urban_morbidity = morbidity_U
         self.rural_morbidity = morbidity_R
 
+    def time_save(self, value_of_time, walking_friction, forest):
+
+        if self.name == 'traditional_biomass_collected' or self.name == 'improved_biomass_collected':
+            collection_time = 2 * (raster.travel_time(walking_friction,forest))
+        else:
+            collection_time = 0
+
+        total_time = collection_time + self.time_of_cooking + self.time_of_collection
+
+        time_value = total_time * value_of_time
+
     def salvage(discount_rate_tech, tech):
         """
         Calculates discounted salvage cost assuming straight-line depreciation
@@ -299,20 +318,6 @@ class Technology():
 
         self.discounted_investments = discounted_investments
 
-
-def time_save(tech, value_of_time, walking_friction, forest):
-    if tech.name == 'biogas':
-        time_of_collection = 2
-    elif tech.name == 'traditional_biomass' or tech.name == 'improved_biomass':
-        time_of_collection = 2 * (raster.travel_time(walking_friction,
-                                                     forest)) + 2.2  # 2.2 hrs Medium scenario for Jeiland paper globally, placeholder
-    else:
-        time_of_collection = 0
-
-    time = time_of_collection + tech.time_of_cooking
-    time_value = time * value_of_time
-
-    return time_value
 
 
 def carbon_emissions(tech):
