@@ -95,6 +95,66 @@ class Technology():
 
         return paf
 
+    def mortality(self, social_specs_file, paf_0_alri, paf_0_copd, paf_0_lc, paf_0_ihd):
+        """
+        Calculates mortality rate per fuel
+
+        Returns
+        ----------
+        Monetary mortality for each stove in urban and rural settings
+        """
+
+        rr_alri, rr_copd, rr_ihd, rr_lc = self.relative_risk()
+
+        paf_alri = self.paf(rr_alri, sfu)
+        paf_copd = self.paf(rr_copd, sfu)
+        paf_ihd = self.paf(rr_ihd, sfu)
+        paf_lc = self.paf(rr_lc, sfu)
+
+        mort_alri_U = social_specs_file["Urban_Hhsize"] * (paf_0_alri - paf_alri) * social_specs_file["Mort_ALRI"]
+        mort_copd_U = social_specs_file["Urban_Hhsize"] * (paf_0_copd - paf_copd) * social_specs_file["Mort_COPD"]
+        mort_ihd_U = social_specs_file["Urban_Hhsize"] * (paf_0_ihd - paf_ihd) * social_specs_file["Mort_IHD"]
+        mort_lc_U = social_specs_file["Urban_Hhsize"] * paf_lc * social_specs_file["Mort_LC"]
+
+        mort_alri_R = social_specs_file["Rural_Hhsize"] * (paf_0_alri - paf_alri) * social_specs_file["Mort_ALRI"]
+        mort_copd_R = social_specs_file["Rural_Hhsize"] * (paf_0_copd - paf_copd) * social_specs_file["Mort_COPD"]
+        mort_ihd_R = social_specs_file["Rural_Hhsize"] * (paf_0_ihd - paf_ihd) * social_specs_file["Mort_IHD"]
+        mort_lc_R = social_specs_file["Rural_Hhsize"] * (paf_0_lc - paf_lc) * social_specs_file["Mort_LC"]
+
+        cl_copd = {1: 0.3, 2: 0.2, 3: 0.17, 4: 0.17, 5: 0.16}
+        cl_alri = {1: 0.7, 2: 0.1, 3: 0.07, 4: 0.07, 5: 0.06}
+        cl_lc = {1: 0.2, 2: 0.1, 3: 0.24, 4: 0.23, 5: 0.23}
+        cl_ihd = {1: 0.2, 2: 0.1, 3: 0.24, 4: 0.23, 5: 0.23}
+
+        i = 1
+        mort_U_vector = []
+        mort_R_vector = []
+        while i < 6:
+
+            mortality_alri_U = cl_alri[i] * social_specs_file["VSL"] * mort_alri_U / (1 + social_specs_file["Discount_rate"]) ** (i-1)
+            mortality_copd_U = cl_copd[i] * social_specs_file["VSL"] * mort_copd_U / (1 + social_specs_file["Discount_rate"]) ** (i-1)
+            mortality_lc_U = cl_lc[i] * social_specs_file["VSL"] * mort_lc_U / (1 + social_specs_file["Discount_rate"]) ** (i-1)
+            mortality_ihd_U = cl_ihd[i] * social_specs_file["VSL"] * mort_ihd_U / (1 + social_specs_file["Discount_rate"]) ** (i-1)
+
+            mort_U_total = (1 + social_specs_file["Health_spillovers_parameter"]) *(mortality_alri_U + mortality_copd_U + mortality_lc_U + mortality_ihd_U)
+
+            mort_U_vector.append(mort_U_total)
+
+            mortality_alri_R = cl_alri[i] * social_specs_file["VSL"] * mort_alri_R / (1 + social_specs_file["Discount_rate"]) ** (i-1)
+            mortality_copd_R = cl_copd[i] * social_specs_file["VSL"] * mort_copd_R / (1 + social_specs_file["Discount_rate"]) ** (i-1)
+            mortality_lc_R = cl_lc[i] * social_specs_file["VLS"] * mort_lc_R / (1 + social_specs_file["Discount_rate"]) ** (i-1)
+            mortality_ihd_R = cl_ihd[i] * social_specs_file["VSL"] * mort_ihd_R / (1 + social_specs_file["Discount_rate"]) ** (i-1)
+
+            mort_R_total = (1 + social_specs_file["Health_spillovers_parameter"]) * (mortality_alri_R + mortality_copd_R + mortality_lc_R + mortality_ihd_R)
+
+            mort_R_vector.append(mort_R_total)
+
+        mortality_U = np.sum(mort_R_vector)
+        mortality_R = np.sum(mort_R_vector)
+
+        self.urban_mortality = mortality_U
+        self.rural_mortality = mortality_R
+
     def morbidity(self, social_specs_file, paf_0_alri, paf_0_copd, paf_0_lc, paf_0_ihd):
         """
         Calculates morbidity rate per fuel
