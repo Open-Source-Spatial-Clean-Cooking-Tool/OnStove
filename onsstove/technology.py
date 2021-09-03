@@ -86,10 +86,10 @@ class Technology():
          else:
              rr_lc = 1 + 152.496 * (1 - exp(-0.000167 * (self.pm25 - 7.345) ** 0.76))
 
-         return rr_alri, rr_copd, rr_ihd, rr_l
-      
-    @staticmethod
-    def paf(rr, sfu):
+         return rr_alri, rr_copd, rr_ihd, rr_lc
+
+    @classmethod
+    def paf(self, rr, sfu):
 
         paf = (sfu * (rr - 1)) / (sfu * (rr - 1) + 1)
 
@@ -154,8 +154,66 @@ class Technology():
 
         self.urban_mortality = mortality_U
         self.rural_mortality = mortality_R
-    
 
+    def morbidity(self, social_specs_file, paf_0_alri, paf_0_copd, paf_0_lc, paf_0_ihd):
+        """
+        Calculates morbidity rate per fuel
+
+        Returns
+        ----------
+        Monetary morbidity for each stove in urban and rural settings
+        """
+
+        rr_alri, rr_copd, rr_ihd, rr_lc = self.relative_risk(self)
+
+        paf_alri = self.paf(rr_alri, sfu)
+        paf_copd = self.paf(rr_copd, sfu)
+        paf_ihd = self.paf(rr_ihd, sfu)
+        paf_lc = self.paf(rr_lc, sfu)
+
+        morb_alri_U = social_specs_file["Urban_Hhsize"] * (paf_0_alri - paf_alri) * social_specs_file["Morb_ALRI"]
+        morb_copd_U = social_specs_file["Urban_Hhsize"] * (paf_0_copd - paf_copd) * social_specs_file["Morb_COPD"]
+        morb_ihd_U = social_specs_file["Urban_Hhsize"] * (paf_0_ihd - paf_ihd) * social_specs_file["Morb_IHD"]
+        morb_lc_U = social_specs_file["Urban_Hhsize"] * (paf_0_lc - paf_lc) * social_specs_file["Morb_LC"]
+
+        morb_alri_R = social_specs_file["Rural_Hhsize"] * (paf_0_alri - paf_alri) * social_specs_file["Morb_ALRI"]
+        morb_copd_R = social_specs_file["Rural_Hhsize"] * (paf_0_copd - paf_copd) * social_specs_file["Morb_COPD"]
+        morb_ihd_R = social_specs_file["Rural_Hhsize"] * (paf_0_ihd - paf_ihd)  * social_specs_file["Morb_IHD"]
+        morb_lc_R = social_specs_file["Rural_Hhsize"] * (paf_0_lc - paf_lc)  * social_specs_file["Morb_LC"]
+
+        cl_copd = {1: 0.3, 2: 0.2, 3: 0.17, 4: 0.17, 5: 0.16}
+        cl_alri = {1: 0.7, 2: 0.1, 3: 0.07, 4: 0.07, 5: 0.06}
+        cl_lc = {1: 0.2, 2: 0.1, 3: 0.24, 4: 0.23, 5: 0.23}
+        cl_ihd = {1: 0.2, 2: 0.1, 3: 0.24, 4: 0.23, 5: 0.23}
+
+        i = 1
+        morb_U_vector = []
+        morb_R_vector = []
+        while i < 6:
+
+            morbidity_alri_U = cl_alri[i] * social_specs_file["COI_ALRI"] * morb_alri_U / (1 + social_specs_file["Discount_rate"]) ** (i-1)
+            morbidity_copd_U = cl_copd[i] * social_specs_file["COI_COPD"] * morb_copd_U / (1 + social_specs_file["Discount_rate"]) ** (i-1)
+            morbidity_lc_U = cl_lc[i] * social_specs_file["COI_LC"] * morb_lc_U / (1 + social_specs_file["Discount_rate"]) ** (i-1)
+            morbidity_ihd_U = cl_ihd[i] * social_specs_file["COI_IHD"] * morb_ihd_U / (1 + social_specs_file["Discount_rate"]) ** (i-1)
+
+            morb_U_total = (1 + social_specs_file["Health_spillovers_parameter"]) *(morbidity_alri_U + morbidity_copd_U + morbidity_lc_U + morbidity_ihd_U)
+
+            morb_U_vector.append(morb_U_total)
+
+            morbidity_alri_R = cl_alri[i] * social_specs_file["COI_ALRI"] * morb_alri_R / (1 + social_specs_file["Discount_rate"]) ** (i-1)
+            morbidity_copd_R = cl_copd[i] * social_specs_file["COI_COPD"] * morb_copd_R / (1 + social_specs_file["Discount_rate"]) ** (i-1)
+            morbidity_lc_R = cl_lc[i] * social_specs_file["COI_LC"] * morb_lc_R / (1 + social_specs_file["Discount_rate"]) ** (i-1)
+            morbidity_ihd_R = cl_ihd[i] * social_specs_file["COI_IHD"] * morb_ihd_R / (1 + social_specs_file["Discount_rate"]) ** (i-1)
+
+            morb_R_total = (1 + social_specs_file["Health_spillovers_parameter"]) * (morbidity_alri_R + morbidity_copd_R + morbidity_lc_R + morbidity_ihd_R)
+
+            morb_R_vector.append(morb_R_total)
+
+        morbidity_U = np.sum(morb_U_vector)
+        morbidity_R = np.sum(morb_R_vector)
+
+        self.urban_morbidity = morbidity_U
+        self.rural_morbidity = morbidity_R
 
 def time_save(tech, value_of_time, walking_friction, forest):
     if tech.name == 'biogas':
@@ -177,20 +235,6 @@ def carbon_emissions(tech):
                 tech.carbon_intensity * tech.energy_content / tech.efficiency)  # 5 USD/MT is average social cost of carbon emissions in Nepal according to https://www.nature.com/articles/s41558-018-0282-y.pdf, 3.64 MJ to cook based on https://iopscience.iop.org/article/10.1088/1748-9326/aa6fd0/meta
 
     return carb
-
-
-def discount_factor(discount_rate_tech, tech):
-    if tech.start_year == tech.end_year:
-        proj_life = 1
-    else:
-        proj_life = tech.end_year - tech.start_year
-
-    year = np.arange(proj_life)
-
-    discount_factor = (1 + discount_rate_tech) ** year
-
-    return discount_factor, proj_life
-
 
 def discounted_meals(meals_per_year, discount_rate_tech, tech):
     discount_rate, proj_life = discount_factor(discount_rate_tech, tech)
