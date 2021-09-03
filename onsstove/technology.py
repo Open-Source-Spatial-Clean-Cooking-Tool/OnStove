@@ -120,6 +120,19 @@ class Technology:
 
         return discount_factor, proj_life
 
+    @classmethod
+    def carb(self):
+
+        carb = (3.64 / self.efficiency) / self.energy_content * (self.carbon_intensity * self.energy_content / self.efficiency)
+
+        return carb
+
+    def carbon_emissions(self, specs_file, carb):
+
+        carbon = specs_file["Cost of carbon emissions"] * (carb - self.carb)
+
+        self.decreased_carbon_emissions = carbon
+
     def mortality(self, social_specs_file, paf_0_alri, paf_0_copd, paf_0_lc, paf_0_ihd):
         """
         Calculates mortality rate per fuel
@@ -258,6 +271,67 @@ class Technology:
         self.urban_morbidity = morbidity_U
         self.rural_morbidity = morbidity_R
 
+    def salvage(self, specs_file):
+        """
+        Calculates discounted salvage cost assuming straight-line depreciation
+        Returns
+        ----------
+        discounted salvage cost
+        """
+        discount_rate, proj_life = self.discount_factor(self, specs_file)
+        salvage = np.zeros(proj_life)
+        used_life = proj_life % self.tech_life
+
+        salvage[-1] = self.inv_cost * (1 - used_life / self.tech_life)
+
+        discounted_salvage = salvage.sum() / discount_rate
+
+        self.discounted_salvage_cost = discounted_salvage
+
+    def discounted_om(self, specs_file):
+        """
+        Calls discount_factor function and creates discounted OM costs.
+        Returns
+        ----------
+        discountedOM costs for each stove during the project lifetime
+        """
+        discount_rate, proj_life = self.discount_factor(self, specs_file)
+
+        operation_and_maintenance = self.om_costs * np.ones(proj_life) * self.inv_cost
+        operation_and_maintenance[0] = 0
+
+        i = self.tech_life
+        while i < proj_life:
+            operation_and_maintenance[i] = 0
+            i = i + self.tech_life
+
+        discounted_om_cost = operation_and_maintenance.sum() / discount_rate
+
+        self.discounted_om_costs = discounted_om_cost
+
+    def discounted_inv(self, specs_file):
+        """
+        Calls discount_factor function and creates discounted investment cost. Uses proj_life and tech_life to determine
+        number of necessary re-investments
+
+        Returns
+        ----------
+        discounted investment cost for each stove during the project lifetime
+        """
+        discount_rate, proj_life = self.discount_factor(self, specs_file)
+    
+        investments = np.zeros(proj_life)
+        investments[0] = self.inv_cost
+
+        i = self.tech_life
+        while i < proj_life:
+            investments[i] = self.inv_cost
+            i = i + self.tech_life
+
+        discounted_investments = investments.sum() / discount_rate
+
+        self.discounted_investments = discounted_investments
+
 
 def time_save(tech, value_of_time, walking_friction, forest):
     if tech.name == 'biogas':
@@ -273,16 +347,8 @@ def time_save(tech, value_of_time, walking_friction, forest):
 
     return time_value
 
-
-def carbon_emissions(tech):
-    carb = 5 * (3.64 / tech.efficiency) / tech.energy_content * (
-            tech.carbon_intensity * tech.energy_content / tech.efficiency)  # 5 USD/MT is average social cost of carbon emissions in Nepal according to https://www.nature.com/articles/s41558-018-0282-y.pdf, 3.64 MJ to cook based on https://iopscience.iop.org/article/10.1088/1748-9326/aa6fd0/meta
-
-    return carb
-
-
 def discounted_meals(meals_per_year, discount_rate_tech, tech):
-    discount_rate, proj_life = discount_factor(discount_rate_tech, tech)
+    discount_rate, proj_life = self.discount_factor(discount_rate_tech, tech)
 
     energy = meals_per_year * 3.64 / tech.efficiency
 
@@ -294,53 +360,6 @@ def discounted_meals(meals_per_year, discount_rate_tech, tech):
     discounted_energy = energy_needed / discount_rate
 
     return discounted_energy
-
-
-def discounted_inv(discount_rate_tech, tech):
-    discount_rate, proj_life = discount_factor(discount_rate_tech, tech)
-
-    investments = np.zeros(project_life)
-    investments[0] = tech.inv_cost
-
-    if proj_life > tech.tech_life:
-        investments[tech.tech_life] = tech.inv_cost
-
-    discounted_investments = investments / discount_rate
-
-    return discounted_investments
-
-
-def discounted_om(discount_rate_tech, tech):
-    discount_rate, proj_life = discount_factor(discount_rate_tech, tech)
-
-    operation_and_maintenance = tech.om_costs * np.ones(project_life)
-
-    if proj_life > 1:
-        operation_and_maintenance[0] = 0
-
-        if proj_life > tech.tech_life:
-            operation_and_maintenance[tech.tech_life] = 0
-
-    discounted_om_cost = operation_and_maintenance / discount_rate
-
-    return discounted_om_cost
-
-
-def salvage(discount_rate_tech, tech):
-    discount_rate, proj_life = discount_factor(discount_rate_tech, tech)
-
-    salvage = np.zeros(project_life)
-    used_life = project_life
-
-    if proj_life > tech.tech_life:
-        used_life = project_life - tech.tech_life
-
-    salvage[-1] = tech.inv_cost * (1 - used_life / tech.tech_life)
-
-    discounted_salvage = salvage / discount_rate
-
-    return discounted_salvage
-
 
 def discounted_fuel_cost(discount_rate_tech, tech, road_friction, lpg, meals_per_year):
     discount_rate, proj_life = discount_factor(discount_rate_tech, tech)
