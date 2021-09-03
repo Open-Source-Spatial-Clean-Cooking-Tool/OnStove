@@ -235,7 +235,7 @@ class Technology():
         self.urban_morbidity = morbidity_U
         self.rural_morbidity = morbidity_R
 
-    def salvage(discount_rate_tech, tech):
+    def salvage(self, specs_file):
         """
         Calculates discounted salvage cost assuming straight-line depreciation
 
@@ -244,7 +244,7 @@ class Technology():
         discounted salvage cost
         """
 
-        discount_rate, proj_life = discount_factor(discount_rate_tech, tech)
+        discount_rate, proj_life = discount_factor(self, specs_file)
 
         salvage = np.zeros(proj_life)
         used_life = proj_life % self.tech_life
