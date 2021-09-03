@@ -243,7 +243,8 @@ class Technology():
         self.urban_morbidity = morbidity_U
         self.rural_morbidity = morbidity_R
 
-    def time_save(self, value_of_time, walking_friction, forest):
+    @classmethod
+    def time_save(self, df, value_of_time, walking_friction, forest):
 
         if self.name == 'traditional_biomass_collected' or self.name == 'improved_biomass_collected':
             collection_time = 2 * (raster.travel_time(walking_friction,forest))
@@ -253,6 +254,8 @@ class Technology():
         total_time = collection_time + self.time_of_cooking + self.time_of_collection
 
         time_value = total_time * value_of_time
+
+        return time_value
 
     def salvage(discount_rate_tech, tech):
         """
