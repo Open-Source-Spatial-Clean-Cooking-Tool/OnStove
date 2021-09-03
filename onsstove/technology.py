@@ -252,7 +252,7 @@ class Technology():
         investments[0] = self.inv_cost
 
         i = self.tech_life
-        while i <= proj_life:
+        while i < proj_life:
             investments[i] = self.inv_cost
             i = i + self.tech_life
 
