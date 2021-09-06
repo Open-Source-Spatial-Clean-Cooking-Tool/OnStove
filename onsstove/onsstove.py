@@ -356,7 +356,7 @@ class OnSSTOVE():
 
         self.gdf["Final_Elec_Code" + "{}".format(self.specs["Start_year"])] = \
             self.gdf.apply(lambda row: 1 if row["Current_elec"] == 1 else 99, axis=1)
-            
+
     def add_mask_layer(self, name, layer_path, postgres=False):
         """
         Adds a vector layer to self.mask_layer, which will be used to mask all 
@@ -461,7 +461,7 @@ class OnSSTOVE():
                 layer.get_distance_raster(self.base_layer.path,
                                           output_path,
                                           self.mask_layer.layer)
-                layer.distance_raster.layer /= 1000 # to convert from meters to km
+                layer.distance_raster.layer /= 1000  # to convert from meters to km
                 self.raster_to_dataframe(layer.distance_raster, method='read')
 
     def normalize_rasters(self, datasets='all'):
@@ -532,6 +532,9 @@ class OnSSTOVE():
         ----
         0.5 is the upper limit for minimum wage and 0.2 the lower limit
         """
+        wealth.layer[wealth.layer < 0] = np.nan
+        wealth.meta['nodata'] = np.nan
+
         min_value = np.nanmin(wealth.layer)
         max_value = np.nanmax(wealth.layer)
         print(max_value, min_value)

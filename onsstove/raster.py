@@ -28,7 +28,8 @@ def align_raster(raster_1, raster_2, method='nearest', compression='NONE'):
     out_meta.update({
         'transform': raster_1_meta['transform'],
         'crs': raster_1_meta['crs'],
-        'compress': compression
+        'compress': compression,
+        'nodata': raster_2_meta['nodata']
     })    
     destination = np.full((raster_1_meta['height'], raster_1_meta['width']), raster_2_meta['nodata'])
     reproject(
