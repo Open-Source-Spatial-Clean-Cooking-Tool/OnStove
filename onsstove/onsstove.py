@@ -165,9 +165,9 @@ class OnSSTOVE():
             self.layers[category] = {name: layer}
 
     def elec_current(self):
-
-        urban_pop = (self.gdf.loc[self.gdf["IsUrban"] > 1, self.gdf["Calibrated_pop"]].sum())
-        rural_pop = (self.gdf.loc[self.gdf["IsUrban"] <= 1, self.gdf["Calibrated_pop"]].sum())
+        elec_actual = self.specs['Elec_rate']
+        urban_pop = (self.gdf.loc[self.gdf["IsUrban"] > 1, "Calibrated_pop"].sum())
+        rural_pop = (self.gdf.loc[self.gdf["IsUrban"] <= 1, "Calibrated_pop"].sum())
         total_pop = self.gdf["Calibrated_pop"].sum()
 
         total_elec_ratio = self.specs["Elec_rate"]
@@ -179,7 +179,7 @@ class OnSSTOVE():
         urban_elec_ratio *= factor
         rural_elec_ratio *= factor
 
-        self.gdf.loc[self.gdf["Night_lights"] == 0, self.gdf["Elec_pop_calib"]] = 0
+        self.gdf.loc[self.gdf["Night_lights"] == 0, "Elec_pop_calib"] = 0
         self.gdf["Current_elec"] = 0
 
         if "Transformer_dist" in self.gdf.columns:
@@ -469,7 +469,9 @@ class OnSSTOVE():
                                           output_path,
                                           self.mask_layer.layer)
                 layer.distance_raster.layer /= 1000  # to convert from meters to km
-                self.raster_to_dataframe(layer.distance_raster, method='read')
+                self.raster_to_dataframe(layer.distance_raster.layer,
+                                         name=layer.distance_raster.name,
+                                         method='read')
 
     def normalize_rasters(self, datasets='all'):
         """
@@ -515,12 +517,12 @@ class OnSSTOVE():
         while abs(urban_modelled - urban_current) > 0.01:
 
             self.gdf["IsUrban"] = 0
-            self.gdf.loc[(self.gdf["Population"] > 5000 * factor) & (
-                    self.gdf["Population"] / self.cell_size > 350 * factor), "IsUrban"] = 1
-            self.gdf.loc[(self.gdf["Population"] > 50000 * factor) & (
-                    self.gdf["Population"] / self.cell_size > 1500 * factor), "IsUrban"] = 2
+            self.gdf.loc[(self.gdf["Calibrated_pop"] > 5000 * factor) & (
+                    self.gdf["Calibrated_pop"] / (self.cell_size[0] ** 2 / 1000000) > 350 * factor), "IsUrban"] = 1
+            self.gdf.loc[(self.gdf["Calibrated_pop"] > 50000 * factor) & (
+                    self.gdf["Calibrated_pop"] / (self.cell_size[0] ** 2 / 1000000) > 1500 * factor), "IsUrban"] = 2
 
-            pop_urb = self.gdf.loc[clusters["IsUrban"] > 1, "Calibrated_pop"].sum()
+            pop_urb = self.gdf.loc[self.gdf["IsUrban"] > 1, "Calibrated_pop"].sum()
 
             urban_modelled = pop_urb / pop_tot
 
@@ -544,7 +546,6 @@ class OnSSTOVE():
 
         min_value = np.nanmin(wealth.layer)
         max_value = np.nanmax(wealth.layer)
-        print(max_value, min_value)
         norm_layer = (wealth.layer - min_value) / (max_value - min_value) * (0.5 - 0.2) + 0.2
         self.value_of_time = norm_layer * self.specs['Minimum_wage']
         self.raster_to_dataframe(self.value_of_time, name='value_of_time', method='read')
