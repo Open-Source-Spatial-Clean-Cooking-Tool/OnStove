@@ -312,6 +312,17 @@ class Technology():
 
         self.discounted_investments = discounted_investments
 
+    def discounted_meals(self, specs_file):
+        discount_rate, proj_life = discount_factor(specs_file["Discount_rate_tech"])
+
+        energy = specs_file["Meals_per_day"] * 365 * 3.64 / self.efficiency
+
+        energy_needed = energy * np.ones(proj_life)
+
+        discounted_energy = energy_needed / discount_rate
+
+        self.discounted_meals = discounted_energy
+
 
 def time_save(tech, value_of_time, walking_friction, forest):
     if tech.name == 'biogas':
@@ -326,20 +337,6 @@ def time_save(tech, value_of_time, walking_friction, forest):
     time_value = time * value_of_time
 
     return time_value
-
-def discounted_meals(meals_per_year, discount_rate_tech, tech):
-    discount_rate, proj_life = discount_factor(discount_rate_tech, tech)
-
-    energy = meals_per_year * 3.64 / tech.efficiency
-
-    energy_needed = energy * np.ones(proj_life)
-
-    if proj_life > 1:
-        energy_needed[0] = 0
-
-    discounted_energy = energy_needed / discount_rate
-
-    return discounted_energy
 
 def discounted_fuel_cost(discount_rate_tech, tech, road_friction, lpg, meals_per_year):
     discount_rate, proj_life = discount_factor(discount_rate_tech, tech)
@@ -357,23 +354,6 @@ def discounted_fuel_cost(discount_rate_tech, tech, road_friction, lpg, meals_per
     fuel_cost_discounted = fuel_cost / discount_rate
 
     return fuel_cost_discounted
-
-
-def cost(discount_rate_tech, tech, meals_per_year, road_friction, lpg):
-    cost = (discounted_inv(discount_rate_tech, tech) + discounted_om(discount_rate_tech, tech) + \
-            discounted_fuel_cost(discount_rate_tech, tech, road_friction, lpg) - salvage(discount_rate_tech, tech)) / \
-           discounted_meals(meals_per_year, discount_rate_tech, tech)
-
-    return cost
-
-
-def benefit(start_year, end_year, tech, discount_rate_social, hhsize_R, hhsize_U, vsl, value_of_time, walking_friction,
-            forest, sfu=1):
-    benefit = morbidity(start_year, end_year, tech, discount_rate_social, hhsize_R, hhsize_U, sfu) + \
-              mortality(start_year, end_year, tech, discount_rate_social, hhsize_R, hhsize_U, vsl, sfu) + \
-              time_save(tech, value_of_time, walking_friction, forest) + carbon_emissions(tech)
-
-    return benefit
 
 
 def net_costs(discount_rate_tech, tech, meals_per_year, road_friction, lpg, start_year, end_year, discount_rate_social,
