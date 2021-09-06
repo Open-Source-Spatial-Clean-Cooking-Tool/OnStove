@@ -209,13 +209,13 @@ class RasterLayer(Layer):
         self.read_layer(output_file)
 
     def reproject(self, crs, output_path,
-                  cell_width=None, cell_height=None, method='nearest'):
+                  cell_width=None, cell_height=None):
         if self.meta['crs'] != crs:
             output_file = os.path.join(output_path,
                                        self.name + ' - reprojected.tif')
             reproject_raster(self.path, crs, output_file=output_file,
                              cell_width=cell_width, cell_height=cell_height,
-                             method=method, compression='DEFLATE')
+                             method=self.resample, compression='DEFLATE')
 
             self.read_layer(output_file)
 

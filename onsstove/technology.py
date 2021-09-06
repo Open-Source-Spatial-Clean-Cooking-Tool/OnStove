@@ -124,12 +124,11 @@ class Technology:
         return discount_factor, proj_life
 
     def carb(self):
-        self.carb = (3.64 / self.efficiency) / self.energy_content * (self.carbon_intensity * self.energy_content / self.efficiency)
-
+        self.carbon = (3.64 / self.efficiency) / self.energy_content * (self.carbon_intensity * self.energy_content / self.efficiency)
 
     def carbon_emissions(self, specs_file, carb_base_fuel):
-
-        carbon = specs_file["Cost of carbon emissions"] * (carb_base_fuel - self.carb)
+        self.carb()
+        carbon = specs_file["Cost of carbon emissions"] * (carb_base_fuel - self.carbon)
 
         self.decreased_carbon_emissions = carbon
 
@@ -149,15 +148,15 @@ class Technology:
         paf_ihd = self.paf(rr_ihd, 1 - specs_file['clean_cooking_access'])
         paf_lc = self.paf(rr_lc, 1 - specs_file['clean_cooking_access'])
 
-        mort_alri_U = specs_file["Urban_Hhsize"] * (paf_0_alri - paf_alri) * specs_file["Mort_ALRI"]
-        mort_copd_U = specs_file["Urban_Hhsize"] * (paf_0_copd - paf_copd) * specs_file["Mort_COPD"]
-        mort_ihd_U = specs_file["Urban_Hhsize"] * (paf_0_ihd - paf_ihd) * specs_file["Mort_IHD"]
-        mort_lc_U = specs_file["Urban_Hhsize"] * paf_lc * specs_file["Mort_LC"]
+        mort_alri_U = specs_file["Urban_HHsize"] * (paf_0_alri - paf_alri) * specs_file["Mort_ALRI"]
+        mort_copd_U = specs_file["Urban_HHsize"] * (paf_0_copd - paf_copd) * specs_file["Mort_COPD"]
+        mort_ihd_U = specs_file["Urban_HHsize"] * (paf_0_ihd - paf_ihd) * specs_file["Mort_IHD"]
+        mort_lc_U = specs_file["Urban_HHsize"] * (paf_0_lc - paf_lc) * specs_file["Mort_LC"]
 
-        mort_alri_R = specs_file["Rural_Hhsize"] * (paf_0_alri - paf_alri) * specs_file["Mort_ALRI"]
-        mort_copd_R = specs_file["Rural_Hhsize"] * (paf_0_copd - paf_copd) * specs_file["Mort_COPD"]
-        mort_ihd_R = specs_file["Rural_Hhsize"] * (paf_0_ihd - paf_ihd) * specs_file["Mort_IHD"]
-        mort_lc_R = specs_file["Rural_Hhsize"] * (paf_0_lc - paf_lc) * specs_file["Mort_LC"]
+        mort_alri_R = specs_file["Rural_HHsize"] * (paf_0_alri - paf_alri) * specs_file["Mort_ALRI"]
+        mort_copd_R = specs_file["Rural_HHsize"] * (paf_0_copd - paf_copd) * specs_file["Mort_COPD"]
+        mort_ihd_R = specs_file["Rural_HHsize"] * (paf_0_ihd - paf_ihd) * specs_file["Mort_IHD"]
+        mort_lc_R = specs_file["Rural_HHsize"] * (paf_0_lc - paf_lc) * specs_file["Mort_LC"]
 
         cl_copd = {1: 0.3, 2: 0.2, 3: 0.17, 4: 0.17, 5: 0.16}
         cl_alri = {1: 0.7, 2: 0.1, 3: 0.07, 4: 0.07, 5: 0.06}
@@ -168,8 +167,7 @@ class Technology:
         mort_U_vector = []
         mort_R_vector = []
         while i < 6:
-            mortality_alri_U = cl_alri[i] * specs_file["VSL"] * mort_alri_U / (
-                    1 + specs_file["Discount_rate"]) ** (i - 1)
+            mortality_alri_U = cl_alri[i] * specs_file["VSL"] * mort_alri_U / (1 + specs_file["Discount_rate"]) ** (i - 1)
             mortality_copd_U = cl_copd[i] * specs_file["VSL"] * mort_copd_U / (
                     1 + specs_file["Discount_rate"]) ** (i - 1)
             mortality_lc_U = cl_lc[i] * specs_file["VSL"] * mort_lc_U / (
@@ -186,7 +184,7 @@ class Technology:
                     1 + specs_file["Discount_rate"]) ** (i - 1)
             mortality_copd_R = cl_copd[i] * specs_file["VSL"] * mort_copd_R / (
                     1 + specs_file["Discount_rate"]) ** (i - 1)
-            mortality_lc_R = cl_lc[i] * specs_file["VLS"] * mort_lc_R / (
+            mortality_lc_R = cl_lc[i] * specs_file["VSL"] * mort_lc_R / (
                     1 + specs_file["Discount_rate"]) ** (i - 1)
             mortality_ihd_R = cl_ihd[i] * specs_file["VSL"] * mort_ihd_R / (
                     1 + specs_file["Discount_rate"]) ** (i - 1)
@@ -196,7 +194,9 @@ class Technology:
 
             mort_R_vector.append(mort_R_total)
 
-        mortality_U = np.sum(mort_R_vector)
+            i += 1
+
+        mortality_U = np.sum(mort_U_vector)
         mortality_R = np.sum(mort_R_vector)
 
         self.urban_mortality = mortality_U
@@ -218,15 +218,15 @@ class Technology:
         paf_ihd = self.paf(rr_ihd, 1 - specs_file['clean_cooking_access'])
         paf_lc = self.paf(rr_lc, 1 - specs_file['clean_cooking_access'])
 
-        morb_alri_U = specs_file["Urban_Hhsize"] * (paf_0_alri - paf_alri) * specs_file["Morb_ALRI"]
-        morb_copd_U = specs_file["Urban_Hhsize"] * (paf_0_copd - paf_copd) * specs_file["Morb_COPD"]
-        morb_ihd_U = specs_file["Urban_Hhsize"] * (paf_0_ihd - paf_ihd) * specs_file["Morb_IHD"]
-        morb_lc_U = specs_file["Urban_Hhsize"] * (paf_0_lc - paf_lc) * specs_file["Morb_LC"]
+        morb_alri_U = specs_file["Urban_HHsize"] * (paf_0_alri - paf_alri) * specs_file["Morb_ALRI"]
+        morb_copd_U = specs_file["Urban_HHsize"] * (paf_0_copd - paf_copd) * specs_file["Morb_COPD"]
+        morb_ihd_U = specs_file["Urban_HHsize"] * (paf_0_ihd - paf_ihd) * specs_file["Morb_IHD"]
+        morb_lc_U = specs_file["Urban_HHsize"] * (paf_0_lc - paf_lc) * specs_file["Morb_LC"]
 
-        morb_alri_R = specs_file["Rural_Hhsize"] * (paf_0_alri - paf_alri) * specs_file["Morb_ALRI"]
-        morb_copd_R = specs_file["Rural_Hhsize"] * (paf_0_copd - paf_copd) * specs_file["Morb_COPD"]
-        morb_ihd_R = specs_file["Rural_Hhsize"] * (paf_0_ihd - paf_ihd) * specs_file["Morb_IHD"]
-        morb_lc_R = specs_file["Rural_Hhsize"] * (paf_0_lc - paf_lc) * specs_file["Morb_LC"]
+        morb_alri_R = specs_file["Rural_HHsize"] * (paf_0_alri - paf_alri) * specs_file["Morb_ALRI"]
+        morb_copd_R = specs_file["Rural_HHsize"] * (paf_0_copd - paf_copd) * specs_file["Morb_COPD"]
+        morb_ihd_R = specs_file["Rural_HHsize"] * (paf_0_ihd - paf_ihd) * specs_file["Morb_IHD"]
+        morb_lc_R = specs_file["Rural_HHsize"] * (paf_0_lc - paf_lc) * specs_file["Morb_LC"]
 
         cl_copd = {1: 0.3, 2: 0.2, 3: 0.17, 4: 0.17, 5: 0.16}
         cl_alri = {1: 0.7, 2: 0.1, 3: 0.07, 4: 0.07, 5: 0.06}
@@ -264,6 +264,8 @@ class Technology:
                     morbidity_alri_R + morbidity_copd_R + morbidity_lc_R + morbidity_ihd_R)
 
             morb_R_vector.append(morb_R_total)
+
+            i += 1
 
         morbidity_U = np.sum(morb_U_vector)
         morbidity_R = np.sum(morb_R_vector)
@@ -356,11 +358,11 @@ class Technology:
         self.discounted_fuel_cost = fuel_cost_discounted
 
     def total_time(self):
-        self.total_time = self.time_of_collection + self.time_of_cooking
+        self.total_time_yr = self.time_of_collection + self.time_of_cooking
 
     def time_save(self, df):
-
-        time_saved = self.total_time - df["base_fuel_time"]
+        self.total_time()
+        time_saved = df["base_fuel_time"] - self.total_time_yr
 
         time_value = time_saved * df["value_of_time"]
 
@@ -469,7 +471,7 @@ class Biomass(Technology):
 
         self.travel_time = 2 * forest.distance_raster.layer
 
-    def total_time(self, friction_path, forest_path, population_path, out_path):
+    def total_time(self, specs_file, friction_path, forest_path, population_path, out_path):
         self.transportation_time(friction_path, forest_path, population_path, out_path)
-        self.total_time = self.time_of_cooking + self.travel_time + self.time_of_collection
+        self.total_time_yr = self.time_of_cooking * specs_file['Meals_per_day'] * 365 + (self.travel_time + self.time_of_collection) * 52
 
