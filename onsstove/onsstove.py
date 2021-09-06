@@ -33,6 +33,7 @@ class OnSSTOVE():
         self.mask_layer = None
         self.specs = None
         self.techs = None
+        self.base_fuel = None
 
     def get_layers(self, layers):
         if layers == 'all':
@@ -96,8 +97,14 @@ class OnSSTOVE():
                         techs[row['Fuel']][row['Param']] = float(row['Value'])
                     elif row['data_type'] == 'string':
                         techs[row['Fuel']][row['Param']] = str(row['Value'])
+                    elif row['data_type'] == 'bool':
+                        techs[row['Fuel']][row['Param']] = bool(row['Value'])
                     else:
                         raise ValueError("Config file data type not recognised.")
+        for name, tech in techs.items():
+            if tech.is_base:
+                self.base_fuel = tech
+
         self.techs = techs
 
     def add_layer(self, category, name, layer_path, layer_type, query=None,

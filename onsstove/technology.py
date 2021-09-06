@@ -7,7 +7,7 @@ import datetime
 from math import exp
 
 from .raster import *
-
+from .layer import *
 
 class Technology:
     """
@@ -25,7 +25,8 @@ class Technology:
                  time_of_cooking=0,
                  om_cost=0,  # percentage of investement cost
                  efficiency=0,  # ratio
-                 pm25=0):  # 24-h PM2.5 concentration
+                 pm25=0,
+                 is_base=False):  # 24-h PM2.5 concentration
 
         self.name = name
         self.carbon_intensity = carbon_intensity
@@ -40,6 +41,7 @@ class Technology:
         self.pm25 = pm25
         self.time_of_collection = None
         self.fuel_use = None
+        self.is_base = is_base
 
     def __setitem__(self, idx, value):
         if idx == 'name':
@@ -68,6 +70,8 @@ class Technology:
             self.time_of_collection = value
         elif idx == 'fuel_use':
             self.fuel_use = value
+        elif idx == 'is_base':
+            self.is_base = value
         else:
             raise KeyError(idx)
 
@@ -94,7 +98,6 @@ class Technology:
 
         return rr_alri, rr_copd, rr_ihd, rr_lc
 
-    @classmethod
     def paf(self, rr, sfu):
 
         paf = (sfu * (rr - 1)) / (sfu * (rr - 1) + 1)
@@ -120,16 +123,13 @@ class Technology:
 
         return discount_factor, proj_life
 
-    @classmethod
     def carb(self):
+        self.carb = (3.64 / self.efficiency) / self.energy_content * (self.carbon_intensity * self.energy_content / self.efficiency)
 
-        carb = (3.64 / self.efficiency) / self.energy_content * (self.carbon_intensity * self.energy_content / self.efficiency)
 
-        return carb
+    def carbon_emissions(self, specs_file, carb_base_fuel):
 
-    def carbon_emissions(self, specs_file, carb):
-
-        carbon = specs_file["Cost of carbon emissions"] * (carb - self.carb)
+        carbon = specs_file["Cost of carbon emissions"] * (carb_base_fuel - self.carb)
 
         self.decreased_carbon_emissions = carbon
 
@@ -360,7 +360,7 @@ class Technology:
 
     def time_save(self, df):
 
-        time_saved = self.total_time - df["biomass_time"]
+        time_saved = self.total_time - df["base_fuel_time"]
 
         time_value = time_saved * df["value_of_time"]
 
@@ -458,16 +458,18 @@ class Biomass(Technology):
 
     def transportation_time(self, friction_path, forest_path, population_path, out_path):
 
-        forest = RasterLayer('rasters', 'forest', layer_path=forest_path,  resample='majority')
+        forest = RasterLayer('rasters', 'forest', layer_path=forest_path,  resample='mode')
         friction = RasterLayer('rasters', 'forest', layer_path=friction_path, resample='average')
 
         forest.align(population_path, out_path)
         friction.align(population_path, out_path)
 
         forest.add_friction_raster(friction)
+        forest.travel_time(out_path)
 
-        self.travel_time = 2 * forest.distance_raster
+        self.travel_time = 2 * forest.distance_raster.layer
 
     def total_time(self, friction_path, forest_path, population_path, out_path):
-        self.total_time = self.time_of_cooking + self.transportation_time(friction_path, forest_path, population_path, out_path) + self.time_of_collection
+        self.transportation_time(friction_path, forest_path, population_path, out_path)
+        self.total_time = self.time_of_cooking + self.travel_time + self.time_of_collection
 
