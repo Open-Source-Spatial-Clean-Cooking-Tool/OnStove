@@ -488,14 +488,14 @@ class OnSSTOVE():
         self.gdf = gpd.GeoDataFrame({'geometry': gpd.points_from_xy(x, y),
                                      'Pop': layer.layer[self.rows, self.cols]})
 
-    def raster_to_dataframe(self, layer, method='sample'):
+    def raster_to_dataframe(self, layer, name=None, method='sample'):
         """
         Takes a RasterLayer and a method (sample or read), gets the values from the raster layer using the population points previously extracted and saves the values in a new column of OnSSTOVE.gdf
         """
         if method == 'sample':
             self.gdf[layer.name] = sample_raster(layer.path, self.gdf)
         elif method == 'read':
-            self.gdf[layer.name] = layer.layer[self.rows, self.cols]
+            self.gdf[name] = layer[self.rows, self.cols]
 
     def calibrate_urban(self):
 
@@ -540,6 +540,7 @@ class OnSSTOVE():
         print(max_value, min_value)
         norm_layer = (wealth.layer - min_value) / (max_value - min_value) * (0.5 - 0.2) + 0.2
         self.value_of_time = norm_layer * self.specs['Minimum_wage']
+        self.raster_to_dataframe(self.value_of_time, name='value_of_time', method='read')
 
     def save_datasets(self, datasets='all'):
         """
