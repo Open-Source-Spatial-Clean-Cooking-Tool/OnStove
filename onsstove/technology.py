@@ -355,20 +355,16 @@ class Technology:
 
         self.discounted_fuel_cost = fuel_cost_discounted
 
+    def total_time(self):
+        self.total_time = self.time_of_collection + self.time_of_cooking
 
-def time_save(tech, value_of_time, walking_friction, forest):
-    if tech.name == 'biogas':
-        time_of_collection = 2
-    elif tech.name == 'traditional_biomass' or tech.name == 'improved_biomass':
-        time_of_collection = 2 * (raster.travel_time(walking_friction,
-                                                     forest)) + 2.2  # 2.2 hrs Medium scenario for Jeiland paper globally, placeholder
-    else:
-        time_of_collection = 0
+    def time_save(self, df):
 
-    time = time_of_collection + tech.time_of_cooking
-    time_value = time * value_of_time
+        time_saved = self.total_time - df["biomass_time"]
 
-    return time_value
+        time_value = time_saved * df["value_of_time"]
+
+        self.time_value = time_value
 
 
 def net_costs(discount_rate_tech, tech, meals_per_year, road_friction, lpg, start_year, end_year, discount_rate_social,
@@ -459,3 +455,19 @@ class Biomass(Technology):
                          inv_cost, infra_cost, fuel_cost, time_of_cooking,
                          om_cost, efficiency, pm25)
         self.travel_time = travel_time
+
+    def transportation_time(self, friction_path, forest_path, population_path, out_path):
+
+        forest = RasterLayer('rasters', 'forest', layer_path=forest_path,  resample='majority')
+        friction = RasterLayer('rasters', 'forest', layer_path=friction_path, resample='average')
+
+        forest.align(population_path, out_path)
+        friction.align(population_path, out_path)
+
+        forest.add_friction_raster(friction)
+
+        self.travel_time = 2 * forest.distance_raster
+
+    def total_time(self, friction_path, forest_path, population_path, out_path):
+        self.total_time = self.time_of_cooking + self.transportation_time(friction_path, forest_path, population_path, out_path) + self.time_of_collection
+
