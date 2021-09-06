@@ -323,6 +323,20 @@ class Technology():
 
         self.discounted_meals = discounted_energy
 
+    def discounted_fuel_cost(self, specs):
+
+        discount_rate, proj_life = discount_factor(discount_rate_tech, tech)
+
+        fuel = np.ones(proj_life)
+
+        energy = specs["Meals_per_day"] * 365 * 3.64 / self.efficiency
+
+        fuel_cost = fuel * (energy * (self.fuel_cost / (self.energy_content)))
+
+        fuel_cost_discounted = fuel_cost.sum() / discount_rate
+
+        self.discounted_fuel_cost = fuel_cost_discounted
+
 
 def time_save(tech, value_of_time, walking_friction, forest):
     if tech.name == 'biogas':
@@ -337,23 +351,6 @@ def time_save(tech, value_of_time, walking_friction, forest):
     time_value = time * value_of_time
 
     return time_value
-
-def discounted_fuel_cost(discount_rate_tech, tech, road_friction, lpg, meals_per_year):
-    discount_rate, proj_life = discount_factor(discount_rate_tech, tech)
-
-    if tech.name == 'electricity' or tech.name == 'improved_biomass_purchased' or tech.name == 'purchased_traditional_biomass':
-        fuel_cost = (tech.fuel_cost * discounted_meals(meals_per_year, discount_rate_tech, tech)) * np.ones(
-            project_life) / tech.efficiency
-    elif tech.name == 'lpg':
-        fuel_cost = (tech.fuel_cost * discounted_meals(meals_per_year, discount_rate_tech,
-                                                       tech)) * raster.lpg_transportation_cost(
-            raster.travel_time(road_friction, lpg)) / tech.efficiency
-    else:
-        fuel_cost = 0
-
-    fuel_cost_discounted = fuel_cost / discount_rate
-
-    return fuel_cost_discounted
 
 
 def net_costs(discount_rate_tech, tech, meals_per_year, road_friction, lpg, start_year, end_year, discount_rate_social,
