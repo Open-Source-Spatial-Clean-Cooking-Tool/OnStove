@@ -356,7 +356,7 @@ class OnSSTOVE():
 
         self.gdf["Final_Elec_Code" + "{}".format(self.specs["Start_year"])] = \
             self.gdf.apply(lambda row: 1 if row["Current_elec"] == 1 else 99, axis=1)
-            
+
     def add_mask_layer(self, name, layer_path, postgres=False):
         """
         Adds a vector layer to self.mask_layer, which will be used to mask all 
@@ -461,7 +461,7 @@ class OnSSTOVE():
                 layer.get_distance_raster(self.base_layer.path,
                                           output_path,
                                           self.mask_layer.layer)
-                layer.distance_raster.layer /= 1000 # to convert from meters to km
+                layer.distance_raster.layer /= 1000  # to convert from meters to km
                 self.raster_to_dataframe(layer.distance_raster, method='read')
 
     def normalize_rasters(self, datasets='all'):
@@ -488,14 +488,14 @@ class OnSSTOVE():
         self.gdf = gpd.GeoDataFrame({'geometry': gpd.points_from_xy(x, y),
                                      'Pop': layer.layer[self.rows, self.cols]})
 
-    def raster_to_dataframe(self, layer, method='sample'):
+    def raster_to_dataframe(self, layer, name=None, method='sample'):
         """
         Takes a RasterLayer and a method (sample or read), gets the values from the raster layer using the population points previously extracted and saves the values in a new column of OnSSTOVE.gdf
         """
         if method == 'sample':
             self.gdf[layer.name] = sample_raster(layer.path, self.gdf)
         elif method == 'read':
-            self.gdf[layer.name] = layer.layer[self.rows, self.cols]
+            self.gdf[name] = layer[self.rows, self.cols]
 
     def calibrate_urban(self):
 
@@ -524,6 +524,23 @@ class OnSSTOVE():
             i = i + 1
             if i > 500:
                 break
+
+    def get_value_of_time(self, wealth):
+        """
+        Calculates teh value of time based on the minimum wage ($/h) and a
+        GIS raster map as wealth index, poverty or GDP
+        ----
+        0.5 is the upper limit for minimum wage and 0.2 the lower limit
+        """
+        wealth.layer[wealth.layer < 0] = np.nan
+        wealth.meta['nodata'] = np.nan
+
+        min_value = np.nanmin(wealth.layer)
+        max_value = np.nanmax(wealth.layer)
+        print(max_value, min_value)
+        norm_layer = (wealth.layer - min_value) / (max_value - min_value) * (0.5 - 0.2) + 0.2
+        self.value_of_time = norm_layer * self.specs['Minimum_wage']
+        self.raster_to_dataframe(self.value_of_time, name='value_of_time', method='read')
 
     def save_datasets(self, datasets='all'):
         """
