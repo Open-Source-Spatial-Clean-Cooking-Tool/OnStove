@@ -525,6 +525,19 @@ class OnSSTOVE():
             if i > 500:
                 break
 
+    def get_value_of_time(self, wealth):
+        """
+        Calculates teh value of time based on the minimum wage ($/h) and a
+        GIS raster map as wealth index, poverty or GDP
+        ----
+        0.5 is the upper limit for minimum wage and 0.2 the lower limit
+        """
+        min_value = np.nanmin(wealth.layer)
+        max_value = np.nanmax(wealth.layer)
+        print(max_value, min_value)
+        norm_layer = (wealth.layer - min_value) / (max_value - min_value) * (0.5 - 0.2) + 0.2
+        self.value_of_time = norm_layer * self.specs['Minimum_wage']
+
     def save_datasets(self, datasets='all'):
         """
         Saves all layers that have not been previously saved
