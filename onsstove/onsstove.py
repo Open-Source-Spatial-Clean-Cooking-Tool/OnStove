@@ -552,3 +552,12 @@ class OnSSTOVE():
                 output_path = os.path.join(self.output_directory,
                                            category, name)
                 layer.save(output_path)
+
+
+    def maximum_net_benefit(self, df):
+
+        net_benefit_cols = [col for col in df if 'final_tech' in col]
+        df["final_tech"] = df[net_benefit_cols].idxmin(axis=1)
+        df["maximum_net_benefit"] = df[net_benefit_cols].min(axis=1)
+
+        df['final_tech'] = df['final_tech'].str.replace("net_benefit_","")
