@@ -8,7 +8,7 @@ from skimage.graph.mcp import MCP_Geometric
 from .raster import *
 
 
-class Layer():
+class Layer:
     """
     Template Layer initializing all needed variables.
     """
@@ -159,9 +159,14 @@ class VectorLayer(Layer):
         self.layer.to_file(output_file, driver='GeoJSON')
         self.path = output_file
 
-    def add_friction_raster(self, raster_path, resample='nearest'):
-        self.friction = RasterLayer(self.category, self.name + ' - friction',
-                                    raster_path, resample=resample)
+    def add_friction_raster(self, raster, resample='nearest'):
+        if isinstance(raster, str):
+            self.friction = RasterLayer(self.category, self.name + ' - friction',
+                                        raster, resample=resample)
+        elif isinstance(raster, RasterLayer):
+            self.friction = raster
+        else:
+            raise ValueError('Raster file type or object not recognized.')
 
     def add_restricted_areas(self, layer_path, layer_type, **kwargs):
         if layer_type == 'vector':
@@ -262,12 +267,17 @@ class RasterLayer(Layer):
         with rasterio.open(output_file, "w", **self.meta) as dest:
             dest.write(self.layer, indexes=1)
 
-    def add_friction_raster(self, raster_path, starting_cells=[1],
+    def add_friction_raster(self, raster, starting_cells=[1],
                             resample='nearest'):
         self.starting_cells = starting_cells
-        self.friction = RasterLayer(self.category,
-                                    self.name + ' - friction',
-                                    raster_path, resample=resample)
+        if isinstance(raster, str):
+            self.friction = RasterLayer(self.category,
+                                        self.name + ' - friction',
+                                        raster, resample=resample)
+        elif isinstance(raster, RasterLayer):
+            self.friction = raster
+        else:
+            raise ValueError('Raster file type or object not recognized.')
 
     def align(self, base_layer, output_path):
         layer, meta = align_raster(base_layer, self.path,
