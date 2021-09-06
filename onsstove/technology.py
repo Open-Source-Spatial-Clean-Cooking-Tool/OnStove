@@ -339,7 +339,7 @@ class Technology:
 
         energy_needed = energy * np.ones(proj_life)
 
-        discounted_energy = energy_needed / discount_rate
+        self.discounted_energy = energy_needed / discount_rate
 
     def discounted_fuel_cost(self, specs):
 
@@ -366,14 +366,14 @@ class Technology:
 
         self.time_value = time_value
 
+    def costs(self):
 
-def net_costs(discount_rate_tech, tech, meals_per_year, road_friction, lpg, start_year, end_year, discount_rate_social,
-              hhsize_R, hhsize_U, vsl, value_of_time, walking_friction, forest, sfu=1):
-    net_costs = cost(discount_rate_tech, tech, meals_per_year, road_friction, lpg) - \
-                benefit(start_year, end_year, tech, discount_rate_social, hhsize_R, hhsize_U, vsl, value_of_time,
-                        walking_friction, forest, sfu)
+        self.costs = (self.discounted_fuel_cost + self.discounted_inv + self.discounted_om_costs - self.discounted_salvage_cost) / self.discounted_energy
 
-    return net_costs
+    def net_benefit(self, df):
+
+        df["net_benefit_{}".fromat(self.name)] = df.apply(lambda row: self.urban_morbidity + self.urban_mortality + self.decreased_carbon_emissions + self.time_value - self.costs if df["IsUrban"] == 2 else
+        self.rural_morbidity + self.rural_mortality + self.decreased_carbon_emissions + self.time_value - self.costs)
 
 
 class LPG(Technology):
