@@ -313,19 +313,16 @@ class Technology:
 
         self.discounted_fuel_cost = fuel_cost_discounted
 
-    def total_time(self):
-        self.total_time_yr = self.time_of_collection + self.time_of_cooking
+    def total_time(self, specs_file):
+        self.total_time_yr = self.time_of_cooking * specs_file['Meals_per_day'] * 365
 
-    def time_save(self, df):
-        self.total_time()
-        time_saved = df["base_fuel_time"] - self.total_time_yr
+    def time_saved(self, df, specs_file):
+        self.total_time(specs_file)
+        self.total_time_saved = df["base_fuel_time"] - self.total_time_yr  # time saved per household
 
-        time_value = time_saved * df["value_of_time"]
-
-        self.time_value = time_value
+        self.time_value = self.total_time_saved * df["value_of_time"]  # time value of time saved per household
 
     def costs(self):
-
         self.costs = (self.discounted_fuel_cost + self.discounted_inv + self.discounted_om_costs - self.discounted_salvage_cost) / self.discounted_energy
 
     def net_benefit(self, df):
