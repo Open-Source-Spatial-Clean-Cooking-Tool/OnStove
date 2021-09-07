@@ -9,6 +9,7 @@ from math import exp
 from .raster import *
 from .layer import *
 
+
 class Technology:
     """
     Standard technology class.
@@ -26,7 +27,8 @@ class Technology:
                  om_cost=0,  # percentage of investement cost
                  efficiency=0,  # ratio
                  pm25=0,
-                 is_base=False):  # 24-h PM2.5 concentration
+                 is_base=False,
+                 transport_cost=0):  # 24-h PM2.5 concentration
 
         self.name = name
         self.carbon_intensity = carbon_intensity
@@ -42,6 +44,7 @@ class Technology:
         self.time_of_collection = None
         self.fuel_use = None
         self.is_base = is_base
+        self.transport_cost = transport_cost
 
     def __setitem__(self, idx, value):
         if idx == 'name':
@@ -124,7 +127,8 @@ class Technology:
         return discount_factor, proj_life
 
     def carb(self):
-        self.carbon = (3.64 / self.efficiency) / self.energy_content * (self.carbon_intensity * self.energy_content / self.efficiency)
+        self.carbon = (3.64 / self.efficiency) / self.energy_content * (
+                    self.carbon_intensity * self.energy_content / self.efficiency)
 
     def carbon_emissions(self, specs_file, carb_base_fuel):
         self.carb()
@@ -148,10 +152,10 @@ class Technology:
         paf_ihd = self.paf(rr_ihd, 1 - specs_file['clean_cooking_access'])
         paf_lc = self.paf(rr_lc, 1 - specs_file['clean_cooking_access'])
 
-        mort_alri = specs_file["Population_start_year"] * (paf_0_alri - paf_alri) * (specs_file["Mort_ALRI"]/100000)
-        mort_copd = specs_file["Population_start_year"] * (paf_0_copd - paf_copd) * (specs_file["Mort_COPD"]/100000)
-        mort_ihd = specs_file["Population_start_year"] * (paf_0_ihd - paf_ihd) * (specs_file["Mort_IHD"]/100000)
-        mort_lc = specs_file["Population_start_year"] * (paf_0_lc - paf_lc) * (specs_file["Mort_LC"]/100000)
+        mort_alri = specs_file["Population_start_year"] * (paf_0_alri - paf_alri) * (specs_file["Mort_ALRI"] / 100000)
+        mort_copd = specs_file["Population_start_year"] * (paf_0_copd - paf_copd) * (specs_file["Mort_COPD"] / 100000)
+        mort_ihd = specs_file["Population_start_year"] * (paf_0_ihd - paf_ihd) * (specs_file["Mort_IHD"] / 100000)
+        mort_lc = specs_file["Population_start_year"] * (paf_0_lc - paf_lc) * (specs_file["Mort_LC"] / 100000)
 
         cl_copd = {1: 0.3, 2: 0.2, 3: 0.17, 4: 0.17, 5: 0.16}
         cl_alri = {1: 0.7, 2: 0.1, 3: 0.07, 4: 0.07, 5: 0.06}
@@ -178,11 +182,11 @@ class Technology:
 
         mortality = np.sum(mort_vector)
 
-        self.distributed_mortality = gdf["Calibrated_pop"]/gdf["Calibrated_pop"].sum()*mortality
+        self.distributed_mortality = gdf["Calibrated_pop"] / gdf["Calibrated_pop"].sum() * mortality
         self.mortality = mortality
         self.deahts_avoided = (mort_alri + mort_copd + mort_lc + mort_ihd)
 
-    def morbidity(self, specs_file, gdf,paf_0_alri, paf_0_copd, paf_0_lc, paf_0_ihd):
+    def morbidity(self, specs_file, gdf, paf_0_alri, paf_0_copd, paf_0_lc, paf_0_ihd):
         """
         Calculates morbidity rate per fuel
 
@@ -198,10 +202,10 @@ class Technology:
         paf_ihd = self.paf(rr_ihd, 1 - specs_file['clean_cooking_access'])
         paf_lc = self.paf(rr_lc, 1 - specs_file['clean_cooking_access'])
 
-        morb_alri = specs_file["Population_start_year"] * (paf_0_alri - paf_alri) * (specs_file["Morb_ALRI"]/100000)
-        morb_copd = specs_file["Population_start_year"] * (paf_0_copd - paf_copd) * (specs_file["Morb_COPD"]/100000)
-        morb_ihd = specs_file["Population_start_year"] * (paf_0_ihd - paf_ihd) * (specs_file["Morb_IHD"]/100000)
-        morb_lc = specs_file["Population_start_year"] * (paf_0_lc - paf_lc) * (specs_file["Morb_LC"]/100000)
+        morb_alri = specs_file["Population_start_year"] * (paf_0_alri - paf_alri) * (specs_file["Morb_ALRI"] / 100000)
+        morb_copd = specs_file["Population_start_year"] * (paf_0_copd - paf_copd) * (specs_file["Morb_COPD"] / 100000)
+        morb_ihd = specs_file["Population_start_year"] * (paf_0_ihd - paf_ihd) * (specs_file["Morb_IHD"] / 100000)
+        morb_lc = specs_file["Population_start_year"] * (paf_0_lc - paf_lc) * (specs_file["Morb_LC"] / 100000)
 
         cl_copd = {1: 0.3, 2: 0.2, 3: 0.17, 4: 0.17, 5: 0.16}
         cl_alri = {1: 0.7, 2: 0.1, 3: 0.07, 4: 0.07, 5: 0.06}
@@ -211,8 +215,10 @@ class Technology:
         i = 1
         morb_vector = []
         while i < 6:
-            morbidity_alri = cl_alri[i] * specs_file["COI_ALRI"] * morb_alri / (1 + specs_file["Discount_rate"]) ** (i - 1)
-            morbidity_copd = cl_copd[i] * specs_file["COI_COPD"] * morb_copd / (1 + specs_file["Discount_rate"]) ** (i - 1)
+            morbidity_alri = cl_alri[i] * specs_file["COI_ALRI"] * morb_alri / (1 + specs_file["Discount_rate"]) ** (
+                        i - 1)
+            morbidity_copd = cl_copd[i] * specs_file["COI_COPD"] * morb_copd / (1 + specs_file["Discount_rate"]) ** (
+                        i - 1)
             morbidity_lc = cl_lc[i] * specs_file["COI_LC"] * morb_lc / (1 + specs_file["Discount_rate"]) ** (i - 1)
             morbidity_ihd = cl_ihd[i] * specs_file["COI_IHD"] * morb_ihd / (1 + specs_file["Discount_rate"]) ** (i - 1)
 
@@ -277,7 +283,7 @@ class Technology:
         discounted investment cost for each stove during the project lifetime
         """
         discount_rate, proj_life = self.discount_factor(self, specs_file)
-    
+
         investments = np.zeros(proj_life)
         investments[0] = self.inv_cost
 
@@ -303,11 +309,9 @@ class Technology:
 
         discount_rate, proj_life = self.discount_factor(specs_file)
 
-        fuel = np.ones(proj_life)
-
         energy = specs_file["Meals_per_day"] * 365 * 3.64 / self.efficiency
 
-        fuel_cost = fuel * (energy * (self.fuel_cost / (self.energy_content)))
+        fuel_cost = np.ones(proj_life) * (energy * (self.fuel_cost / self.energy_content) + self.transport_cost)
 
         fuel_cost_discounted = fuel_cost.sum() / discount_rate
 
@@ -320,14 +324,18 @@ class Technology:
         self.total_time(specs_file)
         self.total_time_saved = df["base_fuel_time"] - self.total_time_yr  # time saved per household
 
-        self.time_value = self.total_time_saved * df["value_of_time"]  # time value of time saved per household
+        self.time_value = self.total_time_saved * df["value_of_time"] * df[
+            "Households"]  # time value of time saved per sq km
 
     def costs(self):
-        self.costs = (self.discounted_fuel_cost + self.discounted_inv + self.discounted_om_costs - self.discounted_salvage_cost) / self.discounted_energy
+        self.costs = (
+                                 self.discounted_fuel_cost + self.discounted_inv + self.discounted_om_costs - self.discounted_salvage_cost) / self.discounted_energy
 
     def net_benefit(self, df):
 
-        df["net_benefit_{}".fromat(self.name)] = df.apply(lambda row: self.urban_morbidity + self.urban_mortality + self.decreased_carbon_emissions + self.time_value - self.costs if df["IsUrban"] == 2 else
+        df["net_benefit_{}".fromat(self.name)] = df.apply(lambda
+                                                              row: self.urban_morbidity + self.urban_mortality + self.decreased_carbon_emissions + self.time_value - self.costs if
+        df["IsUrban"] == 2 else
         self.rural_morbidity + self.rural_mortality + self.decreased_carbon_emissions + self.time_value - self.costs)
 
 
@@ -362,7 +370,7 @@ class LPG(Technology):
         self.diesel_per_hour = diesel_per_hour
         self.transport_cost = None
 
-    def transportation_cost(self):
+    def transportation_cost(self, specs_file):
         """The cost of transporting LPG. See https://iopscience.iop.org/article/10.1088/1748-9326/6/3/034002/pdf for the formula
 
         Transportation cost = (2 * diesel consumption per h * national diesel price * travel time)/transported LPG
@@ -383,8 +391,14 @@ class LPG(Technology):
                         Hour to travel between each point and the startpoints as array
         :returns:       The cost of LPG in each cell per kg
         """
-        transport_cost = (2 * self.diesel_per_hour * self.diesel_price * self.travel_time.layer) / self.truck_capacity
-        self.transport_cost = transport_cost
+        transport_cost = (2 * self.diesel_per_hour * self.diesel_price * self.travel_time) / self.truck_capacity
+        # TODO: check units of energy content (MJ/kg)
+        kg_yr = (specs_file["Meals_per_day"] * 365 * 3.64) / (self.efficiency * self.energy_content)
+        self.transport_cost = transport_cost * kg_yr
+
+    def discounted_fuel_cost(self, specs_file):
+        self.transportation_cost(specs_file)
+        super().discounted_fuel_cost(specs_file)
 
 
 class Biomass(Technology):
@@ -412,8 +426,7 @@ class Biomass(Technology):
         self.travel_time = travel_time
 
     def transportation_time(self, friction_path, forest_path, population_path, out_path):
-
-        forest = RasterLayer('rasters', 'forest', layer_path=forest_path,  resample='mode')
+        forest = RasterLayer('rasters', 'forest', layer_path=forest_path, resample='mode')
         friction = RasterLayer('rasters', 'forest', layer_path=friction_path, resample='average')
 
         forest.align(population_path, out_path)
@@ -426,5 +439,5 @@ class Biomass(Technology):
 
     def total_time(self, specs_file, friction_path, forest_path, population_path, out_path):
         self.transportation_time(friction_path, forest_path, population_path, out_path)
-        self.total_time_yr = self.time_of_cooking * specs_file['Meals_per_day'] * 365 + (self.travel_time + self.time_of_collection) * 52
-
+        self.total_time_yr = self.time_of_cooking * specs_file['Meals_per_day'] * 365 + (
+                    self.travel_time + self.time_of_collection) * 52
