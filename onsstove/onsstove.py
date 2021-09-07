@@ -534,6 +534,12 @@ class OnSSTOVE():
             if i > 500:
                 break
 
+        self.gdf.loc[self.gdf["IsUrban"] <= 1, 'Households'] = self.gdf.loc[
+                                                                   self.gdf["IsUrban"] == 0, 'Calibrated_pop'] / \
+                                                               self.specs["Rural_HHsize"]
+        self.gdf.loc[self.gdf["IsUrban"] > 1, 'Households'] = self.gdf.loc[self.gdf["IsUrban"] > 0, 'Calibrated_pop'] / \
+                                                              self.specs["Urban_HHsize"]
+
     def get_value_of_time(self, wealth):
         """
         Calculates teh value of time based on the minimum wage ($/h) and a
@@ -547,7 +553,7 @@ class OnSSTOVE():
         min_value = np.nanmin(wealth.layer)
         max_value = np.nanmax(wealth.layer)
         norm_layer = (wealth.layer - min_value) / (max_value - min_value) * (0.5 - 0.2) + 0.2
-        self.value_of_time = norm_layer * self.specs['Minimum_wage']
+        self.value_of_time = norm_layer * self.specs['Minimum_wage'] / 30 / 24  # convert $/months to $/h
         self.raster_to_dataframe(self.value_of_time, name='value_of_time', method='read')
 
     def save_datasets(self, datasets='all'):
@@ -561,11 +567,10 @@ class OnSSTOVE():
                                            category, name)
                 layer.save(output_path)
 
-
     def maximum_net_benefit(self, df):
 
         net_benefit_cols = [col for col in df if 'final_tech' in col]
         df["final_tech"] = df[net_benefit_cols].idxmin(axis=1)
         df["maximum_net_benefit"] = df[net_benefit_cols].min(axis=1)
 
-        df['final_tech'] = df['final_tech'].str.replace("net_benefit_","")
+        df['final_tech'] = df['final_tech'].str.replace("net_benefit_", "")
