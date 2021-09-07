@@ -535,9 +535,9 @@ class OnSSTOVE():
                 break
 
         self.gdf.loc[self.gdf["IsUrban"] <= 1, 'Households'] = self.gdf.loc[
-                                                                   self.gdf["IsUrban"] == 0, 'Calibrated_pop'] / \
+                                                                   self.gdf["IsUrban"] <= 1, 'Calibrated_pop'] / \
                                                                self.specs["Rural_HHsize"]
-        self.gdf.loc[self.gdf["IsUrban"] > 1, 'Households'] = self.gdf.loc[self.gdf["IsUrban"] > 0, 'Calibrated_pop'] / \
+        self.gdf.loc[self.gdf["IsUrban"] > 1, 'Households'] = self.gdf.loc[self.gdf["IsUrban"] > 1, 'Calibrated_pop'] / \
                                                               self.specs["Urban_HHsize"]
 
     def get_value_of_time(self, wealth):
