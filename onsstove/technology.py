@@ -132,7 +132,7 @@ class Technology:
 
         self.decreased_carbon_emissions = carbon
 
-    def mortality(self, specs_file, paf_0_alri, paf_0_copd, paf_0_lc, paf_0_ihd):
+    def mortality(self, specs_file, gdf, paf_0_alri, paf_0_copd, paf_0_lc, paf_0_ihd):
         """
         Calculates mortality rate per fuel
 
@@ -161,12 +161,12 @@ class Technology:
         i = 1
         mort_vector = []
         while i < 6:
-            mortality_alri = cl_alri[i] * specs_file["VSL"] * mort_alri_U / (1 + specs_file["Discount_rate"]) ** (i - 1)
-            mortality_copd = cl_copd[i] * specs_file["VSL"] * mort_copd_U / (
+            mortality_alri = cl_alri[i] * specs_file["VSL"] * mort_alri / (1 + specs_file["Discount_rate"]) ** (i - 1)
+            mortality_copd = cl_copd[i] * specs_file["VSL"] * mort_copd / (
                     1 + specs_file["Discount_rate"]) ** (i - 1)
-            mortality_lc = cl_lc[i] * specs_file["VSL"] * mort_lc_U / (
+            mortality_lc = cl_lc[i] * specs_file["VSL"] * mort_lc / (
                     1 + specs_file["Discount_rate"]) ** (i - 1)
-            mortality_ihd = cl_ihd[i] * specs_file["VSL"] * mort_ihd_U / (
+            mortality_ihd = cl_ihd[i] * specs_file["VSL"] * mort_ihd / (
                     1 + specs_file["Discount_rate"]) ** (i - 1)
 
             mort_total = (1 + specs_file["Health_spillovers_parameter"]) * (
@@ -178,10 +178,11 @@ class Technology:
 
         mortality = np.sum(mort_vector)
 
+        self.distributed_mortality = gdf["Calibrated_pop"]/gdf["Calibrated_pop"].sum()*mortality
         self.mortality = mortality
         self.deahts_avoided = (mort_alri + mort_copd + mort_lc + mort_ihd)
 
-    def morbidity(self, specs_file, paf_0_alri, paf_0_copd, paf_0_lc, paf_0_ihd):
+    def morbidity(self, specs_file, gdf,paf_0_alri, paf_0_copd, paf_0_lc, paf_0_ihd):
         """
         Calculates morbidity rate per fuel
 
@@ -218,12 +219,13 @@ class Technology:
             morb_total = (1 + specs_file["Health_spillovers_parameter"]) * (
                     morbidity_alri + morbidity_copd + morbidity_lc + morbidity_ihd)
 
-            morb_U_vector.append(morb_total)
+            morb_vector.append(morb_total)
 
             i += 1
 
         morbidity = np.sum(morb_vector)
 
+        self.distributed_morbidity = gdf["Calibrated_pop"] / gdf["Calibrated_pop"].sum() * morbidity
         self.morbidity = morbidity
         self.cases_avoided = (morb_alri + morb_copd + morb_lc + morb_ihd)
 
