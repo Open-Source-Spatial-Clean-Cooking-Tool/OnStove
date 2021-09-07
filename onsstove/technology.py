@@ -98,13 +98,11 @@ class Technology:
 
         return rr_alri, rr_copd, rr_ihd, rr_lc
 
-    def paf(self, rr, sfu_urban, sfu_rural):
+    def paf(self, rr, sfu):
 
-        paf_urban = (sfu_urban * (rr - 1)) / (sfu_urban * (rr - 1) + 1)
+        paf = (sfu * (rr - 1)) / (sfu * (rr - 1) + 1)
 
-        paf_rural = (sfu_rural * (rr - 1)) / (sfu_rural * (rr - 1) + 1)
-
-        return paf_urban, paf_rural
+        return paf
 
     @staticmethod
     def discount_factor(specs_file):
@@ -134,7 +132,7 @@ class Technology:
 
         self.decreased_carbon_emissions = carbon
 
-    def mortality(self, specs_file, paf_0_alri, paf_0_copd, paf_0_lc, paf_0_ihd):
+    def mortality(self, specs_file, gdf, paf_0_alri, paf_0_copd, paf_0_lc, paf_0_ihd):
         """
         Calculates mortality rate per fuel
 
@@ -150,15 +148,10 @@ class Technology:
         paf_ihd = self.paf(rr_ihd, 1 - specs_file['clean_cooking_access'])
         paf_lc = self.paf(rr_lc, 1 - specs_file['clean_cooking_access'])
 
-        mort_alri_U = specs_file["Urban_HHsize"] * (paf_0_alri - paf_alri) * specs_file["Mort_ALRI"]
-        mort_copd_U = specs_file["Urban_HHsize"] * (paf_0_copd - paf_copd) * specs_file["Mort_COPD"]
-        mort_ihd_U = specs_file["Urban_HHsize"] * (paf_0_ihd - paf_ihd) * specs_file["Mort_IHD"]
-        mort_lc_U = specs_file["Urban_HHsize"] * (paf_0_lc - paf_lc) * specs_file["Mort_LC"]
-
-        mort_alri_R = specs_file["Rural_HHsize"] * (paf_0_alri - paf_alri) * specs_file["Mort_ALRI"]
-        mort_copd_R = specs_file["Rural_HHsize"] * (paf_0_copd - paf_copd) * specs_file["Mort_COPD"]
-        mort_ihd_R = specs_file["Rural_HHsize"] * (paf_0_ihd - paf_ihd) * specs_file["Mort_IHD"]
-        mort_lc_R = specs_file["Rural_HHsize"] * (paf_0_lc - paf_lc) * specs_file["Mort_LC"]
+        mort_alri = specs_file["Population_start_year"] * (paf_0_alri - paf_alri) * (specs_file["Mort_ALRI"]/100000)
+        mort_copd = specs_file["Population_start_year"] * (paf_0_copd - paf_copd) * (specs_file["Mort_COPD"]/100000)
+        mort_ihd = specs_file["Population_start_year"] * (paf_0_ihd - paf_ihd) * (specs_file["Mort_IHD"]/100000)
+        mort_lc = specs_file["Population_start_year"] * (paf_0_lc - paf_lc) * (specs_file["Mort_LC"]/100000)
 
         cl_copd = {1: 0.3, 2: 0.2, 3: 0.17, 4: 0.17, 5: 0.16}
         cl_alri = {1: 0.7, 2: 0.1, 3: 0.07, 4: 0.07, 5: 0.06}
@@ -166,45 +159,30 @@ class Technology:
         cl_ihd = {1: 0.2, 2: 0.1, 3: 0.24, 4: 0.23, 5: 0.23}
 
         i = 1
-        mort_U_vector = []
-        mort_R_vector = []
+        mort_vector = []
         while i < 6:
-            mortality_alri_U = cl_alri[i] * specs_file["VSL"] * mort_alri_U / (1 + specs_file["Discount_rate"]) ** (i - 1)
-            mortality_copd_U = cl_copd[i] * specs_file["VSL"] * mort_copd_U / (
+            mortality_alri = cl_alri[i] * specs_file["VSL"] * mort_alri / (1 + specs_file["Discount_rate"]) ** (i - 1)
+            mortality_copd = cl_copd[i] * specs_file["VSL"] * mort_copd / (
                     1 + specs_file["Discount_rate"]) ** (i - 1)
-            mortality_lc_U = cl_lc[i] * specs_file["VSL"] * mort_lc_U / (
+            mortality_lc = cl_lc[i] * specs_file["VSL"] * mort_lc / (
                     1 + specs_file["Discount_rate"]) ** (i - 1)
-            mortality_ihd_U = cl_ihd[i] * specs_file["VSL"] * mort_ihd_U / (
-                    1 + specs_file["Discount_rate"]) ** (i - 1)
-
-            mort_U_total = (1 + specs_file["Health_spillovers_parameter"]) * (
-                    mortality_alri_U + mortality_copd_U + mortality_lc_U + mortality_ihd_U)
-
-            mort_U_vector.append(mort_U_total)
-
-            mortality_alri_R = cl_alri[i] * specs_file["VSL"] * mort_alri_R / (
-                    1 + specs_file["Discount_rate"]) ** (i - 1)
-            mortality_copd_R = cl_copd[i] * specs_file["VSL"] * mort_copd_R / (
-                    1 + specs_file["Discount_rate"]) ** (i - 1)
-            mortality_lc_R = cl_lc[i] * specs_file["VSL"] * mort_lc_R / (
-                    1 + specs_file["Discount_rate"]) ** (i - 1)
-            mortality_ihd_R = cl_ihd[i] * specs_file["VSL"] * mort_ihd_R / (
+            mortality_ihd = cl_ihd[i] * specs_file["VSL"] * mort_ihd / (
                     1 + specs_file["Discount_rate"]) ** (i - 1)
 
-            mort_R_total = (1 + specs_file["Health_spillovers_parameter"]) * (
-                    mortality_alri_R + mortality_copd_R + mortality_lc_R + mortality_ihd_R)
+            mort_total = (1 + specs_file["Health_spillovers_parameter"]) * (
+                    mortality_alri + mortality_copd + mortality_lc + mortality_ihd)
 
-            mort_R_vector.append(mort_R_total)
+            mort_vector.append(mort_total)
 
             i += 1
 
-        mortality_U = np.sum(mort_U_vector)
-        mortality_R = np.sum(mort_R_vector)
+        mortality = np.sum(mort_vector)
 
-        self.urban_mortality = mortality_U
-        self.rural_mortality = mortality_R
+        self.distributed_mortality = gdf["Calibrated_pop"]/gdf["Calibrated_pop"].sum()*mortality
+        self.mortality = mortality
+        self.deahts_avoided = (mort_alri + mort_copd + mort_lc + mort_ihd)
 
-    def morbidity(self, specs_file, paf_0_alri, paf_0_copd, paf_0_lc, paf_0_ihd):
+    def morbidity(self, specs_file, gdf,paf_0_alri, paf_0_copd, paf_0_lc, paf_0_ihd):
         """
         Calculates morbidity rate per fuel
 
@@ -220,15 +198,10 @@ class Technology:
         paf_ihd = self.paf(rr_ihd, 1 - specs_file['clean_cooking_access'])
         paf_lc = self.paf(rr_lc, 1 - specs_file['clean_cooking_access'])
 
-        morb_alri_U = specs_file["Urban_HHsize"] * (paf_0_alri - paf_alri) * specs_file["Morb_ALRI"]
-        morb_copd_U = specs_file["Urban_HHsize"] * (paf_0_copd - paf_copd) * specs_file["Morb_COPD"]
-        morb_ihd_U = specs_file["Urban_HHsize"] * (paf_0_ihd - paf_ihd) * specs_file["Morb_IHD"]
-        morb_lc_U = specs_file["Urban_HHsize"] * (paf_0_lc - paf_lc) * specs_file["Morb_LC"]
-
-        morb_alri_R = specs_file["Rural_HHsize"] * (paf_0_alri - paf_alri) * specs_file["Morb_ALRI"]
-        morb_copd_R = specs_file["Rural_HHsize"] * (paf_0_copd - paf_copd) * specs_file["Morb_COPD"]
-        morb_ihd_R = specs_file["Rural_HHsize"] * (paf_0_ihd - paf_ihd) * specs_file["Morb_IHD"]
-        morb_lc_R = specs_file["Rural_HHsize"] * (paf_0_lc - paf_lc) * specs_file["Morb_LC"]
+        morb_alri = specs_file["Population_start_year"] * (paf_0_alri - paf_alri) * (specs_file["Morb_ALRI"]/100000)
+        morb_copd = specs_file["Population_start_year"] * (paf_0_copd - paf_copd) * (specs_file["Morb_COPD"]/100000)
+        morb_ihd = specs_file["Population_start_year"] * (paf_0_ihd - paf_ihd) * (specs_file["Morb_IHD"]/100000)
+        morb_lc = specs_file["Population_start_year"] * (paf_0_lc - paf_lc) * (specs_file["Morb_LC"]/100000)
 
         cl_copd = {1: 0.3, 2: 0.2, 3: 0.17, 4: 0.17, 5: 0.16}
         cl_alri = {1: 0.7, 2: 0.1, 3: 0.07, 4: 0.07, 5: 0.06}
@@ -236,44 +209,25 @@ class Technology:
         cl_ihd = {1: 0.2, 2: 0.1, 3: 0.24, 4: 0.23, 5: 0.23}
 
         i = 1
-        morb_U_vector = []
-        morb_R_vector = []
+        morb_vector = []
         while i < 6:
-            morbidity_alri_U = cl_alri[i] * specs_file["COI_ALRI"] * morb_alri_U / (
-                    1 + specs_file["Discount_rate"]) ** (i - 1)
-            morbidity_copd_U = cl_copd[i] * specs_file["COI_COPD"] * morb_copd_U / (
-                    1 + specs_file["Discount_rate"]) ** (i - 1)
-            morbidity_lc_U = cl_lc[i] * specs_file["COI_LC"] * morb_lc_U / (
-                    1 + specs_file["Discount_rate"]) ** (i - 1)
-            morbidity_ihd_U = cl_ihd[i] * specs_file["COI_IHD"] * morb_ihd_U / (
-                    1 + specs_file["Discount_rate"]) ** (i - 1)
+            morbidity_alri = cl_alri[i] * specs_file["COI_ALRI"] * morb_alri / (1 + specs_file["Discount_rate"]) ** (i - 1)
+            morbidity_copd = cl_copd[i] * specs_file["COI_COPD"] * morb_copd / (1 + specs_file["Discount_rate"]) ** (i - 1)
+            morbidity_lc = cl_lc[i] * specs_file["COI_LC"] * morb_lc / (1 + specs_file["Discount_rate"]) ** (i - 1)
+            morbidity_ihd = cl_ihd[i] * specs_file["COI_IHD"] * morb_ihd / (1 + specs_file["Discount_rate"]) ** (i - 1)
 
-            morb_U_total = (1 + specs_file["Health_spillovers_parameter"]) * (
-                    morbidity_alri_U + morbidity_copd_U + morbidity_lc_U + morbidity_ihd_U)
+            morb_total = (1 + specs_file["Health_spillovers_parameter"]) * (
+                    morbidity_alri + morbidity_copd + morbidity_lc + morbidity_ihd)
 
-            morb_U_vector.append(morb_U_total)
-
-            morbidity_alri_R = cl_alri[i] * specs_file["COI_ALRI"] * morb_alri_R / (
-                    1 + specs_file["Discount_rate"]) ** (i - 1)
-            morbidity_copd_R = cl_copd[i] * specs_file["COI_COPD"] * morb_copd_R / (
-                    1 + specs_file["Discount_rate"]) ** (i - 1)
-            morbidity_lc_R = cl_lc[i] * specs_file["COI_LC"] * morb_lc_R / (
-                    1 + specs_file["Discount_rate"]) ** (i - 1)
-            morbidity_ihd_R = cl_ihd[i] * specs_file["COI_IHD"] * morb_ihd_R / (
-                    1 + specs_file["Discount_rate"]) ** (i - 1)
-
-            morb_R_total = (1 + specs_file["Health_spillovers_parameter"]) * (
-                    morbidity_alri_R + morbidity_copd_R + morbidity_lc_R + morbidity_ihd_R)
-
-            morb_R_vector.append(morb_R_total)
+            morb_vector.append(morb_total)
 
             i += 1
 
-        morbidity_U = np.sum(morb_U_vector)
-        morbidity_R = np.sum(morb_R_vector)
+        morbidity = np.sum(morb_vector)
 
-        self.urban_morbidity = morbidity_U
-        self.rural_morbidity = morbidity_R
+        self.distributed_morbidity = gdf["Calibrated_pop"] / gdf["Calibrated_pop"].sum() * morbidity
+        self.morbidity = morbidity
+        self.cases_avoided = (morb_alri + morb_copd + morb_lc + morb_ihd)
 
     def salvage(self, specs_file):
         """
