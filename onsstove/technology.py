@@ -98,11 +98,13 @@ class Technology:
 
         return rr_alri, rr_copd, rr_ihd, rr_lc
 
-    def paf(self, rr, sfu):
+    def paf(self, rr, sfu_urban, sfu_rural):
 
-        paf = (sfu * (rr - 1)) / (sfu * (rr - 1) + 1)
+        paf_urban = (sfu_urban * (rr - 1)) / (sfu_urban * (rr - 1) + 1)
 
-        return paf
+        paf_rural = (sfu_rural * (rr - 1)) / (sfu_rural * (rr - 1) + 1)
+
+        return paf_urban, paf_rural
 
     @staticmethod
     def discount_factor(specs_file):
