@@ -596,3 +596,14 @@ class OnSSTOVE():
 
         self.gdf["emissions_saved"] = self.gdf.apply(lambda row: self.techs[row['final_tech']].decreased_carbon_emissions[row.index], axis = 1)
 
+    def gdf_to_csv(self, scenario_name):
+
+        name = os.path.join(self.output_directory, scenario_name)
+
+        pt = self.gdf.to_crs({'init': 'EPSG:3395'})
+
+        pt["X"] = pt["geometry"].x
+        pt["Y"] = pt["geometry"].y
+
+        df = pd.DataFrame(pt.drop(columns='geometry'))
+        df.to_csv(name)
