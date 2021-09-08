@@ -581,6 +581,11 @@ class OnSSTOVE():
 
         self.gdf["deaths_avoided"] = self.gdf.apply(lambda row: self.techs[row['final_tech']].deaths_avoided * row['Calibrated_pop'] / total_pop)
 
+    def extract_time_saved(self):
+
+        self.gdf["time_saved"] = self.gdf.apply(lambda row: self.techs[row['final_tech']].total_time_saved, axis = 1)* gdf["Households"]
+        
     def reduced_emissions(self):
 
         self.gdf["emissions_saved"] = self.gdf.apply(lambda row: self.techs[row['final_tech']].decreased_carbon_emissions[row.index])
+
