@@ -327,7 +327,7 @@ class Technology:
 
     def net_benefit(self, gdf):
         self.costs()
-        gdf["net_benefit_{}".fromat(self.name)] = self.distributed_morbidity + self.distributed_mortality + self.decreased_carbon_emissions + self.time_value - self.cost
+        gdf["net_benefit_{}".format(self.name)] = self.distributed_morbidity + self.distributed_mortality + self.decreased_carbon_emissions + self.time_value - self.cost
 
 
 class LPG(Technology):
