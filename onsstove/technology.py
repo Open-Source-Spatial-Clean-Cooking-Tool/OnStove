@@ -392,8 +392,7 @@ class LPG(Technology):
         :returns:       The cost of LPG in each cell per kg
         """
         transport_cost = (2 * self.diesel_per_hour * self.diesel_price * self.travel_time) / self.truck_capacity
-        # TODO: check units of energy content (MJ/kg)
-        kg_yr = (specs_file["Meals_per_day"] * 365 * 3.64) / (self.efficiency * self.energy_content)
+        kg_yr = (specs_file["Meals_per_day"] * 365 * 3.64) / (self.efficiency * self.energy_content)  # energy content in MJ/kg
         self.transport_cost = transport_cost * kg_yr
 
     def discounted_fuel_cost(self, specs_file):
