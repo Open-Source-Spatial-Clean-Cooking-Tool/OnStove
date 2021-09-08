@@ -599,5 +599,11 @@ class OnSSTOVE():
     def gdf_to_csv(self, scenario_name):
 
         name = os.path.join(self.output_directory, scenario_name)
-        df = pd.DataFrame(self.gdf.drop(columns='geometry'))
+
+        pt = self.gdf.to_crs({'init': 'EPSG:3395'})
+
+        pt["X"] = pt["geometry"].x
+        pt["Y"] = pt["geometry"].y
+
+        df = pd.DataFrame(pt.drop(columns='geometry'))
         df.to_csv(name)
