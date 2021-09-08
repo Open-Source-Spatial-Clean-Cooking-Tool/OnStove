@@ -567,10 +567,22 @@ class OnSSTOVE():
                                            category, name)
                 layer.save(output_path)
 
-    def maximum_net_benefit(self, df):
+    def maximum_net_benefit(self):
 
-        net_benefit_cols = [col for col in df if 'final_tech' in col]
-        df["final_tech"] = df[net_benefit_cols].idxmin(axis=1)
-        df["maximum_net_benefit"] = df[net_benefit_cols].min(axis=1)
+        net_benefit_cols = [col for col in self.gdf if 'final_tech' in col]
+        self.gdf["final_tech"] = self.gdf[net_benefit_cols].idxmin(axis=1)
+        self.gdf["maximum_net_benefit"] = self.gdf[net_benefit_cols].min(axis=1)
 
-        df['final_tech'] = df['final_tech'].str.replace("net_benefit_", "")
+        self.gdf['final_tech'] = self.gdf['final_tech'].str.replace("net_benefit_","")
+
+    def lives_saved(self):
+
+        total_pop = self.gdf['Calibrated_pop'].sum()
+
+        deaths_avoided = self.gdf.apply(lambda row: self.techs[row['final_tech']].deaths_avoided * row['Calibrated_pop'] / total_pop)
+
+        self.gdf["deaths_avoided"] = deaths_avoided.values
+
+
+
+

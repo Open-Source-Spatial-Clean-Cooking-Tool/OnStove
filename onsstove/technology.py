@@ -323,12 +323,11 @@ class Technology:
         self.time_value = self.total_time_saved * df["value_of_time"]  # time value of time saved per household
 
     def costs(self):
-        self.costs = (self.discounted_fuel_cost + self.discounted_inv + self.discounted_om_costs - self.discounted_salvage_cost) / self.discounted_energy
+        self.cost = (self.discounted_fuel_cost + self.discounted_inv + self.discounted_om_costs - self.discounted_salvage_cost) / self.discounted_energy
 
-    def net_benefit(self, df):
-
-        df["net_benefit_{}".fromat(self.name)] = df.apply(lambda row: self.urban_morbidity + self.urban_mortality + self.decreased_carbon_emissions + self.time_value - self.costs if df["IsUrban"] == 2 else
-        self.rural_morbidity + self.rural_mortality + self.decreased_carbon_emissions + self.time_value - self.costs)
+    def net_benefit(self, gdf):
+        self.costs()
+        gdf["net_benefit_{}".fromat(self.name)] = self.distributed_morbidity + self.distributed_mortality + self.decreased_carbon_emissions + self.time_value - self.cost
 
 
 class LPG(Technology):
