@@ -42,6 +42,15 @@ def align_raster(raster_1, raster_2, method='nearest', compression='NONE'):
             resampling=Resampling[method])
     return destination, out_meta
 
+def interpolate(raster, max_search_distance = 10):
+    with rasterio.open(raster) as src:
+        profile = src.profile
+        arr = src.read
+        arr_filled = fillnodata(arr, mask = src.read.masks(1), max_search_distance = max_search_distance)
+
+    with rasterio.open(raster, 'w', **profile) as dest:
+        dest.write_band(1, arr_filled)
+
 def polygonize(raster, mask = None):
     with rasterio.Env():
         if type(raster) == str:
