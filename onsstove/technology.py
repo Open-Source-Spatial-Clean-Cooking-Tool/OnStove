@@ -441,3 +441,20 @@ class Biomass(Technology):
         self.transportation_time(friction_path, forest_path, population_path, out_path)
         self.total_time_yr = self.time_of_cooking * specs_file['Meals_per_day'] * 365 + (
                     self.travel_time + self.time_of_collection) * 365
+
+
+class Electricity(Technology):
+    """
+    LPG technology class. Inherits all functionality from the standard
+    Technology class
+    """
+    def infrastructure_cost(self):
+        pass
+
+    def carb(self, gdf):
+        self.carbon_intesity = 0
+        super().carb(gdf)
+
+    def net_benefit(self, gdf):
+        super().net_benefit(gdf)
+        gdf.loc[gdf['Current_elec'] == 0, "net_benefit_{}".format(self.name)] = -99999

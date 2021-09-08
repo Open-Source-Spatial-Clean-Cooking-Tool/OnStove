@@ -6,7 +6,7 @@ import geopandas as gpd
 import numpy as np
 from typing import Dict, Any
 
-from onsstove.technology import Technology, LPG, Biomass
+from onsstove.technology import Technology, LPG, Biomass, Electricity
 from .raster import *
 from .layer import VectorLayer, RasterLayer
 
@@ -89,6 +89,8 @@ class OnSSTOVE():
                             techs[row['Fuel']] = LPG()
                         elif 'biomass' in row['Fuel'].lower():
                             techs[row['Fuel']] = Biomass()
+                        elif 'electricity' in row['Fuel'].lower():
+                            techs[row['Fuel']] = Electricity()
                         else:
                             techs[row['Fuel']] = Technology()
                     if row['data_type'] == 'int':
