@@ -569,11 +569,11 @@ class OnSSTOVE():
 
     def maximum_net_benefit(self):
 
-        net_benefit_cols = [col for col in self.gdf if 'final_tech' in col]
-        self.gdf["final_tech"] = self.gdf[net_benefit_cols].idxmin(axis=1)
-        self.gdf["maximum_net_benefit"] = self.gdf[net_benefit_cols].min(axis=1)
+        net_benefit_cols = [col for col in self.gdf if 'net_benefit' in col]
+        self.gdf["final_tech"] = self.gdf[net_benefit_cols].idxmax(axis=1)
+        self.gdf["maximum_net_benefit"] = self.gdf[net_benefit_cols].max(axis=1)
 
-        self.gdf['final_tech'] = self.gdf['final_tech'].str.replace("net_benefit_","")
+        self.gdf['final_tech'] = self.gdf['final_tech'].str.replace("net_benefit_", "")
 
     def lives_saved(self):
 

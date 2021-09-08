@@ -128,11 +128,12 @@ class Technology:
 
 
     def carb(self, gdf):
-        self.carbon = (3.64 * gdf['Households'] / self.efficiency) / self.energy_content * (self.carbon_intensity * self.energy_content / self.efficiency)
+        self.carbon = (3.64 * gdf['Households'] / (self.efficiency * self.energy_content)) * (self.carbon_intensity * self.energy_content / (self.efficiency * 1000))
 
-    def carbon_emissions(self, specs_file, carb_base_fuel, gdf):
+    def carbon_emissions(self, specs_file, gdf, carb_base_fuel):
         self.carb(gdf)
-        carbon = specs_file["Cost of carbon emissions"] * (carb_base_fuel - self.carbon)
+        proj_life = specs_file['End_year'] - specs_file['Start_year']
+        carbon = specs_file["Cost of carbon emissions"] * (carb_base_fuel - self.carbon) / 1000 / (1 + specs_file["Discount_rate"]) ** (proj_life)
 
         self.decreased_carbon_emissions = carbon
 
@@ -184,7 +185,7 @@ class Technology:
 
         self.distributed_mortality = gdf["Calibrated_pop"] / gdf["Calibrated_pop"].sum() * mortality
         self.mortality = mortality #TODO: Check if really needed
-        self.deahts_avoided = (mort_alri + mort_copd + mort_lc + mort_ihd)
+        self.deaths_avoided = (mort_alri + mort_copd + mort_lc + mort_ihd)
 
     def morbidity(self, specs_file, gdf, paf_0_alri, paf_0_copd, paf_0_lc, paf_0_ihd):
         """
@@ -306,45 +307,37 @@ class Technology:
 
         self.discounted_energy = (energy_needed / discount_rate) * gdf['Households']
 
-    def discounted_fuel_cost(self, gdf, specs_file):
+    def discount_fuel_cost(self, gdf, specs_file):
 
         discount_rate, proj_life = self.discount_factor(specs_file)
 
-        energy = specs_file["Meals_per_day"] * 365 * 3.64 * gdf['Households'] / self.efficiency
+        energy = specs_file["Meals_per_day"] * 365 * 3.64 / self.efficiency
 
-        fuel_cost = np.ones(proj_life) * (energy * self.fuel_cost / self.energy_content + self.transport_cost)
+        cost = (energy * self.fuel_cost / self.energy_content + self.transport_cost) * gdf['Households']
 
-        fuel_cost_discounted = fuel_cost.sum() / discount_rate
+        fuel_cost = [np.ones(proj_life) * x for x in cost]
 
-        self.discounted_fuel_cost = fuel_cost_discounted
+        fuel_cost_discounted = np.array([sum(x / discount_rate) for x in fuel_cost])
+
+        self.discounted_fuel_cost = pd.Series(fuel_cost_discounted, index=gdf.index)
 
     def total_time(self, specs_file):
         self.total_time_yr = self.time_of_cooking * specs_file['Meals_per_day'] * 365
 
-    def time_saved(self, df, specs_file):
+    def time_saved(self, gdf, specs_file):
+        proj_life = specs_file['End_year'] - specs_file['Start_year']
         self.total_time(specs_file)
-        self.total_time_saved = df["base_fuel_time"] - self.total_time_yr  # time saved per household
+        self.total_time_saved = gdf["base_fuel_time"] - self.total_time_yr  # time saved per household
         # time value of time saved per sq km
-        self.time_value = self.total_time_saved * df["value_of_time"] * df["Households"]
+        self.time_value = self.total_time_saved * gdf["value_of_time"] * gdf["Households"] / (1 + specs_file["Discount_rate"]) ** (proj_life)
 
     def costs(self):
 
-        self.cost = (self.discounted_fuel_cost + self.discounted_inv + self.discounted_om_costs - self.discounted_salvage_cost) / self.discounted_energy
+        self.cost = (self.discounted_fuel_cost + self.discounted_investments + self.discounted_om_costs - self.discounted_salvage_cost) #/ self.discounted_energy
 
     def net_benefit(self, gdf):
         self.costs()
         gdf["net_benefit_{}".format(self.name)] = self.distributed_morbidity + self.distributed_mortality + self.decreased_carbon_emissions + self.time_value - self.cost
-
-        self.costs = (
-                                 self.discounted_fuel_cost + self.discounted_inv + self.discounted_om_costs - self.discounted_salvage_cost) / self.discounted_energy
-
-    def net_benefit(self, df):
-
-        df["net_benefit_{}".format(self.name)] = df.apply(lambda
-                                                              row: self.urban_morbidity + self.urban_mortality + self.decreased_carbon_emissions + self.time_value - self.costs if
-        df["IsUrban"] == 2 else
-        self.rural_morbidity + self.rural_mortality + self.decreased_carbon_emissions + self.time_value - self.costs)
-
 
 
 class LPG(Technology):
@@ -447,4 +440,4 @@ class Biomass(Technology):
     def total_time(self, specs_file, friction_path, forest_path, population_path, out_path):
         self.transportation_time(friction_path, forest_path, population_path, out_path)
         self.total_time_yr = self.time_of_cooking * specs_file['Meals_per_day'] * 365 + (
-                    self.travel_time + self.time_of_collection) * 52
+                    self.travel_time + self.time_of_collection) * 365
