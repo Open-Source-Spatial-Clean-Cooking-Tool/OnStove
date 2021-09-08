@@ -583,4 +583,4 @@ class OnSSTOVE():
 
     def reduced_emissions(self):
 
-        self.gdf["emissions_saved"] = self.gdf.apply(lambda row: self.techs[row['final_tech']].decreased_carbon_emissions)
+        self.gdf["emissions_saved"] = self.gdf.apply(lambda row: self.techs[row['final_tech']].decreased_carbon_emissions[row.index])
