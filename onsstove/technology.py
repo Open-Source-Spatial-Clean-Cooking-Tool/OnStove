@@ -123,8 +123,8 @@ class Technology:
 
         return discount_factor, proj_life
 
-    def carb(self):
-        self.carbon = (3.64 / self.efficiency) / self.energy_content * (self.carbon_intensity * self.energy_content / self.efficiency)
+    def carb(self, gdf):
+        self.carbon = (3.64 * gdf['Households'] / self.efficiency) / self.energy_content * (self.carbon_intensity * self.energy_content / self.efficiency)
 
     def carbon_emissions(self, specs_file, carb_base_fuel):
         self.carb()
@@ -179,7 +179,8 @@ class Technology:
         mortality = np.sum(mort_vector)
 
         self.distributed_mortality = gdf["Calibrated_pop"]/gdf["Calibrated_pop"].sum()*mortality
-        self.mortality = mortality
+
+        self.mortality = mortality #TODO: Check if really needed
         self.deahts_avoided = (mort_alri + mort_copd + mort_lc + mort_ihd)
 
     def morbidity(self, specs_file, gdf,paf_0_alri, paf_0_copd, paf_0_lc, paf_0_ihd):
@@ -226,10 +227,11 @@ class Technology:
         morbidity = np.sum(morb_vector)
 
         self.distributed_morbidity = gdf["Calibrated_pop"] / gdf["Calibrated_pop"].sum() * morbidity
-        self.morbidity = morbidity
+
+        self.morbidity = morbidity #TODO: Check if really needed
         self.cases_avoided = (morb_alri + morb_copd + morb_lc + morb_ihd)
 
-    def salvage(self, specs_file):
+    def salvage(self, gdf, specs_file):
         """
         Calculates discounted salvage cost assuming straight-line depreciation
         Returns
@@ -244,9 +246,9 @@ class Technology:
 
         discounted_salvage = salvage.sum() / discount_rate
 
-        self.discounted_salvage_cost = discounted_salvage
+        self.discounted_salvage_cost = discounted_salvage * gdf['Households']
 
-    def discounted_om(self, specs_file):
+    def discounted_om(self, gdf, specs_file):
         """
         Calls discount_factor function and creates discounted OM costs.
         Returns
@@ -265,9 +267,9 @@ class Technology:
 
         discounted_om_cost = operation_and_maintenance.sum() / discount_rate
 
-        self.discounted_om_costs = discounted_om_cost
+        self.discounted_om_costs = discounted_om_cost * gdf['Households']
 
-    def discounted_inv(self, specs_file):
+    def discounted_inv(self, gdf, specs_file):
         """
         Calls discount_factor function and creates discounted investment cost. Uses proj_life and tech_life to determine
         number of necessary re-investments
@@ -288,24 +290,24 @@ class Technology:
 
         discounted_investments = investments.sum() / discount_rate
 
-        self.discounted_investments = discounted_investments
+        self.discounted_investments = discounted_investments * gdf['Households']
 
-    def discounted_meals(self, specs_file):
+    def discounted_meals(self, gdf, specs_file):
         discount_rate, proj_life = self.discount_factor(specs_file)
 
         energy = specs_file["Meals_per_day"] * 365 * 3.64 / self.efficiency
 
         energy_needed = energy * np.ones(proj_life)
 
-        self.discounted_energy = energy_needed / discount_rate
+        self.discounted_energy = (energy_needed / discount_rate) * gdf['Households']
 
-    def discounted_fuel_cost(self, specs_file):
+    def discounted_fuel_cost(self, gdf,specs_file):
 
         discount_rate, proj_life = self.discount_factor(specs_file)
 
         fuel = np.ones(proj_life)
 
-        energy = specs_file["Meals_per_day"] * 365 * 3.64 / self.efficiency
+        energy = specs_file["Meals_per_day"] * 365 * 3.64 * gdf['Households'] / self.efficiency
 
         fuel_cost = fuel * (energy * (self.fuel_cost / (self.energy_content)))
 
