@@ -583,5 +583,5 @@ class OnSSTOVE():
 
     def extract_time_saved(self):
 
-        self.gdf["time_saved"] = self.gdf.apply(lambda row: self.techs[row['final_tech']].total_time_saved)* gdf["Households"]
+        self.gdf["time_saved"] = self.gdf.apply(lambda row: self.techs[row['final_tech']].total_time_saved, axis = 1)* gdf["Households"]
 
