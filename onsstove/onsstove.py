@@ -579,4 +579,11 @@ class OnSSTOVE():
 
         total_pop = self.gdf['Calibrated_pop'].sum()
 
-        self.gdf["deaths_avoided"] = self.gdf.apply(lambda row: self.techs[row['final_tech']].deaths_avoided * row['Calibrated_pop'] / total_pop)
+        self.gdf["deaths_avoided"] = self.gdf.apply(
+            lambda row: self.techs[row['final_tech']].deaths_avoided * row['Calibrated_pop'] / total_pop)
+
+    def health_costs_saved(self):
+
+        self.gdf["health_costs_avoided"] = self.gdf.apply(
+            lambda row: self.techs[row['final_tech']].distributed_morbidity +
+                        self.techs[row['final_tech'].distributed_mortality])
