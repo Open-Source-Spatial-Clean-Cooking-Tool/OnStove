@@ -8,7 +8,7 @@ from math import exp
 
 from .raster import *
 from .layer import *
-
+from .raster import interpolate
 
 class Technology:
     """
@@ -184,7 +184,6 @@ class Technology:
         mortality = np.sum(mort_vector)
 
         self.distributed_mortality = gdf["Calibrated_pop"] / gdf["Calibrated_pop"].sum() * mortality
-        self.mortality = mortality #TODO: Check if really needed
         self.deaths_avoided = (mort_alri + mort_copd + mort_lc + mort_ihd)
 
     def morbidity(self, specs_file, gdf, paf_0_alri, paf_0_copd, paf_0_lc, paf_0_ihd):
@@ -233,8 +232,6 @@ class Technology:
         morbidity = np.sum(morb_vector)
 
         self.distributed_morbidity = gdf["Calibrated_pop"] / gdf["Calibrated_pop"].sum() * morbidity
-
-        self.morbidity = morbidity #TODO: Check if really needed
         self.cases_avoided = (morb_alri + morb_copd + morb_lc + morb_ihd)
 
     def salvage(self, gdf, specs_file):
@@ -262,7 +259,7 @@ class Technology:
         discountedOM costs for each stove during the project lifetime
         """
         discount_rate, proj_life = self.discount_factor(specs_file)
-
+        # TODO: check this formula and the units of om_cost
         operation_and_maintenance = self.om_cost * np.ones(proj_life) * self.inv_cost
         operation_and_maintenance[0] = 0
 
@@ -307,7 +304,7 @@ class Technology:
 
         self.discounted_energy = (energy_needed / discount_rate) * gdf['Households']
 
-    def discount_fuel_cost(self, gdf, specs_file):
+    def discount_fuel_cost(self, gdf, specs_file, rows=None, cols=None):
 
         discount_rate, proj_life = self.discount_factor(specs_file)
 
@@ -321,23 +318,30 @@ class Technology:
 
         self.discounted_fuel_cost = pd.Series(fuel_cost_discounted, index=gdf.index)
 
-    def total_time(self, specs_file):
+    def total_time(self, specs_file, population=None, out_path=None):
         self.total_time_yr = self.time_of_cooking * specs_file['Meals_per_day'] * 365
 
-    def time_saved(self, gdf, specs_file):
-        proj_life = specs_file['End_year'] - specs_file['Start_year']
-        self.total_time(specs_file)
-        self.total_time_saved = gdf["base_fuel_time"] - self.total_time_yr  # time saved per household
-        # time value of time saved per sq km
-        self.time_value = self.total_time_saved * gdf["value_of_time"] * gdf["Households"] / (1 + specs_file["Discount_rate"]) ** (proj_life)
+    def time_saved(self, gdf, specs_file, population=None, out_path=None):
+        if self.is_base:
+            self.total_time_saved = 0
+            self.time_value = 0
+        else:
+            proj_life = specs_file['End_year'] - specs_file['Start_year']
+            self.total_time(specs_file, population, out_path)
+            self.total_time_saved = gdf["base_fuel_time"] - self.total_time_yr  # time saved per household
+            # time value of time saved per sq km
+            self.time_value = self.total_time_saved * gdf["value_of_time"] * gdf["Households"] / (1 + specs_file["Discount_rate"]) ** (proj_life)
 
-    def costs(self):
+    def total_costs(self):
 
-        self.cost = (self.discounted_fuel_cost + self.discounted_investments + self.discounted_om_costs - self.discounted_salvage_cost) #/ self.discounted_energy
+        self.costs = (self.discounted_fuel_cost + self.discounted_investments + self.discounted_om_costs - self.discounted_salvage_cost) #/ self.discounted_energy
 
     def net_benefit(self, gdf):
-        self.costs()
-        gdf["net_benefit_{}".format(self.name)] = self.distributed_morbidity + self.distributed_mortality + self.decreased_carbon_emissions + self.time_value - self.cost
+        self.total_costs()
+        self.benefits = self.distributed_morbidity + self.distributed_mortality + self.decreased_carbon_emissions + self.time_value
+        gdf["costs_{}".format(self.name)] = self.costs
+        gdf["benefits_{}".format(self.name)] = self.benefits
+        gdf["net_benefit_{}".format(self.name)] = self.benefits - self.costs
 
 
 class LPG(Technology):
@@ -361,7 +365,9 @@ class LPG(Technology):
                  travel_time=None,
                  truck_capacity=2000,
                  diesel_price=0.88,
-                 diesel_per_hour=14):
+                 diesel_per_hour=14,
+                 lpg_path=None,
+                 friction_path=None):
         super().__init__(name, carbon_intensity, energy_content, tech_life,
                          inv_cost, infra_cost, fuel_cost, time_of_cooking,
                          om_cost, efficiency, pm25)
@@ -370,8 +376,23 @@ class LPG(Technology):
         self.diesel_price = diesel_price
         self.diesel_per_hour = diesel_per_hour
         self.transport_cost = None
+        self.lpg_path = lpg_path
+        self.friction_path = friction_path
 
-    def transportation_cost(self, specs_file):
+    def add_travel_time(self, population, out_path):
+        lpg = VectorLayer(self.name, 'LPG_points', layer_path=self.lpg_path)
+        friction = RasterLayer(self.name, 'friction', layer_path=self.friction_path, resample='average')
+
+        os.makedirs(os.path.join(out_path, self.name, 'LPG_points'), exist_ok=True)
+        lpg.reproject(population.meta['crs'], os.path.join(out_path, self.name, 'LPG_points'))
+        friction.align(population.path, os.path.join(out_path, self.name, 'friction'))
+
+        lpg.add_friction_raster(friction)
+        lpg.travel_time(os.path.join(out_path, self.name))
+        interpolate(lpg.distance_raster.path)
+        self.travel_time = 2 * lpg.distance_raster.layer
+
+    def transportation_cost(self, specs_file, gdf, rows, cols):
         """The cost of transporting LPG. See https://iopscience.iop.org/article/10.1088/1748-9326/6/3/034002/pdf for the formula
 
         Transportation cost = (2 * diesel consumption per h * national diesel price * travel time)/transported LPG
@@ -392,13 +413,14 @@ class LPG(Technology):
                         Hour to travel between each point and the startpoints as array
         :returns:       The cost of LPG in each cell per kg
         """
-        transport_cost = (2 * self.diesel_per_hour * self.diesel_price * self.travel_time) / self.truck_capacity
+        transport_cost = (self.diesel_per_hour * self.diesel_price * self.travel_time) / self.truck_capacity
         kg_yr = (specs_file["Meals_per_day"] * 365 * 3.64) / (self.efficiency * self.energy_content)  # energy content in MJ/kg
-        self.transport_cost = transport_cost * kg_yr
+        transport_cost = transport_cost * kg_yr
+        self.transport_cost = pd.Series(transport_cost[rows, cols], index=gdf.index)
 
-    def discounted_fuel_cost(self, gdf, specs_file):
-        self.transportation_cost(specs_file)
-        super().discounted_fuel_cost(gdf, specs_file)
+    def discount_fuel_cost(self, gdf, specs_file, rows=None, cols=None):
+        self.transportation_cost(specs_file, gdf, rows, cols)
+        super().discount_fuel_cost(gdf, specs_file)
 
 
 class Biomass(Technology):
@@ -419,26 +441,30 @@ class Biomass(Technology):
                  om_cost=0,  # percentage of investement cost
                  efficiency=0,  # ratio
                  pm25=0,
+                 forest_path=None,
+                 friction_path=None,
                  travel_time=None):
         super().__init__(name, carbon_intensity, energy_content, tech_life,
                          inv_cost, infra_cost, fuel_cost, time_of_cooking,
                          om_cost, efficiency, pm25)
         self.travel_time = travel_time
+        self.forest_path = forest_path
+        self.friction_path = friction_path
 
     def transportation_time(self, friction_path, forest_path, population_path, out_path):
-        forest = RasterLayer('rasters', 'forest', layer_path=forest_path, resample='mode')
-        friction = RasterLayer('rasters', 'forest', layer_path=friction_path, resample='average')
+        forest = RasterLayer(self.name, 'forest', layer_path=forest_path, resample='mode')
+        friction = RasterLayer(self.name, 'friction', layer_path=friction_path, resample='average')
 
-        forest.align(population_path, out_path)
-        friction.align(population_path, out_path)
+        forest.align(population_path, os.path.join(out_path, self.name, 'Forest_points'))
+        friction.align(population_path, os.path.join(out_path, self.name, 'friction'))
 
         forest.add_friction_raster(friction)
-        forest.travel_time(out_path)
+        forest.travel_time(os.path.join(out_path, self.name))
 
         self.travel_time = 2 * forest.distance_raster.layer
 
-    def total_time(self, specs_file, friction_path, forest_path, population_path, out_path):
-        self.transportation_time(friction_path, forest_path, population_path, out_path)
+    def total_time(self, specs_file, population=None, out_path=None):
+        self.transportation_time(self.friction_path, self.forest_path, population.path, out_path)
         self.total_time_yr = self.time_of_cooking * specs_file['Meals_per_day'] * 365 + (
                     self.travel_time + self.time_of_collection) * 365
 
