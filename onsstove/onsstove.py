@@ -55,12 +55,12 @@ class OnSSTOVE():
                                      user=POSTGRES_USER,
                                      password=POSTGRES_KEY)
 
-    def read_scenario_data(self, path_to_config: str):
+    def read_scenario_data(self, path_to_config: str, delimiter=','):
         """Reads the scenario data into a dictionary
         """
         config = {}
         with open(path_to_config, 'r') as csvfile:
-            reader = DictReader(csvfile, delimiter=';')
+            reader = DictReader(csvfile, delimiter=delimiter)
             config_file = list(reader)
             for row in config_file:
                 if row['Value']:
@@ -74,13 +74,13 @@ class OnSSTOVE():
                         raise ValueError("Config file data type not recognised.")
         self.specs = config
 
-    def read_tech_data(self, path_to_config: str):
+    def read_tech_data(self, path_to_config: str, delimiter=','):
         """
         Reads the technology data from a csv file into a dictionary
         """
         techs = {}
         with open(path_to_config, 'r') as csvfile:
-            reader = DictReader(csvfile, delimiter=';')
+            reader = DictReader(csvfile, delimiter=delimiter)
             config_file = list(reader)
             for row in config_file:
                 if row['Value']:
@@ -582,21 +582,23 @@ class OnSSTOVE():
         total_pop = self.gdf['Calibrated_pop'].sum()
 
         self.gdf["deaths_avoided"] = self.gdf.apply(
-            lambda row: self.techs[row['final_tech']].deaths_avoided * row['Calibrated_pop'] / total_pop, axis = 1)
+            lambda row: self.techs[row['final_tech']].deaths_avoided * row['Calibrated_pop'] / total_pop, axis=1)
 
     def health_costs_saved(self):
 
         self.gdf["health_costs_avoided"] = self.gdf.apply(
             lambda row: self.techs[row['final_tech']].distributed_morbidity +
-                        self.techs[row['final_tech']].distributed_mortality, axis = 1)
+                        self.techs[row['final_tech']].distributed_mortality, axis=1)
 
     def extract_time_saved(self):
 
-        self.gdf["time_saved"] = self.gdf.apply(lambda row: self.techs[row['final_tech']].total_time_saved, axis = 1)* gdf["Households"]
-        
+        self.gdf["time_saved"] = self.gdf.apply(lambda row: self.techs[row['final_tech']].total_time_saved, axis=1) * \
+                                 gdf["Households"]
+
     def reduced_emissions(self):
 
-        self.gdf["emissions_saved"] = self.gdf.apply(lambda row: self.techs[row['final_tech']].decreased_carbon_emissions[row.index], axis = 1)
+        self.gdf["emissions_saved"] = self.gdf.apply(
+            lambda row: self.techs[row['final_tech']].decreased_carbon_emissions[row.index], axis=1)
 
     def gdf_to_csv(self, scenario_name):
 
