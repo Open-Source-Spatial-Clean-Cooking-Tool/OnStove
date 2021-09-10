@@ -619,6 +619,8 @@ class OnSSTOVE():
         if isinstance(self.gdf[variable].iloc[0], str):
             tech_codes = {tech.name: i for i, tech in enumerate(self.techs.values())}
             layer[self.rows, self.cols] = [tech_codes[tech] for tech in self.gdf[variable]]
+        else:
+            layer[self.rows, self.cols] = self.gdf[variable]
 
         raster = RasterLayer('Output', variable)
         raster.layer = layer
@@ -629,3 +631,4 @@ class OnSSTOVE():
             print('Variable codes:')
             for tech, value in tech_codes.items():
                 print('    ' + tech + ':', value)
+            print('')
