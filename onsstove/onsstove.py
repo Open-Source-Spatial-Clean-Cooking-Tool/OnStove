@@ -2,6 +2,7 @@ import os
 from csv import DictReader
 
 import psycopg2
+import pandas as pd
 import geopandas as gpd
 import numpy as np
 from typing import Dict, Any
@@ -593,7 +594,7 @@ class OnSSTOVE():
     def extract_time_saved(self):
 
         self.gdf["time_saved"] = self.gdf.apply(lambda row: self.techs[row['final_tech']].total_time_saved, axis=1) * \
-                                 gdf["Households"]
+                                 self.gdf["Households"]
 
     def reduced_emissions(self):
 
@@ -611,3 +612,20 @@ class OnSSTOVE():
 
         df = pd.DataFrame(pt.drop(columns='geometry'))
         df.to_csv(name)
+
+    def to_raster(self, variable):
+        layer = self.base_layer.layer.copy()
+        tech_codes = None
+        if isinstance(self.gdf[variable].iloc[0], str):
+            tech_codes = {tech.name: i for i, tech in enumerate(self.techs.values())}
+            layer[self.rows, self.cols] = [tech_codes[tech] for tech in self.gdf[variable]]
+
+        raster = RasterLayer('Output', variable)
+        raster.layer = layer
+        raster.meta = self.base_layer.meta
+        raster.save(os.path.join(self.output_directory, 'Output'))
+        print(f'Layer saved in {os.path.join(self.output_directory, "Output", variable + ".tif")}\n')
+        if tech_codes:
+            print('Variable codes:')
+            for tech, value in tech_codes.items():
+                print('    ' + tech + ':', value)

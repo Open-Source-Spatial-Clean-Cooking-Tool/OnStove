@@ -10,6 +10,7 @@ from .raster import *
 from .layer import *
 from .raster import interpolate
 
+
 class Technology:
     """
     Standard technology class.
@@ -126,14 +127,14 @@ class Technology:
 
         return discount_factor, proj_life
 
-
-    def carb(self, gdf):
-        self.carbon = (3.64 * gdf['Households'] / (self.efficiency * self.energy_content)) * (self.carbon_intensity * self.energy_content / (self.efficiency * 1000))
+    def carb(self, specs_file, gdf):
+        self.carbon = (3.64 * specs_file["Meals_per_day"] * 365 * gdf['Households'] * self.carbon_intensity) / (self.efficiency * 1000)
 
     def carbon_emissions(self, specs_file, gdf, carb_base_fuel):
-        self.carb(gdf)
+        self.carb(specs_file, gdf)
         proj_life = specs_file['End_year'] - specs_file['Start_year']
-        carbon = specs_file["Cost of carbon emissions"] * (carb_base_fuel - self.carbon) / 1000 / (1 + specs_file["Discount_rate"]) ** (proj_life)
+        carbon = specs_file["Cost of carbon emissions"] * (carb_base_fuel - self.carbon) / 1000 / (
+                    1 + specs_file["Discount_rate"]) ** (proj_life)
 
         self.decreased_carbon_emissions = carbon
 
@@ -216,9 +217,9 @@ class Technology:
         morb_vector = []
         while i < 6:
             morbidity_alri = cl_alri[i] * specs_file["COI_ALRI"] * morb_alri / (1 + specs_file["Discount_rate"]) ** (
-                        i - 1)
+                    i - 1)
             morbidity_copd = cl_copd[i] * specs_file["COI_COPD"] * morb_copd / (1 + specs_file["Discount_rate"]) ** (
-                        i - 1)
+                    i - 1)
             morbidity_lc = cl_lc[i] * specs_file["COI_LC"] * morb_lc / (1 + specs_file["Discount_rate"]) ** (i - 1)
             morbidity_ihd = cl_ihd[i] * specs_file["COI_IHD"] * morb_ihd / (1 + specs_file["Discount_rate"]) ** (i - 1)
 
@@ -319,7 +320,7 @@ class Technology:
         self.discounted_fuel_cost = pd.Series(fuel_cost_discounted, index=gdf.index)
 
     def total_time(self, specs_file, population=None, out_path=None):
-        self.total_time_yr = self.time_of_cooking * specs_file['Meals_per_day'] * 365
+        self.total_time_yr = self.time_of_cooking * 365
 
     def time_saved(self, gdf, specs_file, population=None, out_path=None):
         if self.is_base:
@@ -330,11 +331,13 @@ class Technology:
             self.total_time(specs_file, population, out_path)
             self.total_time_saved = gdf["base_fuel_time"] - self.total_time_yr  # time saved per household
             # time value of time saved per sq km
-            self.time_value = self.total_time_saved * gdf["value_of_time"] * gdf["Households"] / (1 + specs_file["Discount_rate"]) ** (proj_life)
+            self.time_value = self.total_time_saved * gdf["value_of_time"] * gdf["Households"] / (
+                        1 + specs_file["Discount_rate"]) ** (proj_life)
 
     def total_costs(self):
 
-        self.costs = (self.discounted_fuel_cost + self.discounted_investments + self.discounted_om_costs - self.discounted_salvage_cost) #/ self.discounted_energy
+        self.costs = (
+                    self.discounted_fuel_cost + self.discounted_investments + self.discounted_om_costs - self.discounted_salvage_cost)  # / self.discounted_energy
 
     def net_benefit(self, gdf):
         self.total_costs()
@@ -414,7 +417,8 @@ class LPG(Technology):
         :returns:       The cost of LPG in each cell per kg
         """
         transport_cost = (self.diesel_per_hour * self.diesel_price * self.travel_time) / self.truck_capacity
-        kg_yr = (specs_file["Meals_per_day"] * 365 * 3.64) / (self.efficiency * self.energy_content)  # energy content in MJ/kg
+        kg_yr = (specs_file["Meals_per_day"] * 365 * 3.64) / (
+                    self.efficiency * self.energy_content)  # energy content in MJ/kg
         transport_cost = transport_cost * kg_yr
         self.transport_cost = pd.Series(transport_cost[rows, cols], index=gdf.index)
 
@@ -466,7 +470,7 @@ class Biomass(Technology):
     def total_time(self, specs_file, population=None, out_path=None):
         self.transportation_time(self.friction_path, self.forest_path, population.path, out_path)
         self.total_time_yr = self.time_of_cooking * specs_file['Meals_per_day'] * 365 + (
-                    self.travel_time + self.time_of_collection) * 365
+                self.travel_time + self.time_of_collection) * 365
 
 
 class Electricity(Technology):
@@ -474,13 +478,52 @@ class Electricity(Technology):
     LPG technology class. Inherits all functionality from the standard
     Technology class
     """
+
+    def __init__(self,
+                 name=None,
+                 carbon_intensity=0,
+                 energy_content=0,
+                 tech_life=0,  # in years
+                 inv_cost=0,  # in USD
+                 infra_cost=0,  # cost of additional infrastructure
+                 fuel_cost=0,
+                 time_of_cooking=0,
+                 om_cost=0,  # percentage of investement cost
+                 efficiency=0,  # ratio
+                 pm25=0):
+        super().__init__(name, carbon_intensity, energy_content, tech_life,
+                         inv_cost, infra_cost, fuel_cost, time_of_cooking,
+                         om_cost, efficiency, pm25)
+        # Carbon intensity of fossil fuel plants in kg/GWh
+        self.generation = {}
+        self.carbon_intensities = {'coal': 0.090374363, 'natural_gas': 0.050300655,
+                                   'crude_oil': 0.070650288, 'heavy_fuel_oil': 0.074687989,
+                                   'oil': 0.072669139,'diesel': 0.069332823,
+                                   'still_gas': 0.060849859, 'flared_natural_gas': 0.051855075,
+                                   'waste': 0.010736111, 'biofuels_waste': 0.010736111,
+                                   'nuclear': 0, 'hydro': 0, 'wind': 0,
+                                   'solar': 0, 'other': 0}
+
+    def __setitem__(self, idx, value):
+        if 'generation' in idx:
+            self.generation[idx.lower().replace('generation_', '')] = value
+        elif 'carbon_intensity' in idx:
+            self.carbon_intensities[idx.lower().replace('carbon_intensity_', '')] = value
+        else:
+            super().__setitem__(idx, value)
+
     def infrastructure_cost(self):
         pass
 
-    def carb(self, gdf):
-        self.carbon_intesity = 0
-        super().carb(gdf)
+    def get_carbon_intensity(self):
+        grid_emissions = sum([gen * self.carbon_intensities[fuel] for fuel, gen in self.generation.items()])
+        grid_generation = sum(self.generation.values())
+        self.carbon_intensity = grid_emissions / grid_generation * 1000  # to convert from Mton/PJ to kg/GJ
+
+    def carb(self, specs_file, gdf):
+        self.get_carbon_intensity()
+        super().carb(specs_file, gdf)
 
     def net_benefit(self, gdf):
         super().net_benefit(gdf)
-        gdf.loc[gdf['Current_elec'] == 0, "net_benefit_{}".format(self.name)] = -99999
+        gdf.loc[gdf['Current_elec'] == 0, "net_benefit_{}".format(self.name)] = np.nan
