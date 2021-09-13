@@ -108,8 +108,6 @@ class Technology:
 
         return paf
 
-    # TODO: add static method to select either all households or only the electrified ones
-
     @staticmethod
     def discount_factor(specs_file):
         '''
@@ -130,8 +128,7 @@ class Technology:
         return discount_factor, proj_life
 
     def carb(self, specs_file, gdf):
-        # TODO: make logic to select either all households or only the electrified ones
-        self.carbon = (3.64 * specs_file["Meals_per_day"] * 365 * gdf['Households'] * self.carbon_intensity) / (self.efficiency * 1000)
+        self.carbon = (3.64 * specs_file["Meals_per_day"] * 365 * self.carbon_intensity) / (self.efficiency * 1000)
 
     def carbon_emissions(self, specs_file, gdf, carb_base_fuel):
         self.carb(specs_file, gdf)
@@ -165,10 +162,10 @@ class Technology:
         paf_ihd = self.paf(rr_ihd, 1 - specs_file['clean_cooking_access'])
         paf_lc = self.paf(rr_lc, 1 - specs_file['clean_cooking_access'])
 
-        mort_alri = pop_total * (paf_0_alri - paf_alri) * (specs_file["Mort_ALRI"] / 100000)
-        mort_copd = pop_total * (paf_0_copd - paf_copd) * (specs_file["Mort_COPD"] / 100000)
-        mort_ihd = pop_total * (paf_0_ihd - paf_ihd) * (specs_file["Mort_IHD"] / 100000)
-        mort_lc = pop_total * (paf_0_lc - paf_lc) * (specs_file["Mort_LC"] / 100000)
+        mort_alri = gdf["Calibrated_pop"].sum() * (paf_0_alri - paf_alri) * (specs_file["Mort_ALRI"] / 100000)
+        mort_copd = gdf["Calibrated_pop"].sum() * (paf_0_copd - paf_copd) * (specs_file["Mort_COPD"] / 100000)
+        mort_ihd = gdf["Calibrated_pop"].sum() * (paf_0_ihd - paf_ihd) * (specs_file["Mort_IHD"] / 100000)
+        mort_lc = gdf["Calibrated_pop"].sum() * (paf_0_lc - paf_lc) * (specs_file["Mort_LC"] / 100000)
 
         cl_copd = {1: 0.3, 2: 0.2, 3: 0.17, 4: 0.17, 5: 0.16}
         cl_alri = {1: 0.7, 2: 0.1, 3: 0.07, 4: 0.07, 5: 0.06}
@@ -195,8 +192,10 @@ class Technology:
 
         mortality = np.sum(mort_vector)
 
-        self.distributed_mortality = pop / pop_total * mortality
-        self.deaths_avoided = (mort_alri + mort_copd + mort_lc + mort_ihd)
+        #  Distributed mortality per household
+        self.distributed_mortality = gdf["Calibrated_pop"] / (gdf["Calibrated_pop"].sum() * gdf['Households']) * mortality
+        #  Total deaths avoided
+        self.deaths_avoided = (mort_alri + mort_copd + mort_lc + mort_ihd) * (pop_total / gdf["Calibrated_pop"].sum())
 
     def morbidity(self, specs_file, gdf, paf_0_alri, paf_0_copd, paf_0_lc, paf_0_ihd, population='all'):
         """
@@ -208,10 +207,8 @@ class Technology:
         """
         if population == 'all':
             pop_total = gdf["Calibrated_pop"].sum()
-            pop = gdf["Calibrated_pop"]
         elif population == 'electrified':
             pop_total = gdf['Elec_pop_calib'].sum()
-            pop = gdf['Elec_pop_calib']
         else:
             raise ValueError('the population value must be either "all" or "electrified"')
 
@@ -222,10 +219,10 @@ class Technology:
         paf_ihd = self.paf(rr_ihd, 1 - specs_file['clean_cooking_access'])
         paf_lc = self.paf(rr_lc, 1 - specs_file['clean_cooking_access'])
 
-        morb_alri = pop_total * (paf_0_alri - paf_alri) * (specs_file["Morb_ALRI"] / 100000)
-        morb_copd = pop_total * (paf_0_copd - paf_copd) * (specs_file["Morb_COPD"] / 100000)
-        morb_ihd = pop_total * (paf_0_ihd - paf_ihd) * (specs_file["Morb_IHD"] / 100000)
-        morb_lc = pop_total * (paf_0_lc - paf_lc) * (specs_file["Morb_LC"] / 100000)
+        morb_alri = gdf["Calibrated_pop"].sum() * (paf_0_alri - paf_alri) * (specs_file["Morb_ALRI"] / 100000)
+        morb_copd = gdf["Calibrated_pop"].sum() * (paf_0_copd - paf_copd) * (specs_file["Morb_COPD"] / 100000)
+        morb_ihd = gdf["Calibrated_pop"].sum() * (paf_0_ihd - paf_ihd) * (specs_file["Morb_IHD"] / 100000)
+        morb_lc = gdf["Calibrated_pop"].sum() * (paf_0_lc - paf_lc) * (specs_file["Morb_LC"] / 100000)
 
         cl_copd = {1: 0.3, 2: 0.2, 3: 0.17, 4: 0.17, 5: 0.16}
         cl_alri = {1: 0.7, 2: 0.1, 3: 0.07, 4: 0.07, 5: 0.06}
@@ -251,8 +248,8 @@ class Technology:
 
         morbidity = np.sum(morb_vector)
 
-        self.distributed_morbidity = pop / pop_total * morbidity
-        self.cases_avoided = (morb_alri + morb_copd + morb_lc + morb_ihd)
+        self.distributed_morbidity = gdf["Calibrated_pop"] / (gdf["Calibrated_pop"].sum() * gdf['Households']) * morbidity
+        self.cases_avoided = (morb_alri + morb_copd + morb_lc + morb_ihd) * (pop_total / gdf["Calibrated_pop"].sum())
 
     def salvage(self, gdf, specs_file):
         """
@@ -261,7 +258,6 @@ class Technology:
         ----------
         discounted salvage cost
         """
-        # TODO: make logic to select either all households or only the electrified ones
         discount_rate, proj_life = self.discount_factor(specs_file)
         salvage = np.zeros(proj_life)
         used_life = proj_life % self.tech_life
@@ -270,7 +266,7 @@ class Technology:
 
         discounted_salvage = salvage.sum() / discount_rate
 
-        self.discounted_salvage_cost = discounted_salvage * gdf['Households']
+        self.discounted_salvage_cost = discounted_salvage
 
     def discounted_om(self, gdf, specs_file):
         """
@@ -279,7 +275,6 @@ class Technology:
         ----------
         discountedOM costs for each stove during the project lifetime
         """
-        # TODO: make logic to select either all households or only the electrified ones
         discount_rate, proj_life = self.discount_factor(specs_file)
         operation_and_maintenance = self.om_cost * np.ones(proj_life) * self.inv_cost
         operation_and_maintenance[0] = 0
@@ -291,7 +286,7 @@ class Technology:
 
         discounted_om_cost = operation_and_maintenance.sum() / discount_rate
 
-        self.discounted_om_costs = discounted_om_cost * gdf['Households']
+        self.discounted_om_costs = discounted_om_cost
 
     def discounted_inv(self, gdf, specs_file):
         """
@@ -302,7 +297,6 @@ class Technology:
         ----------
         discounted investment cost for each stove during the project lifetime
         """
-        # TODO: make logic to select either all households or only the electrified ones
         discount_rate, proj_life = self.discount_factor(specs_file)
 
         investments = np.zeros(proj_life)
@@ -315,26 +309,24 @@ class Technology:
 
         discounted_investments = investments.sum() / discount_rate
 
-        self.discounted_investments = discounted_investments * gdf['Households']
+        self.discounted_investments = discounted_investments
 
     def discounted_meals(self, gdf, specs_file):
-        # TODO: make logic to select either all households or only the electrified ones
         discount_rate, proj_life = self.discount_factor(specs_file)
 
         energy = specs_file["Meals_per_day"] * 365 * 3.64 / self.efficiency
 
         energy_needed = energy * np.ones(proj_life)
 
-        self.discounted_energy = (energy_needed / discount_rate) * gdf['Households']
+        self.discounted_energy = (energy_needed / discount_rate)
 
     def discount_fuel_cost(self, gdf, specs_file, rows=None, cols=None):
-        # TODO: make logic to select either all households or only the electrified ones
 
         discount_rate, proj_life = self.discount_factor(specs_file)
 
         energy = specs_file["Meals_per_day"] * 365 * 3.64 / self.efficiency
 
-        cost = (energy * self.fuel_cost / self.energy_content + self.transport_cost) * gdf['Households']
+        cost = (energy * self.fuel_cost / self.energy_content + self.transport_cost) * np.ones(gdf.shape[0])
 
         fuel_cost = [np.ones(proj_life) * x for x in cost]
 
@@ -346,7 +338,6 @@ class Technology:
         self.total_time_yr = self.time_of_cooking * 365
 
     def time_saved(self, gdf, specs_file, population=None, out_path=None):
-        # TODO: make logic to select either all households or only the electrified ones
         if self.is_base:
             self.total_time_saved = 0
             self.time_value = 0
@@ -355,8 +346,7 @@ class Technology:
             self.total_time(specs_file, population, out_path)
             self.total_time_saved = gdf["base_fuel_time"] - self.total_time_yr  # time saved per household
             # time value of time saved per sq km
-            self.time_value = self.total_time_saved * gdf["value_of_time"] * gdf["Households"] / (
-                        1 + specs_file["Discount_rate"]) ** (proj_life)
+            self.time_value = self.total_time_saved * gdf["value_of_time"] / (1 + specs_file["Discount_rate"]) ** (proj_life)
 
     def total_costs(self):
 
@@ -547,6 +537,12 @@ class Electricity(Technology):
     def carb(self, specs_file, gdf):
         self.get_carbon_intensity()
         super().carb(specs_file, gdf)
+
+    def mortality(self, specs_file, gdf, paf_0_alri, paf_0_copd, paf_0_lc, paf_0_ihd, population='electrified'):
+        super().mortality(specs_file, gdf, paf_0_alri, paf_0_copd, paf_0_lc, paf_0_ihd, population)
+
+    def morbidity(self, specs_file, gdf, paf_0_alri, paf_0_copd, paf_0_lc, paf_0_ihd, population='electrified'):
+        super().morbidity(specs_file, gdf, paf_0_alri, paf_0_copd, paf_0_lc, paf_0_ihd, population)
 
     def net_benefit(self, gdf):
         super().net_benefit(gdf)
