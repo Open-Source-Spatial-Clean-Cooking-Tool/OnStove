@@ -575,9 +575,9 @@ class OnSSTOVE():
 
     def maximum_net_benefit(self):
         net_benefit_cols = [col for col in self.gdf if 'net_benefit_' in col]
-        self.gdf["least_cost_tech"] = self.gdf[net_benefit_cols].idxmax(axis=1)
+        self.gdf["max_benefit_tech"] = self.gdf[net_benefit_cols].idxmax(axis=1)
 
-        self.gdf['least_cost_tech'] = self.gdf['least_cost_tech'].str.replace("net_benefit_", "")
+        self.gdf['max_benefit_tech'] = self.gdf['max_benefit_tech'].str.replace("net_benefit_", "")
         self.gdf["maximum_net_benefit"] = self.gdf[net_benefit_cols].max(axis=1) #* self.gdf['Households']
 
         current_elect = self.gdf["Current_elec"] == 1
@@ -586,13 +586,13 @@ class OnSSTOVE():
 
         bool_vect = (self.gdf['Current_elec'] == 1) & (self.gdf['Elec_pop_calib'] < self.gdf['Calibrated_pop'])
         second_benefit_cols = [col for col in self.gdf if 'net_benefit_' in col]
-        second_benefit_cols.remove('net_benefit_electricity')
+        second_benefit_cols.remove('net_benefit_Electricity')
         second_best = self.gdf.loc[bool_vect, second_benefit_cols].idxmax(axis=1).str.replace("net_benefit_", "")
 
         second_best_value = self.gdf.loc[current_elect, second_benefit_cols].max(axis=1) * (1 - elect_fraction)
         second_tech_net_benefit = second_best_value #* self.gdf.loc[current_elect, 'Households']
         dff = self.gdf.loc[current_elect].copy()
-        dff['least_cost_tech'] = second_best
+        dff['max_benefit_tech'] = second_best
         dff['maximum_net_benefit'] = second_tech_net_benefit
         dff['Calibrated_pop'] *= (1 - elect_fraction)
         dff['Elec_pop_calib'] *= (1 - elect_fraction)
@@ -604,56 +604,50 @@ class OnSSTOVE():
         self.gdf = self.gdf.append(dff)
 
         benefit_cols = self.gdf.columns.str.contains('benefit')
+        benefit_cols[np.where(self.gdf.columns == 'max_benefit_tech')] = False
         cost_cols = self.gdf.columns.str.contains('costs')
         columns = self.gdf.columns[benefit_cols | cost_cols]
         for col in columns:
             self.gdf[col] *= self.gdf['Households']
 
-
-        # net_benefit_cols = [col for col in self.gdf if 'net_benefit_hh' in col]
-        # self.gdf["best_tech"] = self.gdf[net_benefit_cols].idxmax(axis=1)
-        #
-        # self.gdf['best_tech'] = self.gdf['best_tech'].str.replace("net_benefit_hh_", "")
-        # self.gdf["best_tech_net_benefit"] = self.gdf[net_benefit_cols].max(axis=1) * self.gdf['Households']
-        #
-        # bool_vect = (self.gdf['Current_elec'] == 1) & (self.gdf['Elec_pop_calib'] < self.gdf['Calibrated_pop'])
-        # second_benefit_cols = [col for col in self.gdf if 'net_benefit_hh' in col]
-        # second_benefit_cols.remove('net_benefit_hh_electricity')
-        # second_best = self.gdf.loc[bool_vect, second_benefit_cols].idxmax(axis=1).str.replace("net_benefit_hh_", "")
-        # self.gdf['second_tech'] = second_best
-        #
-        # current_elect = self.gdf["Current_elec"] == 1
-        # elect_fraction = self.gdf.loc[current_elect, "Elec_pop_calib"] / self.gdf.loc[current_elect, "Calibrated_pop"]
-        # self.gdf.loc[current_elect, "best_tech_net_benefit"] *= elect_fraction
-        # second_best_value = self.gdf.loc[current_elect, second_benefit_cols].max(axis=1) * (1 - elect_fraction)
-        # self.gdf["second_tech_net_benefit"] = 0
-        # self.gdf.loc[current_elect, "second_tech_net_benefit"] = second_best_value * self.gdf.loc[current_elect, 'Households']
-        # self.gdf["maximum_net_benefit"] = self.gdf["best_tech_net_benefit"] + self.gdf["second_tech_net_benefit"]
-        # self.gdf['least_cost_tech_mix'] = self.gdf['best_tech']
-        # self.gdf.loc[bool_vect, 'least_cost_tech_mix'] += ', ' + second_best
-
     def lives_saved(self):
-
-        total_pop = self.gdf['Calibrated_pop'].sum()
-
         self.gdf["deaths_avoided"] = self.gdf.apply(
-            lambda row: self.techs[row['least_cost_tech']].deaths_avoided * row['Calibrated_pop'] / total_pop, axis=1)
+            lambda row: self.techs[row['max_benefit_tech']].deaths_avoided[row.name], axis=1) * self.gdf["Households"]
 
     def health_costs_saved(self):
 
         self.gdf["health_costs_avoided"] = self.gdf.apply(
-            lambda row: self.techs[row['least_cost_tech']].distributed_morbidity +
-                        self.techs[row['least_cost_tech']].distributed_mortality, axis=1)
+            lambda row: self.techs[row['max_benefit_tech']].distributed_morbidity[row.name] +
+                        self.techs[row['max_benefit_tech']].distributed_mortality[row.name], axis=1) * self.gdf["Households"]
 
     def extract_time_saved(self):
-
-        self.gdf["time_saved"] = self.gdf.apply(lambda row: self.techs[row['least_cost_tech']].total_time_saved, axis=1) * \
+        self.gdf["time_saved"] = self.gdf.apply(lambda row: self.techs[row['max_benefit_tech']].total_time_saved[row.name], axis=1) * \
                                  self.gdf["Households"]
 
     def reduced_emissions(self):
 
-        self.gdf["emissions_saved"] = self.gdf.apply(
-            lambda row: self.techs[row['least_cost_tech']].decreased_carbon_emissions[row.index], axis=1)
+        self.gdf["reduced_emissions"] = self.gdf.apply(
+            lambda row: self.techs[row['max_benefit_tech']].decreased_carbon_emissions, axis=1) * self.gdf["Households"]
+
+    def investment_costs(self):
+
+        self.gdf["investment_costs"] = self.gdf.apply(
+            lambda row: self.techs[row['max_benefit_tech']].discounted_investments, axis=1) * self.gdf["Households"]
+
+    def om_costs(self):
+
+        self.gdf["om_costs"] = self.gdf.apply(
+            lambda row: self.techs[row['max_benefit_tech']].discounted_om_costs, axis=1) * self.gdf["Households"]
+
+    def fuel_costs(self):
+
+        self.gdf["fuel_costs"] = self.gdf.apply(
+            lambda row: self.techs[row['max_benefit_tech']].discounted_fuel_cost[row.name], axis=1) * self.gdf["Households"]
+
+    def emissions_costs_saved(self):
+
+        self.gdf["emissions_costs_saved"] = self.gdf.apply(
+            lambda row: self.techs[row['max_benefit_tech']].decreased_carbon_costs, axis=1) * self.gdf["Households"]
 
     def gdf_to_csv(self, scenario_name):
 
