@@ -12,7 +12,9 @@ dependencies:
   - pandas
   - plotly
   - psycopg2
+  - psutil
   - python-decouple
+  - python-kaleido
   - rasterio
   - rasterstats
   - scikit-learn
