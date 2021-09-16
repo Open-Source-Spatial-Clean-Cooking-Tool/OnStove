@@ -609,19 +609,30 @@ class OnSSTOVE():
         dff['Elec_pop_calib'] *= (1 - elect_fraction)
         dff['Households'] *= (1 - elect_fraction)
 
-
-        second_best_value = self.gdf.loc[current_elect, second_benefit_cols].max(axis=1) * (1 - elect_fraction)
-        second_tech_net_benefit = second_best_value #* self.gdf.loc[current_elect, 'Households']
-        dff = self.gdf.loc[current_elect].copy()
-        dff['max_benefit_tech'] = second_best_biogas
-        dff['maximum_net_benefit'] = second_tech_net_benefit
-        dff['Calibrated_pop'] *= (1 - elect_fraction)
-        dff['Elec_pop_calib'] *= (1 - elect_fraction)
-        dff['Households'] *= (1 - elect_fraction)
-
         self.gdf.loc[current_elect, 'Calibrated_pop'] *= elect_fraction
         self.gdf.loc[current_elect, 'Elec_pop_calib'] *= elect_fraction
         self.gdf.loc[current_elect, 'Households'] *= elect_fraction
+        self.gdf = self.gdf.append(dff)
+
+        benefit_cols = self.gdf.columns.str.contains('benefit')
+        benefit_cols[np.where(self.gdf.columns == 'max_benefit_tech')] = False
+        cost_cols = self.gdf.columns.str.contains('costs')
+        columns = self.gdf.columns[benefit_cols | cost_cols]
+        for col in columns:
+            self.gdf[col] *= self.gdf['Households']
+
+        second_best_value = self.gdf.loc[current_biogas, second_benefit_cols].max(axis=1) * (1 - biogas_fraction)
+        second_tech_net_benefit = second_best_value #* self.gdf.loc[current_elect, 'Households']
+        dff = self.gdf.loc[current_biogas].copy()
+        dff['max_benefit_tech'] = second_best_biogas
+        dff['maximum_net_benefit'] = second_tech_net_benefit
+        dff['Calibrated_pop'] *= (1 - biogas_fraction)
+        dff['Elec_pop_calib'] *= (1 - biogas_fraction)
+        dff['Households'] *= (1 - biogas_fraction)
+
+        self.gdf.loc[current_biogas, 'Calibrated_pop'] *= biogas_fraction
+        self.gdf.loc[current_biogas, 'Biogas_pop_calib'] *= biogas_fraction
+        self.gdf.loc[current_biogas, 'Households'] *= biogas_fraction
         self.gdf = self.gdf.append(dff)
 
         benefit_cols = self.gdf.columns.str.contains('benefit')
