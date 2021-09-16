@@ -589,10 +589,31 @@ class OnSSTOVE():
         second_benefit_cols.remove('net_benefit_Electricity')
         second_best = self.gdf.loc[bool_vect, second_benefit_cols].idxmax(axis=1).str.replace("net_benefit_", "")
 
+        current_biogas = (self.gdf["needed_energy"]*gdf["Households"] <= self.gdf["available_biogas_energy"]) &\
+                         (self.gdf["max_benefit_tech"] == 'Biogas')
+        biogas_fraction = self.gdf.loc[current_biogas, "available_biogas_energy"] / \
+                          self.gdf.loc[current_biogas, "needed_energy"]
+        self.gdf.loc[current_biogas, "maximum_net_benefit"] *= biogas_fraction
+
+        biogas_bool = (self.gdf["needed_energy"]*gdf["Households"] <= self.gdf["available_biogas_energy"])
+        second_benefit_cols = [col for col in self.gdf if 'net_benefit_' in col]
+        second_benefit_cols.remove('net_benefit_Biogas')
+        second_best_biogas = self.gdf.loc[biogas_bool, second_benefit_cols].idxmax(axis=1).str.replace("net_benefit_", "")
+
         second_best_value = self.gdf.loc[current_elect, second_benefit_cols].max(axis=1) * (1 - elect_fraction)
         second_tech_net_benefit = second_best_value #* self.gdf.loc[current_elect, 'Households']
         dff = self.gdf.loc[current_elect].copy()
         dff['max_benefit_tech'] = second_best
+        dff['maximum_net_benefit'] = second_tech_net_benefit
+        dff['Calibrated_pop'] *= (1 - elect_fraction)
+        dff['Elec_pop_calib'] *= (1 - elect_fraction)
+        dff['Households'] *= (1 - elect_fraction)
+
+
+        second_best_value = self.gdf.loc[current_elect, second_benefit_cols].max(axis=1) * (1 - elect_fraction)
+        second_tech_net_benefit = second_best_value #* self.gdf.loc[current_elect, 'Households']
+        dff = self.gdf.loc[current_elect].copy()
+        dff['max_benefit_tech'] = second_best_biogas
         dff['maximum_net_benefit'] = second_tech_net_benefit
         dff['Calibrated_pop'] *= (1 - elect_fraction)
         dff['Elec_pop_calib'] *= (1 - elect_fraction)
