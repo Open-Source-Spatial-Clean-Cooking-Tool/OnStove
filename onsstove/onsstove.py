@@ -6,6 +6,7 @@ import pandas as pd
 import geopandas as gpd
 import numpy as np
 from typing import Dict, Any
+from shapely.ops import nearest_points
 
 from onsstove.technology import Technology, LPG, Biomass, Electricity
 from .raster import *
@@ -779,6 +780,47 @@ class OnSSTOVE:
 
         df = pd.DataFrame(pt.drop(columns='geometry'))
         df.to_csv(name)
+
+    def extract_wealth_index(self, wealth_index, file_type = "csv", x_column = "longitude", y_column = "latitude",
+                             wealth_column = "rwi"):
+
+        if file_type == "csv":
+            df = pd.read_csv(wealth_index)
+
+            gdf = gpd.GeoDataFrame(df, geometry=gpd.points_from_xy(df[x_column], df[y_column]))
+            gdf.to_crs(self.gdf.crs, inplace=True)
+            pts3 = gdf.geometry.unary_union
+
+            def near(point, pts=pts3):
+                nearest = gpd2.geometry == nearest_points(point, pts)[1]
+                return gpd2[nearest][wealth_column].get_values()[0]
+
+            self.gdf['relative_wealth'] = self.gdf.apply(lambda row: near(row.geometry), axis=1)
+        elif file_type == "point":
+            gdf = gpd.read_file(wealth_index)
+            gdf.to_crs(self.gdf.crs, inplace=True)
+            pts3 = gdf.geometry.unary_union
+
+            def near(point, pts=pts3):
+                nearest = gpd2.geometry == nearest_points(point, pts)[1]
+                return gpd2[nearest][wealth_column].get_values()[0]
+
+            self.gdf['relative_wealth'] = self.gdf.apply(lambda row: near(row.geometry), axis=1)
+        elif file_type == "polgon":
+            gdf = gpd.read_file(wealth_index)
+            gdf.to_crs(self.gdf.crs, inplace=True)
+
+            gdf.rename(columns={wealth_column: "relative_wealth"})
+
+            self.gdf = gpd.sjoin(self.gdf, gdf["relative_wealth"], how="inner", op='intersects')
+        elif file_type == "raster":
+            layer = RasterLayer('Indexes', 'Demand_index', layer_path = wealth_index, resample = 'mean')
+
+            layer.align(self.base_layer)
+
+            self.raster_to_dataframe(layer, name="relative_wealth", method='read')
+        else:
+            raise ValueError("file_type needs to be either csv, raster, polygon or point.")
 
     def to_raster(self, variable):
         layer = self.base_layer.layer.copy()
