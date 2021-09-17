@@ -316,6 +316,7 @@ class Technology:
         discount_rate, proj_life = self.discount_factor(specs_file)
 
         energy = specs_file["Meals_per_day"] * 365 * 3.64 / self.efficiency
+        gdf["needed_energy"] = specs["Meals_per_day"] * 365 * 3.64 / self.efficiency
 
         energy_needed = energy * np.ones(proj_life)
 
@@ -549,3 +550,49 @@ class Electricity(Technology):
     def net_benefit(self, gdf):
         super().net_benefit(gdf)
         gdf.loc[gdf['Current_elec'] == 0, "net_benefit_{}".format(self.name)] = np.nan
+
+
+class Biogas(Technology):
+    """
+    LPG technology class. Inherits all functionality from the standard
+    Technology class
+    """
+
+    def __init__(self,
+                 name=None,
+                 carbon_intensity=0,
+                 energy_content=0,
+                 tech_life=0,  # in years
+                 inv_cost=0,  # in USD
+                 infra_cost=0,  # cost of additional infrastructure
+                 fuel_cost=0,
+                 time_of_cooking=0,
+                 om_cost=0,  # percentage of investement cost
+                 efficiency=0,  # ratio
+                 pm25=0):
+        super().__init__(name, carbon_intensity, energy_content, tech_life,
+                         inv_cost, infra_cost, fuel_cost, time_of_cooking,
+                         om_cost, efficiency, pm25)
+
+        def available_biogas(self, df):
+
+            from_cattle = df["#Cattles"] * 12 * 0.15 * 0.8 * 305
+            from_buffalo = df["#Buffaloes"] * 14 * 0.2 * 0.75 * 305
+            from_sheep = df["#Sheeps"] * 0.7 * 0.25 * 0.8 * 452
+            from_goat = df["#Goats"] * 0.6 * 0.3 * 0.85 * 450
+            from_pig = df["#Pigs"] * 5 * 0.75 * 0.14 * 470
+            from_poultry = df["#Poultry"] * 0.12 * 0.25 * 0.75 * 450
+
+            df["yearly_cubic_meter_biogas"] = (from_cattle + from_buffalo + from_goat + from_pig + from_poultry + \
+                                              from_sheep) * 0.365
+
+            del df["#Cattles"]
+            del df["#Buffaloes"]
+            del df["#Sheeps"]
+            del df["#Goats"]
+            del df["#Pigs"]
+            del df["#Poultry"]
+
+        def available_energy(self, df):
+
+            df["available_biogas_energy"] = df["yearly_cubic_meter_biogas"] * self.energy_content
