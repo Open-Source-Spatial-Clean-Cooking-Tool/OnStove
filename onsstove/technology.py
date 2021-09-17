@@ -139,7 +139,7 @@ class Technology:
         self.decreased_carbon_emissions = carb_base_fuel - self.carbon
         self.decreased_carbon_costs = carbon
 
-    def mortality(self, specs_file, gdf, paf_0_alri, paf_0_copd, paf_0_lc, paf_0_ihd, population='all'):
+    def mortality(self, specs_file, gdf, paf_0_alri, paf_0_copd, paf_0_lc, paf_0_ihd):
         """
         Calculates mortality rate per fuel
 
@@ -147,15 +147,6 @@ class Technology:
         ----------
         Monetary mortality for each stove in urban and rural settings
         """
-        if population == 'all':
-            pop_total = gdf["Calibrated_pop"].sum()
-            pop = gdf["Calibrated_pop"]
-        elif population == 'electrified':
-            pop_total = gdf['Elec_pop_calib'].sum()
-            pop = gdf['Elec_pop_calib']
-        else:
-            raise ValueError('the population value must be either "all" or "electrified"')
-
         rr_alri, rr_copd, rr_ihd, rr_lc = self.relative_risk()
 
         paf_alri = self.paf(rr_alri, 1 - specs_file['clean_cooking_access'])
@@ -198,7 +189,7 @@ class Technology:
         #  Total deaths avoided
         self.deaths_avoided = (mort_alri + mort_copd + mort_lc + mort_ihd) * (gdf["Calibrated_pop"] / (gdf["Calibrated_pop"].sum() * gdf['Households']))
 
-    def morbidity(self, specs_file, gdf, paf_0_alri, paf_0_copd, paf_0_lc, paf_0_ihd, population='all'):
+    def morbidity(self, specs_file, gdf, paf_0_alri, paf_0_copd, paf_0_lc, paf_0_ihd):
         """
         Calculates morbidity rate per fuel
 
@@ -206,13 +197,6 @@ class Technology:
         ----------
         Monetary morbidity for each stove in urban and rural settings
         """
-        if population == 'all':
-            pop_total = gdf["Calibrated_pop"].sum()
-        elif population == 'electrified':
-            pop_total = gdf['Elec_pop_calib'].sum()
-        else:
-            raise ValueError('the population value must be either "all" or "electrified"')
-
         rr_alri, rr_copd, rr_ihd, rr_lc = self.relative_risk()
 
         paf_alri = self.paf(rr_alri, 1 - specs_file['clean_cooking_access'])
@@ -539,12 +523,6 @@ class Electricity(Technology):
     def carb(self, specs_file, gdf):
         self.get_carbon_intensity()
         super().carb(specs_file, gdf)
-
-    def mortality(self, specs_file, gdf, paf_0_alri, paf_0_copd, paf_0_lc, paf_0_ihd, population='electrified'):
-        super().mortality(specs_file, gdf, paf_0_alri, paf_0_copd, paf_0_lc, paf_0_ihd, population)
-
-    def morbidity(self, specs_file, gdf, paf_0_alri, paf_0_copd, paf_0_lc, paf_0_ihd, population='electrified'):
-        super().morbidity(specs_file, gdf, paf_0_alri, paf_0_copd, paf_0_lc, paf_0_ihd, population)
 
     def net_benefit(self, gdf):
         super().net_benefit(gdf)

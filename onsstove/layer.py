@@ -4,6 +4,8 @@ import re
 import pandas as pd
 import datetime
 from skimage.graph.mcp import MCP_Geometric
+import matplotlib.pyplot as plt
+import matplotlib
 
 from .raster import *
 
@@ -28,6 +30,7 @@ class Layer:
         self.restrictions = []
         self.resample = resample
         self.read_layer(layer_path, conn)
+        self.weight = 1
 
     def __repr__(self):
         return 'Layer(name=%r)' % self.name
@@ -56,7 +59,10 @@ class Layer:
         cumulative_costs[np.where(cumulative_costs == float('inf'))] = np.nan
 
         self.distance_raster = RasterLayer(self.category,
-                                           self.name + ' - traveltime')
+                                           self.name + ' - traveltime',
+                                           distance_limit=self.distance_limit,
+                                           inverse=self.inverse,
+                                           normalization=self.normalization)
 
         self.distance_raster.layer = cumulative_costs
         self.distance_raster.meta = self.friction.meta.copy()
@@ -131,7 +137,10 @@ class VectorLayer(Layer):
             os.remove(output_proximity_temp)
             self.distance_raster = RasterLayer(self.category,
                                                self.name + '_dist',
-                                               output_proximity)
+                                               output_proximity,
+                                               distance_limit=self.distance_limit,
+                                               inverse=self.inverse,
+                                               normalization=self.normalization)
 
         elif self.distance == 'travel_time':
             self.travel_time(output_path)
@@ -139,15 +148,6 @@ class VectorLayer(Layer):
     def start_points(self):
         return friction_start_points(self.friction.path,
                                      self.layer)
-
-    def normalize(self, output_path, mask_layer):
-        if self.normalization == 'MinMax':
-            output_file = os.path.join(output_path,
-                                       self.name + ' - normalized.tif')
-            normalize(self.distance_raster.path, limit=self.distance_limit,
-                      inverse=self.inverse, output_file=output_file)
-            mask_raster(output_file, mask_layer,
-                        output_file, np.nan, 'DEFLATE')
 
     def save(self, output_path):
         for column in self.layer.columns:
@@ -232,7 +232,10 @@ class RasterLayer(Layer):
             meta.update(nodata=np.nan, dtype='float64')
 
             self.distance_raster = RasterLayer(self.category,
-                                               self.name + ' - log')
+                                               self.name + ' - log',
+                                               distance_limit=self.distance_limit,
+                                               inverse=self.inverse,
+                                               normalization=self.normalization)
 
             self.distance_raster.layer = layer
             self.distance_raster.meta = meta
@@ -249,14 +252,17 @@ class RasterLayer(Layer):
     def start_points(self):
         return np.where(np.isin(self.layer, self.starting_cells))
 
-    def normalize(self, output_path, mask_layer):
+    def normalize(self, output_path, mask_layer=None):
         if self.normalization == 'MinMax':
             output_file = os.path.join(output_path,
                                        self.name + ' - normalized.tif')
-            normalize(self.distance_raster.path, limit=self.distance_limit,
-                      inverse=self.inverse, output_file=output_file)
+            normalize(raster=self.layer, limit=self.distance_limit,
+                      inverse=self.inverse, output_file=output_file,
+                      meta=self.meta)
             mask_raster(output_file, mask_layer,
                         output_file, np.nan, 'DEFLATE')
+            self.normalized = RasterLayer(self.category, self.name + ' - normalized',
+                                          layer_path=output_file)
 
     def save(self, output_path, sufix=''):
         output_file = os.path.join(output_path,
@@ -285,3 +291,11 @@ class RasterLayer(Layer):
         self.layer = layer
         self.meta = meta
         self.save(output_path, ' - aligned')
+
+    def plot(self):
+        fig, ax = plt.subplots(1, 1, figsize=(16, 9))
+        cax = ax.imshow(self.layer, cmap='magma')  # , vmin=0, vmax=1)
+        cbar = fig.colorbar(cax, shrink=0.8, ticks=[0, 0.5, 1])
+        cbar.ax.set_yticklabels(['Low', 'Medium', 'High'])
+        cbar.ax.set_ylabel(self.name)
+        ax.set_axis_off()
