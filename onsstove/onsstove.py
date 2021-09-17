@@ -729,6 +729,16 @@ class OnSSTOVE:
         for col in columns:
             self.gdf[col] *= self.gdf['Households']
 
+    def add_admin_names(self, admin):
+
+        if isinstance(admin, str):
+            admin = gpd.read_file(admin)
+
+        admin.to_crs(self.gdf.crs, inplace=True)
+
+        self.gdf = gpd.sjoin(self.gdf, admin_c, how="inner", op='intersects')
+
+
     def lives_saved(self):
         self.gdf["deaths_avoided"] = self.gdf.apply(
             lambda row: self.techs[row['max_benefit_tech']].deaths_avoided[row.name], axis=1) * self.gdf["Households"]
