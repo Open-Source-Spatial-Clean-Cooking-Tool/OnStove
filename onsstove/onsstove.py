@@ -558,7 +558,7 @@ class OnSSTOVE:
         self.gdf["Final_Elec_Code" + "{}".format(self.specs["Start_year"])] = \
             self.gdf.apply(lambda row: 1 if row["Current_elec"] == 1 else 99, axis=1)
 
-    def calibrate_pop(self):
+    def calibrate_current_pop(self):
 
         total_gis_pop = self.gdf["Pop"].sum()
         calibration_factor = self.specs["Population_start_year"] / total_gis_pop
@@ -610,7 +610,26 @@ class OnSSTOVE:
         elif method == 'read':
             self.gdf[name] = layer[self.rows, self.cols]
 
-    def calibrate_urban(self):
+    def calibrate_urban_current_and_future_GHS(self):
+
+        self.raster_to_dataframe(layer.urban.layer, name = "IsUrban")
+
+        if self.specs["End_Year"] > self.specs["Start_Year"]:
+            population_current = specs["Population_end_year"]
+            urban_current = self.specs["Urban_start"] * population_current
+            rural_current = population_current - urban_current
+
+            population_future = specs["Population_end_year"]
+            urban_future = self.specs["Urban_end"] * population_future
+            rural_future = population_future - urban_future
+
+            rural_growth = (rural_future - rural_current)/(self.specs["End_Year"] - self.specs["Start_Year"])
+            urban_growth = (urban_future - urban_current) / (self.specs["End_Year"] - self.specs["Start_Year"])
+
+            self.gdf.loc[self.gdf['IsUrban'] > 20, 'Pop_future'] = self.gdf["Calibrated_pop"] * urban_growth
+            self.gdf.loc[self.gdf['IsUrban'] < 20, 'Pop_future'] = self.gdf["Calibrated_pop"] * rural_growth
+
+    def calibrate_urban_manual(self):
 
         urban_modelled = 2
         factor = 1
@@ -638,11 +657,14 @@ class OnSSTOVE:
             if i > 500:
                 break
 
-        self.gdf.loc[self.gdf["IsUrban"] <= 1, 'Households'] = self.gdf.loc[
-                                                                   self.gdf["IsUrban"] <= 1, 'Calibrated_pop'] / \
-                                                               self.specs["Rural_HHsize"]
-        self.gdf.loc[self.gdf["IsUrban"] > 1, 'Households'] = self.gdf.loc[self.gdf["IsUrban"] > 1, 'Calibrated_pop'] / \
-                                                              self.specs["Urban_HHsize"]
+
+    def number_of_households(self):
+
+        self.gdf.loc[self.gdf["IsUrban"] < 20, 'Households'] = self.gdf.loc[
+                                                                    self.gdf["IsUrban"] < 20, 'Calibrated_pop'] / \
+                                                                self.specs["Rural_HHsize"]
+        self.gdf.loc[self.gdf["IsUrban"] > 20, 'Households'] = self.gdf.loc[self.gdf["IsUrban"] > 20, 'Calibrated_pop'] / \
+                                                               self.specs["Urban_HHsize"]
 
     def get_value_of_time(self, wealth):
         """
