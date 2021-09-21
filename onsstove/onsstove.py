@@ -781,32 +781,33 @@ class OnSSTOVE:
         df = pd.DataFrame(pt.drop(columns='geometry'))
         df.to_csv(name)
 
-    def extract_wealth_index(self, wealth_index, file_type = "csv", x_column = "longitude", y_column = "latitude",
-                             wealth_column = "rwi"):
+    def extract_wealth_index(self, wealth_index, file_type="csv", x_column="longitude", y_column="latitude",
+                             wealth_column="rwi"):
 
         if file_type == "csv":
             df = pd.read_csv(wealth_index)
 
             gdf = gpd.GeoDataFrame(df, geometry=gpd.points_from_xy(df[x_column], df[y_column]))
+            gdf.crs = 4326
             gdf.to_crs(self.gdf.crs, inplace=True)
-            pts3 = gdf.geometry.unary_union
+            pts = gdf.geometry.unary_union
 
-            def near(point, pts=pts3):
-                nearest = gpd2.geometry == nearest_points(point, pts)[1]
-                return gpd2[nearest][wealth_column].get_values()[0]
+            def near(point, pts=pts):
+                nearest = gdf.geometry == nearest_points(point, pts)[1]
+                return gdf[nearest][wealth_column].values[0]
 
             self.gdf['relative_wealth'] = self.gdf.apply(lambda row: near(row.geometry), axis=1)
         elif file_type == "point":
             gdf = gpd.read_file(wealth_index)
             gdf.to_crs(self.gdf.crs, inplace=True)
-            pts3 = gdf.geometry.unary_union
+            pts = gdf.geometry.unary_union
 
-            def near(point, pts=pts3):
-                nearest = gpd2.geometry == nearest_points(point, pts)[1]
-                return gpd2[nearest][wealth_column].get_values()[0]
+            def near(point, pts=pts):
+                nearest = gdf.geometry == nearest_points(point, pts)[1]
+                return gdf[nearest][wealth_column].get_values()[0]
 
             self.gdf['relative_wealth'] = self.gdf.apply(lambda row: near(row.geometry), axis=1)
-        elif file_type == "polgon":
+        elif file_type == "polygon":
             gdf = gpd.read_file(wealth_index)
             gdf.to_crs(self.gdf.crs, inplace=True)
 
