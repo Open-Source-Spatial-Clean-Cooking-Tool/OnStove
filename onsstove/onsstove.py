@@ -390,21 +390,18 @@ class OnSSTOVE:
 
         self.gdf["Current_elec"] = 0
 
-        i = 0
+        i = 1
         elec_pop = 0
         total_pop = self.gdf["Calibrated_pop"].sum()
 
         while elec_pop <= total_pop * elec_rate:
-            bool = (self.combined_weight <= i)
+            bool = (self.combined_weight >= i)
             elec_pop = self.gdf.loc[bool, "Calibrated_pop"].sum()
 
             self.gdf.loc[bool, "Current_elec"] = 1
-            print(elec_pop)
-            i = i + 0.0001
+            i = i - 0.0001
 
         self.i = i
-
-
 
     def final_elec(self):
 
@@ -412,27 +409,27 @@ class OnSSTOVE:
 
         self.gdf["Elec_pop_calib"] = self.gdf["Calibrated_pop"]
 
-        i = self.i - 0.01
+        i = self.i + 0.0001
         total_pop = self.gdf["Calibrated_pop"].sum()
-        elec_pop = self.gdf["Calibrated_pop"].sum()
+        elec_pop = self.gdf.loc[self.gdf["Current_elec"] == 1, "Calibrated_pop"].sum()
         diff = elec_pop - (total_pop * elec_rate)
         factor = diff/self.gdf["Current_elec"].count()
 
 
         while elec_pop > total_pop * elec_rate:
 
-            new_bool = (self.combined_weight >= i)
+            new_bool = (self.i <= self.combined_weight) & (self.combined_weight <= i)
 
             self.gdf.loc[new_bool, "Elec_pop_calib"] -= factor
             self.gdf.loc[self.gdf["Elec_pop_calib"] < 0, "Elec_pop_calib"] = 0
             self.gdf.loc[self.gdf["Elec_pop_calib"] == 0, "Current_elec"] = 0
-            bool = self.gdf["Current_elec"]
+            bool = self.gdf["Current_elec"] == 1
 
             elec_pop = self.gdf.loc[bool, "Elec_pop_calib"].sum()
 
-            new_bool = bool & (self.combined_weight >= i)
+            new_bool = bool & new_bool
             if new_bool.sum() == 0:
-                i = i - 0.001
+                i = i + 0.0001
 
         self.gdf.loc[self.gdf["Current_elec"] == 0, "Elec_pop_calib"] = 0
 
