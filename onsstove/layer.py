@@ -285,12 +285,13 @@ class RasterLayer(Layer):
         else:
             raise ValueError('Raster file type or object not recognized.')
 
-    def align(self, base_layer, output_path):
+    def align(self, base_layer, output_path = None):
         layer, meta = align_raster(base_layer, self.path,
                                    method=self.resample)
         self.layer = layer
         self.meta = meta
-        self.save(output_path, ' - aligned')
+        if output_path:
+            self.save(output_path, ' - aligned')
 
     def plot(self):
         fig, ax = plt.subplots(1, 1, figsize=(16, 9))

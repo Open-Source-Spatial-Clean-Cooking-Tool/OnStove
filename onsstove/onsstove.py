@@ -6,6 +6,8 @@ import pandas as pd
 import geopandas as gpd
 import numpy as np
 from typing import Dict, Any
+from shapely.geometry import shape
+import scipy.spatial
 
 from onsstove.technology import Technology, LPG, Biomass, Electricity
 from .raster import *
@@ -665,6 +667,58 @@ class OnSSTOVE:
 
         df = pd.DataFrame(pt.drop(columns='geometry'))
         df.to_csv(name)
+
+    def extract_wealth_index(self, wealth_index, file_type="csv", x_column="longitude", y_column="latitude",
+                             wealth_column="rwi"):
+
+        if file_type == "csv":
+            df = pd.read_csv(wealth_index)
+
+            gdf = gpd.GeoDataFrame(df, geometry=gpd.points_from_xy(df[x_column], df[y_column]))
+            gdf.crs = 4326
+            gdf.to_crs(self.gdf.crs, inplace=True)
+
+            s1_arr = np.column_stack((self.gdf.centroid.x, self.gdf.centroid.y))
+            s2_arr = np.column_stack((gdf.centroid.x, gdf.centroid.y))
+
+            def do_kdtree(combined_x_y_arrays, points):
+                mytree = scipy.spatial.cKDTree(combined_x_y_arrays)
+                dist, indexes = mytree.query(points)
+                return dist, indexes
+
+            results1, results2 = do_kdtree(s2_arr, s1_arr)
+            self.gdf["relative_wealth"] = gdf.loc[results2].reset_index()[wealth_column]
+
+        elif file_type == "point":
+            gdf = gpd.read_file(wealth_index)
+            gdf.to_crs(self.gdf.crs, inplace=True)
+
+            s1_arr = np.column_stack((self.gdf.centroid.x, self.gdf.centroid.y))
+            s2_arr = np.column_stack((gdf.centroid.x, gdf.centroid.y))
+
+            def do_kdtree(combined_x_y_arrays, points):
+                mytree = scipy.spatial.cKDTree(combined_x_y_arrays)
+                dist, indexes = mytree.query(points)
+                return dist, indexes
+
+            results1, results2 = do_kdtree(s2_arr, s1_arr)
+            self.gdf["relative_wealth"] = gdf.loc[results2].reset_index()[wealth_column]
+
+        elif file_type == "polygon":
+            gdf = gpd.read_file(wealth_index)
+            gdf.to_crs(self.gdf.crs, inplace=True)
+
+            gdf.rename(columns={wealth_column: "relative_wealth"})
+
+            self.gdf = gpd.sjoin(self.gdf, gdf["relative_wealth"], how="inner", op='intersects')
+        elif file_type == "raster":
+            layer = RasterLayer('Indexes', 'Demand_index', layer_path = wealth_index, resample = 'mean')
+
+            layer.align(self.base_layer)
+
+            self.raster_to_dataframe(layer, name="relative_wealth", method='read')
+        else:
+            raise ValueError("file_type needs to be either csv, raster, polygon or point.")
 
     def to_raster(self, variable):
         layer = self.base_layer.layer.copy()
