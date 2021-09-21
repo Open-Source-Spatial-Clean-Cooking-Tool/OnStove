@@ -6,7 +6,8 @@ import pandas as pd
 import geopandas as gpd
 import numpy as np
 from typing import Dict, Any
-from shapely.ops import nearest_points
+from shapely.geometry import shape
+import scipy.spatial
 
 from onsstove.technology import Technology, LPG, Biomass, Electricity
 from .raster import *
@@ -790,23 +791,33 @@ class OnSSTOVE:
             gdf = gpd.GeoDataFrame(df, geometry=gpd.points_from_xy(df[x_column], df[y_column]))
             gdf.crs = 4326
             gdf.to_crs(self.gdf.crs, inplace=True)
-            pts = gdf.geometry.unary_union
 
-            def near(point, pts=pts):
-                nearest = gdf.geometry == nearest_points(point, pts)[1]
-                return gdf[nearest][wealth_column].values[0]
+            s1_arr = np.column_stack((self.gdf.centroid.x, self.gdf.centroid.y))
+            s2_arr = np.column_stack((gdf.centroid.x, gdf.centroid.y))
 
-            self.gdf['relative_wealth'] = self.gdf.apply(lambda row: near(row.geometry), axis=1)
+            def do_kdtree(combined_x_y_arrays, points):
+                mytree = scipy.spatial.cKDTree(combined_x_y_arrays)
+                dist, indexes = mytree.query(points)
+                return dist, indexes
+
+            results1, results2 = do_kdtree(s2_arr, s1_arr)
+            self.gdf["relative_wealth"] = gdf.loc[results2].reset_index()[wealth_column]
+
         elif file_type == "point":
             gdf = gpd.read_file(wealth_index)
             gdf.to_crs(self.gdf.crs, inplace=True)
-            pts = gdf.geometry.unary_union
 
-            def near(point, pts=pts):
-                nearest = gdf.geometry == nearest_points(point, pts)[1]
-                return gdf[nearest][wealth_column].get_values()[0]
+            s1_arr = np.column_stack((self.gdf.centroid.x, self.gdf.centroid.y))
+            s2_arr = np.column_stack((gdf.centroid.x, gdf.centroid.y))
 
-            self.gdf['relative_wealth'] = self.gdf.apply(lambda row: near(row.geometry), axis=1)
+            def do_kdtree(combined_x_y_arrays, points):
+                mytree = scipy.spatial.cKDTree(combined_x_y_arrays)
+                dist, indexes = mytree.query(points)
+                return dist, indexes
+
+            results1, results2 = do_kdtree(s2_arr, s1_arr)
+            self.gdf["relative_wealth"] = gdf.loc[results2].reset_index()[wealth_column]
+
         elif file_type == "polygon":
             gdf = gpd.read_file(wealth_index)
             gdf.to_crs(self.gdf.crs, inplace=True)
