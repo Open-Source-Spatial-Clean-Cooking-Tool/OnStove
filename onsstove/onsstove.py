@@ -436,7 +436,7 @@ class OnSSTOVE:
         self.gdf.loc[self.gdf["Current_elec"] == 0, "Elec_pop_calib"] = 0
 
 
-    def calibrate_pop(self):
+    def calibrate_current_pop(self):
 
         total_gis_pop = self.gdf["Pop"].sum()
         calibration_factor = self.specs["Population_start_year"] / total_gis_pop
@@ -478,17 +478,40 @@ class OnSSTOVE:
 
         self.gdf = gpd.GeoDataFrame({'geometry': gpd.points_from_xy(x, y),
                                      'Pop': layer.layer[self.rows, self.cols]})
+        self.gdf.crs = self.project_crs
 
     def raster_to_dataframe(self, layer, name=None, method='sample'):
         """
         Takes a RasterLayer and a method (sample or read), gets the values from the raster layer using the population points previously extracted and saves the values in a new column of OnSSTOVE.gdf
         """
         if method == 'sample':
-            self.gdf[layer.name] = sample_raster(layer.path, self.gdf)
+            self.gdf[name] = sample_raster(layer, self.gdf)
         elif method == 'read':
             self.gdf[name] = layer[self.rows, self.cols]
 
-    def calibrate_urban(self):
+    def calibrate_urban_current_and_future_GHS(self, GHS_path):
+        layer = RasterLayer('Demographics', 'GHS', GHS_path, resample='nearest')
+        layer.reproject(self.project_crs, self.output_directory)
+        self.raster_to_dataframe(layer.path, name="IsUrban", method='sample')
+
+        if self.specs["End_year"] > self.specs["Start_year"]:
+            population_current = self.specs["Population_end_year"]
+            urban_current = self.specs["Urban_start"] * population_current
+            rural_current = population_current - urban_current
+
+            population_future = self.specs["Population_end_year"]
+            urban_future = self.specs["Urban_end"] * population_future
+            rural_future = population_future - urban_future
+
+            rural_growth = (rural_future - rural_current)/(self.specs["End_Year"] - self.specs["Start_Year"])
+            urban_growth = (urban_future - urban_current) / (self.specs["End_Year"] - self.specs["Start_Year"])
+
+            self.gdf.loc[self.gdf['IsUrban'] > 20, 'Pop_future'] = self.gdf["Calibrated_pop"] * urban_growth
+            self.gdf.loc[self.gdf['IsUrban'] < 20, 'Pop_future'] = self.gdf["Calibrated_pop"] * rural_growth
+
+        self.number_of_households()
+
+    def calibrate_urban_manual(self):
 
         urban_modelled = 2
         factor = 1
@@ -516,11 +539,14 @@ class OnSSTOVE:
             if i > 500:
                 break
 
-        self.gdf.loc[self.gdf["IsUrban"] <= 1, 'Households'] = self.gdf.loc[
-                                                                   self.gdf["IsUrban"] <= 1, 'Calibrated_pop'] / \
-                                                               self.specs["Rural_HHsize"]
-        self.gdf.loc[self.gdf["IsUrban"] > 1, 'Households'] = self.gdf.loc[self.gdf["IsUrban"] > 1, 'Calibrated_pop'] / \
-                                                              self.specs["Urban_HHsize"]
+
+    def number_of_households(self):
+
+        self.gdf.loc[self.gdf["IsUrban"] < 20, 'Households'] = self.gdf.loc[
+                                                                    self.gdf["IsUrban"] < 20, 'Calibrated_pop'] / \
+                                                                self.specs["Rural_HHsize"]
+        self.gdf.loc[self.gdf["IsUrban"] > 20, 'Households'] = self.gdf.loc[self.gdf["IsUrban"] > 20, 'Calibrated_pop'] / \
+                                                               self.specs["Urban_HHsize"]
 
     def get_value_of_time(self, wealth):
         """

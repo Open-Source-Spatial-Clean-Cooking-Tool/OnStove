@@ -325,56 +325,6 @@ def resample(raster_path, height, width, method='bilinear'):
         return data, transform
 
 
-def calibrate_urban(clusters, urban_current):
-    """
-    Calibrate urban population. Classifies clusters to either urban(2), peri-urban(1) or rural(0). 
-
-    Parameters
-    ----------
-    arg1 : clusters
-        Population clusters with population column
-    arg2 : urban_current
-        Urban ration defined by the user
-    arg3 : workspace
-        Output folder in which the clusters as saved after the urban classification
-
-    Returns
-    ----------
-    Population clusters with an ubran-rural classifcation column 
-    """
-
-    urban_modelled = 2
-    factor = 1
-    pop_tot = clusters["Population"].sum()
-    i = 0
-    while abs(urban_modelled - urban_current) > 0.01:
-        clusters["IsUrban"] = 0
-        clusters.loc[(clusters["Population"] > 5000 * factor) &
-                     (clusters["Population"] / clusters["Area"] > 300 * factor),
-                     "IsUrban"] = 1
-        clusters.loc[(clusters["Population"] > 50000 * factor) &
-                     (clusters["Population"] / clusters["Area"] > 1500 * factor),
-                     "IsUrban"] = 2
-        pop_urb = clusters.loc[clusters["IsUrban"] > 1, "Population"].sum()
-
-        urban_modelled = pop_urb / pop_tot
-
-        if urban_modelled > urban_current:
-            factor *= 1.1
-        else:
-            factor *= 0.9
-        i = i + 1
-        if i > 500:
-            break
-            print(i)
-
-    # clusters.to_file(workspace + r"/clusters.shp") 
-
-    print("Modelled urban ratio is " + str(round(urban_modelled, 3)) +
-          "% in comparision to the actual ratio of " + str(urban_current) +
-          "% after " + str(i) + " iterations.")
-
-
 def lpg_transportation_cost(travel_time):
     """The cost of transporting LPG. See https://iopscience.iop.org/article/10.1088/1748-9326/6/3/034002/pdf for the formula
     
