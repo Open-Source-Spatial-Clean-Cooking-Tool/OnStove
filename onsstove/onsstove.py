@@ -280,6 +280,7 @@ class OnSSTOVE:
         self.specs = None
         self.techs = None
         self.base_fuel = None
+        self.i = {}
 
     def get_layers(self, layers):
         if layers == 'all':
@@ -355,208 +356,83 @@ class OnSSTOVE:
 
         self.techs = techs
 
-    def elec_current(self):
-        elec_actual = self.specs['Elec_rate']
-        urban_pop = (self.gdf.loc[self.gdf["IsUrban"] > 1, "Calibrated_pop"].sum())
-        rural_pop = (self.gdf.loc[self.gdf["IsUrban"] <= 1, "Calibrated_pop"].sum())
-        total_pop = self.gdf["Calibrated_pop"].sum()
 
-        total_elec_ratio = self.specs["Elec_rate"]
-        urban_elec_ratio = self.specs["urban_elec_rate"]
-        rural_elec_ratio = self.specs["rural_elec_rate"]
-        elec_modelled = 0
+    def normalized(self, column, inverse = False):
 
-        factor = (total_pop * total_elec_ratio) / (urban_pop * urban_elec_ratio + rural_pop * rural_elec_ratio)
-        urban_elec_ratio *= factor
-        rural_elec_ratio *= factor
+        if inverse:
+            normalized = (self.gdf[column].max() - self.gdf[column])/(self.gdf[column].max() - self.gdf[column].min())
+        else:
+            normalized = (self.gdf[column] - self.gdf[column].min())/(self.gdf[column].max() - self.gdf[column].min())
+
+        return normalized
+
+    def normalize_for_electricity(self):
 
         if "Transformer_dist" in self.gdf.columns:
             self.gdf["Elec_dist"] = self.gdf["Transformer_dist"]
-            priority = 1
-            dist_limit = self.specs["Max_Transformer_dist"]
         elif "MV_line_dist" in self.gdf.columns:
             self.gdf["Elec_dist"] = self.gdf["MV_line_dist"]
-            priority = 1
-            dist_limit = self.specs["Max_MV_line_dist"]
         else:
             self.gdf["Elec_dist"] = self.gdf["HV_line_dist"]
-            priority = 2
-            dist_limit = self.specs["Max_HV_line_dist"]
 
-        condition = 0
+        elec_dist = self.normalized("Elec_dist", inverse = True)
+        ntl = self.normalized("Night_lights")
+        pop = self.normalized("Calibrated_pop")
 
-        min_night_lights = self.specs["Min_Night_Lights"]
-        min_pop = self.specs["Min_Elec_Pop"]
 
-        while condition == 0:
-            urban_electrified = urban_pop * urban_elec_ratio
-            rural_electrified = rural_pop * rural_elec_ratio
+        self.combined_weight = (elec_dist * self.specs["infra_weight"] + pop * self.specs["Min_Elec_Pop"] +
+                 ntl * self.specs["Min_Night_Lights"]) / (self.specs["infra_weight"] + self.specs["Min_Elec_Pop"] +
+                                                          self.specs["Min_Night_Lights"])
 
-            if priority == 1:
+    def current_elec(self):
 
-                print(
-                    'We have identified the existence of transformers or MV lines as input data; '
-                    'therefore we proceed using those for the calibration')
+        elec_rate = self.specs["Elec_rate"]
 
-                self.gdf["Elec_pop_calib"] = 0
-                self.gdf["Current_elec"] = 0
+        self.gdf["Current_elec"] = 0
 
-                self.gdf.loc[
-                    (self.gdf["Elec_dist"] < dist_limit) & (self.gdf["Night_lights"] > min_night_lights) & (
-                            self.gdf["Calibrated_pop"] > min_pop), "Elec_pop_calib"] = self.gdf["Calibrated_pop"]
-                self.gdf.loc[
-                    (self.gdf["Elec_dist"] < dist_limit) & (self.gdf["Night_lights"] > min_night_lights) & (
-                            self.gdf["Calibrated_pop"] > min_pop), "Current_elec"] = 1
+        i = 1
+        elec_pop = 0
+        total_pop = self.gdf["Calibrated_pop"].sum()
 
-                urban_elec_modelled = self.gdf.loc[
-                    (self.gdf["Current_elec"] == 1) & (self.gdf["IsUrban"] > 1), "Elec_pop_calib"].sum()
+        while elec_pop <= total_pop * elec_rate:
+            bool = (self.combined_weight >= i)
+            elec_pop = self.gdf.loc[bool, "Calibrated_pop"].sum()
 
-                rural_elec_modelled = self.gdf.loc[
-                    (self.gdf["Current_elec"] == 1) & (self.gdf["IsUrban"] <= 1), "Elec_pop_calib"].sum()
+            self.gdf.loc[bool, "Current_elec"] = 1
+            i = i - 0.0001
 
-                urban_elec_factor = urban_elec_modelled / urban_electrified
-                rural_elec_factor = rural_elec_modelled / rural_electrified
+        self.i = i
 
-                if urban_elec_factor > 1:
-                    self.gdf.loc[(self.gdf["Current_elec"] == 1) & (self.gdf["IsUrban"] > 1), "Elec_pop_calib"] *= (
-                            1 / urban_elec_factor)
-                else:
-                    i = 0
-                    while urban_elec_factor <= 1:
-                        if i < 10:
-                            self.gdf.loc[
-                                (self.gdf["Current_elec"] == 1) & (self.gdf["IsUrban"] == 2), "Elec_pop_calib"] *= 1.1
-                            self.gdf["Elec_pop_calib"] = np.minimum(self.gdf["Elec_pop_calib"],
-                                                                    self.gdf["Calibrated_pop"])
-                            urban_elec_modelled = self.gdf.loc[
-                                (self.gdf["Current_elec"] == 1) & (self.gdf["IsUrban"] == 2), "Elec_pop_calib"].sum()
-                            urban_elec_factor = urban_elec_modelled / urban_electrified
-                            i += 1
-                        else:
-                            break
+    def final_elec(self):
 
-                if rural_elec_factor > 1:
-                    self.gdf.loc[(self.gdf["Current_elec"] == 1) & (self.gdf["IsUrban"] <= 1), "Elec_pop_calib"] *= (
-                            1 / rural_elec_factor)
-                else:
-                    i = 0
-                    while rural_elec_factor <= 1:
-                        if i < 10:
-                            self.gdf.loc[
-                                (self.gdf["Current_elec"] == 1) & (self.gdf["IsUrban"] < 2), "Elec_pop_calib"] *= 1.1
-                            self.gdf["Elec_pop_calib"] = np.minimum(self.gdf["Elec_pop_calib"],
-                                                                    self.gdf["Calibrated_pop"])
-                            rural_elec_modelled = self.gdf.loc[
-                                (self.gdf["Current_elec"] == 1) & (self.gdf["IsUrban"] < 2), "Elec_pop_calib"].sum()
-                            rural_elec_factor = rural_elec_modelled / rural_electrified
-                            i += 1
-                        else:
-                            break
+        elec_rate = self.specs["Elec_rate"]
 
-                pop_elec = self.gdf.loc[self.gdf["Current_elec"] == 1, "Elec_pop_calib"].sum()
-                elec_modelled = pop_elec / total_pop
+        self.gdf["Elec_pop_calib"] = self.gdf["Calibrated_pop"]
 
-                # REVIEW. Added new calibration step for pop not meeting original steps, if prev elec pop is too small
-                i = 0
-                td_dist_2 = 0.1
-                while elec_actual - elec_modelled > 0.01:
-                    pop_elec_2 = self.gdf.loc[(self.gdf["Current_elec"] == 0) & (self.gdf["Calibrated_pop"] > min_pop) &
-                                              (self.gdf["Elec_dist"] < td_dist_2), "Calibrated_pop"].sum()
-                    if i < 50:
-                        if (pop_elec + pop_elec_2) / total_pop > elec_actual:
-                            elec_modelled = (pop_elec + pop_elec_2) / total_pop
-                            self.gdf.loc[(self.gdf["Current_elec"] == 0) & (self.gdf["Calibrated_pop"] > min_pop) &
-                                         (self.gdf["Elec_dist"] < td_dist_2), "Elec_pop_calib"] = self.gdf[
-                                "Calibrated_pop"]
-                            self.gdf.loc[(self.gdf["Current_elec"] == 0) & (self.gdf["Calibrated_pop"] > min_pop) &
-                                         (self.gdf["Elec_dist"] < td_dist_2), "Current_elec"] = 1
-                        else:
-                            i += 1
-                            td_dist_2 += 0.1
-                    else:
-                        self.gdf.loc[(self.gdf["Current_elec"] == 0) & (self.gdf["Calibrated_pop"] > min_pop) &
-                                     (self.gdf["Elec_dist"] < td_dist_2), "Elec_pop_calib"] = self.gdf[
-                            "Calibrated_pop"]
-                        self.gdf.loc[(self.gdf["Current_elec"] == 0) & (self.gdf["Calibrated_pop"] > min_pop) &
-                                     (self.gdf["Elec_dist"] < td_dist_2), "Current_elec"] = 1
-                        elec_modelled = (pop_elec + pop_elec_2) / total_pop
-                        break
+        i = self.i + 0.0001
+        total_pop = self.gdf["Calibrated_pop"].sum()
+        elec_pop = self.gdf.loc[self.gdf["Current_elec"] == 1, "Calibrated_pop"].sum()
+        diff = elec_pop - (total_pop * elec_rate)
+        factor = diff/self.gdf["Current_elec"].count()
 
-                if elec_modelled > elec_actual:
-                    self.gdf["Elec_pop_calib"] *= elec_actual / elec_modelled
-                pop_elec = self.gdf.loc[self.gdf["Current_elec"] == 1, "Elec_pop_calib"].sum()
-                elec_modelled = pop_elec / total_pop
 
-            # RUN_PARAM: Calibration parameters if only HV lines are available
-            else:
-                print(
-                    'No transformers or MV lines were identified as input data; '
-                    'therefore we proceed to the calibration with HV line info')
-                self.gdf.loc[
-                    (self.gdf["Elec_dist"] < dist_limit) & (self.gdf["Night_lights"] > min_night_lights) & (
-                            self.gdf["Calibrated_pop"] > min_pop), "Current_elec"] = 1
+        while elec_pop > total_pop * elec_rate:
 
-                urban_elec_modelled = self.gdf.loc[
-                    (self.gdf["Current_elec"] == 1) & (self.gdf["IsUrban"] > 1), "Elec_pop_calib"].sum()
-                rural_elec_modelled = self.gdf.loc[
-                    (self.gdf["Current_elec"] == 1) & (self.gdf["IsUrban"] <= 1), "Elec_pop_calib"].sum()
-                urban_elec_factor = urban_elec_modelled / urban_electrified
-                rural_elec_factor = rural_elec_modelled / rural_electrified
+            new_bool = (self.i <= self.combined_weight) & (self.combined_weight <= i)
 
-                if urban_elec_factor > 1:
-                    self.gdf.loc[(self.gdf["Current_elec"] == 1) & (self.gdf["IsUrban"] > 1), "Elec_pop_calib"] *= (
-                            1 / urban_elec_factor)
-                else:
-                    pass
-                if rural_elec_factor > 1:
-                    self.gdf.loc[(self.gdf["Current_elec"] == 1) & (self.gdf["IsUrban"] <= 1), "Elec_pop_calib"] *= (
-                            1 / rural_elec_factor)
-                else:
-                    pass
+            self.gdf.loc[new_bool, "Elec_pop_calib"] -= factor
+            self.gdf.loc[self.gdf["Elec_pop_calib"] < 0, "Elec_pop_calib"] = 0
+            self.gdf.loc[self.gdf["Elec_pop_calib"] == 0, "Current_elec"] = 0
+            bool = self.gdf["Current_elec"] == 1
 
-                pop_elec = self.gdf.loc[self.gdf["Current_elec"] == 1, "Elec_pop_calib"].sum()
-                elec_modelled = pop_elec / total_pop
+            elec_pop = self.gdf.loc[bool, "Elec_pop_calib"].sum()
 
-                # REVIEW. Added new calibration step for pop not meeting original steps, if prev elec pop is too small
-                i = 0
-                td_dist_2 = 0.1
-                while elec_actual - elec_modelled > 0.01:
-                    pop_elec_2 = self.gdf.loc[(self.gdf["Current_elec"] == 0) & (self.gdf["Calibrated_pop"] > min_pop) &
-                                              (self.gdf["Elec_dist"] < td_dist_2), "Calibrated_pop"].sum()
-                    if i < 50:
-                        if (pop_elec + pop_elec_2) / total_pop > elec_actual:
-                            elec_modelled = (pop_elec + pop_elec_2) / total_pop
-                            self.gdf.loc[(self.gdf["Current_elec"] == 0) & (self.gdf["Calibrated_pop"] > min_pop) &
-                                         (self.gdf["Elec_dist"] < td_dist_2), "Elec_pop_calib"] = self.gdf[
-                                "Calibrated_pop"]
-                            self.gdf.loc[(self.gdf["Current_elec"] == 0) & (self.gdf["Calibrated_pop"] > min_pop) &
-                                         (self.gdf["Elec_dist"] < td_dist_2), "Current_elec"] = 1
-                        else:
-                            i += 1
-                            td_dist_2 += 0.1
-                    else:
-                        self.gdf.loc[(self.gdf["Current_elec"] == 0) & (self.gdf["Calibrated_pop"] > min_pop) &
-                                     (self.gdf["Elec_dist"] < td_dist_2), "Elec_pop_calib"] = self.gdf[
-                            "Calibrated_pop"]
-                        self.gdf.loc[(self.gdf["Current_elec"] == 0) & (self.gdf["Calibrated_pop"] > min_pop) &
-                                     (self.gdf["Elec_dist"] < td_dist_2), "Current_elec"] = 1
-                        elec_modelled = (pop_elec + pop_elec_2) / total_pop
-                        break
+            new_bool = bool & new_bool
+            if new_bool.sum() == 0:
+                i = i + 0.0001
 
-                if elec_modelled > elec_actual:
-                    self.gdf["Elec_pop_calib"] *= elec_actual / elec_modelled
-                pop_elec = self.gdf.loc[self.gdf["Current_elec"] == 1, "Elec_pop_calib"].sum()
-                elec_modelled = pop_elec / total_pop
+        self.gdf.loc[self.gdf["Current_elec"] == 0, "Elec_pop_calib"] = 0
 
-            urban_elec_ratio = self.gdf.loc[(self.gdf["Current_elec"] == 1) & (
-                    self.gdf["IsUrban"] > 1), "Elec_pop_calib"].sum() / urban_pop
-            rural_elec_ratio = self.gdf.loc[(self.gdf["Current_elec"] == 1) & (
-                    self.gdf["IsUrban"] <= 1), "Elec_pop_calib"].sum() / rural_pop
-
-            condition = 1
-
-        self.gdf["Final_Elec_Code" + "{}".format(self.specs["Start_year"])] = \
-            self.gdf.apply(lambda row: 1 if row["Current_elec"] == 1 else 99, axis=1)
 
     def calibrate_pop(self):
 
