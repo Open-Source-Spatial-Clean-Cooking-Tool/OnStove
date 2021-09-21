@@ -300,7 +300,7 @@ class Technology:
         discount_rate, proj_life = self.discount_factor(specs_file)
 
         energy = specs_file["Meals_per_day"] * 365 * 3.64 / self.efficiency
-        gdf["needed_energy"] = specs["Meals_per_day"] * 365 * 3.64 / self.efficiency
+        gdf["needed_energy"] = specs_file["Meals_per_day"] * 365 * 3.64 / self.efficiency
 
         energy_needed = energy * np.ones(proj_life)
 

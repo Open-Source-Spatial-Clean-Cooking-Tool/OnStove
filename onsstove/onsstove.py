@@ -387,7 +387,7 @@ class OnSSTOVE:
                                                           self.specs["Min_Night_Lights"])
 
     def current_elec(self):
-
+        self.normalize_for_electricity()
         elec_rate = self.specs["Elec_rate"]
 
         self.gdf["Current_elec"] = 0
