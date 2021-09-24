@@ -320,13 +320,13 @@ class Technology:
 
         self.discounted_fuel_cost = pd.Series(fuel_cost_discounted, index=gdf.index)
 
-    def total_time(self, onstove):
+    def total_time(self, model):
         self.total_time_yr = self.time_of_cooking * 365
 
     def time_saved(self, onstove):
         if self.is_base:
-            self.total_time_saved = 0
-            self.time_value = 0
+            self.total_time_saved = np.zeros(onstove.gdf.shape[0])
+            self.time_value = np.zeros(onstove.gdf.shape[0])
         else:
             proj_life = onstove.specs['End_year'] - onstove.specs['Start_year']
             self.total_time(onstove)
@@ -382,16 +382,17 @@ class LPG(Technology):
         self.lpg_path = lpg_path
         self.friction_path = friction_path
 
-    def add_travel_time(self, population, out_path):
-        lpg = VectorLayer(self.name, 'LPG_points', layer_path=self.lpg_path)
-        friction = RasterLayer(self.name, 'friction', layer_path=self.friction_path, resample='average')
+    def add_travel_time(self, model, align=False):
+        lpg = VectorLayer(self.name, 'Suppliers', layer_path=self.lpg_path)
+        friction = RasterLayer(self.name, 'Friction', layer_path=self.friction_path, resample='average')
 
-        os.makedirs(os.path.join(out_path, self.name, 'LPG_points'), exist_ok=True)
-        lpg.reproject(population.meta['crs'], os.path.join(out_path, self.name, 'LPG_points'))
-        friction.align(population.path, os.path.join(out_path, self.name, 'friction'))
+        if align:
+            os.makedirs(os.path.join(model.output_directory, self.name, 'Suppliers'), exist_ok=True)
+            lpg.reproject(model.base_layer.meta['crs'], os.path.join(model.output_directory, self.name, 'Suppliers'))
+            friction.align(model.base_layer.path, os.path.join(model.output_directory, self.name, 'Friction'))
 
         lpg.add_friction_raster(friction)
-        lpg.travel_time(os.path.join(out_path, self.name))
+        lpg.travel_time(os.path.join(model.output_directory, self.name))
         interpolate(lpg.distance_raster.path)
         self.travel_time = 2 * lpg.distance_raster.layer
 
@@ -455,22 +456,23 @@ class Biomass(Technology):
         self.forest_path = forest_path
         self.friction_path = friction_path
 
-    def transportation_time(self, friction_path, forest_path, onstove):
-        forest = RasterLayer(self.name, 'forest', layer_path=forest_path, resample='mode')
-        friction = RasterLayer(self.name, 'friction', layer_path=friction_path, resample='average')
+    def transportation_time(self, friction_path, forest_path, model, align=False):
+        forest = RasterLayer(self.name, 'Forest', layer_path=forest_path, resample='mode')
+        friction = RasterLayer(self.name, 'Friction', layer_path=friction_path, resample='average')
 
-        forest.align(onstove.base_layer.path, os.path.join(onstove.output_directory, self.name, 'Forest_points'))
-        friction.align(onstove.base_layer.path, os.path.join(onstove.output_directory, self.name, 'friction'))
+        if align:
+            forest.align(model.base_layer.path, os.path.join(model.output_directory, self.name, 'Forest'))
+            friction.align(model.base_layer.path, os.path.join(model.output_directory, self.name, 'Friction'))
 
         forest.add_friction_raster(friction)
-        forest.travel_time(os.path.join(onstove.output_directory, self.name))
+        forest.travel_time(os.path.join(model.output_directory, self.name))
 
-        self.travel_time = 2 * pd.Series(forest.distance_raster.layer[onstove.rows, onstove.cols],
-                                         index=onstove.gdf.index)
+        self.travel_time = 2 * pd.Series(forest.distance_raster.layer[model.rows, model.cols],
+                                         index=model.gdf.index)
 
-    def total_time(self, onstove):
-        self.transportation_time(self.friction_path, self.forest_path, onstove)
-        self.total_time_yr = self.time_of_cooking * onstove.specs['Meals_per_day'] * 365 + (
+    def total_time(self, model):
+        self.transportation_time(self.friction_path, self.forest_path, model)
+        self.total_time_yr = self.time_of_cooking * model.specs['Meals_per_day'] * 365 + (
                 self.travel_time + self.time_of_collection) * 52 * 2
 
 

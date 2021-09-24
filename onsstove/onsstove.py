@@ -92,7 +92,7 @@ class DataProcessor:
             if base_layer:
                 if not self.cell_size:
                     self.cell_size = (layer.meta['transform'][0],
-                                      abs(layer.meta['transform'][1]))
+                                      abs(layer.meta['transform'][4]))
                 if not self.project_crs:
                     self.project_crs = layer.meta['crs']
 
@@ -112,26 +112,26 @@ class DataProcessor:
         else:
             self.layers[category] = {name: layer}
 
-    def add_mask_layer(self, name, layer_path, postgres=False):
+    def add_mask_layer(self, category, name, layer_path, postgres=False, query=None):
         """
         Adds a vector layer to self.mask_layer, which will be used to mask all
         other layers into is boundaries
         """
         if postgres:
-            sql = f'SELECT * FROM {layer_path}'
-            self.mask_layer = gpd.read_postgis(sql, self.conn)
+            self.mask_layer = VectorLayer(category, name, layer_path, self.conn, query)
         else:
-            self.mask_layer = gpd.read_file(layer_path)
+            self.mask_layer = VectorLayer(category, name, layer_path, query=query)
 
-        if self.mask_layer.crs != self.project_crs:
-            self.mask_layer.to_crs(self.project_crs, inplace=True)
+        if self.mask_layer.layer.crs != self.project_crs:
+            output_path = os.path.join(self.output_directory, category, name)
+            self.mask_layer.reproject(self.project_crs, output_path)
 
     def mask_layers(self, datasets='all'):
         """
         Uses the previously added mask layer in self.mask_layer to mask all
         other layers to its boundaries
         """
-        if not isinstance(self.mask_layer, gpd.GeoDataFrame):
+        if not isinstance(self.mask_layer, VectorLayer):
             raise Exception('The `mask_layer` attribute is empty, please first ' + \
                             'add a mask layer using the `.add_mask_layer` method.')
         datasets = self.get_layers(datasets)
@@ -140,9 +140,13 @@ class DataProcessor:
                 output_path = os.path.join(self.output_directory,
                                            category, name)
                 os.makedirs(output_path, exist_ok=True)
-                layer.mask(self.mask_layer, output_path)
+                if name != self.base_layer.name:
+                    all_touched = True
+                else:
+                    all_touched = False
+                layer.mask(self.mask_layer.layer, output_path, all_touched=all_touched)
                 if isinstance(layer.friction, RasterLayer):
-                    layer.friction.mask(self.mask_layer, output_path)
+                    layer.friction.mask(self.mask_layer.layer, output_path)
 
     def align_layers(self, datasets='all'):
         datasets = self.get_layers(datasets)
@@ -186,10 +190,10 @@ class DataProcessor:
                                            category, name)
                 os.makedirs(output_path, exist_ok=True)
                 layer.get_distance_raster(self.base_layer.path,
-                                          output_path, self.mask_layer)
+                                          output_path, self.mask_layer.layer)
                 if isinstance(layer.friction, RasterLayer):
                     layer.friction.get_distance_raster(self.base_layer.path,
-                                                       output_path, self.mask_layer)
+                                                       output_path, self.mask_layer.layer)
 
     def normalize_rasters(self, datasets='all'):
         """
@@ -200,7 +204,7 @@ class DataProcessor:
             for name, layer in layers.items():
                 output_path = os.path.join(self.output_directory,
                                            category, name)
-                layer.distance_raster.normalize(output_path, self.mask_layer)
+                layer.distance_raster.normalize(output_path, self.mask_layer.layer)
 
     @staticmethod
     def index(layers):
@@ -220,7 +224,7 @@ class DataProcessor:
         output_path = os.path.join(self.output_directory,
                                    'Indexes', 'Demand Index')
         os.makedirs(output_path, exist_ok=True)
-        layer.normalize(output_path, self.mask_layer)
+        layer.normalize(output_path, self.mask_layer.layer)
         layer.normalized.name = 'Demand Index'
         self.demand_index = layer.normalized
 
@@ -232,7 +236,7 @@ class DataProcessor:
         output_path = os.path.join(self.output_directory,
                                    'Indexes', 'Supply Index')
         os.makedirs(output_path, exist_ok=True)
-        layer.normalize(output_path, self.mask_layer)
+        layer.normalize(output_path, self.mask_layer.layer)
         layer.normalized.name = 'Supply Index'
         self.supply_index = layer.normalized
 
@@ -244,7 +248,7 @@ class DataProcessor:
         output_path = os.path.join(self.output_directory,
                                    'Indexes', 'Clean Cooking Potential Index')
         os.makedirs(output_path, exist_ok=True)
-        layer.normalize(output_path, self.mask_layer)
+        layer.normalize(output_path, self.mask_layer.layer)
         layer.normalized.name = 'Clean Cooking Potential Index'
         self.clean_cooking_index = layer.normalized
 
@@ -260,7 +264,7 @@ class DataProcessor:
                 layer.save(output_path)
 
 
-class OnSSTOVE:
+class OnSSTOVE(DataProcessor):
     """
     Class containing the methods to perform a geospatial max-benefit analysis
     on clean cooking access
@@ -274,11 +278,7 @@ class OnSSTOVE:
         """
         Initializes the class and sets an empty layers dictionaries.
         """
-        self.layers = {}
-        self.project_crs = project_crs
-        self.cell_size = cell_size
-        self.output_directory = output_directory
-        self.mask_layer = None
+        super().__init__(project_crs, cell_size, output_directory)
         self.specs = None
         self.techs = None
         self.base_fuel = None
@@ -370,12 +370,12 @@ class OnSSTOVE:
 
     def normalize_for_electricity(self):
 
-        if "Transformer_dist" in self.gdf.columns:
-            self.gdf["Elec_dist"] = self.gdf["Transformer_dist"]
-        elif "MV_line_dist" in self.gdf.columns:
-            self.gdf["Elec_dist"] = self.gdf["MV_line_dist"]
+        if "Transformers_dist" in self.gdf.columns:
+            self.gdf["Elec_dist"] = self.gdf["Transformers_dist"]
+        elif "MV_lines_dist" in self.gdf.columns:
+            self.gdf["Elec_dist"] = self.gdf["MV_lines_dist"]
         else:
-            self.gdf["Elec_dist"] = self.gdf["HV_line_dist"]
+            self.gdf["Elec_dist"] = self.gdf["HV_lines_dist"]
 
         elec_dist = self.normalized("Elec_dist", inverse = True)
         ntl = self.normalized("Night_lights")
@@ -466,11 +466,17 @@ class OnSSTOVE:
                                          name=layer.distance_raster.name,
                                          method='read')
 
-    def population_to_dataframe(self, layer):
+    def population_to_dataframe(self, layer=None):
         """
         Takes a population `RasterLayer` as input and extracts the populated points to a GeoDataFrame that is
         saved in `OnSSTOVE.gdf`.
         """
+        if not layer:
+            if self.base_layer:
+                layer = self.base_layer
+            else:
+                raise ValueError("No population layer was provided as input to the method or in the model base_layer")
+
         self.rows, self.cols = np.where(~np.isnan(layer.layer))
         x, y = rasterio.transform.xy(layer.meta['transform'],
                                      self.rows, self.cols,
@@ -485,14 +491,14 @@ class OnSSTOVE:
         Takes a RasterLayer and a method (sample or read), gets the values from the raster layer using the population points previously extracted and saves the values in a new column of OnSSTOVE.gdf
         """
         if method == 'sample':
-            self.gdf[name] = sample_raster(layer, self.gdf)
+            with rasterio.open(layer) as src:
+                if src.meta['crs'] != self.gdf.crs:
+                    self.gdf[name] = sample_raster(layer, self.gdf.to_crs(src.meta['crs']))
         elif method == 'read':
             self.gdf[name] = layer[self.rows, self.cols]
 
     def calibrate_urban_current_and_future_GHS(self, GHS_path):
-        layer = RasterLayer('Demographics', 'GHS', GHS_path, resample='nearest')
-        layer.reproject(self.project_crs, self.output_directory)
-        self.raster_to_dataframe(layer.path, name="IsUrban", method='sample')
+        self.raster_to_dataframe(GHS_path, name="IsUrban", method='sample')
 
         if self.specs["End_year"] > self.specs["Start_year"]:
             population_current = self.specs["Population_end_year"]
@@ -548,99 +554,83 @@ class OnSSTOVE:
         self.gdf.loc[self.gdf["IsUrban"] > 20, 'Households'] = self.gdf.loc[self.gdf["IsUrban"] > 20, 'Calibrated_pop'] / \
                                                                self.specs["Urban_HHsize"]
 
-    def get_value_of_time(self, wealth):
+    def get_value_of_time(self):
         """
         Calculates teh value of time based on the minimum wage ($/h) and a
         GIS raster map as wealth index, poverty or GDP
         ----
         0.5 is the upper limit for minimum wage and 0.2 the lower limit
         """
-        wealth.layer[wealth.layer < 0] = np.nan
-        wealth.meta['nodata'] = np.nan
+        min_value = np.nanmin(self.gdf['relative_wealth'])
+        max_value = np.nanmax(self.gdf['relative_wealth'])
+        norm_layer = (self.gdf['relative_wealth'] - min_value) / (max_value - min_value) * (0.5 - 0.2) + 0.2
+        self.gdf['value_of_time'] = norm_layer * self.specs['Minimum_wage'] / 30 / 24  # convert $/months to $/h
 
-        min_value = np.nanmin(wealth.layer)
-        max_value = np.nanmax(wealth.layer)
-        norm_layer = (wealth.layer - min_value) / (max_value - min_value) * (0.5 - 0.2) + 0.2
-        self.value_of_time = norm_layer * self.specs['Minimum_wage'] / 30 / 24  # convert $/months to $/h
-        self.raster_to_dataframe(self.value_of_time, name='value_of_time', method='read')
 
     def maximum_net_benefit(self):
         net_benefit_cols = [col for col in self.gdf if 'net_benefit_' in col]
         self.gdf["max_benefit_tech"] = self.gdf[net_benefit_cols].idxmax(axis=1)
 
         self.gdf['max_benefit_tech'] = self.gdf['max_benefit_tech'].str.replace("net_benefit_", "")
-        self.gdf["maximum_net_benefit"] = self.gdf[net_benefit_cols].max(axis=1) #* self.gdf['Households']
+        self.gdf["maximum_net_benefit"] = self.gdf[net_benefit_cols].max(axis=1)  # * self.gdf['Households']
 
-        current_elect = self.gdf["Current_elec"] == 1
-        elect_fraction = self.gdf.loc[current_elect, "Elec_pop_calib"] / self.gdf.loc[current_elect, "Calibrated_pop"]
-        self.gdf.loc[current_elect, "maximum_net_benefit"] *= elect_fraction
+        current_elect = (self.gdf['Current_elec'] == 1) & (self.gdf['Elec_pop_calib'] < self.gdf['Calibrated_pop']) & \
+                        (self.gdf["max_benefit_tech"] == 'Electricity')
+        if current_elect.sum() > 0:
+            elect_fraction = self.gdf.loc[current_elect, "Elec_pop_calib"] / self.gdf.loc[
+                current_elect, "Calibrated_pop"]
+            self.gdf.loc[current_elect, "maximum_net_benefit"] *= elect_fraction
 
-        bool_vect = (self.gdf['Current_elec'] == 1) & (self.gdf['Elec_pop_calib'] < self.gdf['Calibrated_pop'])
-        second_benefit_cols = [col for col in self.gdf if 'net_benefit_' in col]
-        second_benefit_cols.remove('net_benefit_Electricity')
-        second_best = self.gdf.loc[bool_vect, second_benefit_cols].idxmax(axis=1).str.replace("net_benefit_", "")
+            second_benefit_cols = [col for col in self.gdf if 'net_benefit_' in col]
+            second_benefit_cols.remove('net_benefit_Electricity')
+            second_best = self.gdf.loc[current_elect, second_benefit_cols].idxmax(axis=1).str.replace("net_benefit_",
+                                                                                                      "")
 
-        current_biogas = (self.gdf["needed_energy"]*gdf["Households"] <= self.gdf["available_biogas_energy"]) &\
-                         (self.gdf["max_benefit_tech"] == 'Biogas')
-        biogas_fraction = self.gdf.loc[current_biogas, "available_biogas_energy"] / \
-                          self.gdf.loc[current_biogas, "needed_energy"]
-        self.gdf.loc[current_biogas, "maximum_net_benefit"] *= biogas_fraction
+            second_best_value = self.gdf.loc[current_elect, second_benefit_cols].max(axis=1) * (1 - elect_fraction)
+            second_tech_net_benefit = second_best_value  # * self.gdf.loc[current_elect, 'Households']
+            dff = self.gdf.loc[current_elect].copy()
+            dff['max_benefit_tech'] = second_best
+            dff['maximum_net_benefit'] = second_tech_net_benefit
+            dff['Calibrated_pop'] *= (1 - elect_fraction)
+            dff['Elec_pop_calib'] *= (1 - elect_fraction)
+            dff['Households'] *= (1 - elect_fraction)
 
-        biogas_bool = (self.gdf["needed_energy"]*gdf["Households"] <= self.gdf["available_biogas_energy"])
-        second_benefit_cols = [col for col in self.gdf if 'net_benefit_' in col]
-        second_benefit_cols.remove('net_benefit_Biogas')
-        second_best_biogas = self.gdf.loc[biogas_bool, second_benefit_cols].idxmax(axis=1).str.replace("net_benefit_", "")
+            self.gdf.loc[current_elect, 'Calibrated_pop'] *= elect_fraction
+            self.gdf.loc[current_elect, 'Elec_pop_calib'] *= elect_fraction
+            self.gdf.loc[current_elect, 'Households'] *= elect_fraction
+            self.gdf = self.gdf.append(dff)
 
-        second_best_value = self.gdf.loc[current_elect, second_benefit_cols].max(axis=1) * (1 - elect_fraction)
-        second_tech_net_benefit = second_best_value #* self.gdf.loc[current_elect, 'Households']
-        dff = self.gdf.loc[current_elect].copy()
-        dff['max_benefit_tech'] = second_best
-        dff['maximum_net_benefit'] = second_tech_net_benefit
-        dff['Calibrated_pop'] *= (1 - elect_fraction)
-        dff['Elec_pop_calib'] *= (1 - elect_fraction)
-        dff['Households'] *= (1 - elect_fraction)
+        # current_biogas = (self.gdf["needed_energy"] * self.gdf["Households"] >= self.gdf["available_biogas_energy"]) & \
+        #                  (self.gdf["max_benefit_tech"] == 'Biogas')
+        # if current_biogas.sum() > 0:
+        #     biogas_fraction = self.gdf.loc[current_biogas, "available_biogas_energy"] / \
+        #                       self.gdf.loc[current_biogas, "needed_energy"]
+        #     self.gdf.loc[current_biogas, "maximum_net_benefit"] *= biogas_fraction
+        #
+        #     second_benefit_cols = [col for col in self.gdf if 'net_benefit_' in col]
+        #     second_benefit_cols.remove('net_benefit_Biogas')
+        #     second_best_biogas = self.gdf.loc[current_biogas, second_benefit_cols].idxmax(axis=1).str.replace("net_benefit_", "")
+        #
+        #     second_best_value = self.gdf.loc[current_biogas, second_benefit_cols].max(axis=1) * (1 - biogas_fraction)
+        #     second_tech_net_benefit = second_best_value #* self.gdf.loc[current_elect, 'Households']
+        #     dff = self.gdf.loc[current_biogas].copy()
+        #     dff['max_benefit_tech'] = second_best_biogas
+        #     dff['maximum_net_benefit'] = second_tech_net_benefit
+        #     dff['Calibrated_pop'] *= (1 - biogas_fraction)
+        #     dff['Households'] *= (1 - biogas_fraction)
+        #
+        #     self.gdf.loc[current_biogas, 'Calibrated_pop'] *= biogas_fraction
+        #     self.gdf.loc[current_biogas, 'Households'] *= biogas_fraction
+        #     self.gdf = self.gdf.append(dff)
 
-        self.gdf.loc[current_elect, 'Calibrated_pop'] *= elect_fraction
-        self.gdf.loc[current_elect, 'Elec_pop_calib'] *= elect_fraction
-        self.gdf.loc[current_elect, 'Households'] *= elect_fraction
-        self.gdf = self.gdf.append(dff)
-
-        benefit_cols = self.gdf.columns.str.contains('benefit')
-        benefit_cols[np.where(self.gdf.columns == 'max_benefit_tech')] = False
-        cost_cols = self.gdf.columns.str.contains('costs')
-        columns = self.gdf.columns[benefit_cols | cost_cols]
-        for col in columns:
-            self.gdf[col] *= self.gdf['Households']
-
-        second_best_value = self.gdf.loc[current_biogas, second_benefit_cols].max(axis=1) * (1 - biogas_fraction)
-        second_tech_net_benefit = second_best_value #* self.gdf.loc[current_elect, 'Households']
-        dff = self.gdf.loc[current_biogas].copy()
-        dff['max_benefit_tech'] = second_best_biogas
-        dff['maximum_net_benefit'] = second_tech_net_benefit
-        dff['Calibrated_pop'] *= (1 - biogas_fraction)
-        dff['Elec_pop_calib'] *= (1 - biogas_fraction)
-        dff['Households'] *= (1 - biogas_fraction)
-
-        self.gdf.loc[current_biogas, 'Calibrated_pop'] *= biogas_fraction
-        self.gdf.loc[current_biogas, 'Biogas_pop_calib'] *= biogas_fraction
-        self.gdf.loc[current_biogas, 'Households'] *= biogas_fraction
-        self.gdf = self.gdf.append(dff)
-
-        benefit_cols = self.gdf.columns.str.contains('benefit')
-        benefit_cols[np.where(self.gdf.columns == 'max_benefit_tech')] = False
-        cost_cols = self.gdf.columns.str.contains('costs')
-        columns = self.gdf.columns[benefit_cols | cost_cols]
-        for col in columns:
-            self.gdf[col] *= self.gdf['Households']
-
-    def add_admin_names(self, admin):
+    def add_admin_names(self, admin, column_name):
 
         if isinstance(admin, str):
             admin = gpd.read_file(admin)
 
         admin.to_crs(self.gdf.crs, inplace=True)
 
-        self.gdf = gpd.sjoin(self.gdf, admin_c, how="inner", op='intersects')
+        self.gdf = gpd.sjoin(self.gdf, admin[[column_name, 'geometry']], how="inner", op='intersects')
 
 
     def lives_saved(self):
@@ -713,7 +703,7 @@ class OnSSTOVE:
                 return dist, indexes
 
             results1, results2 = do_kdtree(s2_arr, s1_arr)
-            self.gdf["relative_wealth"] = gdf.loc[results2].reset_index()[wealth_column]
+            self.gdf["relative_wealth"] = gdf.loc[results2][wealth_column].values
 
         elif file_type == "point":
             gdf = gpd.read_file(wealth_index)
@@ -738,11 +728,11 @@ class OnSSTOVE:
 
             self.gdf = gpd.sjoin(self.gdf, gdf["relative_wealth"], how="inner", op='intersects')
         elif file_type == "raster":
-            layer = RasterLayer('Indexes', 'Demand_index', layer_path = wealth_index, resample = 'mean')
+            layer = RasterLayer('Demographics', 'Wealth', layer_path=wealth_index, resample='average')
 
-            layer.align(self.base_layer)
+            layer.align(self.base_layer.path)
 
-            self.raster_to_dataframe(layer, name="relative_wealth", method='read')
+            self.raster_to_dataframe(layer.layer, name="relative_wealth", method='read')
         else:
             raise ValueError("file_type needs to be either csv, raster, polygon or point.")
 

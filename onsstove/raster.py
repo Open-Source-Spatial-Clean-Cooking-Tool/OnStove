@@ -17,7 +17,7 @@ from osgeo import gdal, osr
 import gzip
 
 
-def align_raster(raster_1, raster_2, method='nearest', compression='NONE'):
+def align_raster(raster_1, raster_2, method='nearest', compression='DEFLATE'):
     with rasterio.open(raster_1) as src:
         raster_1_meta = src.meta
     with rasterio.open(raster_2) as src:
@@ -96,7 +96,7 @@ def proximity_raster(src_filename, dst_filename, values, compression):
     dst_ds = None
 
 
-def mask_raster(raster_path, mask_layer, output_file, nodata=0, compression='NONE'):
+def mask_raster(raster_path, mask_layer, output_file, nodata=0, compression='NONE', all_touched=False):
     if isinstance(mask_layer, str):
         with fiona.open(mask_layer, "r") as shapefile:
             shapes = [feature["geometry"] for feature in shapefile]
@@ -108,11 +108,13 @@ def mask_raster(raster_path, mask_layer, output_file, nodata=0, compression='NON
     if '.gz' in raster_path:
         with gzip.open(raster_path) as gzip_infile:
             with rasterio.open(gzip_infile) as src:
-                out_image, out_transform = rasterio.mask.mask(src, shapes, crop=True, nodata=nodata)
+                out_image, out_transform = rasterio.mask.mask(src, shapes, crop=True, nodata=nodata,
+                                                              all_touched=all_touched)
                 out_meta = src.meta
     else:
         with rasterio.open(raster_path) as src:
-            out_image, out_transform = rasterio.mask.mask(src, shapes, crop=True, nodata=nodata)
+            out_image, out_transform = rasterio.mask.mask(src, shapes, crop=True, nodata=nodata,
+                                                          all_touched=all_touched)
             out_meta = src.meta
 
     out_meta.update({"driver": "GTiff",
@@ -127,9 +129,9 @@ def mask_raster(raster_path, mask_layer, output_file, nodata=0, compression='NON
         dest.write(out_image)
 
 
-def reproject_raster(raster_path, dst_crs, output_file=None,
+def reproject_raster(raster_path, dst_crs,
                      cell_width=None, cell_height=None, method='nearest',
-                     compression='NONE'):
+                     compression='DEFLATE'):
     """
     Resamples and/or reproject a raster layer.
     """
@@ -160,31 +162,31 @@ def reproject_raster(raster_path, dst_crs, output_file=None,
             'compress': compression
         })
         # The layer is then reprojected/resampled
-        if output_file:
-            # if an output file path was provided, then the layer is saved
-            with rasterio.open(output_file, 'w', **out_meta) as dst:
-                for i in range(1, src.count + 1):
-                    reproject(
-                        source=rasterio.band(src, i),
-                        destination=rasterio.band(dst, i),
-                        src_transform=src.transform,
-                        src_crs=src.crs,
-                        dst_transform=transform,
-                        dst_crs=dst_crs,
-                        resampling=Resampling[method])
-        else:
+        # if output_file:
+        #     # if an output file path was provided, then the layer is saved
+        #     with rasterio.open(output_file, 'w', **out_meta) as dst:
+        #         for i in range(1, src.count + 1):
+        #             reproject(
+        #                 source=rasterio.band(src, i),
+        #                 destination=rasterio.band(dst, i),
+        #                 src_transform=src.transform,
+        #                 src_crs=src.crs,
+        #                 dst_transform=transform,
+        #                 dst_crs=dst_crs,
+        #                 resampling=Resampling[method])
+        # else:
             # If not outputfile is provided, then a numpy array and the 
             # metadata if returned
-            destination = np.full((height, width), src.nodata)
-            reproject(
-                source=rasterio.band(src, 1),
-                destination=destination,
-                src_transform=src.transform,
-                src_crs=src.crs,
-                dst_transform=transform,
-                dst_crs=dst_crs,
-                resampling=Resampling[method])
-            return destination, out_meta
+        destination = np.full((height, width), src.nodata)
+        reproject(
+            source=rasterio.band(src, 1),
+            destination=destination,
+            src_transform=src.transform,
+            src_crs=src.crs,
+            dst_transform=transform,
+            dst_crs=dst_crs,
+            resampling=Resampling[method])
+        return destination, out_meta
 
 
 def sample_raster(path, gdf):

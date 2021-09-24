@@ -18,7 +18,7 @@ class Layer:
     def __init__(self, category, name, layer_path=None,
                  conn=None, normalization=None,
                  inverse=False, distance=None,
-                 distance_limit=float('inf'), resample=None):
+                 distance_limit=float('inf'), resample='nearest'):
         self.category = category
         self.name = name
         self.normalization = normalization
@@ -76,7 +76,7 @@ class VectorLayer(Layer):
     distance algorithm.
     """
 
-    def __init__(self, category, name, layer_path, conn=None, query=None,
+    def __init__(self, category, name, layer_path=None, conn=None, query=None,
                  normalization='MinMax', inverse=False, distance='proximity',
                  distance_limit=float('inf')):
         """
@@ -100,14 +100,15 @@ class VectorLayer(Layer):
         return 'Vector' + super().__str__()
 
     def read_layer(self, layer_path, conn=None):
-        if conn:
-            sql = f'SELECT * FROM {layer_path}'
-            self.layer = gpd.read_postgis(sql, conn)
-        else:
-            self.layer = gpd.read_file(layer_path)
+        if layer_path:
+            if conn:
+                sql = f'SELECT * FROM {layer_path}'
+                self.layer = gpd.read_postgis(sql, conn)
+            else:
+                self.layer = gpd.read_file(layer_path)
         self.path = layer_path
 
-    def mask(self, mask_layer, output_path):
+    def mask(self, mask_layer, output_path, all_touched=True):
         self.layer = gpd.clip(self.layer, mask_layer.to_crs(self.layer.crs))
         self.save(output_path)
 
@@ -201,23 +202,22 @@ class RasterLayer(Layer):
                 self.meta = src.meta
         self.path = layer_path
 
-    def mask(self, mask_layer, output_path):
+    def mask(self, mask_layer, output_path, all_touched=False):
         output_file = os.path.join(output_path,
                                    self.name + '.tif')
         mask_raster(self.path, mask_layer.to_crs(self.meta['crs']),
-                    output_file, np.nan, 'DEFLATE')
+                    output_file, np.nan, 'DEFLATE', all_touched=all_touched)
         self.read_layer(output_file)
 
     def reproject(self, crs, output_path,
                   cell_width=None, cell_height=None):
-        if self.meta['crs'] != crs:
-            output_file = os.path.join(output_path,
-                                       self.name + ' - reprojected.tif')
-            reproject_raster(self.path, crs, output_file=output_file,
-                             cell_width=cell_width, cell_height=cell_height,
-                             method=self.resample, compression='DEFLATE')
-
-            self.read_layer(output_file)
+        if (self.meta['crs'] != crs) or cell_width:
+            data, meta = reproject_raster(self.path, crs,
+                                          cell_width=cell_width, cell_height=cell_height,
+                                          method=self.resample, compression='DEFLATE')
+            self.layer = data
+            self.meta = meta
+            self.save(output_path)
 
     def get_distance_raster(self, base_layer, output_path,
                             mask_layer):
@@ -269,7 +269,7 @@ class RasterLayer(Layer):
                                    self.name + f'{sufix}.tif')
         self.path = output_file
         os.makedirs(output_path, exist_ok=True)
-        self.meta.update(dtype=self.layer.dtype)
+        self.meta.update(dtype=self.layer.dtype, compress='DEFLATE')
         with rasterio.open(output_file, "w", **self.meta) as dest:
             dest.write(self.layer, indexes=1)
 
@@ -285,13 +285,13 @@ class RasterLayer(Layer):
         else:
             raise ValueError('Raster file type or object not recognized.')
 
-    def align(self, base_layer, output_path = None):
+    def align(self, base_layer, output_path=None):
         layer, meta = align_raster(base_layer, self.path,
                                    method=self.resample)
         self.layer = layer
         self.meta = meta
         if output_path:
-            self.save(output_path, ' - aligned')
+            self.save(output_path)
 
     def plot(self):
         fig, ax = plt.subplots(1, 1, figsize=(16, 9))
