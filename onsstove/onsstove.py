@@ -631,7 +631,8 @@ class OnSSTOVE(DataProcessor):
         admin.to_crs(self.gdf.crs, inplace=True)
 
         self.gdf = gpd.sjoin(self.gdf, admin[[column_name, 'geometry']], how="inner", op='intersects')
-
+        self.gdf.drop('index_right', axis=1, inplace=True)
+        self.gdf.sort_index(inplace=True)
 
     def lives_saved(self):
         self.gdf["deaths_avoided"] = self.gdf.apply(
@@ -736,7 +737,7 @@ class OnSSTOVE(DataProcessor):
         else:
             raise ValueError("file_type needs to be either csv, raster, polygon or point.")
 
-    def to_raster(self, variable):
+    def _create_layer(self, variable):
         layer = self.base_layer.layer.copy()
         tech_codes = None
         if isinstance(self.gdf[variable].iloc[0], str):
@@ -750,9 +751,13 @@ class OnSSTOVE(DataProcessor):
             dff = self.gdf.copy().reset_index(drop=False)
             dff = dff.groupby('index').agg({variable: 'sum'})
             layer[self.rows, self.cols] = dff[variable]
-
         raster = RasterLayer('Output', variable)
         raster.layer = layer
+
+        return raster, tech_codes
+
+    def to_raster(self, variable):
+        raster, tech_codes = self._create_layer(variable)
         raster.meta = self.base_layer.meta
         raster.save(os.path.join(self.output_directory, 'Output'))
         print(f'Layer saved in {os.path.join(self.output_directory, "Output", variable + ".tif")}\n')
@@ -761,3 +766,15 @@ class OnSSTOVE(DataProcessor):
             for tech, value in tech_codes.items():
                 print('    ' + tech + ':', value)
             print('')
+
+    def plot(self, variable, cmap='viridis', cumulative_count=None, legend_position=(1.05, 1)):
+        raster, tech_codes = self._create_layer(variable)
+        raster.bounds = self.base_layer.bounds
+        return raster.plot(cmap=cmap, cumulative_count=cumulative_count,
+                           categories=tech_codes, legend_position=legend_position)
+
+    def to_image(self, variable, cmap='viridis', cumulative_count=None, legend_position=(1.05, 1)):
+        raster, tech_codes = self._create_layer(variable)
+        raster.bounds = self.base_layer.bounds
+        raster.save_png(self.output_directory, cmap=cmap, cumulative_count=cumulative_count,
+                        categories=tech_codes, legend_position=legend_position)

@@ -5,7 +5,7 @@ import pandas as pd
 import datetime
 from skimage.graph.mcp import MCP_Geometric
 import matplotlib.pyplot as plt
-import matplotlib
+import matplotlib.patches as mpatches
 
 from .raster import *
 
@@ -200,6 +200,7 @@ class RasterLayer(Layer):
             with rasterio.open(layer_path) as src:
                 self.layer = src.read(1)
                 self.meta = src.meta
+                self.bounds = src.bounds
         self.path = layer_path
 
     def mask(self, mask_layer, output_path, all_touched=False):
@@ -293,10 +294,57 @@ class RasterLayer(Layer):
         if output_path:
             self.save(output_path)
 
-    def plot(self):
+    def cumulative_count(self, min_max=[0.02, 0.98]):
+        x = self.layer.flat
+        x = np.sort(x[~np.isnan(x)])
+        count = x.shape[0]
+        max_val = x[int(count * min_max[1])]
+        min_val = x[int(count * min_max[0])]
+        self.layer[self.layer > max_val] = max_val
+        self.layer[self.layer < min_val] = min_val
+
+    def category_legend(self, im, categories, legend_position=(1.05, 1)):
+        values = list(categories.values())
+        titles = list(categories.keys())
+
+        colors = [im.cmap(im.norm(value)) for value in values]
+        # create a patch (proxy artist) for every color
+        patches = [mpatches.Patch(color=colors[i], label="{}".format(titles[i])) for i in range(len(values))]
+        # put those patched as legend-handles into the legend
+        plt.legend(handles=patches, bbox_to_anchor=legend_position, loc=2, borderaxespad=0.)
+
+        plt.grid(True)
+
+    def plot(self, cmap='viridis', ticks=None, tick_labels=None,
+             cumulative_count=None, categories=None, legend_position=(1.05, 1)):
+        extent = [self.bounds[0], self.bounds[2],
+                  self.bounds[1], self.bounds[3]]  # [left, right, bottom, top]
+
+        if cumulative_count:
+            self.cumulative_count(cumulative_count)
+
         fig, ax = plt.subplots(1, 1, figsize=(16, 9))
-        cax = ax.imshow(self.layer, cmap='magma')  # , vmin=0, vmax=1)
-        cbar = fig.colorbar(cax, shrink=0.8, ticks=[0, 0.5, 1])
-        cbar.ax.set_yticklabels(['Low', 'Medium', 'High'])
-        cbar.ax.set_ylabel(self.name)
+        cax = ax.imshow(self.layer, cmap=cmap, extent=extent)
+
         ax.set_axis_off()
+        if categories:
+            self.category_legend(cax, categories, legend_position=legend_position)
+        else:
+            colorbar = dict(shrink=0.8)
+            if ticks:
+                colorbar['thicks'] = ticks
+            cbar = fig.colorbar(cax, **colorbar)
+
+            if tick_labels:
+                cbar.ax.set_yticklabels(tick_labels)
+            cbar.ax.set_ylabel(self.name.replace('_', ' '))
+        plt.close()
+        return fig
+
+    def save_png(self, output_path, cmap='viridis', ticks=None, tick_labels=None,
+                 cumulative_count=None, categories=None, legend_position=(1.05, 1)):
+        output_file = os.path.join(output_path,
+                                   self.name + '.png')
+        fig = self.plot(cmap=cmap, ticks=ticks, tick_labels=tick_labels, cumulative_count=cumulative_count,
+                        categories=categories, legend_position=legend_position)
+        fig.savefig(output_file, dpi=300, bbox_inches='tight')
