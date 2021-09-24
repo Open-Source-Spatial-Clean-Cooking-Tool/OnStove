@@ -316,7 +316,8 @@ class RasterLayer(Layer):
         plt.grid(True)
 
     def plot(self, cmap='viridis', ticks=None, tick_labels=None,
-             cumulative_count=None, categories=None, legend_position=(1.05, 1)):
+             cumulative_count=None, categories=None, legend_position=(1.05, 1),
+             admin_layer=None):
         extent = [self.bounds[0], self.bounds[2],
                   self.bounds[1], self.bounds[3]]  # [left, right, bottom, top]
 
@@ -338,13 +339,17 @@ class RasterLayer(Layer):
             if tick_labels:
                 cbar.ax.set_yticklabels(tick_labels)
             cbar.ax.set_ylabel(self.name.replace('_', ' '))
+        if isinstance(admin_layer, gpd.GeoDataFrame):
+            admin_layer.boundary.plot(color='black', linewidth=1, ax=ax, zorder=1)
         plt.close()
         return fig
 
     def save_png(self, output_path, cmap='viridis', ticks=None, tick_labels=None,
-                 cumulative_count=None, categories=None, legend_position=(1.05, 1)):
+                 cumulative_count=None, categories=None, legend_position=(1.05, 1),
+                 admin_layer=None):
         output_file = os.path.join(output_path,
                                    self.name + '.png')
         fig = self.plot(cmap=cmap, ticks=ticks, tick_labels=tick_labels, cumulative_count=cumulative_count,
-                        categories=categories, legend_position=legend_position)
+                        categories=categories, legend_position=legend_position,
+                        admin_layer=admin_layer)
         fig.savefig(output_file, dpi=300, bbox_inches='tight')

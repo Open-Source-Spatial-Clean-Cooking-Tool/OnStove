@@ -767,14 +767,26 @@ class OnSSTOVE(DataProcessor):
                 print('    ' + tech + ':', value)
             print('')
 
-    def plot(self, variable, cmap='viridis', cumulative_count=None, legend_position=(1.05, 1)):
+    def plot(self, variable, cmap='viridis', cumulative_count=None, legend_position=(1.05, 1),
+             admin_layer=None):
         raster, tech_codes = self._create_layer(variable)
         raster.bounds = self.base_layer.bounds
+        if isinstance(admin_layer, gpd.GeoDataFrame):
+            admin_layer = admin_layer
+        elif not admin_layer:
+            admin_layer = self.mask_layer.layer
         return raster.plot(cmap=cmap, cumulative_count=cumulative_count,
-                           categories=tech_codes, legend_position=legend_position)
+                           categories=tech_codes, legend_position=legend_position,
+                           admin_layer=admin_layer)
 
-    def to_image(self, variable, cmap='viridis', cumulative_count=None, legend_position=(1.05, 1)):
+    def to_image(self, variable, cmap='viridis', cumulative_count=None, legend_position=(1.05, 1),
+                 admin_layer=None):
         raster, tech_codes = self._create_layer(variable)
         raster.bounds = self.base_layer.bounds
+        if isinstance(admin_layer, gpd.GeoDataFrame):
+            admin_layer = admin_layer
+        elif not admin_layer:
+            admin_layer = self.mask_layer.layer
         raster.save_png(self.output_directory, cmap=cmap, cumulative_count=cumulative_count,
-                        categories=tech_codes, legend_position=legend_position)
+                        categories=tech_codes, legend_position=legend_position,
+                        admin_layer=admin_layer)
