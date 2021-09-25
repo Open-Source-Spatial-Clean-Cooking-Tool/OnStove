@@ -5,10 +5,12 @@ import pandas as pd
 import numpy as np
 import datetime
 from math import exp
+from rasterstats import zonal_stats
+import rasterio
 
 from .raster import *
 from .layer import *
-from .raster import interpolate
+from .raster import interpolate, rasterize
 
 
 class Technology:
@@ -300,7 +302,7 @@ class Technology:
         discount_rate, proj_life = self.discount_factor(specs_file)
 
         energy = specs_file["Meals_per_day"] * 365 * 3.64 / self.efficiency
-        gdf["needed_energy"] = specs["Meals_per_day"] * 365 * 3.64 / self.efficiency
+        gdf["needed_energy"] = specs_file["Meals_per_day"] * 365 * 3.64 / self.efficiency
 
         energy_needed = energy * np.ones(proj_life)
 
@@ -552,35 +554,84 @@ class Biogas(Technology):
                          inv_cost, infra_cost, fuel_cost, time_of_cooking,
                          om_cost, efficiency, pm25)
 
-        def available_biogas(self, model):
+    def available_biogas(self, model):
 
-            from_cattle = model.gdf["#Cattles"] * 12 * 0.15 * 0.8 * 305
-            from_buffalo = model.gdf["#Buffaloes"] * 14 * 0.2 * 0.75 * 305
-            from_sheep = model.gdf["#Sheeps"] * 0.7 * 0.25 * 0.8 * 452
-            from_goat = model.gdf["#Goats"] * 0.6 * 0.3 * 0.85 * 450
-            from_pig = model.gdf["#Pigs"] * 5 * 0.75 * 0.14 * 470
-            from_poultry = model.gdf["#Poultry"] * 0.12 * 0.25 * 0.75 * 450
+        from_cattle = model.gdf["#Cattles"] * 12 * 0.15 * 0.8 * 305
+        from_buffalo = model.gdf["#Buffaloes"] * 14 * 0.2 * 0.75 * 305
+        from_sheep = model.gdf["#Sheeps"] * 0.7 * 0.25 * 0.8 * 452
+        from_goat = model.gdf["#Goats"] * 0.6 * 0.3 * 0.85 * 450
+        from_pig = model.gdf["#Pigs"] * 5 * 0.75 * 0.14 * 470
+        from_poultry = model.gdf["#Poultry"] * 0.12 * 0.25 * 0.75 * 450
 
-            model.gdf["yearly_cubic_meter_biogas"] = (from_cattle + from_buffalo + from_goat + from_pig + from_poultry + \
-                                              from_sheep) * 0.365
+        model.gdf["yearly_cubic_meter_biogas"] = (from_cattle + from_buffalo + from_goat + from_pig + from_poultry + \
+                                          from_sheep) * 0.365
 
-            del model.gdf["#Cattles"]
-            del model.gdf["#Buffaloes"]
-            del model.gdf["#Sheeps"]
-            del model.gdf["#Goats"]
-            del model.gdf["#Pigs"]
-            del model.gdf["#Poultry"]
+        del model.gdf["Cattles"]
+        del model.gdf["Buffaloes"]
+        del model.gdf["Sheeps"]
+        del model.gdf["Goats"]
+        del model.gdf["Pigs"]
+        del model.gdf["Poultry"]
 
-        def available_energy(self, model, data):
+    def available_energy(self, model, data):
 
-            model.raster_to_dataframe(data, name = "Temperature")
+        model.raster_to_dataframe(data, name = "Temperature")
 
-            model.gdf.loc[model.gdf["Temperature"] < 10, "potential_households"] = 0
-            model.gdf.loc[(model.gdf["Temperature"] < 20) & (model.gdf["Temperature"] >= 10),
-                          "yearly_cubic_meter_biogas"] = model.gdf["potential_households"]/7.2
-            model.gdf.loc[(model.gdf["Temperature"] >= 20),"potential_households"] = \
-                model.gdf["yearly_cubic_meter_biogas"]/6
-            model.gdf.loc[(model.gdf["IsUrban"] > 20), "potential_households"] = 0
+        model.gdf.loc[model.gdf["Temperature"] < 10, "potential_households"] = 0
+        model.gdf.loc[(model.gdf["Temperature"] < 20) & (model.gdf["Temperature"] >= 10),
+                      "yearly_cubic_meter_biogas"] = model.gdf["potential_households"]/7.2
+        model.gdf.loc[(model.gdf["Temperature"] >= 20),"potential_households"] = \
+            model.gdf["yearly_cubic_meter_biogas"]/6
+        model.gdf.loc[(model.gdf["IsUrban"] > 20), "potential_households"] = 0
 
 
+        df["available_biogas_energy"] = df["yearly_cubic_meter_biogas"] * self.energy_content
 
+    def recalibrate_livestock(self, model, admin, buffaloes, cattles, poultry, goats, pigs, sheeps):
+
+        paths = {
+            'Buffaloes': buffaloes,
+            'Cattles': cattles,
+            'Poultry': poultry,
+            'Goats': goats,
+            'Pigs': pigs,
+            'Sheeps': sheeps}
+
+        for name, path in paths.items():
+            folder = f'{model.output_directory}/livestock/{name}'
+            os.makedirs(folder, exist_ok=True)
+
+            layer = RasterLayer('livestock', name, layer_path=path, resample='nearest')
+            layer.mask(admin, folder)
+            admin_zones = zonal_stats(admin, path, stats='sum', prefix='orig_', geojson_out=True,
+                                all_touched=False)
+
+            geostats = gpd.GeoDataFrame.from_features(admin_zones)
+
+            geostats.crs = 4326
+            geostats.to_crs(model.project_crs, inplace=True)
+            layer.reproject(model.project_crs, output_path=folder, cell_width=1000,
+                            cell_height=1000)
+
+            admin_zones = zonal_stats(geostats, folder + r"/" + name + " - reprojected.tif", stats='sum', prefix='r_',
+                                geojson_out=True,
+                                all_touched=False)
+
+            geostats = gpd.GeoDataFrame.from_features(admin_zones)
+
+            geostats["ratio"] = geostats['orig_sum'] / geostats['r_sum']
+
+            admin_image, admin_out_meta = rasterize(geostats, folder + r'/' + name + ' - reprojected.tif',
+                                                    outpul_file=None,
+                                                    value='ratio', nodata=-9999, compression='NONE', all_touched=True,
+                                                    save=False, dtype=rasterio.float64)
+
+            with rasterio.open(folder + r'/' + name + ' - reprojected.tif') as src:
+                band = src.read(1)
+                new_band = band * admin_image
+
+            with rasterio.open(folder + r'/final_' + name + '.tif', 'w', **admin_out_meta) as dst:
+                dst.write(new_band, 1)
+
+            model.raster_to_dataframe(folder + r'/final_' + name + '.tif', name=name, method='sample')
+            model.gdf[name] = model.gdf[name].fillna(0)

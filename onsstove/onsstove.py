@@ -9,7 +9,7 @@ from typing import Dict, Any
 from shapely.geometry import shape
 import scipy.spatial
 
-from onsstove.technology import Technology, LPG, Biomass, Electricity
+from onsstove.technology import Technology, LPG, Biomass, Electricity, Biogas
 from .raster import *
 from .layer import VectorLayer, RasterLayer
 
@@ -338,6 +338,8 @@ class OnSSTOVE:
                             techs[row['Fuel']] = LPG()
                         elif 'biomass' in row['Fuel'].lower():
                             techs[row['Fuel']] = Biomass()
+                        elif 'biogas' in row['Fuel'].lower():
+                            techs[row['Fuel']] = Biogas()
                         elif 'electricity' in row['Fuel'].lower():
                             techs[row['Fuel']] = Electricity()
                         else:
@@ -580,13 +582,13 @@ class OnSSTOVE:
         second_benefit_cols.remove('net_benefit_Electricity')
         second_best = self.gdf.loc[bool_vect, second_benefit_cols].idxmax(axis=1).str.replace("net_benefit_", "")
 
-        current_biogas = (self.gdf["needed_energy"]*gdf["Households"] <= self.gdf["available_biogas_energy"]) &\
+        current_biogas = (self.gdf["needed_energy"]*self.gdf["Households"] <= self.gdf["available_biogas_energy"]) &\
                          (self.gdf["max_benefit_tech"] == 'Biogas')
         biogas_fraction = self.gdf.loc[current_biogas, "available_biogas_energy"] / \
                           self.gdf.loc[current_biogas, "needed_energy"]
         self.gdf.loc[current_biogas, "maximum_net_benefit"] *= biogas_fraction
 
-        biogas_bool = (self.gdf["needed_energy"]*gdf["Households"] <= self.gdf["available_biogas_energy"])
+        biogas_bool = (self.gdf["needed_energy"]*self.gdf["Households"] <= self.gdf["available_biogas_energy"])
         second_benefit_cols = [col for col in self.gdf if 'net_benefit_' in col]
         second_benefit_cols.remove('net_benefit_Biogas')
         second_best_biogas = self.gdf.loc[biogas_bool, second_benefit_cols].idxmax(axis=1).str.replace("net_benefit_", "")
