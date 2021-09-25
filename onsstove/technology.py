@@ -556,12 +556,12 @@ class Biogas(Technology):
 
     def available_biogas(self, model):
 
-        from_cattle = model.gdf["#Cattles"] * 12 * 0.15 * 0.8 * 305
-        from_buffalo = model.gdf["#Buffaloes"] * 14 * 0.2 * 0.75 * 305
-        from_sheep = model.gdf["#Sheeps"] * 0.7 * 0.25 * 0.8 * 452
-        from_goat = model.gdf["#Goats"] * 0.6 * 0.3 * 0.85 * 450
-        from_pig = model.gdf["#Pigs"] * 5 * 0.75 * 0.14 * 470
-        from_poultry = model.gdf["#Poultry"] * 0.12 * 0.25 * 0.75 * 450
+        from_cattle = model.gdf["Cattles"] * 12 * 0.15 * 0.8 * 305
+        from_buffalo = model.gdf["Buffaloes"] * 14 * 0.2 * 0.75 * 305
+        from_sheep = model.gdf["Sheeps"] * 0.7 * 0.25 * 0.8 * 452
+        from_goat = model.gdf["Goats"] * 0.6 * 0.3 * 0.85 * 450
+        from_pig = model.gdf["Pigs"] * 5 * 0.75 * 0.14 * 470
+        from_poultry = model.gdf["Poultry"] * 0.12 * 0.25 * 0.75 * 450
 
         model.gdf["yearly_cubic_meter_biogas"] = (from_cattle + from_buffalo + from_goat + from_pig + from_poultry + \
                                           from_sheep) * 0.365
@@ -575,17 +575,18 @@ class Biogas(Technology):
 
     def available_energy(self, model, data):
 
+        model.gdf.to_crs(4326, inplace = True)
         model.raster_to_dataframe(data, name = "Temperature")
+        model.gdf.to_crs(model.project_crs, inplace = True)
 
         model.gdf.loc[model.gdf["Temperature"] < 10, "potential_households"] = 0
-        model.gdf.loc[(model.gdf["Temperature"] < 20) & (model.gdf["Temperature"] >= 10),
-                      "yearly_cubic_meter_biogas"] = model.gdf["potential_households"]/7.2
-        model.gdf.loc[(model.gdf["Temperature"] >= 20),"potential_households"] = \
-            model.gdf["yearly_cubic_meter_biogas"]/6
         model.gdf.loc[(model.gdf["IsUrban"] > 20), "potential_households"] = 0
 
+        model.gdf.loc[(model.gdf["Temperature"] < 20) & (model.gdf["Temperature"] >= 10), "potential_households"] = model.gdf["potential_households"]/7.2
+        model.gdf.loc[(model.gdf["Temperature"] >= 20),"potential_households"] = model.gdf["yearly_cubic_meter_biogas"]/6
 
-        df["available_biogas_energy"] = df["yearly_cubic_meter_biogas"] * self.energy_content
+
+        model.gdf["available_biogas_energy"] = model.gdf["yearly_cubic_meter_biogas"] * self.energy_content
 
     def recalibrate_livestock(self, model, admin, buffaloes, cattles, poultry, goats, pigs, sheeps):
 
