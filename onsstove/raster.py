@@ -286,7 +286,9 @@ def normalize(raster=None, limit=float('inf'), output_file=None, inverse=False, 
         raster = raster.copy()
         nodata = meta['nodata']
         meta = meta
-    raster[raster > limit] = np.nan
+    if inverse:
+        raster[raster > limit] = np.nan
+
     min_value = np.nanmin(raster[raster != nodata])
     max_value = np.nanmax(raster[raster != nodata])
     raster[raster != nodata] = raster[raster != nodata] / (max_value - min_value)

@@ -66,6 +66,7 @@ class Layer:
 
         self.distance_raster.layer = cumulative_costs
         self.distance_raster.meta = self.friction.meta.copy()
+        self.distance_raster.bounds = self.friction.bounds
         self.distance_raster.save(output_path)
 
 
@@ -145,6 +146,7 @@ class VectorLayer(Layer):
 
         elif self.distance == 'travel_time':
             self.travel_time(output_path)
+
 
     def start_points(self):
         return friction_start_points(self.friction.path,
@@ -250,6 +252,20 @@ class RasterLayer(Layer):
             # self.friction.meta = meta
             self.travel_time(output_path)
 
+        else:
+            layer = self.layer.copy()
+            meta = self.meta.copy()
+            meta.update(nodata=np.nan, dtype='float64')
+            self.distance_raster = RasterLayer(self.category,
+                                               self.name + ' - log',
+                                               distance_limit=self.distance_limit,
+                                               inverse=self.inverse,
+                                               normalization=self.normalization)
+            self.distance_raster.layer = layer
+            self.distance_raster.meta = meta
+            self.distance_raster.bounds = self.bounds
+            self.distance_raster.save(output_path)
+
     def start_points(self):
         return np.where(np.isin(self.layer, self.starting_cells))
 
@@ -333,7 +349,7 @@ class RasterLayer(Layer):
         else:
             colorbar = dict(shrink=0.8)
             if ticks:
-                colorbar['thicks'] = ticks
+                colorbar['ticks'] = ticks
             cbar = fig.colorbar(cax, **colorbar)
 
             if tick_labels:
@@ -347,6 +363,7 @@ class RasterLayer(Layer):
     def save_png(self, output_path, cmap='viridis', ticks=None, tick_labels=None,
                  cumulative_count=None, categories=None, legend_position=(1.05, 1),
                  admin_layer=None):
+        os.makedirs(output_path, exist_ok=True)
         output_file = os.path.join(output_path,
                                    self.name + '.png')
         fig = self.plot(cmap=cmap, ticks=ticks, tick_labels=tick_labels, cumulative_count=cumulative_count,
