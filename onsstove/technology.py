@@ -588,7 +588,7 @@ class Biogas(Technology):
         model.gdf.loc[(model.gdf["Temperature"] >= 20),"potential_households"] = model.gdf["yearly_cubic_meter_biogas"]/6
 
 
-        model.gdf["available_biogas_energy"] = model.gdf["yearly_cubic_meter_biogas"] * self.energy_content
+        # model.gdf["available_biogas_energy"] = model.gdf["yearly_cubic_meter_biogas"] * self.energy_content
 
     def recalibrate_livestock(self, model, admin, buffaloes, cattles, poultry, goats, pigs, sheeps):
 
@@ -607,29 +607,29 @@ class Biogas(Technology):
             layer = RasterLayer('livestock', name, layer_path=path, resample='nearest')
             layer.mask(admin, folder)
             admin_zones = zonal_stats(admin, path, stats='sum', prefix='orig_', geojson_out=True,
-                                all_touched=False)
+                                      all_touched=False)
 
             geostats = gpd.GeoDataFrame.from_features(admin_zones)
 
-            geostats.crs = 4326
+            geostats.crs = admin.crs
             geostats.to_crs(model.project_crs, inplace=True)
             layer.reproject(model.project_crs, output_path=folder, cell_width=1000,
                             cell_height=1000)
 
-            admin_zones = zonal_stats(geostats, folder + r"/" + name + " - reprojected.tif", stats='sum', prefix='r_',
-                                geojson_out=True,
-                                all_touched=False)
+            admin_zones = zonal_stats(geostats, folder + r"/" + name + ".tif", stats='sum', prefix='r_',
+                                      geojson_out=True,
+                                      all_touched=False)
 
             geostats = gpd.GeoDataFrame.from_features(admin_zones)
 
             geostats["ratio"] = geostats['orig_sum'] / geostats['r_sum']
 
-            admin_image, admin_out_meta = rasterize(geostats, folder + r'/' + name + ' - reprojected.tif',
+            admin_image, admin_out_meta = rasterize(geostats, folder + r'/' + name + '.tif',
                                                     outpul_file=None,
-                                                    value='ratio', nodata=-9999, compression='NONE', all_touched=True,
+                                                    value='ratio', nodata=np.nan, compression='NONE', all_touched=False,
                                                     save=False, dtype=rasterio.float64)
 
-            with rasterio.open(folder + r'/' + name + ' - reprojected.tif') as src:
+            with rasterio.open(folder + r'/' + name + '.tif') as src:
                 band = src.read(1)
                 new_band = band * admin_image
 

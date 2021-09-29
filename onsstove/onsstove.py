@@ -1,4 +1,5 @@
 import os
+import pickle
 from csv import DictReader
 
 import psycopg2
@@ -379,13 +380,12 @@ class OnSSTOVE(DataProcessor):
 
         self.techs = techs
 
-
-    def normalized(self, column, inverse = False):
+    def normalize(self, column, inverse=False):
 
         if inverse:
-            normalized = (self.gdf[column].max() - self.gdf[column])/(self.gdf[column].max() - self.gdf[column].min())
+            normalized = (self.gdf[column].max() - self.gdf[column]) / (self.gdf[column].max() - self.gdf[column].min())
         else:
-            normalized = (self.gdf[column] - self.gdf[column].min())/(self.gdf[column].max() - self.gdf[column].min())
+            normalized = (self.gdf[column] - self.gdf[column].min()) / (self.gdf[column].max() - self.gdf[column].min())
 
         return normalized
 
@@ -398,14 +398,14 @@ class OnSSTOVE(DataProcessor):
         else:
             self.gdf["Elec_dist"] = self.gdf["HV_lines_dist"]
 
-        elec_dist = self.normalized("Elec_dist", inverse = True)
-        ntl = self.normalized("Night_lights")
-        pop = self.normalized("Calibrated_pop")
-
+        elec_dist = self.normalize("Elec_dist", inverse=True)
+        ntl = self.normalize("Night_lights")
+        pop = self.normalize("Calibrated_pop")
 
         self.combined_weight = (elec_dist * self.specs["infra_weight"] + pop * self.specs["Min_Elec_Pop"] +
-                 ntl * self.specs["Min_Night_Lights"]) / (self.specs["infra_weight"] + self.specs["Min_Elec_Pop"] +
-                                                          self.specs["Min_Night_Lights"])
+                                ntl * self.specs["Min_Night_Lights"]) / (
+                                           self.specs["infra_weight"] + self.specs["Min_Elec_Pop"] +
+                                           self.specs["Min_Night_Lights"])
 
     def current_elec(self):
         self.normalize_for_electricity()
@@ -436,8 +436,7 @@ class OnSSTOVE(DataProcessor):
         total_pop = self.gdf["Calibrated_pop"].sum()
         elec_pop = self.gdf.loc[self.gdf["Current_elec"] == 1, "Calibrated_pop"].sum()
         diff = elec_pop - (total_pop * elec_rate)
-        factor = diff/self.gdf["Current_elec"].count()
-
+        factor = diff / self.gdf["Current_elec"].count()
 
         while elec_pop > total_pop * elec_rate:
 
@@ -455,7 +454,6 @@ class OnSSTOVE(DataProcessor):
                 i = i + 0.0001
 
         self.gdf.loc[self.gdf["Current_elec"] == 0, "Elec_pop_calib"] = 0
-
 
     def calibrate_current_pop(self):
 
@@ -515,6 +513,8 @@ class OnSSTOVE(DataProcessor):
             with rasterio.open(layer) as src:
                 if src.meta['crs'] != self.gdf.crs:
                     self.gdf[name] = sample_raster(layer, self.gdf.to_crs(src.meta['crs']))
+                else:
+                    self.gdf[name] = sample_raster(layer, self.gdf)
         elif method == 'read':
             self.gdf[name] = layer[self.rows, self.cols]
 
@@ -530,7 +530,7 @@ class OnSSTOVE(DataProcessor):
             urban_future = self.specs["Urban_end"] * population_future
             rural_future = population_future - urban_future
 
-            rural_growth = (rural_future - rural_current)/(self.specs["End_Year"] - self.specs["Start_Year"])
+            rural_growth = (rural_future - rural_current) / (self.specs["End_Year"] - self.specs["Start_Year"])
             urban_growth = (urban_future - urban_current) / (self.specs["End_Year"] - self.specs["Start_Year"])
 
             self.gdf.loc[self.gdf['IsUrban'] > 20, 'Pop_future'] = self.gdf["Calibrated_pop"] * urban_growth
@@ -566,13 +566,13 @@ class OnSSTOVE(DataProcessor):
             if i > 500:
                 break
 
-
     def number_of_households(self):
 
         self.gdf.loc[self.gdf["IsUrban"] < 20, 'Households'] = self.gdf.loc[
-                                                                    self.gdf["IsUrban"] < 20, 'Calibrated_pop'] / \
-                                                                self.specs["Rural_HHsize"]
-        self.gdf.loc[self.gdf["IsUrban"] > 20, 'Households'] = self.gdf.loc[self.gdf["IsUrban"] > 20, 'Calibrated_pop'] / \
+                                                                   self.gdf["IsUrban"] < 20, 'Calibrated_pop'] / \
+                                                               self.specs["Rural_HHsize"]
+        self.gdf.loc[self.gdf["IsUrban"] > 20, 'Households'] = self.gdf.loc[
+                                                                   self.gdf["IsUrban"] > 20, 'Calibrated_pop'] / \
                                                                self.specs["Urban_HHsize"]
 
     def get_value_of_time(self):
@@ -586,7 +586,6 @@ class OnSSTOVE(DataProcessor):
         max_value = np.nanmax(self.gdf['relative_wealth'])
         norm_layer = (self.gdf['relative_wealth'] - min_value) / (max_value - min_value) * (0.5 - 0.2) + 0.2
         self.gdf['value_of_time'] = norm_layer * self.specs['Minimum_wage'] / 30 / 24  # convert $/months to $/h
-
 
     def maximum_net_benefit(self):
         net_benefit_cols = [col for col in self.gdf if 'net_benefit_' in col]
@@ -663,10 +662,12 @@ class OnSSTOVE(DataProcessor):
 
         self.gdf["health_costs_avoided"] = self.gdf.apply(
             lambda row: self.techs[row['max_benefit_tech']].distributed_morbidity[row.name] +
-                        self.techs[row['max_benefit_tech']].distributed_mortality[row.name], axis=1) * self.gdf["Households"]
+                        self.techs[row['max_benefit_tech']].distributed_mortality[row.name], axis=1) * self.gdf[
+                                               "Households"]
 
     def extract_time_saved(self):
-        self.gdf["time_saved"] = self.gdf.apply(lambda row: self.techs[row['max_benefit_tech']].total_time_saved[row.name], axis=1) * \
+        self.gdf["time_saved"] = self.gdf.apply(
+            lambda row: self.techs[row['max_benefit_tech']].total_time_saved[row.name], axis=1) * \
                                  self.gdf["Households"]
 
     def reduced_emissions(self):
@@ -687,7 +688,8 @@ class OnSSTOVE(DataProcessor):
     def fuel_costs(self):
 
         self.gdf["fuel_costs"] = self.gdf.apply(
-            lambda row: self.techs[row['max_benefit_tech']].discounted_fuel_cost[row.name], axis=1) * self.gdf["Households"]
+            lambda row: self.techs[row['max_benefit_tech']].discounted_fuel_cost[row.name], axis=1) * self.gdf[
+                                     "Households"]
 
     def emissions_costs_saved(self):
 
@@ -811,3 +813,19 @@ class OnSSTOVE(DataProcessor):
         raster.save_png(self.output_directory, cmap=cmap, cumulative_count=cumulative_count,
                         categories=tech_codes, legend_position=legend_position,
                         admin_layer=admin_layer)
+
+    def to_json(self, name):
+        self.gdf.to_file(os.path.join(self.output_directory, name), driver='GeoJSON')
+
+    def to_pickle(self, name):
+        with open(os.path.join(self.output_directory, name), "wb") as f:
+            pickle.dump(self, f)
+
+    def read_data(self, path):
+        self.gdf = gpd.read_file(path)
+
+    @classmethod
+    def read_model(cls, path):
+        with open(path, "rb") as f:
+            model = pickle.load(f)
+        return model

@@ -346,6 +346,8 @@ class RasterLayer(Layer):
         else:
             layer = self.layer
 
+        layer[layer == self.meta['nodata']] = np.nan
+
         fig, ax = plt.subplots(1, 1, figsize=(16, 9))
         cax = ax.imshow(layer, cmap=cmap, extent=extent)
 
