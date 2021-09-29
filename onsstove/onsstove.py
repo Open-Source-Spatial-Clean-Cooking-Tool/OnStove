@@ -9,7 +9,7 @@ from typing import Dict, Any
 from shapely.geometry import shape
 import scipy.spatial
 
-from onsstove.technology import Technology, LPG, Biomass, Electricity
+from onsstove.technology import Technology, LPG, Biomass, Electricity, Biogas
 from .raster import *
 from .layer import VectorLayer, RasterLayer
 
@@ -357,6 +357,8 @@ class OnSSTOVE(DataProcessor):
                             techs[row['Fuel']] = LPG()
                         elif 'biomass' in row['Fuel'].lower():
                             techs[row['Fuel']] = Biomass()
+                        elif 'biogas' in row['Fuel'].lower():
+                            techs[row['Fuel']] = Biogas()
                         elif 'electricity' in row['Fuel'].lower():
                             techs[row['Fuel']] = Electricity()
                         else:
