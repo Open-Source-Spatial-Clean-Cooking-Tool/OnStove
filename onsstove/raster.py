@@ -276,7 +276,8 @@ def rasterize(vector_layer, raster_base_layer, outpul_file=None, value=None,
             return image, out_meta
 
 
-def normalize(raster=None, limit=float('inf'), output_file=None, inverse=False, meta=None):
+def normalize(raster=None, limit=float('inf'), output_file=None,
+              inverse=False, meta=None, buffer=False):
     if isinstance(raster, str):
         with rasterio.open(raster) as src:
             raster = src.read(1)
@@ -286,18 +287,22 @@ def normalize(raster=None, limit=float('inf'), output_file=None, inverse=False, 
         raster = raster.copy()
         nodata = meta['nodata']
         meta = meta
+
     if inverse:
         raster[raster > limit] = np.nan
 
-    min_value = np.nanmin(raster[raster != nodata])
-    max_value = np.nanmax(raster[raster != nodata])
-    raster[raster != nodata] = raster[raster != nodata] / (max_value - min_value)
+    raster[raster == nodata] = np.nan
+    min_value = np.nanmin(raster)
+    max_value = np.nanmax(raster)
+    raster = (raster - min_value) / (max_value - min_value)
     if inverse:
-        raster[np.isnan(raster)] = 1
+        if not buffer:
+            raster[np.isnan(raster)] = 1
         raster[raster < 0] = np.nan
         raster = 1 - raster
     else:
-        raster[np.isnan(raster)] = 0
+        if not buffer:
+            raster[np.isnan(raster)] = 0
         raster[raster < 0] = np.nan
 
     meta.update(nodata=np.nan, dtype='float32')

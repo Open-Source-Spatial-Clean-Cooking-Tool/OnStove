@@ -49,9 +49,10 @@ class Layer:
         pass
 
     def travel_time(self, output_path):
-        self.friction.layer *= 1000 / 60  # to convert to hours per kilometer
-        self.friction.layer[np.isnan(self.friction.layer)] = float('inf')
-        mcp = MCP_Geometric(self.friction.layer, fully_connected=True)
+        layer = self.friction.layer.copy()
+        layer *= 1000 / 60  # to convert to hours per kilometer
+        layer[np.isnan(layer)] = float('inf')
+        mcp = MCP_Geometric(layer, fully_connected=True)
         row, col = self.start_points()
         pointlist = np.column_stack((row, col))
         # TODO: create method for restricted areas
@@ -229,7 +230,7 @@ class RasterLayer(Layer):
             layer[layer == 0] = np.nan
             layer[layer > 0] = np.log(layer[layer > 0])
             layer = np.nan_to_num(layer, nan=0)
-            layer[layer < 0] = np.nan
+            # layer[layer < 0] = np.nan
 
             meta = self.meta.copy()
             meta.update(nodata=np.nan, dtype='float64')
@@ -253,29 +254,30 @@ class RasterLayer(Layer):
             self.travel_time(output_path)
 
         else:
-            layer = self.layer.copy()
-            meta = self.meta.copy()
-            meta.update(nodata=np.nan, dtype='float64')
-            self.distance_raster = RasterLayer(self.category,
-                                               self.name + ' - log',
-                                               distance_limit=self.distance_limit,
-                                               inverse=self.inverse,
-                                               normalization=self.normalization)
-            self.distance_raster.layer = layer
-            self.distance_raster.meta = meta
-            self.distance_raster.bounds = self.bounds
-            self.distance_raster.save(output_path)
+            self.distance_raster = self
+            # .layer.copy()
+            # meta = self.meta.copy()
+            # meta.update(nodata=np.nan, dtype='float64')
+            # self.distance_raster = RasterLayer(self.category,
+            #                                    self.name + ' - log',
+            #                                    distance_limit=self.distance_limit,
+            #                                    inverse=self.inverse,
+            #                                    normalization=self.normalization)
+            # self.distance_raster.layer = layer
+            # self.distance_raster.meta = meta
+            # self.distance_raster.bounds = self.bounds
+            # self.distance_raster.save(output_path)
 
     def start_points(self):
         return np.where(np.isin(self.layer, self.starting_cells))
 
-    def normalize(self, output_path, mask_layer=None):
+    def normalize(self, output_path, mask_layer=None, buffer=False):
         if self.normalization == 'MinMax':
             output_file = os.path.join(output_path,
                                        self.name + ' - normalized.tif')
             normalize(raster=self.layer, limit=self.distance_limit,
                       inverse=self.inverse, output_file=output_file,
-                      meta=self.meta)
+                      meta=self.meta, buffer=buffer)
             mask_raster(output_file, mask_layer,
                         output_file, np.nan, 'DEFLATE')
             self.normalized = RasterLayer(self.category, self.name + ' - normalized',
@@ -316,8 +318,10 @@ class RasterLayer(Layer):
         count = x.shape[0]
         max_val = x[int(count * min_max[1])]
         min_val = x[int(count * min_max[0])]
-        self.layer[self.layer > max_val] = max_val
-        self.layer[self.layer < min_val] = min_val
+        layer = self.layer.copy()
+        layer[layer > max_val] = max_val
+        layer[layer < min_val] = min_val
+        return layer
 
     def category_legend(self, im, categories, legend_position=(1.05, 1)):
         values = list(categories.values())
@@ -338,10 +342,12 @@ class RasterLayer(Layer):
                   self.bounds[1], self.bounds[3]]  # [left, right, bottom, top]
 
         if cumulative_count:
-            self.cumulative_count(cumulative_count)
+            layer = self.cumulative_count(cumulative_count)
+        else:
+            layer = self.layer
 
         fig, ax = plt.subplots(1, 1, figsize=(16, 9))
-        cax = ax.imshow(self.layer, cmap=cmap, extent=extent)
+        cax = ax.imshow(layer, cmap=cmap, extent=extent)
 
         ax.set_axis_off()
         if categories:
@@ -356,7 +362,7 @@ class RasterLayer(Layer):
                 cbar.ax.set_yticklabels(tick_labels)
             cbar.ax.set_ylabel(self.name.replace('_', ' '))
         if isinstance(admin_layer, gpd.GeoDataFrame):
-            admin_layer.boundary.plot(color='black', linewidth=1, ax=ax, zorder=1)
+            admin_layer.plot(color='lightgrey', linewidth=1, ax=ax, zorder=0)
         plt.close()
         return fig
 

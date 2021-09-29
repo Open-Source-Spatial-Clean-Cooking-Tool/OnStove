@@ -191,11 +191,11 @@ class DataProcessor:
                 os.makedirs(output_path, exist_ok=True)
                 layer.get_distance_raster(self.base_layer.path,
                                           output_path, self.mask_layer.layer)
-                if isinstance(layer.friction, RasterLayer):
-                    layer.friction.get_distance_raster(self.base_layer.path,
-                                                       output_path, self.mask_layer.layer)
+                # if isinstance(layer.friction, RasterLayer):
+                #     layer.friction.get_distance_raster(self.base_layer.path,
+                #                                        output_path, self.mask_layer.layer)
 
-    def normalize_rasters(self, datasets='all'):
+    def normalize_rasters(self, datasets='all', buffer=False):
         """
         Goes through all layer and call their `.normalize` method
         """
@@ -204,45 +204,48 @@ class DataProcessor:
             for name, layer in layers.items():
                 output_path = os.path.join(self.output_directory,
                                            category, name)
-                layer.distance_raster.normalize(output_path, self.mask_layer.layer)
+                layer.distance_raster.normalize(output_path, self.mask_layer.layer, buffer=buffer)
 
     @staticmethod
     def index(layers):
+        data = {}
+        for k, i in layers.items():
+            data.update(i)
         weights = []
         rasters = []
-        for name, layer in layers.items():
+        for name, layer in data.items():
             rasters.append(layer.weight * layer.distance_raster.normalized.layer)
             weights.append(layer.weight)
 
         return sum(rasters) / sum(weights)
 
-    def get_demand_index(self, datasets='all'):
-        datasets = self.get_layers(datasets)['demand']
-        self.normalize_rasters(datasets={'demand': datasets})
+    def get_demand_index(self, datasets='all', buffer=False):
+        self.normalize_rasters(datasets=datasets, buffer=buffer)
+        datasets = self.get_layers(datasets)
         layer = RasterLayer('Indexes', 'Demand_index', normalization='MinMax')
         layer.layer = self.index(datasets)
         layer.meta = self.base_layer.meta
         output_path = os.path.join(self.output_directory,
                                    'Indexes', 'Demand Index')
         os.makedirs(output_path, exist_ok=True)
-        layer.normalize(output_path, self.mask_layer.layer)
+        layer.normalize(output_path, self.mask_layer.layer, buffer=buffer)
         layer.normalized.name = 'Demand Index'
         self.demand_index = layer.normalized
 
-    def get_supply_index(self, datasets='all'):
-        datasets = self.get_layers(datasets)['supply']
-        self.normalize_rasters(datasets={'supply': datasets})
+    def get_supply_index(self, datasets='all', buffer=False):
+        self.normalize_rasters(datasets=datasets, buffer=buffer)
+        datasets = self.get_layers(datasets)
         layer = RasterLayer('Indexes', 'Supply index', normalization='MinMax')
         layer.layer = self.index(datasets)
         layer.meta = self.base_layer.meta
         output_path = os.path.join(self.output_directory,
                                    'Indexes', 'Supply Index')
         os.makedirs(output_path, exist_ok=True)
-        layer.normalize(output_path, self.mask_layer.layer)
+        layer.normalize(output_path, self.mask_layer.layer, buffer=buffer)
         layer.normalized.name = 'Supply Index'
         self.supply_index = layer.normalized
 
-    def get_clean_cooking_index(self, demand_weight=1, supply_weight=1):
+    def get_clean_cooking_index(self, demand_weight=1, supply_weight=1, buffer=False):
         layer = RasterLayer('Indexes', 'Clean Cooking Potential Index', normalization='MinMax')
         layer.layer = (demand_weight * self.demand_index.layer + supply_weight * self.supply_index.layer) / \
                       (demand_weight + supply_weight)
@@ -250,24 +253,21 @@ class DataProcessor:
         output_path = os.path.join(self.output_directory,
                                    'Indexes', 'Clean Cooking Potential Index')
         os.makedirs(output_path, exist_ok=True)
-        layer.normalize(output_path, self.mask_layer.layer)
+        layer.normalize(output_path, self.mask_layer.layer, buffer=buffer)
         layer.normalized.name = 'Clean Cooking Potential Index'
         self.clean_cooking_index = layer.normalized
 
     # TODO: Logic to set weights and relation of datasets to the assistance need index
-    def get_assistance_need_index(self, datasets='all'):
-        self.normalize_rasters(datasets=datasets)
+    def get_assistance_need_index(self, datasets='all', buffer=False):
+        self.normalize_rasters(datasets=datasets, buffer=buffer)
         datasets = self.get_layers(datasets)
-        data = {}
-        for k, i in datasets.items():
-            data.update(i)
         layer = RasterLayer('Indexes', 'Assistance need index', normalization='MinMax')
-        layer.layer = self.index(data)
+        layer.layer = self.index(datasets)
         layer.meta = self.base_layer.meta
         output_path = os.path.join(self.output_directory,
                                    'Indexes', 'Assistance need index')
         os.makedirs(output_path, exist_ok=True)
-        layer.normalize(output_path, self.mask_layer.layer)
+        layer.normalize(output_path, self.mask_layer.layer, buffer=buffer)
         layer.normalized.name = 'Assistance need index'
         self.assistance_need_index = layer.normalized
 
