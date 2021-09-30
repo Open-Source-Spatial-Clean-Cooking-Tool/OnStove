@@ -15,7 +15,7 @@ class Layer:
     Template Layer initializing all needed variables.
     """
 
-    def __init__(self, category, name, layer_path=None,
+    def __init__(self, category='', name='', layer_path=None,
                  conn=None, normalization=None,
                  inverse=False, distance=None,
                  distance_limit=float('inf'), resample='nearest'):

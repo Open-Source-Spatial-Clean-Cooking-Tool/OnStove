@@ -794,6 +794,7 @@ class OnSSTOVE(DataProcessor):
              admin_layer=None):
         raster, tech_codes = self._create_layer(variable)
         raster.bounds = self.base_layer.bounds
+        raster.meta = self.base_layer.meta
         if isinstance(admin_layer, gpd.GeoDataFrame):
             admin_layer = admin_layer
         elif not admin_layer:
@@ -806,6 +807,7 @@ class OnSSTOVE(DataProcessor):
                  admin_layer=None):
         raster, tech_codes = self._create_layer(variable)
         raster.bounds = self.base_layer.bounds
+        raster.meta = self.base_layer.meta
         if isinstance(admin_layer, gpd.GeoDataFrame):
             admin_layer = admin_layer
         elif not admin_layer:
