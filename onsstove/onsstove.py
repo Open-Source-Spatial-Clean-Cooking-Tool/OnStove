@@ -587,6 +587,51 @@ class OnSSTOVE(DataProcessor):
         norm_layer = (self.gdf['relative_wealth'] - min_value) / (max_value - min_value) * (0.5 - 0.2) + 0.2
         self.gdf['value_of_time'] = norm_layer * self.specs['Minimum_wage'] / 30 / 24  # convert $/months to $/h
 
+    def run(self, technologies='all'):
+        if technologies == 'all':
+            techs = [tech for tech in self.techs.values()]
+        elif isinstance(technologies, list):
+            techs = [self.techs[name] for name in technologies]
+        else:
+            raise ValueError("technologies must be 'all' or a list of strings with the technology names to run.")
+
+        # Loop through each technology and calculate all benefits and costs
+        for tech in techs:
+            print(f'Calculating health benefits for {tech.name}...')
+            tech.morbidity(self)
+            tech.mortality(self)
+            print(f'Calculating carbon emissions benefits for {tech.name}...')
+            tech.carbon_emissions(self.specs, self.gdf, self.base_fuel.carbon)
+            print(f'Calculating time saved benefits for {tech.name}...')
+            tech.time_saved(self)
+            print(f'Calculating costs for {tech.name}...')
+            tech.discounted_om(self.gdf, self.specs)
+            tech.discounted_inv(self.gdf, self.specs)
+            tech.discounted_meals(self.gdf, self.specs)
+            tech.discount_fuel_cost(self.gdf, self.specs, self.rows, self.cols)
+            tech.salvage(self.gdf, self.specs)
+            print(f'Calculating net benefit for {tech.name}...\n')
+            tech.net_benefit(self.gdf)
+
+        print('Getting maximum net benefit technologies...')
+        self.maximum_net_benefit()
+        print('Extracting indicators...')
+        print('    - Lives saved')
+        self.lives_saved()
+        print('    - Health costs')
+        self.health_costs_saved()
+        print('    - Time saved')
+        self.extract_time_saved()
+        print('    - Reduced emissions')
+        self.reduced_emissions()
+        print('    - Investment costs')
+        self.investment_costs()
+        print('    - Fuel costs')
+        self.fuel_costs()
+        print('    - Reduced emissions externalities')
+        self.emissions_costs_saved()
+        print('Done')
+
     def maximum_net_benefit(self):
         net_benefit_cols = [col for col in self.gdf if 'net_benefit_' in col]
         self.gdf["max_benefit_tech"] = self.gdf[net_benefit_cols].idxmax(axis=1)
