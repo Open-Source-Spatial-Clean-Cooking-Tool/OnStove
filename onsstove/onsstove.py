@@ -614,7 +614,7 @@ class OnSSTOVE(DataProcessor):
             tech.net_benefit(self.gdf)
 
         print('Getting maximum net benefit technologies...')
-        self.maximum_net_benefit()
+        self.maximum_net_benefit(techs)
         print('Extracting indicators...')
         print('    - Lives saved')
         self.lives_saved()
@@ -632,38 +632,74 @@ class OnSSTOVE(DataProcessor):
         self.emissions_costs_saved()
         print('Done')
 
-    def maximum_net_benefit(self):
+    def _get_column_functs(self):
+        columns_dict = {column: 'first' for column in self.gdf.columns}
+        for column in self.gdf.columns[self.gdf.columns.str.contains('cost|benefit|pop|Pop|Households')]:
+            columns_dict[column] = 'sum'
+        columns_dict['max_benefit_tech'] = 'first'
+        return columns_dict
+
+    def maximum_net_benefit(self, techs):
         net_benefit_cols = [col for col in self.gdf if 'net_benefit_' in col]
         self.gdf["max_benefit_tech"] = self.gdf[net_benefit_cols].idxmax(axis=1)
 
         self.gdf['max_benefit_tech'] = self.gdf['max_benefit_tech'].str.replace("net_benefit_", "")
-        self.gdf["maximum_net_benefit"] = self.gdf[net_benefit_cols].max(axis=1)  # * self.gdf['Households']
+        self.gdf["maximum_net_benefit"] = self.gdf[net_benefit_cols].max(axis=1)
+        column_dict = self._get_column_functs()
+        gdf = gpd.GeoDataFrame()
+        for tech in techs:
+            current = (tech.households < self.gdf['Households']) & \
+                      (self.gdf["max_benefit_tech"] == tech.name)
+            dff = self.gdf.loc[current].copy()
+            if current.sum() > 0:
+                dff.loc[current, "maximum_net_benefit"] *= tech.factor.loc[current]
 
-        current_elect = (self.gdf['Current_elec'] == 1) & (self.gdf['Elec_pop_calib'] < self.gdf['Calibrated_pop']) & \
-                        (self.gdf["max_benefit_tech"] == 'Electricity')
-        if current_elect.sum() > 0:
-            elect_fraction = self.gdf.loc[current_elect, "Elec_pop_calib"] / self.gdf.loc[
-                current_elect, "Calibrated_pop"]
-            self.gdf.loc[current_elect, "maximum_net_benefit"] *= elect_fraction
+                second_benefit_cols = [col for col in dff if 'net_benefit_' in col]
+                second_benefit_cols.remove(f'net_benefit_{tech.name}')
+                second_best = dff.loc[current, second_benefit_cols].idxmax(axis=1).str.replace("net_benefit_", "")
 
-            second_benefit_cols = [col for col in self.gdf if 'net_benefit_' in col]
-            second_benefit_cols.remove('net_benefit_Electricity')
-            second_best = self.gdf.loc[current_elect, second_benefit_cols].idxmax(axis=1).str.replace("net_benefit_",
-                                                                                                      "")
+                second_best_value = dff.loc[current, second_benefit_cols].max(axis=1) * (1 - tech.factor.loc[current])
+                second_tech_net_benefit = second_best_value
+                # dff = self.gdf.loc[current].copy()
+                dff['max_benefit_tech'] = second_best
+                dff['maximum_net_benefit'] = second_tech_net_benefit
+                dff['Calibrated_pop'] *= (1 - tech.factor.loc[current])
+                dff['Households'] *= (1 - tech.factor.loc[current])
 
-            second_best_value = self.gdf.loc[current_elect, second_benefit_cols].max(axis=1) * (1 - elect_fraction)
-            second_tech_net_benefit = second_best_value  # * self.gdf.loc[current_elect, 'Households']
-            dff = self.gdf.loc[current_elect].copy()
-            dff['max_benefit_tech'] = second_best
-            dff['maximum_net_benefit'] = second_tech_net_benefit
-            dff['Calibrated_pop'] *= (1 - elect_fraction)
-            dff['Elec_pop_calib'] *= (1 - elect_fraction)
-            dff['Households'] *= (1 - elect_fraction)
+                if tech.name == 'Electricity':
+                    dff['Elec_pop_calib'] *= 0
+                    self.gdf.loc[current, 'Elec_pop_calib'] *= tech.factor.loc[current]
+                self.gdf.loc[current, 'Calibrated_pop'] *= tech.factor.loc[current]
+                self.gdf.loc[current, 'Households'] *= tech.factor.loc[current]
+                gdf = gdf.append(dff)
 
-            self.gdf.loc[current_elect, 'Calibrated_pop'] *= elect_fraction
-            self.gdf.loc[current_elect, 'Elec_pop_calib'] *= elect_fraction
-            self.gdf.loc[current_elect, 'Households'] *= elect_fraction
-            self.gdf = self.gdf.append(dff)
+        self.gdf = self.gdf.append(gdf)
+
+        # current_elect = (self.gdf['Current_elec'] == 1) & (self.gdf['Elec_pop_calib'] < self.gdf['Calibrated_pop']) & \
+        #                 (self.gdf["max_benefit_tech"] == 'Electricity')
+        # if current_elect.sum() > 0:
+        #     elect_fraction = self.gdf.loc[current_elect, "Elec_pop_calib"] / self.gdf.loc[
+        #         current_elect, "Calibrated_pop"]
+        #     self.gdf.loc[current_elect, "maximum_net_benefit"] *= elect_fraction
+        #
+        #     second_benefit_cols = [col for col in self.gdf if 'net_benefit_' in col]
+        #     second_benefit_cols.remove('net_benefit_Electricity')
+        #     second_best = self.gdf.loc[current_elect, second_benefit_cols].idxmax(axis=1).str.replace("net_benefit_",
+        #                                                                                               "")
+        #
+        #     second_best_value = self.gdf.loc[current_elect, second_benefit_cols].max(axis=1) * (1 - elect_fraction)
+        #     second_tech_net_benefit = second_best_value  # * self.gdf.loc[current_elect, 'Households']
+        #     dff = self.gdf.loc[current_elect].copy()
+        #     dff['max_benefit_tech'] = second_best
+        #     dff['maximum_net_benefit'] = second_tech_net_benefit
+        #     dff['Calibrated_pop'] *= (1 - elect_fraction)
+        #     dff['Elec_pop_calib'] *= (1 - elect_fraction)
+        #     dff['Households'] *= (1 - elect_fraction)
+        #
+        #     self.gdf.loc[current_elect, 'Calibrated_pop'] *= elect_fraction
+        #     self.gdf.loc[current_elect, 'Elec_pop_calib'] *= elect_fraction
+        #     self.gdf.loc[current_elect, 'Households'] *= elect_fraction
+        #     self.gdf = self.gdf.append(dff)
 
         # current_biogas = (self.gdf["needed_energy"] * self.gdf["Households"] >= self.gdf["available_biogas_energy"]) & \
         #                  (self.gdf["max_benefit_tech"] == 'Biogas')
@@ -813,8 +849,8 @@ class OnSSTOVE(DataProcessor):
             dff[variable] += ' and '
             dff = dff.groupby('index').agg({variable: 'sum'})
             dff[variable] = [s[0:len(s) - 5] for s in dff[variable]]
-            tech_codes = {tech: i for i, tech in enumerate(dff[variable].unique())}
-            layer[self.rows, self.cols] = [tech_codes[tech] for tech in dff[variable]]
+            tech_codes = {tech.replace('_', ' '): i for i, tech in enumerate(dff[variable].unique())}
+            layer[self.rows, self.cols] = [tech_codes[tech.replace('_', ' ')] for tech in dff[variable]]
         else:
             dff = self.gdf.copy().reset_index(drop=False)
             dff = dff.groupby('index').agg({variable: 'sum'})

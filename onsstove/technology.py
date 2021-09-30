@@ -303,9 +303,9 @@ class Technology:
         discount_rate, proj_life = self.discount_factor(specs_file)
 
         energy = specs_file["Meals_per_day"] * 365 * 3.64 / self.efficiency
-        gdf["needed_energy"] = specs_file["Meals_per_day"] * 365 * 3.64 / self.efficiency
+        self.energy = specs_file["Meals_per_day"] * 365 * 3.64 / self.efficiency
 
-        energy_needed = energy * np.ones(proj_life)
+        energy_needed = self.energy * np.ones(proj_life)
 
         self.discounted_energy = (energy_needed / discount_rate)
 
@@ -313,9 +313,9 @@ class Technology:
 
         discount_rate, proj_life = self.discount_factor(specs_file)
 
-        self.energy = specs_file["Meals_per_day"] * 365 * 3.64 / self.efficiency
+        energy = specs_file["Meals_per_day"] * 365 * 3.64 / self.efficiency
 
-        cost = (self.energy * self.fuel_cost / self.energy_content + self.transport_cost) * np.ones(gdf.shape[0])
+        cost = (energy * self.fuel_cost / self.energy_content + self.transport_cost) * np.ones(gdf.shape[0])
 
         fuel_cost = [np.ones(proj_life) * x for x in cost]
 
@@ -348,6 +348,8 @@ class Technology:
         gdf["costs_{}".format(self.name)] = self.costs
         gdf["benefits_{}".format(self.name)] = self.benefits
         gdf["net_benefit_{}".format(self.name)] = self.benefits - self.costs
+        self.factor = pd.Series(np.ones(gdf.shape[0]), index=gdf.index)
+        self.households = gdf['Households']
 
 
 class LPG(Technology):
@@ -535,6 +537,7 @@ class Electricity(Technology):
         gdf.loc[gdf['Current_elec'] == 0, "net_benefit_{}".format(self.name)] = np.nan
         factor = gdf['Elec_pop_calib'] / gdf['Calibrated_pop']
         factor[factor > 1] = 1
+        self.factor = factor
         self.households = gdf['Households'] * factor
 
 
