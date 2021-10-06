@@ -60,7 +60,7 @@ class DataProcessor:
     def add_layer(self, category, name, layer_path, layer_type, query=None,
                   postgres=False, base_layer=False, resample='nearest',
                   normalization=None, inverse=False, distance=None,
-                  distance_limit=float('inf')):
+                  distance_limit=float('inf'), window=False):
         """
         Adds a new layer (type VectorLayer or RasterLayer) to the MCA class
 
@@ -86,9 +86,11 @@ class DataProcessor:
                                     inverse=inverse, query=query)
 
         elif layer_type == 'raster':
+            if window:
+                window = self.base_layer.bounds
             layer = RasterLayer(category, name, layer_path,
                                 normalization=normalization, inverse=inverse,
-                                distance=distance, resample=resample)
+                                distance=distance, resample=resample, window=window)
 
             if base_layer:
                 if not self.cell_size:

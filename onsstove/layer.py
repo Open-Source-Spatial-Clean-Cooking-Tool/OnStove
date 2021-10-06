@@ -3,6 +3,9 @@ import geopandas as gpd
 import re
 import pandas as pd
 import datetime
+
+from rasterio import windows
+from rasterio.warp import calculate_default_transform
 from skimage.graph.mcp import MCP_Geometric
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
@@ -18,7 +21,7 @@ class Layer:
     def __init__(self, category='', name='', layer_path=None,
                  conn=None, normalization=None,
                  inverse=False, distance=None,
-                 distance_limit=float('inf'), resample='nearest'):
+                 distance_limit=float('inf')):
         self.category = category
         self.name = name
         self.normalization = normalization
@@ -28,8 +31,6 @@ class Layer:
         self.friction = None
         self.distance_raster = None
         self.restrictions = []
-        self.resample = resample
-        self.read_layer(layer_path, conn)
         self.weight = 1
 
     def __repr__(self):
@@ -48,12 +49,12 @@ class Layer:
     def read_layer(self, layer_path, conn=None):
         pass
 
-    def travel_time(self, output_path):
+    def travel_time(self, output_path, condition=None):
         layer = self.friction.layer.copy()
         layer *= 1000 / 60  # to convert to hours per kilometer
         layer[np.isnan(layer)] = float('inf')
         mcp = MCP_Geometric(layer, fully_connected=True)
-        row, col = self.start_points()
+        row, col = self.start_points(condition=condition)
         pointlist = np.column_stack((row, col))
         # TODO: create method for restricted areas
         cumulative_costs, traceback = mcp.find_costs(starts=pointlist)
@@ -91,7 +92,7 @@ class VectorLayer(Layer):
                          normalization=normalization, inverse=inverse,
                          distance=distance,
                          distance_limit=distance_limit)
-
+        self.read_layer(layer_path, conn)
         if query:
             self.layer = self.layer.query(query)
 
@@ -191,6 +192,21 @@ class RasterLayer(Layer):
     of a rasterio object. Also some extra metadata is stored as layer name and 
     normalization algorithm.
     """
+    def __init__(self, category, name, layer_path=None, conn=None,
+                 normalization='MinMax', inverse=False, distance='proximity',
+                 distance_limit=float('inf'), resample='nearest', window=None):
+        """
+        Initializes the class. It recibes the name of the layer,
+        the path of the layer, a normalization algorithm, a distance algorithm
+        and a PostgreSQL connection if the layer needs to be read from a database
+        """
+        self.resample = resample
+        super().__init__(category=category, name=name,
+                         layer_path=layer_path, conn=conn,
+                         normalization=normalization, inverse=inverse,
+                         distance=distance,
+                         distance_limit=distance_limit)
+        self.read_layer(layer_path, conn, window=window)
 
     def __repr__(self):
         return 'Raster' + super().__repr__()
@@ -198,12 +214,24 @@ class RasterLayer(Layer):
     def __str__(self):
         return 'Raster' + super().__str__()
 
-    def read_layer(self, layer_path, conn=None):
+    def read_layer(self, layer_path, conn=None, window=None):
         if layer_path:
             with rasterio.open(layer_path) as src:
-                self.layer = src.read(1)
-                self.meta = src.meta
-                self.bounds = src.bounds
+                if window:
+                    transform = src.transform
+                    self.meta = src.meta.copy()
+                    self.bounds = window
+                    window = windows.from_bounds(*window, transform=transform)
+                    window_transform = src.window_transform(window)
+                    self.layer = src.read(1, window=window).astype('float32')
+                    self.meta.update(transform=window_transform,
+                                     width=self.layer.shape[1], height=self.layer.shape[0],
+                                     compress='DEFLATE', dtype='float32')
+                else:
+                    self.layer = src.read(1).astype('float32')
+                    self.meta = src.meta
+                    self.bounds = src.bounds
+                    self.meta['dtype'] = 'float32'
         self.path = layer_path
 
     def mask(self, mask_layer, output_path, all_touched=False):
@@ -222,6 +250,14 @@ class RasterLayer(Layer):
             self.layer = data
             self.meta = meta
             self.save(output_path)
+
+    def calculate_default_transform(self, dst_crs):
+        t, w, h = calculate_default_transform(self.meta['crs'],
+                                              dst_crs,
+                                              self.meta['width'],
+                                              self.meta['height'],
+                                              *self.bounds)
+        return t, w, h
 
     def get_distance_raster(self, base_layer, output_path,
                             mask_layer):
@@ -268,8 +304,11 @@ class RasterLayer(Layer):
             # self.distance_raster.bounds = self.bounds
             # self.distance_raster.save(output_path)
 
-    def start_points(self):
-        return np.where(np.isin(self.layer, self.starting_cells))
+    def start_points(self, condition=None):
+        if callable(condition):
+            return np.where(condition(self.layer))
+        else:
+            return np.where(np.isin(self.layer, self.starting_cells))
 
     def normalize(self, output_path, mask_layer=None, buffer=False):
         if self.normalization == 'MinMax':
@@ -288,7 +327,7 @@ class RasterLayer(Layer):
                                    self.name + f'{sufix}.tif')
         self.path = output_file
         os.makedirs(output_path, exist_ok=True)
-        self.meta.update(dtype=self.layer.dtype, compress='DEFLATE')
+        self.meta.update(compress='DEFLATE')
         with rasterio.open(output_file, "w", **self.meta) as dest:
             dest.write(self.layer, indexes=1)
 
@@ -323,6 +362,19 @@ class RasterLayer(Layer):
         layer[layer < min_val] = min_val
         return layer
 
+    def quantiles(self, quantiles):
+        x = self.layer.flat
+        x = x[~np.isnan(x)].copy()
+        qs = np.quantile(x, quantiles)
+        layer = self.layer.copy()
+        i = 0
+        while i < (len(qs)):
+            if i == 0:
+                layer[(layer >= 0) & (layer < qs[i])] = qs[i]
+            else:
+                layer[(layer >= qs[i - 1]) & (layer < qs[i])] = qs[i]
+        return layer
+
     def category_legend(self, im, categories, legend_position=(1.05, 1)):
         values = list(categories.values())
         titles = list(categories.keys())
@@ -336,13 +388,15 @@ class RasterLayer(Layer):
         plt.grid(True)
 
     def plot(self, cmap='viridis', ticks=None, tick_labels=None,
-             cumulative_count=None, categories=None, legend_position=(1.05, 1),
+             cumulative_count=None, quantiles=None, categories=None, legend_position=(1.05, 1),
              admin_layer=None):
         extent = [self.bounds[0], self.bounds[2],
                   self.bounds[1], self.bounds[3]]  # [left, right, bottom, top]
 
         if cumulative_count:
             layer = self.cumulative_count(cumulative_count)
+        elif quantiles:
+            layer = self.quantiles(quantiles)
         else:
             layer = self.layer
 

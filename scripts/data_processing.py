@@ -1,38 +1,63 @@
-import os, sys
-import geopandas as gpd
-import numpy as np
-import plotly.express as px
+from onsstove.onsstove import DataProcessor
 
-from onsstove.onsstove import OnSSTOVE
-from onsstove.layer import RasterLayer, VectorLayer
-from onsstove.raster import interpolate
+# 1. Create a data processor
+output_directory = snakemake.params.output_directory
+data = DataProcessor(project_crs=3857, cell_size=(1000, 1000))
+data.output_directory = output_directory
 
+# 2. Add a mask layer (country boundaries)
+adm_path = snakemake.input.mask_layer
+data.add_mask_layer(category='Administrative', name='Country_boundaries', layer_path=adm_path)
 
-# Create the model
-output_directory = snakemake.input.output_directory
-model = OnSSTOVE(project_crs=3395, cell_size=(1000, 1000))
-model.output_directory = output_directory
+# 3. Add GIS layers
 
-# Add a country mask layer
-country_name = snakemake.input.country_name
-path = r"..\Clean cooking Africa paper\01. Data\GIS-data\Admin\Admin_1.shp"
-africa = gpd.read_file(path)
-country = africa.loc[africa['GID_0'] == country_name.upper()]
+# Demographics
+pop_path = snakemake.input.population
+data.add_layer(category='Demographics', name='Population', layer_path=pop_path,
+               layer_type='raster', base_layer=True, resample='sum')
 
-mask_layer = VectorLayer('admin', 'adm_0')
-mask_layer.layer = country
-os.makedirs(f'{output_directory}/admin/adm_0', exist_ok=True)
-mask_layer.reproject(model.project_crs, f'{output_directory}/admin/adm_0')
-model.mask_layer = mask_layer
+# ghs_path = snakemake.input.ghs
+# data.add_layer(category='Demographics', name='Urban_rural_divide', layer_path=ghs_path, layer_type='raster',
+#                resample='nearest')
 
-# Add a population base layer
-path = snakemake.input.population
-os.makedirs(f'{output_directory}/demographics/population', exist_ok=True)
-population = RasterLayer('demographics', 'population', layer_path=path, resample='sum')
-population.reproject(model.project_crs, f'{output_directory}/demographics/population',
-                     model.cell_size[0], model.cell_size[1])
-population.mask(model.mask_layer.layer, f'{output_directory}/demographics/population')
-model.base_layer = population
-model.population_to_dataframe(population)
+# Biomass
+forest_path = snakemake.input.forest
+data.add_layer(category='Biomass', name='Forest', layer_path=forest_path, layer_type='raster',
+               resample='sum', window=True)
+data.layers['Biomass']['Forest'].layer[data.layers['Biomass']['Forest'].layer < 5] = 0
+data.layers['Biomass']['Forest'].layer[data.layers['Biomass']['Forest'].layer >= 5] = 1
+data.layers['Biomass']['Forest'].save(f'{data.output_directory}/Biomass/Forest')
+transform = data.layers['Biomass']['Forest'].calculate_default_transform(3857)[0]
+factor = (data.cell_size[0] ** 2) / (transform[0] ** 2)
 
+friction_path = snakemake.input.walking_friction
+data.add_layer(category='Biomass', name='Friction', layer_path=friction_path, layer_type='raster', resample='average')
 
+# Electricity
+hv_path = snakemake.input.hv_lines
+data.add_layer(category='Electricity', name='HV_lines', layer_path=hv_path, layer_type='vector')
+
+mv_path = snakemake.input.mv_lines
+data.add_layer(category='Electricity', name='MV_lines', layer_path=mv_path, layer_type='vector')
+
+ntl_path = snakemake.input.ntl
+data.add_layer(category='Electricity', name='Night_time_lights', layer_path=ntl_path, layer_type='raster',
+               resample='average')
+
+# LPG
+traveltime_cities = snakemake.input.traveltime_cities
+data.add_layer(category='LPG', name='Traveltime', layer_path=traveltime_cities, layer_type='raster', resample='sum')
+
+# Temperature
+temperature = snakemake.input.temperature
+data.add_layer(category='Biogas', name='Temperature', layer_path=temperature, layer_type='raster', resample='average')
+
+# 4. Mask reproject and align all required layers
+data.mask_layers(datasets='all')
+data.align_layers(datasets='all')
+
+# Canopy calculation
+data.layers['Biomass']['Forest'].layer /= factor
+data.layers['Biomass']['Forest'].layer *= 100
+data.layers['Biomass']['Forest'].layer[data.layers['Biomass']['Forest'].layer > 100] = 100
+data.layers['Biomass']['Forest'].save(f'{data.output_directory}/Biomass/Forest')

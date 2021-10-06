@@ -461,7 +461,7 @@ class Biomass(Technology):
         self.forest_path = forest_path
         self.friction_path = friction_path
 
-    def transportation_time(self, friction_path, forest_path, model, align=False):
+    def transportation_time(self, friction_path, forest_path, model, align=False, condition=None):
         forest = RasterLayer(self.name, 'Forest', layer_path=forest_path, resample='mode')
         friction = RasterLayer(self.name, 'Friction', layer_path=friction_path, resample='average')
 
@@ -469,14 +469,15 @@ class Biomass(Technology):
             forest.align(model.base_layer.path, os.path.join(model.output_directory, self.name, 'Forest'))
             friction.align(model.base_layer.path, os.path.join(model.output_directory, self.name, 'Friction'))
 
+        forest.layer
         forest.add_friction_raster(friction)
-        forest.travel_time(os.path.join(model.output_directory, self.name))
+        forest.travel_time(os.path.join(model.output_directory, self.name), condition=condition)
 
         self.travel_time = 2 * pd.Series(forest.distance_raster.layer[model.rows, model.cols],
                                          index=model.gdf.index)
 
-    def total_time(self, model):
-        self.transportation_time(self.friction_path, self.forest_path, model)
+    def total_time(self, model, condition=None):
+        self.transportation_time(self.friction_path, self.forest_path, model, condition=condition)
         self.total_time_yr = self.time_of_cooking * model.specs['Meals_per_day'] * 365 + (
                 self.travel_time + self.time_of_collection) * 52 * 2
 

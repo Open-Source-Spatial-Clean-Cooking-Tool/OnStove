@@ -96,7 +96,8 @@ def proximity_raster(src_filename, dst_filename, values, compression):
     dst_ds = None
 
 
-def mask_raster(raster_path, mask_layer, output_file, nodata=0, compression='NONE', all_touched=False):
+def mask_raster(raster_path, mask_layer, output_file, nodata=0, compression='NONE',
+                all_touched=False):
     if isinstance(mask_layer, str):
         with fiona.open(mask_layer, "r") as shapefile:
             shapes = [feature["geometry"] for feature in shapefile]
