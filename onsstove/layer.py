@@ -235,6 +235,7 @@ class RasterLayer(Layer):
         self.path = layer_path
 
     def mask(self, mask_layer, output_path, all_touched=False):
+        print(f'Masking {self.name}')
         output_file = os.path.join(output_path,
                                    self.name + '.tif')
         mask_raster(self.path, mask_layer.to_crs(self.meta['crs']),

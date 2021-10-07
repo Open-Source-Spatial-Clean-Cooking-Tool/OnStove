@@ -230,15 +230,14 @@ def merge_rasters(files_path, dst_crs, outpul_file):
 
     out_meta = src.meta.copy()
     out_meta.update({"driver": "GTiff",
-                     "height": mosaic.shape[1],
-                     "width": mosaic.shape[2],
+                     "height": mosaic[0].shape[0],
+                     "width": mosaic[0].shape[1],
                      "transform": out_trans,
                      "crs": dst_crs
                      }
                     )
-
     with rasterio.open(outpul_file, "w", **out_meta) as dest:
-        dest.write(mosaic, indexes=1)
+        dest.write(mosaic[0], indexes=1)
 
 
 def rasterize(vector_layer, raster_base_layer, outpul_file=None, value=None,
