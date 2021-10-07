@@ -41,10 +41,10 @@ rule process_data:
     output:
           population = "Africa/{country}/Demographics/Population/Population.tif",
           forest = "Africa/{country}/Biomass/Forest/Forest.tif",
-          # hv_lines = "Africa/{country}/Electricity/HV_lines/HV_lines.geojson",
-          # mv_lines = "Africa/{country}/Electricity/MV_lines/MV_lines.geojson",
-          # ntl = "Africa/{country}/Electricity/Night_time_lights/Night_time_lights.tif",
-          # traveltime_cities = "Africa/{country}/LPG/Traveltime/Traveltime.tif",
-          # temperature = "Africa/{country}/Biogas/Temperature/Temperature.tif"
+          hv_lines = "Africa/{country}/Electricity/HV_lines/HV_lines.geojson",
+          mv_lines = "Africa/{country}/Electricity/MV_lines/MV_lines.geojson",
+          ntl = "Africa/{country}/Electricity/Night_time_lights/Night_time_lights.tif",
+          traveltime_cities = "Africa/{country}/LPG/Traveltime/Traveltime.tif",
+          temperature = "Africa/{country}/Biogas/Temperature/Temperature.tif"
     script:
           "scripts/data_processing.py"

@@ -37,36 +37,40 @@ data.layers['Biomass']['Forest'].save(f'{data.output_directory}/Biomass/Forest')
 transform = data.layers['Biomass']['Forest'].calculate_default_transform(data.project_crs)[0]
 factor = (data.cell_size[0] ** 2) / (transform[0] ** 2)
 
-# print('Adding walking friction')
-# friction_path = snakemake.input.walking_friction
-# data.add_layer(category='Biomass', name='Friction', layer_path=friction_path, layer_type='raster',
-               # resample='average', window=True)
+print('Adding walking friction')
+friction_path = snakemake.input.walking_friction
+data.add_layer(category='Biomass', name='Friction', layer_path=friction_path, layer_type='raster',
+               resample='average', window=True)
 
 # Electricity
-# print('Adding HV lines')
-# hv_path = snakemake.input.hv_lines
-# data.add_layer(category='Electricity', name='HV_lines', layer_path=hv_path, layer_type='vector')
+print('Adding HV lines')
+hv_path = snakemake.input.hv_lines
+data.add_layer(category='Electricity', name='HV_lines', layer_path=hv_path, layer_type='vector')
 
-# print('Adding MV lines')
-# mv_path = snakemake.input.mv_lines
-# data.add_layer(category='Electricity', name='MV_lines', layer_path=mv_path, layer_type='vector')
+print('Adding MV lines')
+mv_path = snakemake.input.mv_lines
+data.add_layer(category='Electricity', name='MV_lines', layer_path=mv_path, layer_type='vector')
 
-# print('Adding Nighttime Lights')
-# ntl_path = snakemake.input.ntl
-# data.add_layer(category='Electricity', name='Night_time_lights', layer_path=ntl_path, layer_type='raster',
-               # resample='average', window=True)
+print('Adding Nighttime Lights')
+ntl_path = snakemake.input.ntl
+data.add_layer(category='Electricity', name='Night_time_lights', layer_path=ntl_path, layer_type='raster',
+               resample='average', window=True)
+data.layers['Electricity']['Night_time_lights'].save(f'{data.output_directory}/Electricity/Night_time_lights')
 
 # LPG
-# print('Adding traveltime to cities')
-# traveltime_cities = snakemake.input.traveltime_cities
-# data.add_layer(category='LPG', name='Traveltime', layer_path=traveltime_cities,
-#                layer_type='raster', resample='sum', window=True)
+print('Adding traveltime to cities')
+traveltime_cities = snakemake.input.traveltime_cities
+data.add_layer(category='LPG', name='Traveltime', layer_path=traveltime_cities,
+               layer_type='raster', resample='sum', window=True)
+data.layers['LPG']['Traveltime'].save(f'{data.output_directory}/LPG/Traveltime')
 
 # Temperature
-# print('Adding temperature')
-# temperature = snakemake.input.temperature
-# data.add_layer(category='Biogas', name='Temperature', layer_path=temperature,
-               # layer_type='raster', resample='average', window=True)
+print('Adding temperature')
+temperature = snakemake.input.temperature
+data.add_layer(category='Biogas', name='Temperature', layer_path=temperature,
+               layer_type='raster', resample='average', window=True)
+data.layers['Biogas']['Temperature'].save(f'{data.output_directory}/Biogas/Temperature')
+data.mask_layers(datasets={'Biogas': ['Temperature']})
 
 # 4. Mask reproject and align all required layers
 # print('Reprojecting all layers')
@@ -77,6 +81,9 @@ data.align_layers(datasets='all')
 
 print('Masking all layers')
 data.mask_layers(datasets='all')
+
+print('Reprojecting all layers')
+data.reproject_layers(datasets={'Electricity': ['HV_lines', 'MV_lines']})
 
 # Canopy calculation
 print('Calculating forest canopy cover')
