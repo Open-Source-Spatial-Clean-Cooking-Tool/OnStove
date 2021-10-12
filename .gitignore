@@ -137,4 +137,6 @@ output/
 Untitled*
 .idea/
 results/
+Africa/
+.snakemake
 

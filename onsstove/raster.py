@@ -17,7 +17,7 @@ from osgeo import gdal, osr
 import gzip
 
 
-def align_raster(raster_1, raster_2, method='nearest', compression='NONE'):
+def align_raster(raster_1, raster_2, method='nearest', compression='DEFLATE'):
     with rasterio.open(raster_1) as src:
         raster_1_meta = src.meta
     with rasterio.open(raster_2) as src:
@@ -37,6 +37,7 @@ def align_raster(raster_1, raster_2, method='nearest', compression='NONE'):
         destination=destination,
         src_transform=raster_2_meta['transform'],
         src_crs=raster_2_meta['crs'],
+        src_nodata=raster_2_meta['nodata'],
         dst_transform=raster_1_meta['transform'],
         dst_crs=raster_1_meta['crs'],
         resampling=Resampling[method])
@@ -96,7 +97,8 @@ def proximity_raster(src_filename, dst_filename, values, compression):
     dst_ds = None
 
 
-def mask_raster(raster_path, mask_layer, output_file, nodata=0, compression='NONE'):
+def mask_raster(raster_path, mask_layer, output_file, nodata=0, compression='NONE',
+                all_touched=False):
     if isinstance(mask_layer, str):
         with fiona.open(mask_layer, "r") as shapefile:
             shapes = [feature["geometry"] for feature in shapefile]
@@ -108,11 +110,13 @@ def mask_raster(raster_path, mask_layer, output_file, nodata=0, compression='NON
     if '.gz' in raster_path:
         with gzip.open(raster_path) as gzip_infile:
             with rasterio.open(gzip_infile) as src:
-                out_image, out_transform = rasterio.mask.mask(src, shapes, crop=True, nodata=nodata)
+                out_image, out_transform = rasterio.mask.mask(src, shapes, crop=True, nodata=nodata,
+                                                              all_touched=all_touched)
                 out_meta = src.meta
     else:
         with rasterio.open(raster_path) as src:
-            out_image, out_transform = rasterio.mask.mask(src, shapes, crop=True, nodata=nodata)
+            out_image, out_transform = rasterio.mask.mask(src, shapes, crop=True, nodata=nodata,
+                                                          all_touched=all_touched)
             out_meta = src.meta
 
     out_meta.update({"driver": "GTiff",
@@ -127,9 +131,9 @@ def mask_raster(raster_path, mask_layer, output_file, nodata=0, compression='NON
         dest.write(out_image)
 
 
-def reproject_raster(raster_path, dst_crs, output_file=None,
+def reproject_raster(raster_path, dst_crs,
                      cell_width=None, cell_height=None, method='nearest',
-                     compression='NONE'):
+                     compression='DEFLATE'):
     """
     Resamples and/or reproject a raster layer.
     """
@@ -160,31 +164,31 @@ def reproject_raster(raster_path, dst_crs, output_file=None,
             'compress': compression
         })
         # The layer is then reprojected/resampled
-        if output_file:
-            # if an output file path was provided, then the layer is saved
-            with rasterio.open(output_file, 'w', **out_meta) as dst:
-                for i in range(1, src.count + 1):
-                    reproject(
-                        source=rasterio.band(src, i),
-                        destination=rasterio.band(dst, i),
-                        src_transform=src.transform,
-                        src_crs=src.crs,
-                        dst_transform=transform,
-                        dst_crs=dst_crs,
-                        resampling=Resampling[method])
-        else:
+        # if output_file:
+        #     # if an output file path was provided, then the layer is saved
+        #     with rasterio.open(output_file, 'w', **out_meta) as dst:
+        #         for i in range(1, src.count + 1):
+        #             reproject(
+        #                 source=rasterio.band(src, i),
+        #                 destination=rasterio.band(dst, i),
+        #                 src_transform=src.transform,
+        #                 src_crs=src.crs,
+        #                 dst_transform=transform,
+        #                 dst_crs=dst_crs,
+        #                 resampling=Resampling[method])
+        # else:
             # If not outputfile is provided, then a numpy array and the 
             # metadata if returned
-            destination = np.full((height, width), src.nodata)
-            reproject(
-                source=rasterio.band(src, 1),
-                destination=destination,
-                src_transform=src.transform,
-                src_crs=src.crs,
-                dst_transform=transform,
-                dst_crs=dst_crs,
-                resampling=Resampling[method])
-            return destination, out_meta
+        destination = np.full((height, width), src.nodata)
+        reproject(
+            source=rasterio.band(src, 1),
+            destination=destination,
+            src_transform=src.transform,
+            src_crs=src.crs,
+            dst_transform=transform,
+            dst_crs=dst_crs,
+            resampling=Resampling[method])
+        return destination, out_meta
 
 
 def sample_raster(path, gdf):
@@ -227,19 +231,18 @@ def merge_rasters(files_path, dst_crs, outpul_file):
 
     out_meta = src.meta.copy()
     out_meta.update({"driver": "GTiff",
-                     "height": mosaic.shape[1],
-                     "width": mosaic.shape[2],
+                     "height": mosaic[0].shape[0],
+                     "width": mosaic[0].shape[1],
                      "transform": out_trans,
                      "crs": dst_crs
                      }
                     )
-
     with rasterio.open(outpul_file, "w", **out_meta) as dest:
-        dest.write(mosaic, indexes=1)
+        dest.write(mosaic[0], indexes=1)
 
 
 def rasterize(vector_layer, raster_base_layer, outpul_file=None, value=None,
-              nodata=-9999, compression='NONE', dtype=rasterio.uint8,
+              nodata=0, compression='NONE', dtype=rasterio.uint8,
               all_touched=True, save=False):
     vector_layer = vector_layer.rename(columns={'geometry': 'geom'})
     if value:
@@ -274,7 +277,8 @@ def rasterize(vector_layer, raster_base_layer, outpul_file=None, value=None,
             return image, out_meta
 
 
-def normalize(raster=None, limit=float('inf'), output_file=None, inverse=False, meta=None):
+def normalize(raster=None, limit=float('inf'), output_file=None,
+              inverse=False, meta=None, buffer=False):
     if isinstance(raster, str):
         with rasterio.open(raster) as src:
             raster = src.read(1)
@@ -284,16 +288,22 @@ def normalize(raster=None, limit=float('inf'), output_file=None, inverse=False, 
         raster = raster.copy()
         nodata = meta['nodata']
         meta = meta
-    raster[raster > limit] = np.nan
-    min_value = np.nanmin(raster[raster != nodata])
-    max_value = np.nanmax(raster[raster != nodata])
-    raster[raster != nodata] = raster[raster != nodata] / (max_value - min_value)
+
     if inverse:
-        raster[np.isnan(raster)] = 1
+        raster[raster > limit] = np.nan
+
+    raster[raster == nodata] = np.nan
+    min_value = np.nanmin(raster)
+    max_value = np.nanmax(raster)
+    raster = (raster - min_value) / (max_value - min_value)
+    if inverse:
+        if not buffer:
+            raster[np.isnan(raster)] = 1
         raster[raster < 0] = np.nan
         raster = 1 - raster
     else:
-        raster[np.isnan(raster)] = 0
+        if not buffer:
+            raster[np.isnan(raster)] = 0
         raster[raster < 0] = np.nan
 
     meta.update(nodata=np.nan, dtype='float32')
@@ -325,44 +335,14 @@ def resample(raster_path, height, width, method='bilinear'):
         return data, transform
 
 
-def lpg_transportation_cost(travel_time):
-    """The cost of transporting LPG. See https://iopscience.iop.org/article/10.1088/1748-9326/6/3/034002/pdf for the formula
-    
-    Transportation cost = (2 * diesel consumption per h * national diesel price * travel time)/transported LPG
-    
-    Total cost = (LPG cost + Transportation cost)/efficiency of LPG stoves
-    
-    
-    Each truck is assumed to transport 2,000 kg LPG 
-    (3.5 MT truck https://www.wlpga.org/wp-content/uploads/2019/09/2019-Guide-to-Good-Industry-Practices-for-LPG-Cylinders-in-the-
-    Distribution-Channel.pdf)
-    National diesel price in Nepal is assumed to be 0.88 USD/l
-    Diesel consumption per h is assumed to be 14 l/h (14 l/100km)
-    (https://www.iea.org/reports/fuel-consumption-of-cars-and-vans)
-    LPG cost in Nepal is assumed to be 19 USD per cylinder (1.34 USD/kg)
-    LPG stove efficiency is assumed to be 60%
-    
-    :param param1:  travel_time_raster
-                    Hour to travel between each point and the startpoints as array
-    :returns:       The cost of LPG in each cell per kg
-    """
-    with rasterio.open(travel_time) as src:
-        trav = src.read(1)
-
-    transport_cost = (2 * 14 * 0.88 * trav) / 2000
-    total_cost = (transport_cost + 1.34) / 0.6
-
-    return total_cost
-
-
-def travel_time(friction, starts):
-    friction *= 1000 / 60
-    friction[np.isnan(friction)] = float('inf')
-    mcp = MCP_Geometric(friction, fully_connected=True)
-    row, col = friction_start_points(friction, starts)
-    pointlist = np.column_stack((row, col))
-
-    cumulative_costs, traceback = mcp.find_costs(starts=pointlist)
-    cumulative_costs[np.where(cumulative_costs == float('inf'))] = np.nan
-
-    return cumulative_costs
+# def travel_time(friction, starts):
+#     friction *= 1000 / 60
+#     friction[np.isnan(friction)] = float('inf')
+#     mcp = MCP_Geometric(friction, fully_connected=True)
+#     row, col = friction_start_points(friction, starts)
+#     pointlist = np.column_stack((row, col))
+#
+#     cumulative_costs, traceback = mcp.find_costs(starts=pointlist)
+#     cumulative_costs[np.where(cumulative_costs == float('inf'))] = np.nan
+#
+#     return cumulative_costs
