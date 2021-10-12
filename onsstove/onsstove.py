@@ -1,14 +1,10 @@
-import os
-import pickle
+import dill
 from csv import DictReader
 
 import psycopg2
 import pandas as pd
-import geopandas as gpd
-import numpy as np
-from typing import Dict, Any
-from shapely.geometry import shape
 import scipy.spatial
+from rasterio.warp import transform_bounds
 
 from onsstove.technology import Technology, LPG, Biomass, Electricity, Biogas
 from .raster import *
@@ -79,15 +75,21 @@ class DataProcessor:
                                     distance_limit=distance_limit,
                                     inverse=inverse, query=query)
             else:
+                if window:
+                    window = self.mask_layer.layer
                 layer = VectorLayer(category, name, layer_path,
                                     normalization=normalization,
                                     distance=distance,
                                     distance_limit=distance_limit,
-                                    inverse=inverse, query=query)
+                                    inverse=inverse, query=query, bbox=window)
 
         elif layer_type == 'raster':
             if window:
-                window = self.base_layer.bounds
+                with rasterio.open(layer_path) as src:
+                    src_crs = src.meta['crs']
+                if src_crs != self.mask_layer.layer.crs:
+                    bounds = transform_bounds(self.mask_layer.layer.crs, src_crs, *self.mask_layer.bounds())
+                window = bounds
             layer = RasterLayer(category, name, layer_path,
                                 normalization=normalization, inverse=inverse,
                                 distance=distance, resample=resample, window=window)
@@ -260,7 +262,6 @@ class DataProcessor:
         layer.normalized.name = 'Clean Cooking Potential Index'
         self.clean_cooking_index = layer.normalized
 
-    # TODO: Logic to set weights and relation of datasets to the assistance need index
     def get_assistance_need_index(self, datasets='all', buffer=False):
         self.normalize_rasters(datasets=datasets, buffer=buffer)
         datasets = self.get_layers(datasets)
@@ -404,10 +405,10 @@ class OnSSTOVE(DataProcessor):
         ntl = self.normalize("Night_lights")
         pop = self.normalize("Calibrated_pop")
 
-        self.combined_weight = (elec_dist * self.specs["infra_weight"] + pop * self.specs["Min_Elec_Pop"] +
-                                ntl * self.specs["Min_Night_Lights"]) / (
-                                           self.specs["infra_weight"] + self.specs["Min_Elec_Pop"] +
-                                           self.specs["Min_Night_Lights"])
+        self.combined_weight = (elec_dist * self.specs["infra_weight"] + pop * self.specs["pop_weight"] +
+                                ntl * self.specs["NTL_weight"]) / (
+                                           self.specs["infra_weight"] + self.specs["pop_weight"] +
+                                           self.specs["NTL_weight"])
 
     def current_elec(self):
         self.normalize_for_electricity()
@@ -424,7 +425,7 @@ class OnSSTOVE(DataProcessor):
             elec_pop = self.gdf.loc[bool, "Calibrated_pop"].sum()
 
             self.gdf.loc[bool, "Current_elec"] = 1
-            i = i - 0.0001
+            i = i - 0.001
 
         self.i = i
 
@@ -434,7 +435,7 @@ class OnSSTOVE(DataProcessor):
 
         self.gdf["Elec_pop_calib"] = self.gdf["Calibrated_pop"]
 
-        i = self.i + 0.0001
+        i = self.i + 0.001
         total_pop = self.gdf["Calibrated_pop"].sum()
         elec_pop = self.gdf.loc[self.gdf["Current_elec"] == 1, "Calibrated_pop"].sum()
         diff = elec_pop - (total_pop * elec_rate)
@@ -453,7 +454,7 @@ class OnSSTOVE(DataProcessor):
 
             new_bool = bool & new_bool
             if new_bool.sum() == 0:
-                i = i + 0.0001
+                i = i + 0.001
 
         self.gdf.loc[self.gdf["Current_elec"] == 0, "Elec_pop_calib"] = 0
 
@@ -494,20 +495,23 @@ class OnSSTOVE(DataProcessor):
         """
         if not layer:
             if self.base_layer:
-                layer = self.base_layer
+                layer = self.base_layer.layer.copy()
+                meta =  self.base_layer.meta
             else:
                 raise ValueError("No population layer was provided as input to the method or in the model base_layer")
-
-        self.rows, self.cols = np.where(~np.isnan(layer.layer))
-        x, y = rasterio.transform.xy(layer.meta['transform'],
+        layer[layer==meta['nodata']] = np.nan
+        layer[layer == 0] = np.nan
+        self.rows, self.cols = np.where(~np.isnan(layer))
+        x, y = rasterio.transform.xy(meta['transform'],
                                      self.rows, self.cols,
                                      offset='center')
 
         self.gdf = gpd.GeoDataFrame({'geometry': gpd.points_from_xy(x, y),
-                                     'Pop': layer.layer[self.rows, self.cols]})
+                                     'Pop': layer[self.rows, self.cols]})
         self.gdf.crs = self.project_crs
 
-    def raster_to_dataframe(self, layer, name=None, method='sample'):
+    def raster_to_dataframe(self, layer, name=None, method='sample',
+                            nodata=np.nan, fill_nodata=None):
         """
         Takes a RasterLayer and a method (sample or read), gets the values from the raster layer using the population points previously extracted and saves the values in a new column of OnSSTOVE.gdf
         """
@@ -518,6 +522,19 @@ class OnSSTOVE(DataProcessor):
                 else:
                     self.gdf[name] = sample_raster(layer, self.gdf)
         elif method == 'read':
+            if fill_nodata:
+                if fill_nodata == 'interpolate':
+                    if np.isnan(layer[self.rows, self.cols]).sum() > 0:
+                        mask = layer.copy()
+                        mask[mask == nodata] = np.nan
+                        mask[~np.isnan(mask)] = 1
+                        rows, cols = np.where(np.isnan(mask) & ~np.isnan(self.base_layer.layer))
+                        mask[rows, cols] = 0
+                        layer = fillnodata(layer, mask=mask,
+                                           max_search_distance=10)
+                else:
+                    raise ValueError('fill_nodata can only be None or "interpolate"')
+
             self.gdf[name] = layer[self.rows, self.cols]
 
     def calibrate_urban_current_and_future_GHS(self, GHS_path):
@@ -647,7 +664,7 @@ class OnSSTOVE(DataProcessor):
 
         self.gdf['max_benefit_tech'] = self.gdf['max_benefit_tech'].str.replace("net_benefit_", "")
         self.gdf["maximum_net_benefit"] = self.gdf[net_benefit_cols].max(axis=1)
-        column_dict = self._get_column_functs()
+
         gdf = gpd.GeoDataFrame()
         for tech in techs:
             current = (tech.households < self.gdf['Households']) & \
@@ -662,7 +679,7 @@ class OnSSTOVE(DataProcessor):
 
                 second_best_value = dff.loc[current, second_benefit_cols].max(axis=1) * (1 - tech.factor.loc[current])
                 second_tech_net_benefit = second_best_value
-                # dff = self.gdf.loc[current].copy()
+
                 dff['max_benefit_tech'] = second_best
                 dff['maximum_net_benefit'] = second_tech_net_benefit
                 dff['Calibrated_pop'] *= (1 - tech.factor.loc[current])
@@ -676,55 +693,6 @@ class OnSSTOVE(DataProcessor):
                 gdf = gdf.append(dff)
 
         self.gdf = self.gdf.append(gdf)
-
-        # current_elect = (self.gdf['Current_elec'] == 1) & (self.gdf['Elec_pop_calib'] < self.gdf['Calibrated_pop']) & \
-        #                 (self.gdf["max_benefit_tech"] == 'Electricity')
-        # if current_elect.sum() > 0:
-        #     elect_fraction = self.gdf.loc[current_elect, "Elec_pop_calib"] / self.gdf.loc[
-        #         current_elect, "Calibrated_pop"]
-        #     self.gdf.loc[current_elect, "maximum_net_benefit"] *= elect_fraction
-        #
-        #     second_benefit_cols = [col for col in self.gdf if 'net_benefit_' in col]
-        #     second_benefit_cols.remove('net_benefit_Electricity')
-        #     second_best = self.gdf.loc[current_elect, second_benefit_cols].idxmax(axis=1).str.replace("net_benefit_",
-        #                                                                                               "")
-        #
-        #     second_best_value = self.gdf.loc[current_elect, second_benefit_cols].max(axis=1) * (1 - elect_fraction)
-        #     second_tech_net_benefit = second_best_value  # * self.gdf.loc[current_elect, 'Households']
-        #     dff = self.gdf.loc[current_elect].copy()
-        #     dff['max_benefit_tech'] = second_best
-        #     dff['maximum_net_benefit'] = second_tech_net_benefit
-        #     dff['Calibrated_pop'] *= (1 - elect_fraction)
-        #     dff['Elec_pop_calib'] *= (1 - elect_fraction)
-        #     dff['Households'] *= (1 - elect_fraction)
-        #
-        #     self.gdf.loc[current_elect, 'Calibrated_pop'] *= elect_fraction
-        #     self.gdf.loc[current_elect, 'Elec_pop_calib'] *= elect_fraction
-        #     self.gdf.loc[current_elect, 'Households'] *= elect_fraction
-        #     self.gdf = self.gdf.append(dff)
-
-        # current_biogas = (self.gdf["needed_energy"] * self.gdf["Households"] >= self.gdf["available_biogas_energy"]) & \
-        #                  (self.gdf["max_benefit_tech"] == 'Biogas')
-        # if current_biogas.sum() > 0:
-        #     biogas_fraction = self.gdf.loc[current_biogas, "available_biogas_energy"] / \
-        #                       self.gdf.loc[current_biogas, "needed_energy"]
-        #     self.gdf.loc[current_biogas, "maximum_net_benefit"] *= biogas_fraction
-        #
-        #     second_benefit_cols = [col for col in self.gdf if 'net_benefit_' in col]
-        #     second_benefit_cols.remove('net_benefit_Biogas')
-        #     second_best_biogas = self.gdf.loc[current_biogas, second_benefit_cols].idxmax(axis=1).str.replace("net_benefit_", "")
-        #
-        #     second_best_value = self.gdf.loc[current_biogas, second_benefit_cols].max(axis=1) * (1 - biogas_fraction)
-        #     second_tech_net_benefit = second_best_value #* self.gdf.loc[current_elect, 'Households']
-        #     dff = self.gdf.loc[current_biogas].copy()
-        #     dff['max_benefit_tech'] = second_best_biogas
-        #     dff['maximum_net_benefit'] = second_tech_net_benefit
-        #     dff['Calibrated_pop'] *= (1 - biogas_fraction)
-        #     dff['Households'] *= (1 - biogas_fraction)
-        #
-        #     self.gdf.loc[current_biogas, 'Calibrated_pop'] *= biogas_fraction
-        #     self.gdf.loc[current_biogas, 'Households'] *= biogas_fraction
-        #     self.gdf = self.gdf.append(dff)
 
     def add_admin_names(self, admin, column_name):
 
@@ -839,7 +807,8 @@ class OnSSTOVE(DataProcessor):
 
             layer.align(self.base_layer.path)
 
-            self.raster_to_dataframe(layer.layer, name="relative_wealth", method='read')
+            self.raster_to_dataframe(layer.layer, name="relative_wealth", method='read',
+                                     nodata=layer.meta['nodata'], fill_nodata='interpolate')
         else:
             raise ValueError("file_type needs to be either csv, raster, polygon or point.")
 
@@ -887,7 +856,7 @@ class OnSSTOVE(DataProcessor):
                            admin_layer=admin_layer)
 
     def to_image(self, variable, cmap='viridis', cumulative_count=None, legend_position=(1.05, 1),
-                 admin_layer=None):
+                 admin_layer=None, title=None, dpi=300):
         raster, tech_codes = self._create_layer(variable)
         raster.bounds = self.base_layer.bounds
         raster.meta = self.base_layer.meta
@@ -897,14 +866,14 @@ class OnSSTOVE(DataProcessor):
             admin_layer = self.mask_layer.layer
         raster.save_png(self.output_directory, cmap=cmap, cumulative_count=cumulative_count,
                         categories=tech_codes, legend_position=legend_position,
-                        admin_layer=admin_layer)
+                        admin_layer=admin_layer, title=title, dpi=dpi)
 
     def to_json(self, name):
         self.gdf.to_file(os.path.join(self.output_directory, name), driver='GeoJSON')
 
     def to_pickle(self, name):
         with open(os.path.join(self.output_directory, name), "wb") as f:
-            pickle.dump(self, f)
+            dill.dump(self, f)
 
     def read_data(self, path):
         self.gdf = gpd.read_file(path)
@@ -912,5 +881,5 @@ class OnSSTOVE(DataProcessor):
     @classmethod
     def read_model(cls, path):
         with open(path, "rb") as f:
-            model = pickle.load(f)
+            model = dill.load(f)
         return model

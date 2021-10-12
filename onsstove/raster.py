@@ -37,6 +37,7 @@ def align_raster(raster_1, raster_2, method='nearest', compression='DEFLATE'):
         destination=destination,
         src_transform=raster_2_meta['transform'],
         src_crs=raster_2_meta['crs'],
+        src_nodata=raster_2_meta['nodata'],
         dst_transform=raster_1_meta['transform'],
         dst_crs=raster_1_meta['crs'],
         resampling=Resampling[method])
@@ -241,7 +242,7 @@ def merge_rasters(files_path, dst_crs, outpul_file):
 
 
 def rasterize(vector_layer, raster_base_layer, outpul_file=None, value=None,
-              nodata=-9999, compression='NONE', dtype=rasterio.uint8,
+              nodata=0, compression='NONE', dtype=rasterio.uint8,
               all_touched=True, save=False):
     vector_layer = vector_layer.rename(columns={'geometry': 'geom'})
     if value:
@@ -334,44 +335,14 @@ def resample(raster_path, height, width, method='bilinear'):
         return data, transform
 
 
-def lpg_transportation_cost(travel_time):
-    """The cost of transporting LPG. See https://iopscience.iop.org/article/10.1088/1748-9326/6/3/034002/pdf for the formula
-    
-    Transportation cost = (2 * diesel consumption per h * national diesel price * travel time)/transported LPG
-    
-    Total cost = (LPG cost + Transportation cost)/efficiency of LPG stoves
-    
-    
-    Each truck is assumed to transport 2,000 kg LPG 
-    (3.5 MT truck https://www.wlpga.org/wp-content/uploads/2019/09/2019-Guide-to-Good-Industry-Practices-for-LPG-Cylinders-in-the-
-    Distribution-Channel.pdf)
-    National diesel price in Nepal is assumed to be 0.88 USD/l
-    Diesel consumption per h is assumed to be 14 l/h (14 l/100km)
-    (https://www.iea.org/reports/fuel-consumption-of-cars-and-vans)
-    LPG cost in Nepal is assumed to be 19 USD per cylinder (1.34 USD/kg)
-    LPG stove efficiency is assumed to be 60%
-    
-    :param param1:  travel_time_raster
-                    Hour to travel between each point and the startpoints as array
-    :returns:       The cost of LPG in each cell per kg
-    """
-    with rasterio.open(travel_time) as src:
-        trav = src.read(1)
-
-    transport_cost = (2 * 14 * 0.88 * trav) / 2000
-    total_cost = (transport_cost + 1.34) / 0.6
-
-    return total_cost
-
-
-def travel_time(friction, starts):
-    friction *= 1000 / 60
-    friction[np.isnan(friction)] = float('inf')
-    mcp = MCP_Geometric(friction, fully_connected=True)
-    row, col = friction_start_points(friction, starts)
-    pointlist = np.column_stack((row, col))
-
-    cumulative_costs, traceback = mcp.find_costs(starts=pointlist)
-    cumulative_costs[np.where(cumulative_costs == float('inf'))] = np.nan
-
-    return cumulative_costs
+# def travel_time(friction, starts):
+#     friction *= 1000 / 60
+#     friction[np.isnan(friction)] = float('inf')
+#     mcp = MCP_Geometric(friction, fully_connected=True)
+#     row, col = friction_start_points(friction, starts)
+#     pointlist = np.column_stack((row, col))
+#
+#     cumulative_costs, traceback = mcp.find_costs(starts=pointlist)
+#     cumulative_costs[np.where(cumulative_costs == float('inf'))] = np.nan
+#
+#     return cumulative_costs

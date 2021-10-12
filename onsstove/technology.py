@@ -1,16 +1,14 @@
-import os
-import geopandas as gpd
-import re
-import pandas as pd
 import numpy as np
-import datetime
-from math import exp
-from rasterstats import zonal_stats
+import pandas as pd
+import os
 import rasterio
 
-from .raster import *
-from .layer import *
-from .raster import interpolate, rasterize
+from math import exp
+
+from rasterio.fill import fillnodata
+
+from .layer import VectorLayer, RasterLayer
+from .raster import interpolate
 
 
 class Technology:
@@ -78,6 +76,8 @@ class Technology:
             self.fuel_use = value
         elif idx == 'is_base':
             self.is_base = value
+        elif idx == 'diesel_cost':
+            self.diesel_cost = value
         else:
             raise KeyError(idx)
 
@@ -372,7 +372,7 @@ class LPG(Technology):
                  pm25=0,
                  travel_time=None,
                  truck_capacity=2000,
-                 diesel_price=0.88,
+                 diesel_cost=0.88,
                  diesel_per_hour=14,
                  lpg_path=None,
                  friction_path=None):
@@ -381,7 +381,7 @@ class LPG(Technology):
                          om_cost, efficiency, pm25)
         self.travel_time = travel_time
         self.truck_capacity = truck_capacity
-        self.diesel_price = diesel_price
+        self.diesel_cost = diesel_cost
         self.diesel_per_hour = diesel_per_hour
         self.transport_cost = None
         self.lpg_path = lpg_path
@@ -422,7 +422,7 @@ class LPG(Technology):
                         Hour to travel between each point and the startpoints as array
         :returns:       The cost of LPG in each cell per kg
         """
-        transport_cost = (self.diesel_per_hour * self.diesel_price * self.travel_time) / self.truck_capacity
+        transport_cost = (self.diesel_per_hour * self.diesel_cost * self.travel_time) / self.truck_capacity
         kg_yr = (specs_file["Meals_per_day"] * 365 * 3.64) / (
                 self.efficiency * self.energy_content)  # energy content in MJ/kg
         transport_cost = transport_cost * kg_yr
@@ -461,7 +461,7 @@ class Biomass(Technology):
         self.forest_path = forest_path
         self.friction_path = friction_path
 
-    def transportation_time(self, friction_path, forest_path, model, align=False, condition=None):
+    def transportation_time(self, friction_path, forest_path, model, align=False):
         forest = RasterLayer(self.name, 'Forest', layer_path=forest_path, resample='mode')
         friction = RasterLayer(self.name, 'Friction', layer_path=friction_path, resample='average')
 
@@ -469,15 +469,14 @@ class Biomass(Technology):
             forest.align(model.base_layer.path, os.path.join(model.output_directory, self.name, 'Forest'))
             friction.align(model.base_layer.path, os.path.join(model.output_directory, self.name, 'Friction'))
 
-        forest.layer
         forest.add_friction_raster(friction)
-        forest.travel_time(os.path.join(model.output_directory, self.name), condition=condition)
+        forest.travel_time(os.path.join(model.output_directory, self.name), condition=self.forest_condition)
 
         self.travel_time = 2 * pd.Series(forest.distance_raster.layer[model.rows, model.cols],
                                          index=model.gdf.index)
 
-    def total_time(self, model, condition=None):
-        self.transportation_time(self.friction_path, self.forest_path, model, condition=condition)
+    def total_time(self, model):
+        self.transportation_time(self.friction_path, self.forest_path, model)
         self.total_time_yr = self.time_of_cooking * model.specs['Meals_per_day'] * 365 + (
                 self.travel_time + self.time_of_collection) * 52 * 2
 
@@ -509,7 +508,7 @@ class Electricity(Technology):
                                    'crude_oil': 0.070650288, 'heavy_fuel_oil': 0.074687989,
                                    'oil': 0.072669139, 'diesel': 0.069332823,
                                    'still_gas': 0.060849859, 'flared_natural_gas': 0.051855075,
-                                   'waste': 0.010736111, 'biofuels_waste': 0.010736111,
+                                   'waste': 0.010736111, 'biofuels_and_waste': 0.010736111,
                                    'nuclear': 0, 'hydro': 0, 'wind': 0,
                                    'solar': 0, 'other': 0}
 
@@ -587,7 +586,9 @@ class Biogas(Technology):
 
     def available_energy(self, model, data):
         model.gdf.to_crs(4326, inplace=True)
-        model.raster_to_dataframe(data, name="Temperature")
+
+        model.raster_to_dataframe(data.layer, name="Temperature", method='read',
+                                  nodata=data.meta['nodata'], fill_nodata='interpolate')
         model.gdf.to_crs(model.project_crs, inplace=True)
 
         # model.gdf.loc[(model.gdf["Temperature"] < 20) & (model.gdf["Temperature"] >= 10), "potential_households"] = model.gdf["yearly_cubic_meter_biogas"]/7.2
@@ -608,43 +609,54 @@ class Biogas(Technology):
             'Sheeps': sheeps}
 
         for name, path in paths.items():
-            folder = f'{model.output_directory}/livestock/{name}'
+            folder = os.path.join(model.output_directory, self.name, 'livestock', name)
             os.makedirs(folder, exist_ok=True)
 
-            layer = RasterLayer('livestock', name, layer_path=path, resample='nearest')
-            layer.mask(admin, folder)
-            admin_zones = zonal_stats(admin, path, stats='sum', prefix='orig_', geojson_out=True,
-                                      all_touched=False)
+            layer = RasterLayer(os.path.join(self.name, 'livestock'), name,
+                                layer_path=path, resample='nearest')
+            transform = layer.calculate_default_transform(model.project_crs)[0]
+            layer.align(model.base_layer.path)
+            layer.layer[layer.layer == layer.meta['nodata']] = np.nan
+            layer.meta['nodata'] = np.nan
+            factor = (model.cell_size[0] ** 2) / (transform[0] ** 2)
+            layer.layer *= factor
+            layer.save(folder)
 
-            geostats = gpd.GeoDataFrame.from_features(admin_zones)
+            model.raster_to_dataframe(layer.layer, name=name, method='read',
+                                      nodata=layer.meta['nodata'], fill_nodata='interpolate')
+            # layer.mask(admin, folder, all_touched=True)
+            # admin_zones = zonal_stats(admin.to_crs(layer.meta['crs']), path, stats='sum',
+            #                           prefix='orig_', geojson_out=True, all_touched=False)
+            #
+            # geostats = gpd.GeoDataFrame.from_features(admin_zones)
+            #
+            # geostats.crs = layer.meta['crs']
+            # geostats.to_crs(model.project_crs, inplace=True)
 
-            geostats.crs = admin.crs
-            geostats.to_crs(model.project_crs, inplace=True)
-            layer.reproject(model.project_crs, output_path=folder, cell_width=1000,
-                            cell_height=1000)
+            # layer.reproject(model.project_crs, output_path=folder, cell_width=model.cell_size[0],
+            #                 cell_height=model.cell_size[1])
+            # admin_zones = zonal_stats(geostats, folder + r"/" + name + ".tif", stats='sum', prefix='r_',
+            #                           geojson_out=True,
+            #                           all_touched=False)
+            #
+            # geostats = gpd.GeoDataFrame.from_features(admin_zones)
+            #
+            # geostats["ratio"] = geostats['orig_sum'] / geostats['r_sum']
+            #
+            # admin_image, admin_out_meta = rasterize(geostats, folder + r'/' + name + '.tif',
+            #                                         outpul_file=None,
+            #                                         value='ratio', nodata=np.nan, compression='NONE', all_touched=True,
+            #                                         save=False, dtype='float32')
 
-            admin_zones = zonal_stats(geostats, folder + r"/" + name + ".tif", stats='sum', prefix='r_',
-                                      geojson_out=True,
-                                      all_touched=False)
+            # with rasterio.open(folder + r'/' + name + '.tif') as src:
+            #     band = src.read(1)
+            #     new_band = band * admin_image
 
-            geostats = gpd.GeoDataFrame.from_features(admin_zones)
+            # with rasterio.open(folder + r'/final_' + name + '.tif', 'w', **admin_out_meta) as dst:
+            #     dst.write(new_band, 1)
 
-            geostats["ratio"] = geostats['orig_sum'] / geostats['r_sum']
-
-            admin_image, admin_out_meta = rasterize(geostats, folder + r'/' + name + '.tif',
-                                                    outpul_file=None,
-                                                    value='ratio', nodata=np.nan, compression='NONE', all_touched=False,
-                                                    save=False, dtype=rasterio.float64)
-
-            with rasterio.open(folder + r'/' + name + '.tif') as src:
-                band = src.read(1)
-                new_band = band * admin_image
-
-            with rasterio.open(folder + r'/final_' + name + '.tif', 'w', **admin_out_meta) as dst:
-                dst.write(new_band, 1)
-
-            model.raster_to_dataframe(folder + r'/final_' + name + '.tif', name=name, method='sample')
-            model.gdf[name] = model.gdf[name].fillna(0)
+            # model.raster_to_dataframe(folder + r'/final_' + name + '.tif', name=name, method='sample')
+            # model.gdf[name] = model.gdf[name].fillna(0)
 
     def net_benefit(self, gdf):
         super().net_benefit(gdf)

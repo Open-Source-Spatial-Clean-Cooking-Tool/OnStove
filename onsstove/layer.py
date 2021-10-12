@@ -5,7 +5,8 @@ import pandas as pd
 import datetime
 
 from rasterio import windows
-from rasterio.warp import calculate_default_transform
+from rasterio.transform import array_bounds
+from rasterio import warp
 from skimage.graph.mcp import MCP_Geometric
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
@@ -53,6 +54,7 @@ class Layer:
         layer = self.friction.layer.copy()
         layer *= 1000 / 60  # to convert to hours per kilometer
         layer[np.isnan(layer)] = float('inf')
+        layer[layer == self.meta['nodata']] = float('inf')
         mcp = MCP_Geometric(layer, fully_connected=True)
         row, col = self.start_points(condition=condition)
         pointlist = np.column_stack((row, col))
@@ -81,7 +83,7 @@ class VectorLayer(Layer):
 
     def __init__(self, category, name, layer_path=None, conn=None, query=None,
                  normalization='MinMax', inverse=False, distance='proximity',
-                 distance_limit=float('inf')):
+                 distance_limit=float('inf'), bbox=None):
         """
         Initializes the class. It recibes the name of the layer, 
         the path of the layer, a normalization algorithm, a distance algorithm 
@@ -92,7 +94,7 @@ class VectorLayer(Layer):
                          normalization=normalization, inverse=inverse,
                          distance=distance,
                          distance_limit=distance_limit)
-        self.read_layer(layer_path, conn)
+        self.read_layer(layer_path, conn, bbox=bbox)
         if query:
             self.layer = self.layer.query(query)
 
@@ -102,13 +104,19 @@ class VectorLayer(Layer):
     def __str__(self):
         return 'Vector' + super().__str__()
 
-    def read_layer(self, layer_path, conn=None):
+    def bounds(self):
+        bounds = self.layer.dissolve().bounds
+        return bounds.iloc[0].to_list()
+
+    def read_layer(self, layer_path, conn=None, bbox=None):
         if layer_path:
             if conn:
                 sql = f'SELECT * FROM {layer_path}'
                 self.layer = gpd.read_postgis(sql, conn)
             else:
-                self.layer = gpd.read_file(layer_path)
+                if bbox is not None:
+                    bbox = bbox.dissolve()
+                self.layer = gpd.read_file(layer_path, bbox=bbox)
         self.path = layer_path
 
     def mask(self, mask_layer, output_path, all_touched=True):
@@ -223,22 +231,24 @@ class RasterLayer(Layer):
                     self.bounds = window
                     window = windows.from_bounds(*window, transform=transform)
                     window_transform = src.window_transform(window)
-                    self.layer = src.read(1, window=window).astype('float32')
+                    self.layer = src.read(1, window=window)
                     self.meta.update(transform=window_transform,
                                      width=self.layer.shape[1], height=self.layer.shape[0],
-                                     compress='DEFLATE', dtype='float32')
+                                     compress='DEFLATE')
                 else:
-                    self.layer = src.read(1).astype('float32')
+                    self.layer = src.read(1)
                     self.meta = src.meta
                     self.bounds = src.bounds
-                    self.meta['dtype'] = 'float32'
+                    # self.meta['dtype'] = 'float32'
+            if self.meta['nodata'] is None:
+                self.meta['nodata'] = np.nan
         self.path = layer_path
 
     def mask(self, mask_layer, output_path, all_touched=False):
         output_file = os.path.join(output_path,
                                    self.name + '.tif')
         mask_raster(self.path, mask_layer.to_crs(self.meta['crs']),
-                    output_file, np.nan, 'DEFLATE', all_touched=all_touched)
+                    output_file, self.meta['nodata'], 'DEFLATE', all_touched=all_touched)
         self.read_layer(output_file)
 
     def reproject(self, crs, output_path,
@@ -248,15 +258,18 @@ class RasterLayer(Layer):
                                           cell_width=cell_width, cell_height=cell_height,
                                           method=self.resample, compression='DEFLATE')
             self.layer = data
+            self.bounds = warp.transform_bounds(self.meta['crs'], crs, *self.bounds)
             self.meta = meta
             self.save(output_path)
 
     def calculate_default_transform(self, dst_crs):
-        t, w, h = calculate_default_transform(self.meta['crs'],
+        t, w, h = warp.calculate_default_transform(self.meta['crs'],
                                               dst_crs,
                                               self.meta['width'],
                                               self.meta['height'],
-                                              *self.bounds)
+                                              *self.bounds,
+                                              dst_width=self.meta['width'],
+                                              dst_height=self.meta['height'])
         return t, w, h
 
     def get_distance_raster(self, base_layer, output_path,
@@ -348,6 +361,7 @@ class RasterLayer(Layer):
                                    method=self.resample)
         self.layer = layer
         self.meta = meta
+        self.bounds = array_bounds(meta['height'], meta['width'], meta['transform'])
         if output_path:
             self.save(output_path)
 
@@ -389,7 +403,7 @@ class RasterLayer(Layer):
 
     def plot(self, cmap='viridis', ticks=None, tick_labels=None,
              cumulative_count=None, quantiles=None, categories=None, legend_position=(1.05, 1),
-             admin_layer=None):
+             admin_layer=None, title=None):
         extent = [self.bounds[0], self.bounds[2],
                   self.bounds[1], self.bounds[3]]  # [left, right, bottom, top]
 
@@ -419,16 +433,18 @@ class RasterLayer(Layer):
             cbar.ax.set_ylabel(self.name.replace('_', ' '))
         if isinstance(admin_layer, gpd.GeoDataFrame):
             admin_layer.plot(color='lightgrey', linewidth=1, ax=ax, zorder=0)
+        if title:
+            plt.title(title, loc='left')
         plt.close()
         return fig
 
     def save_png(self, output_path, cmap='viridis', ticks=None, tick_labels=None,
                  cumulative_count=None, categories=None, legend_position=(1.05, 1),
-                 admin_layer=None):
+                 admin_layer=None, title=None, dpi=300):
         os.makedirs(output_path, exist_ok=True)
         output_file = os.path.join(output_path,
                                    self.name + '.png')
         fig = self.plot(cmap=cmap, ticks=ticks, tick_labels=tick_labels, cumulative_count=cumulative_count,
                         categories=categories, legend_position=legend_position,
-                        admin_layer=admin_layer)
-        fig.savefig(output_file, dpi=300, bbox_inches='tight')
+                        admin_layer=admin_layer, title=title)
+        fig.savefig(output_file, dpi=dpi, bbox_inches='tight')

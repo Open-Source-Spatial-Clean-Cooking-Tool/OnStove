@@ -5,16 +5,16 @@ channels:
   - defaults
 dependencies:
   - contextily
-  - geopandas
+  - dill
+  - geopandas==0.10.0
   - json
   - matplotlib
-  - pandas
   - plotly
   - psycopg2
   - psutil
   - python-decouple
   - python-kaleido
-  - rasterio
+  - rasterio==1.2.9
   - rasterstats
   - scikit-learn
   - scikit-image
