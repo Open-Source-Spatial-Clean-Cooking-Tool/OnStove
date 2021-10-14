@@ -286,6 +286,17 @@ class DataProcessor:
                                            category, name)
                 layer.save(output_path)
 
+    def to_pickle(self, name):
+        self.conn = None
+        with open(os.path.join(self.output_directory, name), "wb") as f:
+            dill.dump(self, f)
+
+    @classmethod
+    def read_model(cls, path):
+        with open(path, "rb") as f:
+            model = dill.load(f)
+        return model
+
 
 class OnSSTOVE(DataProcessor):
     """
@@ -501,6 +512,7 @@ class OnSSTOVE(DataProcessor):
                 raise ValueError("No population layer was provided as input to the method or in the model base_layer")
         layer[layer==meta['nodata']] = np.nan
         layer[layer == 0] = np.nan
+        layer[layer < 1] = np.nan
         self.rows, self.cols = np.where(~np.isnan(layer))
         x, y = rasterio.transform.xy(meta['transform'],
                                      self.rows, self.cols,
@@ -871,15 +883,5 @@ class OnSSTOVE(DataProcessor):
     def to_json(self, name):
         self.gdf.to_file(os.path.join(self.output_directory, name), driver='GeoJSON')
 
-    def to_pickle(self, name):
-        with open(os.path.join(self.output_directory, name), "wb") as f:
-            dill.dump(self, f)
-
     def read_data(self, path):
         self.gdf = gpd.read_file(path)
-
-    @classmethod
-    def read_model(cls, path):
-        with open(path, "rb") as f:
-            model = dill.load(f)
-        return model

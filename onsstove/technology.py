@@ -559,11 +559,14 @@ class Biogas(Technology):
                  om_cost=0,  # percentage of investement cost
                  efficiency=0,  # ratio
                  pm25=0,
-                 utilization_factor=0.5):
+                 utilization_factor=0.5,
+                 digestor_eff=0.4):
         super().__init__(name, carbon_intensity, energy_content, tech_life,
                          inv_cost, infra_cost, fuel_cost, time_of_cooking,
                          om_cost, efficiency, pm25)
+        # TODO: Check what's the difference between these two factors
         self.utilization_factor = utilization_factor
+        self.digestor_eff = digestor_eff
 
     def available_biogas(self, model):
         # Biogas production potential in liters per day
@@ -575,7 +578,7 @@ class Biogas(Technology):
         from_poultry = model.gdf["Poultry"] * 0.12 * 0.25 * 0.75 * 450
 
         model.gdf["yearly_cubic_meter_biogas"] = (from_cattle + from_buffalo + from_goat + from_pig + from_poultry + \
-                                                  from_sheep) * 0.365 * self.utilization_factor
+                                                  from_sheep) * 0.365 * self.utilization_factor * self.digestor_eff
 
         del model.gdf["Cattles"]
         del model.gdf["Buffaloes"]

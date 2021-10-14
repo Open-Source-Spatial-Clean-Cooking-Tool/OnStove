@@ -277,7 +277,7 @@ def rasterize(vector_layer, raster_base_layer, outpul_file=None, value=None,
             return image, out_meta
 
 
-def normalize(raster=None, limit=float('inf'), output_file=None,
+def normalize(raster=None, limit=None, output_file=None,
               inverse=False, meta=None, buffer=False):
     if isinstance(raster, str):
         with rasterio.open(raster) as src:
@@ -288,9 +288,8 @@ def normalize(raster=None, limit=float('inf'), output_file=None,
         raster = raster.copy()
         nodata = meta['nodata']
         meta = meta
-
-    if inverse:
-        raster[raster > limit] = np.nan
+    if callable(limit):
+        raster[~limit(raster)] = np.nan
 
     raster[raster == nodata] = np.nan
     min_value = np.nanmin(raster)

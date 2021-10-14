@@ -22,7 +22,7 @@ class Layer:
     def __init__(self, category='', name='', layer_path=None,
                  conn=None, normalization=None,
                  inverse=False, distance=None,
-                 distance_limit=float('inf')):
+                 distance_limit=None):
         self.category = category
         self.name = name
         self.normalization = normalization
@@ -54,7 +54,7 @@ class Layer:
         layer = self.friction.layer.copy()
         layer *= 1000 / 60  # to convert to hours per kilometer
         layer[np.isnan(layer)] = float('inf')
-        layer[layer == self.meta['nodata']] = float('inf')
+        layer[layer == self.friction.meta['nodata']] = float('inf')
         mcp = MCP_Geometric(layer, fully_connected=True)
         row, col = self.start_points(condition=condition)
         pointlist = np.column_stack((row, col))
@@ -83,12 +83,13 @@ class VectorLayer(Layer):
 
     def __init__(self, category, name, layer_path=None, conn=None, query=None,
                  normalization='MinMax', inverse=False, distance='proximity',
-                 distance_limit=float('inf'), bbox=None):
+                 distance_limit=None, bbox=None):
         """
         Initializes the class. It recibes the name of the layer, 
         the path of the layer, a normalization algorithm, a distance algorithm 
         and a PostgreSQL connection if the layer needs to be read from a database
         """
+        self.style = {}
         super().__init__(category=category, name=name,
                          layer_path=layer_path, conn=conn,
                          normalization=normalization, inverse=inverse,
@@ -114,8 +115,10 @@ class VectorLayer(Layer):
                 sql = f'SELECT * FROM {layer_path}'
                 self.layer = gpd.read_postgis(sql, conn)
             else:
-                if bbox is not None:
+                if isinstance(bbox, gpd.GeoDataFrame):
                     bbox = bbox.dissolve()
+                else:
+                    bbox = None
                 self.layer = gpd.read_file(layer_path, bbox=bbox)
         self.path = layer_path
 
@@ -158,7 +161,7 @@ class VectorLayer(Layer):
             self.travel_time(output_path)
 
 
-    def start_points(self):
+    def start_points(self, condition=None):
         return friction_start_points(self.friction.path,
                                      self.layer)
 
@@ -193,6 +196,19 @@ class VectorLayer(Layer):
                                                  self.name + f' - restriction{i}',
                                                  layer_path, **kwargs))
 
+    def plot(self, ax=None, style=None):
+        if style is None:
+            style = self.style
+
+        if ax is None:
+            self.layer.plot(**style,
+                            label=self.name)
+            lgnd = ax.legend(loc="upper right", prop={'size': 12})
+            lgnd.legendHandles[0]._sizes = [60]
+        else:
+            self.layer.plot(ax=ax,
+                            **style,
+                            label=self.name)
 
 class RasterLayer(Layer):
     """
@@ -202,7 +218,7 @@ class RasterLayer(Layer):
     """
     def __init__(self, category, name, layer_path=None, conn=None,
                  normalization='MinMax', inverse=False, distance='proximity',
-                 distance_limit=float('inf'), resample='nearest', window=None):
+                 distance_limit=None, resample='nearest', window=None):
         """
         Initializes the class. It recibes the name of the layer,
         the path of the layer, a normalization algorithm, a distance algorithm
@@ -403,7 +419,7 @@ class RasterLayer(Layer):
 
     def plot(self, cmap='viridis', ticks=None, tick_labels=None,
              cumulative_count=None, quantiles=None, categories=None, legend_position=(1.05, 1),
-             admin_layer=None, title=None):
+             admin_layer=None, title=None, ax=None):
         extent = [self.bounds[0], self.bounds[2],
                   self.bounds[1], self.bounds[3]]  # [left, right, bottom, top]
 
@@ -416,7 +432,8 @@ class RasterLayer(Layer):
 
         layer[layer == self.meta['nodata']] = np.nan
 
-        fig, ax = plt.subplots(1, 1, figsize=(16, 9))
+        if ax is None:
+            fig, ax = plt.subplots(1, 1, figsize=(16, 9))
         cax = ax.imshow(layer, cmap=cmap, extent=extent)
 
         ax.set_axis_off()
@@ -426,7 +443,7 @@ class RasterLayer(Layer):
             colorbar = dict(shrink=0.8)
             if ticks:
                 colorbar['ticks'] = ticks
-            cbar = fig.colorbar(cax, **colorbar)
+            cbar = plt.colorbar(cax, **colorbar)
 
             if tick_labels:
                 cbar.ax.set_yticklabels(tick_labels)
@@ -435,8 +452,8 @@ class RasterLayer(Layer):
             admin_layer.plot(color='lightgrey', linewidth=1, ax=ax, zorder=0)
         if title:
             plt.title(title, loc='left')
-        plt.close()
-        return fig
+        # plt.close()
+        # return fig
 
     def save_png(self, output_path, cmap='viridis', ticks=None, tick_labels=None,
                  cumulative_count=None, categories=None, legend_position=(1.05, 1),
@@ -444,7 +461,8 @@ class RasterLayer(Layer):
         os.makedirs(output_path, exist_ok=True)
         output_file = os.path.join(output_path,
                                    self.name + '.png')
-        fig = self.plot(cmap=cmap, ticks=ticks, tick_labels=tick_labels, cumulative_count=cumulative_count,
+        self.plot(cmap=cmap, ticks=ticks, tick_labels=tick_labels, cumulative_count=cumulative_count,
                         categories=categories, legend_position=legend_position,
                         admin_layer=admin_layer, title=title)
-        fig.savefig(output_file, dpi=dpi, bbox_inches='tight')
+        plt.savefig(output_file, dpi=dpi, bbox_inches='tight')
+        plt.close()
