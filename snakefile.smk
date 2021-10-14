@@ -9,7 +9,7 @@ COUNTRIES = ['NGA', 'TZA', 'MLI']
 
 rule all:
     input:
-        expand("Africa/{country}/Output/results.csv", country=COUNTRIES)
+        expand("../Clean cooking Africa paper/06. Results/{country}/Output/results.csv", country=COUNTRIES)
         # expand(r"..\Clean cooking Africa paper\01. Data\GIS-data\Forest/{country}/Forest.tif", country=COUNTRIES)
 
 rule extract_forest:
@@ -34,21 +34,21 @@ rule process_data:
          mv_lines = r"..\Clean cooking Africa paper\01. Data\GIS-data\MV\All_MV.shp",
          ntl = r"..\Clean cooking Africa paper\01. Data\GIS-data\NightLights\Africa.tif",
          traveltime_cities = r"..\Clean cooking Africa paper\01. Data\GIS-data\Traveltime_to_cities\2015_accessibility_to_cities_v2.tif",
-         temperature = r"C:\Users\camilorg\Box Sync\Clean cooking Africa paper\01. Data\GIS-data\Temperature\TEMP.tif"
+         temperature = r"..\Clean cooking Africa paper\01. Data\GIS-data\Temperature\TEMP.tif"
     params:
-          output_directory = "Africa/{country}",
+          output_directory = "../Clean cooking Africa paper/06. Results/{country}",
           country = "{country}"
     output:
-          mask_layer = "Africa/{country}/Administrative/Country_boundaries/Country_boundaries.geojson",
-          population = "Africa/{country}/Demographics/Population/Population.tif",
-          ghs = "Africa/{country}/Demographics/Urban/Urban.tif",
-          forest = "Africa/{country}/Biomass/Forest/Forest.tif",
-          biomass_friction = "Africa/{country}/Biomass/Friction/Friction.tif",
+          mask_layer = "../Clean cooking Africa paper/06. Results/{country}/Administrative/Country_boundaries/Country_boundaries.geojson",
+          population = "../Clean cooking Africa paper/06. Results/{country}/Demographics/Population/Population.tif",
+          ghs = "../Clean cooking Africa paper/06. Results/{country}/Demographics/Urban/Urban.tif",
+          forest = "../Clean cooking Africa paper/06. Results/{country}/Biomass/Forest/Forest.tif",
+          biomass_friction = "../Clean cooking Africa paper/06. Results/{country}/Biomass/Friction/Friction.tif",
           # hv_lines = "Africa/{country}/Electricity/HV_lines/HV_lines.geojson",
-          mv_lines = "Africa/{country}/Electricity/MV_lines/MV_lines.geojson",
-          ntl = "Africa/{country}/Electricity/Night_time_lights/Night_time_lights.tif",
-          traveltime_cities = "Africa/{country}/LPG/Traveltime/Traveltime.tif",
-          temperature = "Africa/{country}/Biogas/Temperature/Temperature.tif"
+          mv_lines = "../Clean cooking Africa paper/06. Results/{country}/Electricity/MV_lines/MV_lines.geojson",
+          ntl = "../Clean cooking Africa paper/06. Results/{country}/Electricity/Night_time_lights/Night_time_lights.tif",
+          traveltime_cities = "../Clean cooking Africa paper/06. Results/{country}/LPG/Traveltime/Traveltime.tif",
+          temperature = "../Clean cooking Africa paper/06. Results/{country}/Biogas/Temperature/Temperature.tif"
     script:
           "scripts/data_processing.py"
 
@@ -68,10 +68,10 @@ rule prepare_model:
          traveltime_cities = rules.process_data.output.traveltime_cities,
          temperature = rules.process_data.output.temperature
     params:
-          output_directory = "Africa/{country}",
+          output_directory = "../Clean cooking Africa paper/06. Results/{country}",
           country = "{country}"
     output:
-          model = "Africa/{country}/model.pkl"
+          model = "../Clean cooking Africa paper/06. Results/{country}/model.pkl"
     script:
           "scripts/model_preparation.py"
 
@@ -82,6 +82,6 @@ rule run_model:
     params:
           country = "{country}"
     output:
-          results = "Africa/{country}/Output/results.csv",
+          results = "../Clean cooking Africa paper/06. Results/{country}/Output/results.csv",
     script:
           "scripts/model_run.py"
