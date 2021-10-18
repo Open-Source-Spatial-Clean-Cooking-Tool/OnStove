@@ -1,4 +1,4 @@
-COUNTRIES = ['NGA', 'TZA', 'MLI']
+COUNTRIES = ['TZA']
 
 # COUNTRIES = ['AGO', 'BDI', 'BEN', 'BFA', 'BWA', 'CAF', 'CIV', 'CMR',
 #              'COD', 'COG', 'DJI', 'ERI', 'ETH', 'GAB', 'GHA', 'GIN',
