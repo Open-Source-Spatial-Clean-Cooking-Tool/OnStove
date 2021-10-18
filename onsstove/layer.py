@@ -52,9 +52,10 @@ class Layer:
 
     def travel_time(self, output_path, condition=None):
         layer = self.friction.layer.copy()
-        layer *= 1000 / 60  # to convert to hours per kilometer
+        layer *= (1000 / 60)  # to convert to hours per kilometer
         layer[np.isnan(layer)] = float('inf')
         layer[layer == self.friction.meta['nodata']] = float('inf')
+        layer[layer < 0] = float('inf')
         mcp = MCP_Geometric(layer, fully_connected=True)
         row, col = self.start_points(condition=condition)
         pointlist = np.column_stack((row, col))
