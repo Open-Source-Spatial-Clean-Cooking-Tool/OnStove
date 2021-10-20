@@ -1,4 +1,4 @@
-COUNTRIES = ['TZA']
+COUNTRIES = ['BDI']
 
 # COUNTRIES = ['AGO', 'BDI', 'BEN', 'BFA', 'BWA', 'CAF', 'CIV', 'CMR',
 #              'COD', 'COG', 'DJI', 'ERI', 'ETH', 'GAB', 'GHA', 'GIN',
@@ -54,7 +54,7 @@ rule process_data:
 
 rule prepare_model:
     input:
-         specs_file = r"..\Clean cooking Africa paper\04. OnSSTOVE inputs\Social specs\{country}_social_specs.csv",
+         prep_file = r"..\Clean cooking Africa paper\04. OnSSTOVE inputs\Prep_files\{country}_prep_file.csv",
          wealth_index = r"..\Clean cooking Africa paper\01. Data\GIS-data\Poverty\{country}_relative_wealth_index.csv" ,
          techs_file = r"..\Clean cooking Africa paper\04. OnSSTOVE inputs\Technical specs\{country}_file_tech_specs.csv",
          mask_layer = rules.process_data.output.mask_layer,
@@ -66,7 +66,8 @@ rule prepare_model:
          mv_lines = rules.process_data.output.mv_lines,
          ntl = rules.process_data.output.ntl,
          traveltime_cities = rules.process_data.output.traveltime_cities,
-         temperature = rules.process_data.output.temperature
+         temperature = rules.process_data.output.temperature,
+         tiers = r"..\Clean cooking Africa paper\01. Data\GIS-data\Electricity tiers\tiersofaccess_SSA_2018.tif"
     params:
           output_directory = "../Clean cooking Africa paper/06. Results/{country}",
           country = "{country}"
@@ -78,7 +79,7 @@ rule prepare_model:
 rule run_model:
     input:
          model = rules.prepare_model.output.model,
-         specs_file = rules.prepare_model.input.specs_file
+         scenario_file = r"..\Clean cooking Africa paper\04. OnSSTOVE inputs\Scenario_files\{country}_scenario_file.csv"
     params:
           country = "{country}"
     output:

@@ -22,7 +22,6 @@ class Technology:
                  energy_content=0,
                  tech_life=0,  # in years
                  inv_cost=0,  # in USD
-                 infra_cost=0,  # cost of additional infrastructure
                  fuel_cost=0,
                  time_of_cooking=0,
                  om_cost=0,  # percentage of investement cost
@@ -37,7 +36,6 @@ class Technology:
         self.tech_life = tech_life
         self.fuel_cost = fuel_cost
         self.inv_cost = inv_cost
-        self.infra_cost = infra_cost
         self.om_cost = om_cost
         self.time_of_cooking = time_of_cooking
         self.efficiency = efficiency
@@ -60,8 +58,6 @@ class Technology:
             self.tech_life = value
         elif idx == 'inv_cost':
             self.inv_cost = value
-        elif idx == 'infra_cost':
-            self.infra_cost = value
         elif idx == 'om_cost':
             self.om_cost = value
         elif idx == 'time_of_cooking':
@@ -299,23 +295,18 @@ class Technology:
 
         self.discounted_investments = discounted_investments.sum()
 
-    def discounted_meals(self, gdf, specs_file):
-        discount_rate, proj_life = self.discount_factor(specs_file)
+    def required_energy(self, model):
 
-        energy = specs_file["Meals_per_day"] * 365 * 3.64 / self.efficiency
-        self.energy = specs_file["Meals_per_day"] * 365 * 3.64 / self.efficiency
-
-        energy_needed = self.energy * np.ones(proj_life)
-
-        self.discounted_energy = (energy_needed / discount_rate)
+        self.energy = model.specs["Meals_per_day"] * 365 * 3.64 / self.efficiency
+        # discount_rate, proj_life = self.discount_factor(specs_file)
+        # energy_needed = self.energy * np.ones(proj_life)
+        # self.discounted_energy = (energy_needed / discount_rate)
 
     def discount_fuel_cost(self, gdf, specs_file, rows=None, cols=None):
 
         discount_rate, proj_life = self.discount_factor(specs_file)
 
-        energy = specs_file["Meals_per_day"] * 365 * 3.64 / self.efficiency
-
-        cost = (energy * self.fuel_cost / self.energy_content + self.transport_cost) * np.ones(gdf.shape[0])
+        cost = (self.energy * self.fuel_cost / self.energy_content + self.transport_cost) * np.ones(gdf.shape[0])
 
         fuel_cost = [np.ones(proj_life) * x for x in cost]
 
@@ -339,17 +330,17 @@ class Technology:
                         1 + onstove.specs["Discount_rate"]) ** (proj_life)
 
     def total_costs(self):
-        self.costs = (
-                self.discounted_fuel_cost + self.discounted_investments + self.discounted_om_costs - self.discounted_salvage_cost)  # / self.discounted_energy
+        self.costs = (self.discounted_fuel_cost + self.discounted_investments +
+                      self.discounted_om_costs - self.discounted_salvage_cost)  # / self.discounted_energy
 
-    def net_benefit(self, gdf):
+    def net_benefit(self, model):
         self.total_costs()
         self.benefits = self.distributed_morbidity + self.distributed_mortality + self.decreased_carbon_costs + self.time_value
-        gdf["costs_{}".format(self.name)] = self.costs
-        gdf["benefits_{}".format(self.name)] = self.benefits
-        gdf["net_benefit_{}".format(self.name)] = self.benefits - self.costs
-        self.factor = pd.Series(np.ones(gdf.shape[0]), index=gdf.index)
-        self.households = gdf['Households']
+        model.gdf["costs_{}".format(self.name)] = self.costs
+        model.gdf["benefits_{}".format(self.name)] = self.benefits
+        model.gdf["net_benefit_{}".format(self.name)] = self.benefits - self.costs
+        self.factor = pd.Series(np.ones(model.gdf.shape[0]), index=model.gdf.index)
+        self.households = model.gdf['Households']
 
 
 class LPG(Technology):
@@ -364,7 +355,6 @@ class LPG(Technology):
                  energy_content=0,
                  tech_life=0,  # in years
                  inv_cost=0,  # in USD
-                 infra_cost=0,  # cost of additional infrastructure
                  fuel_cost=0,
                  time_of_cooking=0,
                  om_cost=0,  # percentage of investement cost
@@ -377,7 +367,7 @@ class LPG(Technology):
                  lpg_path=None,
                  friction_path=None):
         super().__init__(name, carbon_intensity, energy_content, tech_life,
-                         inv_cost, infra_cost, fuel_cost, time_of_cooking,
+                         inv_cost, fuel_cost, time_of_cooking,
                          om_cost, efficiency, pm25)
         self.travel_time = travel_time
         self.truck_capacity = truck_capacity
@@ -445,7 +435,6 @@ class Biomass(Technology):
                  energy_content=0,
                  tech_life=0,  # in years
                  inv_cost=0,  # in USD
-                 infra_cost=0,  # cost of additional infrastructure
                  fuel_cost=0,
                  time_of_cooking=0,
                  om_cost=0,  # percentage of investement cost
@@ -455,7 +444,7 @@ class Biomass(Technology):
                  friction_path=None,
                  travel_time=None):
         super().__init__(name, carbon_intensity, energy_content, tech_life,
-                         inv_cost, infra_cost, fuel_cost, time_of_cooking,
+                         inv_cost, fuel_cost, time_of_cooking,
                          om_cost, efficiency, pm25)
         self.travel_time = travel_time
         self.forest_path = forest_path
@@ -493,17 +482,20 @@ class Electricity(Technology):
                  energy_content=0,
                  tech_life=0,  # in years
                  inv_cost=0,  # in USD
-                 infra_cost=0,  # cost of additional infrastructure
+                 connection_cost=0,  # cost of additional infrastructure
+                 grid_capacity_cost=0,
                  fuel_cost=0,
                  time_of_cooking=0,
                  om_cost=0,  # percentage of investement cost
                  efficiency=0,  # ratio
                  pm25=0):
         super().__init__(name, carbon_intensity, energy_content, tech_life,
-                         inv_cost, infra_cost, fuel_cost, time_of_cooking,
+                         inv_cost, fuel_cost, time_of_cooking,
                          om_cost, efficiency, pm25)
         # Carbon intensity of fossil fuel plants in kg/GWh
         self.generation = {}
+        self.tiers_path = None
+        self.connection_cost = connection_cost
         self.carbon_intensities = {'coal': 0.090374363, 'natural_gas': 0.050300655,
                                    'crude_oil': 0.070650288, 'heavy_fuel_oil': 0.074687989,
                                    'oil': 0.072669139, 'diesel': 0.069332823,
@@ -517,11 +509,25 @@ class Electricity(Technology):
             self.generation[idx.lower().replace('generation_', '')] = value
         elif 'carbon_intensity' in idx:
             self.carbon_intensities[idx.lower().replace('carbon_intensity_', '')] = value
+        elif 'grid_capacity_cost' in idx:
+            self.grid_capacity_cost = value
+        elif 'connection_cost' in idx:
+            self.connection_cost = value
         else:
             super().__setitem__(idx, value)
 
-    def infrastructure_cost(self):
-        pass
+    def get_capacity_cost(self, model):
+        # TODO: this line assumes if no tiers data is added, that all population settlements will need added capacity
+        self.required_energy(model)
+        if self.tiers_path is None:
+            add_capacity = 1
+        else:
+            model.raster_to_dataframe(self.tiers_path, name='tiers', method='sample')
+            self.tiers = model.gdf['tiers'].copy()
+            del model.gdf['tiers']
+            add_capacity = (self.tiers < 3)
+        self.capacity = self.energy / (3.6 * self.time_of_cooking * 365)
+        self.capacity_cost = self.capacity * self.grid_capacity_cost * add_capacity
 
     def get_carbon_intensity(self):
         grid_emissions = sum([gen * self.carbon_intensities[fuel] for fuel, gen in self.generation.items()])
@@ -532,13 +538,21 @@ class Electricity(Technology):
         self.get_carbon_intensity()
         super().carb(specs_file, gdf)
 
-    def net_benefit(self, gdf):
-        super().net_benefit(gdf)
-        gdf.loc[gdf['Current_elec'] == 0, "net_benefit_{}".format(self.name)] = np.nan
-        factor = gdf['Elec_pop_calib'] / gdf['Calibrated_pop']
+    def discounted_inv(self, gdf, specs_file):
+        super().discounted_inv(gdf, specs_file)
+        self.discounted_investments += self.connection_cost
+
+    def total_costs(self):
+        super().total_costs()
+        self.costs += self.capacity_cost
+
+    def net_benefit(self, model):
+        super().net_benefit(model)
+        model.gdf.loc[model.gdf['Current_elec'] == 0, "net_benefit_{}".format(self.name)] = np.nan
+        factor = model.gdf['Elec_pop_calib'] / model.gdf['Calibrated_pop']
         factor[factor > 1] = 1
         self.factor = factor
-        self.households = gdf['Households'] * factor
+        self.households = model.gdf['Households'] * factor
 
 
 class Biogas(Technology):
@@ -553,7 +567,6 @@ class Biogas(Technology):
                  energy_content=0,
                  tech_life=0,  # in years
                  inv_cost=0,  # in USD
-                 infra_cost=0,  # cost of additional infrastructure
                  fuel_cost=0,
                  time_of_cooking=0,
                  om_cost=0,  # percentage of investement cost
@@ -562,7 +575,7 @@ class Biogas(Technology):
                  utilization_factor=0.5,
                  digestor_eff=0.4):
         super().__init__(name, carbon_intensity, energy_content, tech_life,
-                         inv_cost, infra_cost, fuel_cost, time_of_cooking,
+                         inv_cost, fuel_cost, time_of_cooking,
                          om_cost, efficiency, pm25)
         # TODO: Check what's the difference between these two factors
         self.utilization_factor = utilization_factor
@@ -578,7 +591,7 @@ class Biogas(Technology):
         from_poultry = model.gdf["Poultry"] * 0.12 * 0.25 * 0.75 * 450
 
         model.gdf["yearly_cubic_meter_biogas"] = (from_cattle + from_buffalo + from_goat + from_pig + from_poultry + \
-                                                  from_sheep) * 0.365 * self.utilization_factor * self.digestor_eff
+                                                  from_sheep) * 0.365 * self.digestor_eff
 
         del model.gdf["Cattles"]
         del model.gdf["Buffaloes"]
@@ -661,9 +674,9 @@ class Biogas(Technology):
             # model.raster_to_dataframe(folder + r'/final_' + name + '.tif', name=name, method='sample')
             # model.gdf[name] = model.gdf[name].fillna(0)
 
-    def net_benefit(self, gdf):
-        super().net_benefit(gdf)
-        gdf.loc[gdf['available_biogas_energy'] == 0, "net_benefit_{}".format(self.name)] = 0
-        factor = gdf['available_biogas_energy'] / self.energy * gdf['Households']
+    def net_benefit(self, model):
+        super().net_benefit(model)
+        model.gdf.loc[model.gdf['available_biogas_energy'] == 0, "net_benefit_{}".format(self.name)] = 0
+        factor = model.gdf['available_biogas_energy'] / (self.energy * model.gdf['Households'])
         factor[factor > 1] = 1
-        self.households = gdf['Households'] * factor
+        self.households = model.gdf['Households'] * factor

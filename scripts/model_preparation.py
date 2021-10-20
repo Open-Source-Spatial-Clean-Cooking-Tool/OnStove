@@ -12,7 +12,7 @@ model.output_directory = output_directory
 
 # 2. Read the model data
 print(f'[{country}] Read model data')
-path = snakemake.input.specs_file
+path = snakemake.input.prep_file
 model.read_scenario_data(path, delimiter=',')
 
 # 3. Add a country mask layer
@@ -49,12 +49,6 @@ model.extract_wealth_index(wealth_index, file_type=file_type,
 
 # wealth_index = r"../EGI Energy Systems\06 Projects\2021 Nepal Geospatial cooking\02 - work\GIS-data\Demand\Wealth Index\Wealth index 2011.tif"
 # nepal.extract_wealth_index(wealth_index, file_type="raster")
-
-# 7. Calculate value of time
-
-# Based on wealth index, minimum wage and a lower an upper range for cost of oportunity
-print(f'[{country}] Getting value of time')
-model.get_value_of_time()
 
 # 8. Read electricity network GIS layers
 
@@ -107,6 +101,11 @@ model.base_fuel.forest_path = snakemake.input.forest
 model.base_fuel.forest_condition = lambda x: x > 30
 model.base_fuel.total_time(model)
 
+# Adding tiers data to Electricity
+print(f'[{country}] Electricity tiers data')
+model.techs['Electricity'].tiers_path = snakemake.input.tiers
+model.techs['Electricity'].get_capacity_cost(model)
+
 # 12. Reading GIS data for LPG supply
 print(f'[{country}] LPG data')
 travel_time = RasterLayer('LPG', 'Traveltime', snakemake.input.traveltime_cities)
@@ -114,9 +113,9 @@ model.techs['LPG'].travel_time = travel_time.layer * 2 / 60
 
 # 13. Adding GIS data for Improved Biomass collected (ICS biomass)
 print(f'[{country}] Improved Biomass collected data')
-model.techs['Collected_Imporved_Biomass'].friction_path = snakemake.input.biomass_friction
-model.techs['Collected_Imporved_Biomass'].forest_path = snakemake.input.forest
-model.techs['Collected_Imporved_Biomass'].forest_condition = lambda x: x > 30
+model.techs['Collected_Improved_Biomass'].friction_path = snakemake.input.biomass_friction
+model.techs['Collected_Improved_Biomass'].forest_path = snakemake.input.forest
+model.techs['Collected_Improved_Biomass'].forest_condition = lambda x: x > 30
 
 # 14. Adding GIS data for Improved Biomass collected (ICS biomass)
 if 'Biogas' in model.techs.keys():
