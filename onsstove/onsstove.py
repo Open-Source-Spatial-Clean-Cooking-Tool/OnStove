@@ -355,7 +355,10 @@ class OnSSTOVE(DataProcessor):
                         config[row['Param']] = str(row['Value'])
                     else:
                         raise ValueError("Config file data type not recognised.")
-        self.specs = config
+        if self.specs is None:
+            self.specs = config
+        else:
+            self.specs.update(config)
 
     def read_tech_data(self, path_to_config: str, delimiter=','):
         """
@@ -626,6 +629,9 @@ class OnSSTOVE(DataProcessor):
         else:
             raise ValueError("technologies must be 'all' or a list of strings with the technology names to run.")
 
+        # Based on wealth index, minimum wage and a lower an upper range for cost of oportunity
+        print(f'[{self.specs["Country_name"]}] Getting value of time')
+        self.get_value_of_time()
         # Loop through each technology and calculate all benefits and costs
         for tech in techs:
             print(f'Calculating health benefits for {tech.name}...')
@@ -636,13 +642,13 @@ class OnSSTOVE(DataProcessor):
             print(f'Calculating time saved benefits for {tech.name}...')
             tech.time_saved(self)
             print(f'Calculating costs for {tech.name}...')
+            tech.required_energy(self)
             tech.discounted_om(self.gdf, self.specs)
             tech.discounted_inv(self.gdf, self.specs)
-            tech.discounted_meals(self.gdf, self.specs)
             tech.discount_fuel_cost(self.gdf, self.specs, self.rows, self.cols)
             tech.salvage(self.gdf, self.specs)
             print(f'Calculating net benefit for {tech.name}...\n')
-            tech.net_benefit(self.gdf)
+            tech.net_benefit(self)
 
         print('Getting maximum net benefit technologies...')
         self.maximum_net_benefit(techs)

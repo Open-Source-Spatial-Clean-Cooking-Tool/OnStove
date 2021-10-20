@@ -13,7 +13,7 @@ model = OnSSTOVE.read_model(snakemake.input.model)
 
 # 2. Read the scenario data
 print(f'[{country}] Scenario data')
-path = snakemake.input.specs_file
+path = snakemake.input.scenario_file
 model.read_scenario_data(path, delimiter=',')
 
 # 3. Calculating benefits and costs of each technology and getting the max benefit technology for each cell
@@ -35,7 +35,7 @@ model.to_raster('max_benefit_tech')
 model.to_raster('net_benefit_Electricity')
 model.to_raster('net_benefit_LPG')
 model.to_raster('net_benefit_Collected_Traditional_Biomass')
-model.to_raster('net_benefit_Collected_Imporved_Biomass')
+model.to_raster('net_benefit_Collected_Improved_Biomass')
 model.to_raster('maximum_net_benefit')
 # model.to_raster('investment_costs')
 
