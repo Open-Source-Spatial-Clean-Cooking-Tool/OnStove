@@ -645,7 +645,7 @@ class OnSSTOVE(DataProcessor):
             tech.required_energy(self)
             tech.discounted_om(self.gdf, self.specs)
             tech.discounted_inv(self.gdf, self.specs)
-            tech.discount_fuel_cost(self.gdf, self.specs, self.rows, self.cols)
+            tech.discount_fuel_cost(self)
             tech.salvage(self.gdf, self.specs)
             print(f'Calculating net benefit for {tech.name}...\n')
             tech.net_benefit(self)

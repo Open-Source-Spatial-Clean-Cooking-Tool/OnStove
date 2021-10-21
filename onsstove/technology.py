@@ -302,17 +302,17 @@ class Technology:
         # energy_needed = self.energy * np.ones(proj_life)
         # self.discounted_energy = (energy_needed / discount_rate)
 
-    def discount_fuel_cost(self, gdf, specs_file, rows=None, cols=None):
+    def discount_fuel_cost(self, model):
+        self.required_energy(model)
+        discount_rate, proj_life = self.discount_factor(model.specs)
 
-        discount_rate, proj_life = self.discount_factor(specs_file)
-
-        cost = (self.energy * self.fuel_cost / self.energy_content + self.transport_cost) * np.ones(gdf.shape[0])
+        cost = (self.energy * self.fuel_cost / self.energy_content + self.transport_cost) * np.ones(model.gdf.shape[0])
 
         fuel_cost = [np.ones(proj_life) * x for x in cost]
 
         fuel_cost_discounted = np.array([sum(x / discount_rate) for x in fuel_cost])
 
-        self.discounted_fuel_cost = pd.Series(fuel_cost_discounted, index=gdf.index)
+        self.discounted_fuel_cost = pd.Series(fuel_cost_discounted, index=model.gdf.index)
 
     def total_time(self, model):
         self.total_time_yr = self.time_of_cooking * 365
@@ -391,7 +391,7 @@ class LPG(Technology):
         interpolate(lpg.distance_raster.path)
         self.travel_time = 2 * lpg.distance_raster.layer
 
-    def transportation_cost(self, specs_file, gdf, rows, cols):
+    def transportation_cost(self, model):
         """The cost of transporting LPG. See https://iopscience.iop.org/article/10.1088/1748-9326/6/3/034002/pdf for the formula
 
         Transportation cost = (2 * diesel consumption per h * national diesel price * travel time)/transported LPG
@@ -413,14 +413,14 @@ class LPG(Technology):
         :returns:       The cost of LPG in each cell per kg
         """
         transport_cost = (self.diesel_per_hour * self.diesel_cost * self.travel_time) / self.truck_capacity
-        kg_yr = (specs_file["Meals_per_day"] * 365 * 3.64) / (
+        kg_yr = (model.specs["Meals_per_day"] * 365 * 3.64) / (
                 self.efficiency * self.energy_content)  # energy content in MJ/kg
         transport_cost = transport_cost * kg_yr
-        self.transport_cost = pd.Series(transport_cost[rows, cols], index=gdf.index)
+        self.transport_cost = pd.Series(transport_cost[model.rows, model.cols], index=model.gdf.index)
 
-    def discount_fuel_cost(self, gdf, specs_file, rows=None, cols=None):
-        self.transportation_cost(specs_file, gdf, rows, cols)
-        super().discount_fuel_cost(gdf, specs_file)
+    def discount_fuel_cost(self, model):
+        self.transportation_cost(model)
+        super().discount_fuel_cost(model)
 
 
 class Biomass(Technology):
@@ -598,7 +598,7 @@ class Biogas(Technology):
         from_pig = model.gdf["Pigs"] * 5 * 0.75 * 0.14 * 470
         from_poultry = model.gdf["Poultry"] * 0.12 * 0.25 * 0.75 * 450
 
-        fraction = self.read_friction(self, model, self.friction_path)
+        fraction = self.read_friction(model, self.friction_path)
 
         model.gdf["available_biogas"] = ((from_cattle + from_buffalo + from_goat + from_pig + from_poultry + \
                                                   from_sheep) * 365 * self.digestor_eff/1000)
@@ -615,7 +615,7 @@ class Biogas(Technology):
         del model.gdf["Poultry"]
 
     def available_energy(self, model, temp, water):
-
+        self.required_energy(model)
         model.raster_to_dataframe(temp.layer, name="Temperature", method='read',
                                   nodata=temp.meta['nodata'], fill_nodata='interpolate')
 

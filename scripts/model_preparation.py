@@ -133,6 +133,7 @@ if 'Biogas' in model.techs.keys():
     model.techs['Biogas'].recalibrate_livestock(model, model.mask_layer.layer, buffaloes,
                                                 cattles, poultry, goats, pigs, sheeps)
     print(f'[{country}] Calculating potential biogas')
+    model.techs['Biogas'].friction_path = snakemake.input.biomass_friction
     model.techs['Biogas'].available_biogas(model)
     model.techs['Biogas'].available_energy(model, temp, water)
 
