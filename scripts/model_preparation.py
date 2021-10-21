@@ -127,12 +127,14 @@ if 'Biogas' in model.techs.keys():
     pigs = r"..\Clean cooking Africa paper\01. Data\GIS-data\Global livestock\Pigs\5_Pg_2010_Da.tif"
     sheeps = r"..\Clean cooking Africa paper\01. Data\GIS-data\Global livestock\Sheep\5_Sh_2010_Da.tif"
     temp = RasterLayer('Biogas', 'Temperature', snakemake.input.temperature)
+    water = VectorLayer('Biogas', 'Water scarcity', snakemake.input.water, bbox=model.mask_layer.layer)
 
     print(f'[{country}] Recalibrating livestock')
-    model.techs['Biogas'].recalibrate_livestock(model, model.mask_layer.layer, buffaloes, cattles, poultry, goats, pigs, sheeps)
+    model.techs['Biogas'].recalibrate_livestock(model, model.mask_layer.layer, buffaloes,
+                                                cattles, poultry, goats, pigs, sheeps)
     print(f'[{country}] Calculating potential biogas')
     model.techs['Biogas'].available_biogas(model)
-    model.techs['Biogas'].available_energy(model, temp)
+    model.techs['Biogas'].available_energy(model, temp, water)
 
 # 15. Saving the prepared model inputs
 print(f'[{country}] Saving the model')
