@@ -40,7 +40,7 @@ class Technology:
         self.time_of_cooking = time_of_cooking
         self.efficiency = efficiency
         self.pm25 = pm25
-        self.time_of_collection = None
+        self.time_of_collection = 0
         self.fuel_use = None
         self.is_base = is_base
         self.transport_cost = transport_cost
@@ -315,7 +315,7 @@ class Technology:
         self.discounted_fuel_cost = pd.Series(fuel_cost_discounted, index=model.gdf.index)
 
     def total_time(self, model):
-        self.total_time_yr = self.time_of_cooking * 365
+        self.total_time_yr = (self.time_of_cooking + self.time_of_collection) * 365
 
     def time_saved(self, onstove):
         if self.is_base:
@@ -586,7 +586,7 @@ class Biogas(Technology):
     def read_friction(self, model, friction_path):
         friction = RasterLayer(self.name, 'Friction', layer_path=friction_path, resample = 'average')
         data = friction.layer[model.rows, model.cols]
-        return (self.time_of_collection * 60)/data
+        return (self.time_of_collection * 60)/data  # (h * 60 min/h) / (min/m)
 
 
     def available_biogas(self, model):
@@ -598,13 +598,13 @@ class Biogas(Technology):
         from_pig = model.gdf["Pigs"] * 5 * 0.75 * 0.14 * 470
         from_poultry = model.gdf["Poultry"] * 0.12 * 0.25 * 0.75 * 450
 
-        fraction = self.read_friction(model, self.friction_path)
+        fraction = self.read_friction(model, self.friction_path) / 1000000
+        self.fraction = fraction
 
         model.gdf["available_biogas"] = ((from_cattle + from_buffalo + from_goat + from_pig + from_poultry + \
-                                                  from_sheep) * 365 * self.digestor_eff/1000)
+                                                  from_sheep) * self.digestor_eff/1000) * 365
 
-        model.gdf["m3_biogas_hh"] = fraction * ((((from_cattle + from_buffalo + from_goat + from_pig + from_poultry + \
-                                                  from_sheep) * 365 * self.digestor_eff)/1000)/1000000)
+        model.gdf["m3_biogas_hh"] = fraction * model.gdf["available_biogas"]
 
 
         del model.gdf["Cattles"]
@@ -620,7 +620,8 @@ class Biogas(Technology):
                                   nodata=temp.meta['nodata'], fill_nodata='interpolate')
 
         water.layer["class"] = 0
-        water.layer['class'] = np.where(water.layer['bws_label'].isin(['Low (<10%)', 'Low - Medium (10-20%)']), 1, 0)
+        water.layer['class'] = np.where(water.layer['bws_label'].isin(['Low (<10%)',
+                                                                       'Low - Medium (10-20%)']), 1, 0)
 
         water.layer.to_crs(model.project_crs, inplace=True)
         out_folder = os.path.join(model.output_directory, "Biogas", "Water scarcity")
@@ -634,7 +635,7 @@ class Biogas(Technology):
 
         model.gdf.loc[model.gdf["Temperature"] < 10, "m3_biogas_hh"] = 0
         model.gdf.loc[(model.gdf["IsUrban"] > 20), "m3_biogas_hh"] = 0
-        model.gdf.loc[model.gdf["Water"] == 0, "m3_biogas_per_m2"] = 0
+        model.gdf.loc[model.gdf["Water"] == 0, "m3_biogas_hh"] = 0
 
         model.gdf["biogas_energy"] = model.gdf["available_biogas"] * self.energy_content
         model.gdf["biogas_energy_hh"] = model.gdf["m3_biogas_hh"] * self.energy_content
