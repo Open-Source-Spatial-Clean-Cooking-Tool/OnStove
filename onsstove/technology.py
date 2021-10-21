@@ -573,13 +573,21 @@ class Biogas(Technology):
                  efficiency=0,  # ratio
                  pm25=0,
                  utilization_factor=0.5,
-                 digestor_eff=0.4):
+                 digestor_eff=0.4,
+                 friction_path=None,):
         super().__init__(name, carbon_intensity, energy_content, tech_life,
                          inv_cost, fuel_cost, time_of_cooking,
                          om_cost, efficiency, pm25)
         # TODO: Check what's the difference between these two factors
         self.utilization_factor = utilization_factor
         self.digestor_eff = digestor_eff
+        self.friction_path = friction_path
+
+    def read_friction(self, model, friction_path):
+        friction = RasterLayer(self.name, 'Friction', layer_path=friction_path, resample = 'average')
+        data = friction.layer[model.rows, model.cols]
+        return (self.time_of_collection * 60)/data
+
 
     def available_biogas(self, model):
         # Biogas production potential in liters per day
@@ -590,8 +598,14 @@ class Biogas(Technology):
         from_pig = model.gdf["Pigs"] * 5 * 0.75 * 0.14 * 470
         from_poultry = model.gdf["Poultry"] * 0.12 * 0.25 * 0.75 * 450
 
-        model.gdf["m3_biogas_per_m2"] = ((from_cattle + from_buffalo + from_goat + from_pig + from_poultry + \
-                                                  from_sheep) * 0.365 * self.digestor_eff)/1000000
+        fraction = self.read_friction(self, model, self.friction_path)
+
+        model.gdf["available_biogas"] = ((from_cattle + from_buffalo + from_goat + from_pig + from_poultry + \
+                                                  from_sheep) * 365 * self.digestor_eff/1000)
+
+        model.gdf["m3_biogas_hh"] = fraction * ((((from_cattle + from_buffalo + from_goat + from_pig + from_poultry + \
+                                                  from_sheep) * 365 * self.digestor_eff)/1000)/1000000)
+
 
         del model.gdf["Cattles"]
         del model.gdf["Buffaloes"]
@@ -617,11 +631,17 @@ class Biogas(Technology):
         # model.gdf.loc[(model.gdf["Temperature"] < 20) & (model.gdf["Temperature"] >= 10), "potential_households"] = model.gdf["yearly_cubic_meter_biogas"]/7.2
         # model.gdf.loc[(model.gdf["Temperature"] >= 20), "potential_households"] = model.gdf["yearly_cubic_meter_biogas"]/6
 
-        model.gdf.loc[model.gdf["Water"] == 0, "m3_biogas_per_m2"] = 0
-        model.gdf.loc[model.gdf["Temperature"] < 10, "m3_biogas_per_m2"] = 0
-        model.gdf.loc[(model.gdf["IsUrban"] > 20), "m3_biogas_per_m2"] = 0
 
-        model.gdf["available_biogas_energy"] = model.gdf["m3_biogas_per_m2"] * self.energy_content
+        model.gdf.loc[model.gdf["Temperature"] < 10, "m3_biogas_hh"] = 0
+        model.gdf.loc[(model.gdf["IsUrban"] > 20), "m3_biogas_hh"] = 0
+        model.gdf.loc[model.gdf["Water"] == 0, "m3_biogas_per_m2"] = 0
+
+        model.gdf["biogas_energy"] = model.gdf["available_biogas"] * self.energy_content
+        model.gdf["biogas_energy_hh"] = model.gdf["m3_biogas_hh"] * self.energy_content
+        model.gdf.loc[(model.gdf["biogas_energy_hh"] < self.energy), "biogas_energy_hh"] = 0
+        model.gdf.loc[(model.gdf["biogas_energy_hh"] == 0), "biogas_energy"] = 0
+
+
 
     def recalibrate_livestock(self, model, admin, buffaloes, cattles, poultry, goats, pigs, sheeps):
         paths = {
@@ -684,7 +704,7 @@ class Biogas(Technology):
 
     def net_benefit(self, model):
         super().net_benefit(model)
-        model.gdf.loc[model.gdf['available_biogas_energy'] == 0, "net_benefit_{}".format(self.name)] = 0
-        factor = model.gdf['available_biogas_energy'] / (self.energy * model.gdf['Households'])
+        model.gdf.loc[model.gdf['biogas_energy_hh'] == 0, "net_benefit_{}".format(self.name)] = 0
+        factor = model.gdf['biogas_energy'] / (self.energy * model.gdf['Households'])
         factor[factor > 1] = 1
         self.households = model.gdf['Households'] * factor
