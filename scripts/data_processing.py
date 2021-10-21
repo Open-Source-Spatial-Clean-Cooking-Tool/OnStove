@@ -1,5 +1,5 @@
 import sys
-sys.path.append(r"C:\Users\camilorg\Box Sync\OnSSTOVE")
+sys.path.append(r"C:\Users\khavari\Box\OnSTOVE")
 from onsstove.onsstove import DataProcessor
 
 # 1. Create a data processor

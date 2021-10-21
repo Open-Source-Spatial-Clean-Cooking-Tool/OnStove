@@ -1,5 +1,5 @@
 import sys, os
-sys.path.append(r"C:\Users\camilorg\Box Sync\OnSSTOVE")
+sys.path.append(r"C:\Users\khavari\Box\OnSTOVE")
 import rasterio
 from onsstove.raster import merge_rasters
 from onsstove.layer import VectorLayer

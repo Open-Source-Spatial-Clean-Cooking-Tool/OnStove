@@ -590,8 +590,8 @@ class Biogas(Technology):
         from_pig = model.gdf["Pigs"] * 5 * 0.75 * 0.14 * 470
         from_poultry = model.gdf["Poultry"] * 0.12 * 0.25 * 0.75 * 450
 
-        model.gdf["yearly_cubic_meter_biogas"] = (from_cattle + from_buffalo + from_goat + from_pig + from_poultry + \
-                                                  from_sheep) * 0.365 * self.digestor_eff
+        model.gdf["m3_biogas_per_m2"] = ((from_cattle + from_buffalo + from_goat + from_pig + from_poultry + \
+                                                  from_sheep) * 0.365 * self.digestor_eff)/1000000
 
         del model.gdf["Cattles"]
         del model.gdf["Buffaloes"]
@@ -600,20 +600,30 @@ class Biogas(Technology):
         del model.gdf["Pigs"]
         del model.gdf["Poultry"]
 
-    def available_energy(self, model, data):
-        model.gdf.to_crs(4326, inplace=True)
+    def available_energy(self, model, temp, water):
 
-        model.raster_to_dataframe(data.layer, name="Temperature", method='read',
-                                  nodata=data.meta['nodata'], fill_nodata='interpolate')
-        model.gdf.to_crs(model.project_crs, inplace=True)
+        model.raster_to_dataframe(temp.layer, name="Temperature", method='read',
+                                  nodata=temp.meta['nodata'], fill_nodata='interpolate')
+
+        water.VectorLayer()
+
+        water.layer["class"] = 0
+        water['class'] = np.where(water['bws_label'] == 'Low (<10%)', 1, 0)
+        water['class'] = np.where(water['bws_label'] == 'Low - Medium (10-20%)', 1, 0)
+
+        water.layer.to_crs(model.project_crs)
+        water.rasterize(model.cell_size[0], model.cell_size[1], "class", os.path.join("Biogas","Water scarcity","Water scarcity.tif"))
+
+        model.raster_to_dataframe(os.path.join("Biogas","Water scarcity","Water scarcity.tif"), name="Water", method='sample')
 
         # model.gdf.loc[(model.gdf["Temperature"] < 20) & (model.gdf["Temperature"] >= 10), "potential_households"] = model.gdf["yearly_cubic_meter_biogas"]/7.2
         # model.gdf.loc[(model.gdf["Temperature"] >= 20), "potential_households"] = model.gdf["yearly_cubic_meter_biogas"]/6
 
-        model.gdf.loc[model.gdf["Temperature"] < 10, "yearly_cubic_meter_biogas"] = 0
-        model.gdf.loc[(model.gdf["IsUrban"] > 20), "yearly_cubic_meter_biogas"] = 0
+        model.gdf.loc[model.gdf["Water"] == 0, "m3_biogas_per_m2"] = 0
+        model.gdf.loc[model.gdf["Temperature"] < 10, "m3_biogas_per_m2"] = 0
+        model.gdf.loc[(model.gdf["IsUrban"] > 20), "m3_biogas_per_m2"] = 0
 
-        model.gdf["available_biogas_energy"] = model.gdf["yearly_cubic_meter_biogas"] * self.energy_content
+        model.gdf["available_biogas_energy"] = model.gdf["m3_biogas_per_m2"] * self.energy_content
 
     def recalibrate_livestock(self, model, admin, buffaloes, cattles, poultry, goats, pigs, sheeps):
         paths = {

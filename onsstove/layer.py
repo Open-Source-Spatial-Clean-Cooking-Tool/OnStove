@@ -5,7 +5,8 @@ import pandas as pd
 import datetime
 
 from rasterio import windows
-from rasterio.transform import array_bounds
+from rasterio.transform import array_bounds, from_bounds
+from rasterio.features import rasterize
 from rasterio import warp
 from skimage.graph.mcp import MCP_Geometric
 import matplotlib.pyplot as plt
@@ -161,6 +162,33 @@ class VectorLayer(Layer):
         elif self.distance == 'travel_time':
             self.travel_time(output_path)
 
+    def rasterize(self, cell_width, cell_height, value, output):
+
+        total_bounds = self.layer['geometry'].total_bounds
+        width = round((total_bounds[3] - total_bounds[1]) / cell_width)
+        height = round((total_bounds[2] - total_bounds[0]) / cell_height)
+
+        shape = height, width
+        transform = rasterio.transform.from_bounds(*self.layer['geometry'].total_bounds, shape[0], shape[1])
+        rasterized = rasterize(
+            ((g, v) for v, g in zip(self.layer[value].values, self.layer['geometry'].values)),
+            out_shape=(width, height),
+            transform=transform,
+            all_touched=True,
+            dtype=rasterio.uint8)
+
+        with rasterio.open(
+                output, 'w',
+                driver='GTiff',
+                dtype=rasterio.uint8,
+                count=1,
+                crs=self.layer.crs,
+                width=shape[0],
+                height=shape[1],
+                transform=transform,
+                nodata=0
+        ) as dst:
+            dst.write(rasterized, indexes=1)
 
     def start_points(self, condition=None):
         return friction_start_points(self.friction.path,
