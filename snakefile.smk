@@ -67,6 +67,7 @@ rule prepare_model:
          ntl = rules.process_data.output.ntl,
          traveltime_cities = rules.process_data.output.traveltime_cities,
          temperature = rules.process_data.output.temperature,
+         water = r"..\Clean cooking Africa paper\01. Data\GIS-data\Water scarcity\y2019m07d11_aqueduct30_annual_v01.gpkg",
          tiers = r"..\Clean cooking Africa paper\01. Data\GIS-data\Electricity tiers\tiersofaccess_SSA_2018.tif"
     params:
           output_directory = "../Clean cooking Africa paper/06. Results/{country}",

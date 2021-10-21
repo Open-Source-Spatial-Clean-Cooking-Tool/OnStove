@@ -1,5 +1,5 @@
 import sys
-sys.path.append(r"C:\Users\khavari\Box\OnSTOVE")
+sys.path.append(r"C:\Users\camilorg\Box Sync\OnSSTOVE")
 import os
 
 import numpy as np

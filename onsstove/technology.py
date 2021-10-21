@@ -605,16 +605,14 @@ class Biogas(Technology):
         model.raster_to_dataframe(temp.layer, name="Temperature", method='read',
                                   nodata=temp.meta['nodata'], fill_nodata='interpolate')
 
-        water.VectorLayer()
-
         water.layer["class"] = 0
-        water['class'] = np.where(water['bws_label'] == 'Low (<10%)', 1, 0)
-        water['class'] = np.where(water['bws_label'] == 'Low - Medium (10-20%)', 1, 0)
+        water.layer['class'] = np.where(water.layer['bws_label'].isin(['Low (<10%)', 'Low - Medium (10-20%)']), 1, 0)
 
-        water.layer.to_crs(model.project_crs)
-        water.rasterize(model.cell_size[0], model.cell_size[1], "class", os.path.join("Biogas","Water scarcity","Water scarcity.tif"))
+        water.layer.to_crs(model.project_crs, inplace=True)
+        out_folder = os.path.join(model.output_directory, "Biogas", "Water scarcity")
+        water.rasterize(model.cell_size[0], model.cell_size[1], "class", out_folder, nodata=0)
 
-        model.raster_to_dataframe(os.path.join("Biogas","Water scarcity","Water scarcity.tif"), name="Water", method='sample')
+        model.raster_to_dataframe(os.path.join(out_folder, water.name + ".tif"), name="Water", method='sample')
 
         # model.gdf.loc[(model.gdf["Temperature"] < 20) & (model.gdf["Temperature"] >= 10), "potential_households"] = model.gdf["yearly_cubic_meter_biogas"]/7.2
         # model.gdf.loc[(model.gdf["Temperature"] >= 20), "potential_households"] = model.gdf["yearly_cubic_meter_biogas"]/6
