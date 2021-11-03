@@ -598,7 +598,7 @@ class Biogas(Technology):
         from_pig = model.gdf["Pigs"] * 5 * 0.75 * 0.14 * 470
         from_poultry = model.gdf["Poultry"] * 0.12 * 0.25 * 0.75 * 450
 
-        fraction = self.read_friction(model, self.friction_path) / 1000000
+        fraction = self.read_friction(model, self.friction_path) / (1000000 * 0.2)
         self.fraction = fraction
 
         model.gdf["available_biogas"] = ((from_cattle + from_buffalo + from_goat + from_pig + from_poultry + \
@@ -614,28 +614,23 @@ class Biogas(Technology):
         del model.gdf["Pigs"]
         del model.gdf["Poultry"]
 
-    def available_energy(self, model, temp, water):
+    def available_energy(self, model, temp, water=None):
         self.required_energy(model)
         model.raster_to_dataframe(temp.layer, name="Temperature", method='read',
                                   nodata=temp.meta['nodata'], fill_nodata='interpolate')
+        if isinstance(water, VectorLayer):
+            water.layer["class"] = 0
+            water.layer['class'] = np.where(water.layer['bws_label'].isin(['Low (<10%)',
+                                                                           'Low - Medium (10-20%)']), 1, 0)
+            water.layer.to_crs(model.project_crs, inplace=True)
+            out_folder = os.path.join(model.output_directory, "Biogas", "Water scarcity")
+            water.rasterize(model.cell_size[0], model.cell_size[1], "class", out_folder, nodata=0)
 
-        water.layer["class"] = 0
-        water.layer['class'] = np.where(water.layer['bws_label'].isin(['Low (<10%)',
-                                                                       'Low - Medium (10-20%)']), 1, 0)
-
-        water.layer.to_crs(model.project_crs, inplace=True)
-        out_folder = os.path.join(model.output_directory, "Biogas", "Water scarcity")
-        water.rasterize(model.cell_size[0], model.cell_size[1], "class", out_folder, nodata=0)
-
-        model.raster_to_dataframe(os.path.join(out_folder, water.name + ".tif"), name="Water", method='sample')
-
-        # model.gdf.loc[(model.gdf["Temperature"] < 20) & (model.gdf["Temperature"] >= 10), "potential_households"] = model.gdf["yearly_cubic_meter_biogas"]/7.2
-        # model.gdf.loc[(model.gdf["Temperature"] >= 20), "potential_households"] = model.gdf["yearly_cubic_meter_biogas"]/6
-
+            model.raster_to_dataframe(os.path.join(out_folder, water.name + ".tif"), name="Water", method='sample')
+            model.gdf.loc[model.gdf["Water"] == 0, "m3_biogas_hh"] = 0
 
         model.gdf.loc[model.gdf["Temperature"] < 10, "m3_biogas_hh"] = 0
         model.gdf.loc[(model.gdf["IsUrban"] > 20), "m3_biogas_hh"] = 0
-        model.gdf.loc[model.gdf["Water"] == 0, "m3_biogas_hh"] = 0
 
         model.gdf["biogas_energy"] = model.gdf["available_biogas"] * self.energy_content
         model.gdf["biogas_energy_hh"] = model.gdf["m3_biogas_hh"] * self.energy_content
