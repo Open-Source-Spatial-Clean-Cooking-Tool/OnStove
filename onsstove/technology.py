@@ -40,7 +40,7 @@ class Technology:
         self.time_of_cooking = time_of_cooking
         self.efficiency = efficiency
         self.pm25 = pm25
-        self.time_of_collection = None
+        self.time_of_collection = 0
         self.fuel_use = None
         self.is_base = is_base
         self.transport_cost = transport_cost
@@ -302,20 +302,20 @@ class Technology:
         # energy_needed = self.energy * np.ones(proj_life)
         # self.discounted_energy = (energy_needed / discount_rate)
 
-    def discount_fuel_cost(self, gdf, specs_file, rows=None, cols=None):
+    def discount_fuel_cost(self, model):
+        self.required_energy(model)
+        discount_rate, proj_life = self.discount_factor(model.specs)
 
-        discount_rate, proj_life = self.discount_factor(specs_file)
-
-        cost = (self.energy * self.fuel_cost / self.energy_content + self.transport_cost) * np.ones(gdf.shape[0])
+        cost = (self.energy * self.fuel_cost / self.energy_content + self.transport_cost) * np.ones(model.gdf.shape[0])
 
         fuel_cost = [np.ones(proj_life) * x for x in cost]
 
         fuel_cost_discounted = np.array([sum(x / discount_rate) for x in fuel_cost])
 
-        self.discounted_fuel_cost = pd.Series(fuel_cost_discounted, index=gdf.index)
+        self.discounted_fuel_cost = pd.Series(fuel_cost_discounted, index=model.gdf.index)
 
     def total_time(self, model):
-        self.total_time_yr = self.time_of_cooking * 365
+        self.total_time_yr = (self.time_of_cooking + self.time_of_collection) * 365
 
     def time_saved(self, onstove):
         if self.is_base:
@@ -391,7 +391,7 @@ class LPG(Technology):
         interpolate(lpg.distance_raster.path)
         self.travel_time = 2 * lpg.distance_raster.layer
 
-    def transportation_cost(self, specs_file, gdf, rows, cols):
+    def transportation_cost(self, model):
         """The cost of transporting LPG. See https://iopscience.iop.org/article/10.1088/1748-9326/6/3/034002/pdf for the formula
 
         Transportation cost = (2 * diesel consumption per h * national diesel price * travel time)/transported LPG
@@ -413,14 +413,14 @@ class LPG(Technology):
         :returns:       The cost of LPG in each cell per kg
         """
         transport_cost = (self.diesel_per_hour * self.diesel_cost * self.travel_time) / self.truck_capacity
-        kg_yr = (specs_file["Meals_per_day"] * 365 * 3.64) / (
+        kg_yr = (model.specs["Meals_per_day"] * 365 * 3.64) / (
                 self.efficiency * self.energy_content)  # energy content in MJ/kg
         transport_cost = transport_cost * kg_yr
-        self.transport_cost = pd.Series(transport_cost[rows, cols], index=gdf.index)
+        self.transport_cost = pd.Series(transport_cost[model.rows, model.cols], index=model.gdf.index)
 
-    def discount_fuel_cost(self, gdf, specs_file, rows=None, cols=None):
-        self.transportation_cost(specs_file, gdf, rows, cols)
-        super().discount_fuel_cost(gdf, specs_file)
+    def discount_fuel_cost(self, model):
+        self.transportation_cost(model)
+        super().discount_fuel_cost(model)
 
 
 class Biomass(Technology):
@@ -586,7 +586,7 @@ class Biogas(Technology):
     def read_friction(self, model, friction_path):
         friction = RasterLayer(self.name, 'Friction', layer_path=friction_path, resample = 'average')
         data = friction.layer[model.rows, model.cols]
-        return (self.time_of_collection * 60)/data
+        return (self.time_of_collection * 60)/data  # (h * 60 min/h) / (min/m)
 
 
     def available_biogas(self, model):
@@ -598,13 +598,13 @@ class Biogas(Technology):
         from_pig = model.gdf["Pigs"] * 5 * 0.75 * 0.14 * 470
         from_poultry = model.gdf["Poultry"] * 0.12 * 0.25 * 0.75 * 450
 
-        fraction = self.read_friction(self, model, self.friction_path)
+        fraction = self.read_friction(model, self.friction_path) / (1000000 * 0.2)
+        self.fraction = fraction
 
         model.gdf["available_biogas"] = ((from_cattle + from_buffalo + from_goat + from_pig + from_poultry + \
-                                                  from_sheep) * 365 * self.digestor_eff/1000)
+                                                  from_sheep) * self.digestor_eff/1000) * 365
 
-        model.gdf["m3_biogas_hh"] = fraction * ((((from_cattle + from_buffalo + from_goat + from_pig + from_poultry + \
-                                                  from_sheep) * 365 * self.digestor_eff)/1000)/1000000)
+        model.gdf["m3_biogas_hh"] = fraction * model.gdf["available_biogas"]
 
 
         del model.gdf["Cattles"]
@@ -614,27 +614,23 @@ class Biogas(Technology):
         del model.gdf["Pigs"]
         del model.gdf["Poultry"]
 
-    def available_energy(self, model, temp, water):
-
+    def available_energy(self, model, temp, water=None):
+        self.required_energy(model)
         model.raster_to_dataframe(temp.layer, name="Temperature", method='read',
                                   nodata=temp.meta['nodata'], fill_nodata='interpolate')
+        if isinstance(water, VectorLayer):
+            water.layer["class"] = 0
+            water.layer['class'] = np.where(water.layer['bws_label'].isin(['Low (<10%)',
+                                                                           'Low - Medium (10-20%)']), 1, 0)
+            water.layer.to_crs(model.project_crs, inplace=True)
+            out_folder = os.path.join(model.output_directory, "Biogas", "Water scarcity")
+            water.rasterize(model.cell_size[0], model.cell_size[1], "class", out_folder, nodata=0)
 
-        water.layer["class"] = 0
-        water.layer['class'] = np.where(water.layer['bws_label'].isin(['Low (<10%)', 'Low - Medium (10-20%)']), 1, 0)
-
-        water.layer.to_crs(model.project_crs, inplace=True)
-        out_folder = os.path.join(model.output_directory, "Biogas", "Water scarcity")
-        water.rasterize(model.cell_size[0], model.cell_size[1], "class", out_folder, nodata=0)
-
-        model.raster_to_dataframe(os.path.join(out_folder, water.name + ".tif"), name="Water", method='sample')
-
-        # model.gdf.loc[(model.gdf["Temperature"] < 20) & (model.gdf["Temperature"] >= 10), "potential_households"] = model.gdf["yearly_cubic_meter_biogas"]/7.2
-        # model.gdf.loc[(model.gdf["Temperature"] >= 20), "potential_households"] = model.gdf["yearly_cubic_meter_biogas"]/6
-
+            model.raster_to_dataframe(os.path.join(out_folder, water.name + ".tif"), name="Water", method='sample')
+            model.gdf.loc[model.gdf["Water"] == 0, "m3_biogas_hh"] = 0
 
         model.gdf.loc[model.gdf["Temperature"] < 10, "m3_biogas_hh"] = 0
         model.gdf.loc[(model.gdf["IsUrban"] > 20), "m3_biogas_hh"] = 0
-        model.gdf.loc[model.gdf["Water"] == 0, "m3_biogas_per_m2"] = 0
 
         model.gdf["biogas_energy"] = model.gdf["available_biogas"] * self.energy_content
         model.gdf["biogas_energy_hh"] = model.gdf["m3_biogas_hh"] * self.energy_content

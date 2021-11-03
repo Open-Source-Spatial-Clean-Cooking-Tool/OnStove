@@ -439,7 +439,7 @@ class OnSSTOVE(DataProcessor):
             elec_pop = self.gdf.loc[bool, "Calibrated_pop"].sum()
 
             self.gdf.loc[bool, "Current_elec"] = 1
-            i = i - 0.001
+            i = i - 0.01
 
         self.i = i
 
@@ -449,7 +449,7 @@ class OnSSTOVE(DataProcessor):
 
         self.gdf["Elec_pop_calib"] = self.gdf["Calibrated_pop"]
 
-        i = self.i + 0.001
+        i = self.i + 0.01
         total_pop = self.gdf["Calibrated_pop"].sum()
         elec_pop = self.gdf.loc[self.gdf["Current_elec"] == 1, "Calibrated_pop"].sum()
         diff = elec_pop - (total_pop * elec_rate)
@@ -468,7 +468,7 @@ class OnSSTOVE(DataProcessor):
 
             new_bool = bool & new_bool
             if new_bool.sum() == 0:
-                i = i + 0.001
+                i = i + 0.01
 
         self.gdf.loc[self.gdf["Current_elec"] == 0, "Elec_pop_calib"] = 0
 
@@ -525,6 +525,8 @@ class OnSSTOVE(DataProcessor):
                                      'Pop': layer[self.rows, self.cols]})
         self.gdf.crs = self.project_crs
 
+    # TODO: add an inplace option with True as default, that will save the result in the
+    #  dataframe or will return it as a pandas series with the same indices
     def raster_to_dataframe(self, layer, name=None, method='sample',
                             nodata=np.nan, fill_nodata=None):
         """
@@ -645,7 +647,7 @@ class OnSSTOVE(DataProcessor):
             tech.required_energy(self)
             tech.discounted_om(self.gdf, self.specs)
             tech.discounted_inv(self.gdf, self.specs)
-            tech.discount_fuel_cost(self.gdf, self.specs, self.rows, self.cols)
+            tech.discount_fuel_cost(self)
             tech.salvage(self.gdf, self.specs)
             print(f'Calculating net benefit for {tech.name}...\n')
             tech.net_benefit(self)

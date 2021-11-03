@@ -1,4 +1,4 @@
-COUNTRIES = ['RWA']
+COUNTRIES = ['COD']
 
 # COUNTRIES = ['AGO', 'BDI', 'BEN', 'BFA', 'BWA', 'CAF', 'CIV', 'CMR',
 #              'COD', 'COG', 'DJI', 'ERI', 'ETH', 'GAB', 'GHA', 'GIN',
@@ -31,7 +31,7 @@ rule process_data:
          forest = rules.extract_forest.output.forest,
          walking_friction = r"..\Clean cooking Africa paper\01. Data\GIS-data\Walking_friction\walking_friction.tif",
          hv_lines = r"..\Clean cooking Africa paper\01. Data\GIS-data\HV\All_HV.shp",
-         mv_lines = r"..\Clean cooking Africa paper\01. Data\GIS-data\MV\All_MV.shp",
+         mv_lines = r"..\Clean cooking Africa paper\01. Data\GIS-data\MV\All_MV.gpkg",
          ntl = r"..\Clean cooking Africa paper\01. Data\GIS-data\NightLights\Africa.tif",
          traveltime_cities = r"..\Clean cooking Africa paper\01. Data\GIS-data\Traveltime_to_cities\2015_accessibility_to_cities_v2.tif",
          temperature = r"..\Clean cooking Africa paper\01. Data\GIS-data\Temperature\TEMP.tif"
