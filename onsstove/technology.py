@@ -98,7 +98,12 @@ class Technology:
         else:
             rr_lc = 1 + 152.496 * (1 - exp(-0.000167 * (self.pm25 - 7.345) ** 0.76))
 
-        return rr_alri, rr_copd, rr_ihd, rr_lc
+        if self.pm25 < 7.359:
+            rr_stroke = 1
+        else:
+            rr_stroke = 1 + 1.312 * (1 - exp(-0.012 * (self.pm25 - 7.359) ** 1.273))
+
+        return rr_alri, rr_copd, rr_ihd, rr_lc, rr_stroke
 
     def paf(self, rr, sfu):
 
@@ -138,11 +143,12 @@ class Technology:
         self.decreased_carbon_costs = carbon
 
     def health_parameters(self, model):
-        rr_alri, rr_copd, rr_ihd, rr_lc = self.relative_risk()
+        rr_alri, rr_copd, rr_ihd, rr_lc, rr_stroke = self.relative_risk()
         self.paf_alri = self.paf(rr_alri, 1 - model.specs['clean_cooking_access'])
         self.paf_copd = self.paf(rr_copd, 1 - model.specs['clean_cooking_access'])
         self.paf_ihd = self.paf(rr_ihd, 1 - model.specs['clean_cooking_access'])
         self.paf_lc = self.paf(rr_lc, 1 - model.specs['clean_cooking_access'])
+        self.paf_stroke = self.paf(rr_stroke, 1 - model.specs['clean_cooking_access'])
 
     def mortality(self, model):
         """
@@ -158,11 +164,13 @@ class Technology:
         mort_copd = model.gdf["Calibrated_pop"].sum() * (model.base_fuel.paf_copd - self.paf_copd) * (model.specs["Mort_COPD"] / 100000)
         mort_ihd = model.gdf["Calibrated_pop"].sum() * (model.base_fuel.paf_ihd - self.paf_ihd) * (model.specs["Mort_IHD"] / 100000)
         mort_lc = model.gdf["Calibrated_pop"].sum() * (model.base_fuel.paf_lc - self.paf_lc) * (model.specs["Mort_LC"] / 100000)
+        mort_stroke = model.gdf["Calibrated_pop"].sum() * (model.base_fuel.paf_stroke - self.paf_stroke) * (model.specs["Mort_STROKE"] / 100000)
 
         cl_copd = {1: 0.3, 2: 0.2, 3: 0.17, 4: 0.17, 5: 0.16}
         cl_alri = {1: 0.7, 2: 0.1, 3: 0.07, 4: 0.07, 5: 0.06}
         cl_lc = {1: 0.2, 2: 0.1, 3: 0.24, 4: 0.23, 5: 0.23}
         cl_ihd = {1: 0.2, 2: 0.1, 3: 0.24, 4: 0.23, 5: 0.23}
+        cl_stroke = {1: 0.2, 2: 0.1, 3: 0.24, 4: 0.23, 5: 0.23}
 
         i = 1
         mort_vector = []
@@ -174,9 +182,10 @@ class Technology:
                     1 + model.specs["Discount_rate"]) ** (i - 1)
             mortality_ihd = cl_ihd[i] * model.specs["VSL"] * mort_ihd / (
                     1 + model.specs["Discount_rate"]) ** (i - 1)
+            mortality_stroke = cl_stroke[i] * model.specs["VSL"] * mort_stroke / (1 + model.specs["Discount_rate"]) ** (i - 1)
 
             mort_total = (1 + model.specs["Health_spillovers_parameter"]) * (
-                    mortality_alri + mortality_copd + mortality_lc + mortality_ihd)
+                    mortality_alri + mortality_copd + mortality_lc + mortality_ihd + mortality_stroke)
 
             mort_vector.append(mort_total)
 
@@ -188,7 +197,7 @@ class Technology:
         self.distributed_mortality = model.gdf["Calibrated_pop"] / (
                     model.gdf["Calibrated_pop"].sum() * model.gdf['Households']) * mortality
         #  Total deaths avoided
-        self.deaths_avoided = (mort_alri + mort_copd + mort_lc + mort_ihd) * (
+        self.deaths_avoided = (mort_alri + mort_copd + mort_lc + mort_ihd + mort_stroke) * (
                     model.gdf["Calibrated_pop"] / (model.gdf["Calibrated_pop"].sum() * model.gdf['Households']))
 
     def morbidity(self, model):
@@ -205,11 +214,13 @@ class Technology:
         morb_copd = model.gdf["Calibrated_pop"].sum() * (model.base_fuel.paf_copd - self.paf_copd) * (model.specs["Morb_COPD"] / 100000)
         morb_ihd = model.gdf["Calibrated_pop"].sum() * (model.base_fuel.paf_ihd - self.paf_ihd) * (model.specs["Morb_IHD"] / 100000)
         morb_lc = model.gdf["Calibrated_pop"].sum() * (model.base_fuel.paf_lc - self.paf_lc) * (model.specs["Morb_LC"] / 100000)
+        morb_stroke = model.gdf["Calibrated_pop"].sum() * (model.base_fuel.paf_stroke - self.paf_stroke) * (model.specs["Morb_STROKE"] / 100000)
 
         cl_copd = {1: 0.3, 2: 0.2, 3: 0.17, 4: 0.17, 5: 0.16}
         cl_alri = {1: 0.7, 2: 0.1, 3: 0.07, 4: 0.07, 5: 0.06}
         cl_lc = {1: 0.2, 2: 0.1, 3: 0.24, 4: 0.23, 5: 0.23}
         cl_ihd = {1: 0.2, 2: 0.1, 3: 0.24, 4: 0.23, 5: 0.23}
+        cl_stroke = {1: 0.2, 2: 0.1, 3: 0.24, 4: 0.23, 5: 0.23}
 
         i = 1
         morb_vector = []
@@ -220,9 +231,11 @@ class Technology:
                     i - 1)
             morbidity_lc = cl_lc[i] * model.specs["COI_LC"] * morb_lc / (1 + model.specs["Discount_rate"]) ** (i - 1)
             morbidity_ihd = cl_ihd[i] * model.specs["COI_IHD"] * morb_ihd / (1 + model.specs["Discount_rate"]) ** (i - 1)
+            morbidity_stroke = cl_stroke[i] * model.specs["COI_STROKE"] * morb_stroke / (1 + model.specs["Discount_rate"]) ** (
+                    i - 1)
 
             morb_total = (1 + model.specs["Health_spillovers_parameter"]) * (
-                    morbidity_alri + morbidity_copd + morbidity_lc + morbidity_ihd)
+                    morbidity_alri + morbidity_copd + morbidity_lc + morbidity_ihd + morbidity_stroke)
 
             morb_vector.append(morb_total)
 
@@ -232,7 +245,7 @@ class Technology:
 
         self.distributed_morbidity = model.gdf["Calibrated_pop"] / (
                     model.gdf["Calibrated_pop"].sum() * model.gdf['Households']) * morbidity
-        self.cases_avoided = (morb_alri + morb_copd + morb_lc + morb_ihd) * (
+        self.cases_avoided = (morb_alri + morb_copd + morb_lc + morb_ihd + morb_stroke) * (
                     model.gdf["Calibrated_pop"] / (model.gdf["Calibrated_pop"].sum() * model.gdf['Households']))
 
     def salvage(self, gdf, specs_file):
@@ -359,7 +372,7 @@ class LPG(Technology):
                  time_of_cooking=0,
                  om_cost=0,  # percentage of investement cost
                  efficiency=0,  # ratio
-                 pm25=0,
+                 pm25=43,
                  travel_time=None,
                  truck_capacity=2000,
                  diesel_cost=0.88,
@@ -439,7 +452,7 @@ class Biomass(Technology):
                  time_of_cooking=0,
                  om_cost=0,  # percentage of investement cost
                  efficiency=0,  # ratio
-                 pm25=0,
+                 pm25=844,
                  forest_path=None,
                  friction_path=None,
                  travel_time=None):
@@ -488,7 +501,7 @@ class Electricity(Technology):
                  time_of_cooking=0,
                  om_cost=0,  # percentage of investement cost
                  efficiency=0,  # ratio
-                 pm25=0):
+                 pm25=41):
         super().__init__(name, carbon_intensity, energy_content, tech_life,
                          inv_cost, fuel_cost, time_of_cooking,
                          om_cost, efficiency, pm25)
@@ -571,7 +584,7 @@ class Biogas(Technology):
                  time_of_cooking=0,
                  om_cost=0,  # percentage of investement cost
                  efficiency=0,  # ratio
-                 pm25=0,
+                 pm25=173,
                  utilization_factor=0.5,
                  digestor_eff=0.4,
                  friction_path=None,):
@@ -584,7 +597,7 @@ class Biogas(Technology):
         self.friction_path = friction_path
 
     def read_friction(self, model, friction_path):
-        friction = RasterLayer(self.name, 'Friction', layer_path=friction_path, resample = 'average')
+        friction = RasterLayer(self.name, 'Friction', layer_path=friction_path, resample='average')
         data = friction.layer[model.rows, model.cols]
         return (self.time_of_collection * 60)/data  # (h * 60 min/h) / (min/m)
 

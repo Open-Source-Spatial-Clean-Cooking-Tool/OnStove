@@ -7,11 +7,23 @@ import datetime
 from rasterio import windows
 from rasterio.transform import array_bounds
 from rasterio import warp, features
-from skimage.graph.mcp import MCP_Geometric
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
+import time, sys
 
 from .raster import *
+
+try:
+    from skimage.graph.mcp import MCP_Geometric
+except Exception as e:
+    try:
+        print('Trying import again...')
+        time.sleep(1)
+        from skimage.graph.mcp import MCP_Geometric
+        print('Import successful...')
+    except Exception as e:
+        sys.exit('exiting due to exception: {}'.format(e))
+
 
 
 class Layer:
