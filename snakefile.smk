@@ -1,4 +1,9 @@
-COUNTRIES = ['COD']
+COUNTRIES = ['AGO', 'BDI', 'BEN', 'BFA', 'BWA', 'CAF', 'CIV', 'CMR',
+             'COD', 'COG', 'ERI', 'ETH', 'GAB', 'GHA', 'GIN',
+             'GMB', 'GNB', 'GNQ', 'KEN', 'LBR', 'LSO', 'MDG', 'MLI',
+             'MOZ', 'MRT', 'MWI', 'NAM', 'NER', 'NGA', 'RWA',
+             'SEN', 'SLE', 'SWZ', 'TCD', 'TGO', 'TZA',
+             'UGA', 'ZAF', 'ZMB', 'ZWE']
 
 # COUNTRIES = ['AGO', 'BDI', 'BEN', 'BFA', 'BWA', 'CAF', 'CIV', 'CMR',
 #              'COD', 'COG', 'DJI', 'ERI', 'ETH', 'GAB', 'GHA', 'GIN',
