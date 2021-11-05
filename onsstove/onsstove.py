@@ -623,7 +623,7 @@ class OnSSTOVE(DataProcessor):
         norm_layer = (self.gdf['relative_wealth'] - min_value) / (max_value - min_value) * (0.5 - 0.2) + 0.2
         self.gdf['value_of_time'] = norm_layer * self.specs['Minimum_wage'] / 30 / 24  # convert $/months to $/h
 
-    def run(self, technologies='all'):
+    def run(self, technologies='all', x1=1, x2=1):
         if technologies == 'all':
             techs = [tech for tech in self.techs.values()]
         elif isinstance(technologies, list):
@@ -640,17 +640,17 @@ class OnSSTOVE(DataProcessor):
             tech.morbidity(self)
             tech.mortality(self)
             print(f'Calculating carbon emissions benefits for {tech.name}...')
-            tech.carbon_emissions(self.specs, self.gdf, self.base_fuel.carbon)
+            tech.carbon_emissions(self)
             print(f'Calculating time saved benefits for {tech.name}...')
             tech.time_saved(self)
             print(f'Calculating costs for {tech.name}...')
             tech.required_energy(self)
-            tech.discounted_om(self.gdf, self.specs)
-            tech.discounted_inv(self.gdf, self.specs)
+            tech.discounted_om(self)
+            tech.discounted_inv(self)
             tech.discount_fuel_cost(self)
-            tech.salvage(self.gdf, self.specs)
+            tech.salvage(self)
             print(f'Calculating net benefit for {tech.name}...\n')
-            tech.net_benefit(self)
+            tech.net_benefit(self, x1, x2)
 
         print('Getting maximum net benefit technologies...')
         self.maximum_net_benefit(techs)
