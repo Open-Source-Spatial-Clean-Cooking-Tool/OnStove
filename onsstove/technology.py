@@ -344,12 +344,12 @@ class Technology:
         self.costs = (self.discounted_fuel_cost + self.discounted_investments + #- self.time_value +
                       self.discounted_om_costs - self.discounted_salvage_cost)
 
-    def net_benefit(self, model, w_benefits, w_costs):
+    def net_benefit(self, model, w_health=1, w_environment=1, w_social=1, w_costs=1):
         self.total_costs()
-        self.benefits = self.distributed_morbidity + self.distributed_mortality + self.decreased_carbon_costs + self.time_value
+        self.benefits = w_health * (self.distributed_morbidity + self.distributed_mortality) + w_environment * self.decreased_carbon_costs + w_social * self.time_value
         model.gdf["costs_{}".format(self.name)] = self.costs
         model.gdf["benefits_{}".format(self.name)] = self.benefits
-        model.gdf["net_benefit_{}".format(self.name)] = w_benefits * self.benefits - w_costs * self.costs
+        model.gdf["net_benefit_{}".format(self.name)] = self.benefits - w_costs * self.costs
         self.factor = pd.Series(np.ones(model.gdf.shape[0]), index=model.gdf.index)
         self.households = model.gdf['Households']
 
@@ -561,8 +561,8 @@ class Electricity(Technology):
         super().total_costs()
         self.costs += self.capacity_cost
 
-    def net_benefit(self, model, x1=1, x2=1):
-        super().net_benefit(model, x1, x2)
+    def net_benefit(self, model, w_health=1, w_environment=1, w_social=1, w_costs=1):
+        super().net_benefit(model, w_health, w_environment, w_social, w_costs)
         model.gdf.loc[model.gdf['Current_elec'] == 0, "net_benefit_{}".format(self.name)] = np.nan
         factor = model.gdf['Elec_pop_calib'] / model.gdf['Calibrated_pop']
         factor[factor > 1] = 1
@@ -659,8 +659,8 @@ class Biogas(Technology):
             model.raster_to_dataframe(layer.layer, name=name, method='read',
                                       nodata=layer.meta['nodata'], fill_nodata='interpolate')
 
-    def net_benefit(self, model, x1=1, x2=1):
-        super().net_benefit(model, x1, x2)
+    def net_benefit(self, model, w_health=1, w_environment=1, w_social=1, w_costs=1):
+        super().net_benefit(model, w_health, w_environment, w_social, w_costs)
         model.gdf.loc[(model.gdf['biogas_energy_hh'] == 0) & \
                       (model.gdf["net_benefit_{}".format(self.name)] > 0), "net_benefit_{}".format(self.name)] = 0
         factor = model.gdf['biogas_energy'] / (self.energy * model.gdf['Households'])

@@ -659,13 +659,17 @@ class OnSSTOVE(DataProcessor):
             tech.discount_fuel_cost(self)
             tech.salvage(self)
             print(f'Calculating net benefit for {tech.name}...\n')
-            if 'w_benefits' not in self.specs.keys():
-                w_benefits = 1
+            if 'w_costs' not in self.specs.keys():
+                w_health = 1
+                w_environment = 1
+                w_social = 1
                 w_costs = 1
             else:
-                w_benefits = self.specs['w_benefits']
+                w_health = self.specs['w_health']
+                w_environment = self.specs['w_environment']
+                w_social = self.specs['w_social']
                 w_costs = self.specs['w_costs']
-            tech.net_benefit(self, w_benefits, w_costs)
+            tech.net_benefit(self, w_health, w_environment, w_social, w_costs)
 
         print('Getting maximum net benefit technologies...')
         self.maximum_net_benefit(techs)
