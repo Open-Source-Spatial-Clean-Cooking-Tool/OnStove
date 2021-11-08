@@ -198,29 +198,6 @@ class VectorLayer(Layer):
             else:
                 return data, meta
 
-            # output_rasterized = os.path.join(output_path,
-            #                                  self.name + ' - rasterized.tif')
-            # rasterize(self.layer, base_layer,
-            #           output_rasterized, compression='DEFLATE',
-            #           nodata=0, save=True)
-            # output_proximity_temp = os.path.join(output_path,
-            #                                      self.name + ' - proximity_temp.tif')
-            # proximity_raster(output_rasterized,
-            #                  output_proximity_temp,
-            #                  [1], 'DEFLATE')
-            # output_proximity = os.path.join(output_path,
-            #                                 self.name + '_dist.tif')
-            # mask_raster(output_proximity_temp, mask_layer,
-            #             output_proximity, np.nan, 'DEFLATE')
-            # os.remove(output_rasterized)
-            # os.remove(output_proximity_temp)
-            # self.distance_raster = RasterLayer(self.category,
-            #                                    self.name + '_dist',
-            #                                    output_proximity,
-            #                                    distance_limit=self.distance_limit,
-            #                                    inverse=self.inverse,
-            #                                    normalization=self.normalization)
-
         elif self.distance == 'travel_time':
             self.travel_time(output_path)
 
@@ -423,26 +400,10 @@ class RasterLayer(Layer):
             self.distance_raster.mask(mask_layer, output_path)
 
         elif self.distance == 'travel_time':
-            # layer, meta = align_raster(self.path, self.friction.path, 
-            # method='nearest')
-            # self.friction.layer = layer
-            # self.friction.meta = meta
             self.travel_time(output_path)
 
         else:
             self.distance_raster = self
-            # .layer.copy()
-            # meta = self.meta.copy()
-            # meta.update(nodata=np.nan, dtype='float64')
-            # self.distance_raster = RasterLayer(self.category,
-            #                                    self.name + ' - log',
-            #                                    distance_limit=self.distance_limit,
-            #                                    inverse=self.inverse,
-            #                                    normalization=self.normalization)
-            # self.distance_raster.layer = layer
-            # self.distance_raster.meta = meta
-            # self.distance_raster.bounds = self.bounds
-            # self.distance_raster.save(output_path)
 
     def start_points(self, condition=None):
         if callable(condition):
@@ -576,8 +537,6 @@ class RasterLayer(Layer):
             admin_layer.plot(color='lightgrey', linewidth=1, ax=ax, zorder=0)
         if title:
             plt.title(title, loc='left')
-        # plt.close()
-        # return fig
 
     def save_png(self, output_path, cmap='viridis', ticks=None, tick_labels=None,
                  cumulative_count=None, categories=None, legend_position=(1.05, 1),

@@ -633,14 +633,6 @@ class Biogas(Technology):
         model.raster_to_dataframe(temp.layer, name="Temperature", method='read',
                                   nodata=temp.meta['nodata'], fill_nodata='interpolate')
         if isinstance(water, VectorLayer):
-            # water.layer["class"] = 0
-            # water.layer['class'] = np.where(water.layer['bws_label'].isin(['Low (<10%)',
-            #                                                                'Low - Medium (10-20%)']), 1, 0)
-            # water.layer.to_crs(model.project_crs, inplace=True)
-            # out_folder = os.path.join(model.output_directory, "Biogas", "Water scarcity")
-            # water.rasterize(cell_height=model.cell_size[0], cell_width=model.cell_size[1],
-            #                 attribute="class", output=out_folder, nodata=0)
-
             model.raster_to_dataframe(water.layer, name="Water", method='read')
             model.gdf.loc[model.gdf["Water"] == 0, "m3_biogas_hh"] = 0
 
@@ -662,21 +654,8 @@ class Biogas(Technology):
             'Sheeps': sheeps}
 
         for name, path in paths.items():
-            # folder = os.path.join(model.output_directory, self.name, 'livestock', name)
-            # os.makedirs(folder, exist_ok=True)
-
             layer = RasterLayer('Livestock', name,
                                 layer_path=path)
-            # TODO: need to test this
-            # layer.align(model.base_layer.path, folder)
-            # transform = layer.calculate_default_transform(model.project_crs)[0]
-            # layer.align(model.base_layer.path)
-            # layer.layer[layer.layer == layer.meta['nodata']] = np.nan
-            # layer.meta['nodata'] = np.nan
-            # factor = (model.cell_size[0] ** 2) / (transform[0] ** 2)
-            # layer.layer *= factor
-            # layer.save(folder)
-
             model.raster_to_dataframe(layer.layer, name=name, method='read',
                                       nodata=layer.meta['nodata'], fill_nodata='interpolate')
 
