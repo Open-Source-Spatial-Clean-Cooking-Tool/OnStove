@@ -112,34 +112,39 @@ class Technology:
         return paf
 
     @staticmethod
-    def discount_factor(specs_file):
-        '''
-
-        :param self:
-        :param specs_file: social specs file
+    def discount_factor(specs):
+        """
+        :param model: onsstove instance containing the informtion of the model
         :return: discount factor to be used for all costs in the net benefit fucntion and the years of analysis
-        '''
-        if specs_file["Start_year"] == specs_file["End_year"]:
+        """
+        if specs["Start_year"] == specs["End_year"]:
             proj_life = 1
         else:
-            proj_life = specs_file["End_year"] - specs_file["Start_year"]
+            proj_life = specs["End_year"] - specs["Start_year"]
 
-        year = np.arange(proj_life)
+        year = np.arange(proj_life) + 1
 
-        discount_factor = (1 + specs_file["Discount_rate_tech"]) ** year
+        discount_factor = (1 + specs["Discount_rate_tech"]) ** year
 
         return discount_factor, proj_life
 
-    def carb(self, specs_file, gdf):
-        self.carbon = (3.64 * specs_file["Meals_per_day"] * 365 * self.carbon_intensity) / (self.efficiency * 1000)
+    def required_energy(self, model):
+        self.energy = model.specs["Meals_per_day"] * 365 * model.energy_per_meal / self.efficiency
+        # discount_rate, proj_life = self.discount_factor(specs_file)
+        # energy_needed = self.energy * np.ones(proj_life)
+        # self.discounted_energy = (energy_needed / discount_rate)
 
-    def carbon_emissions(self, specs_file, gdf, carb_base_fuel):
-        self.carb(specs_file, gdf)
-        proj_life = specs_file['End_year'] - specs_file['Start_year']
-        carbon = specs_file["Cost of carbon emissions"] * (carb_base_fuel - self.carbon) / 1000 / (
-                1 + specs_file["Discount_rate"]) ** (proj_life)
+    def carb(self, model):
+        self.required_energy(model)
+        self.carbon = (self.energy * self.carbon_intensity) / 1000
 
-        self.decreased_carbon_emissions = carb_base_fuel - self.carbon
+    def carbon_emissions(self, model):
+        self.carb(model)
+        proj_life = model.specs['End_year'] - model.specs['Start_year']
+        carbon = model.specs["Cost of carbon emissions"] * (model.base_fuel.carbon - self.carbon) / 1000 / (
+                1 + model.specs["Discount_rate"]) ** (proj_life)
+
+        self.decreased_carbon_emissions = model.base_fuel.carbon - self.carbon
         self.decreased_carbon_costs = carbon
 
     def health_parameters(self, model):
@@ -248,14 +253,14 @@ class Technology:
         self.cases_avoided = (morb_alri + morb_copd + morb_lc + morb_ihd + morb_stroke) * (
                     model.gdf["Calibrated_pop"] / (model.gdf["Calibrated_pop"].sum() * model.gdf['Households']))
 
-    def salvage(self, gdf, specs_file):
+    def salvage(self, model):
         """
         Calculates discounted salvage cost assuming straight-line depreciation
         Returns
         ----------
         discounted salvage cost
         """
-        discount_rate, proj_life = self.discount_factor(specs_file)
+        discount_rate, proj_life = self.discount_factor(model.specs)
         salvage = np.zeros(proj_life)
         used_life = proj_life % self.tech_life
 
@@ -265,14 +270,14 @@ class Technology:
 
         self.discounted_salvage_cost = discounted_salvage
 
-    def discounted_om(self, gdf, specs_file):
+    def discounted_om(self, model):
         """
         Calls discount_factor function and creates discounted OM costs.
         Returns
         ----------
         discountedOM costs for each stove during the project lifetime
         """
-        discount_rate, proj_life = self.discount_factor(specs_file)
+        discount_rate, proj_life = self.discount_factor(model.specs)
         operation_and_maintenance = self.om_cost * np.ones(proj_life) * self.inv_cost
         operation_and_maintenance[0] = 0
 
@@ -285,7 +290,7 @@ class Technology:
 
         self.discounted_om_costs = discounted_om_cost
 
-    def discounted_inv(self, gdf, specs_file):
+    def discounted_inv(self, model):
         """
         Calls discount_factor function and creates discounted investment cost. Uses proj_life and tech_life to determine
         number of necessary re-investments
@@ -294,10 +299,10 @@ class Technology:
         ----------
         discounted investment cost for each stove during the project lifetime
         """
-        discount_rate, proj_life = self.discount_factor(specs_file)
+        discount_rate, proj_life = self.discount_factor(model.specs)
 
         investments = np.zeros(proj_life)
-        investments[0] = self.inv_cost
+        # investments[0] = self.inv_cost
 
         i = self.tech_life
         while i < proj_life:
@@ -305,15 +310,8 @@ class Technology:
             i = i + self.tech_life
 
         discounted_investments = investments / discount_rate
-
-        self.discounted_investments = discounted_investments.sum()
-
-    def required_energy(self, model):
-
-        self.energy = model.specs["Meals_per_day"] * 365 * 3.64 / self.efficiency
-        # discount_rate, proj_life = self.discount_factor(specs_file)
-        # energy_needed = self.energy * np.ones(proj_life)
-        # self.discounted_energy = (energy_needed / discount_rate)
+        # TODO: the + self.inv_cost  is a workaround to account for the investment in year 0
+        self.discounted_investments = discounted_investments.sum() + self.inv_cost
 
     def discount_fuel_cost(self, model):
         self.required_energy(model)
@@ -330,28 +328,28 @@ class Technology:
     def total_time(self, model):
         self.total_time_yr = (self.time_of_cooking + self.time_of_collection) * 365
 
-    def time_saved(self, onstove):
+    def time_saved(self, model):
         if self.is_base:
-            self.total_time_saved = np.zeros(onstove.gdf.shape[0])
-            self.time_value = np.zeros(onstove.gdf.shape[0])
+            self.total_time_saved = np.zeros(model.gdf.shape[0])
+            self.time_value = np.zeros(model.gdf.shape[0])
         else:
-            proj_life = onstove.specs['End_year'] - onstove.specs['Start_year']
-            self.total_time(onstove)
-            self.total_time_saved = onstove.base_fuel.total_time_yr - self.total_time_yr  # time saved per household
+            proj_life = model.specs['End_year'] - model.specs['Start_year']
+            self.total_time(model)
+            self.total_time_saved = model.base_fuel.total_time_yr - self.total_time_yr  # time saved per household
             # time value of time saved per sq km
-            self.time_value = self.total_time_saved * onstove.gdf["value_of_time"] / (
-                        1 + onstove.specs["Discount_rate"]) ** (proj_life)
+            self.time_value = self.total_time_saved * model.gdf["value_of_time"] / (
+                    1 + model.specs["Discount_rate"]) ** (proj_life)
 
     def total_costs(self):
-        self.costs = (self.discounted_fuel_cost + self.discounted_investments +
-                      self.discounted_om_costs - self.discounted_salvage_cost)  # / self.discounted_energy
+        self.costs = (self.discounted_fuel_cost + self.discounted_investments + #- self.time_value +
+                      self.discounted_om_costs - self.discounted_salvage_cost)
 
-    def net_benefit(self, model):
+    def net_benefit(self, model, w_health=1, w_environment=1, w_social=1, w_costs=1):
         self.total_costs()
-        self.benefits = self.distributed_morbidity + self.distributed_mortality + self.decreased_carbon_costs + self.time_value
+        self.benefits = w_health * (self.distributed_morbidity + self.distributed_mortality) + w_environment * self.decreased_carbon_costs + w_social * self.time_value
         model.gdf["costs_{}".format(self.name)] = self.costs
         model.gdf["benefits_{}".format(self.name)] = self.benefits
-        model.gdf["net_benefit_{}".format(self.name)] = self.benefits - self.costs
+        model.gdf["net_benefit_{}".format(self.name)] = self.benefits - w_costs * self.costs
         self.factor = pd.Series(np.ones(model.gdf.shape[0]), index=model.gdf.index)
         self.households = model.gdf['Households']
 
@@ -426,7 +424,7 @@ class LPG(Technology):
         :returns:       The cost of LPG in each cell per kg
         """
         transport_cost = (self.diesel_per_hour * self.diesel_cost * self.travel_time) / self.truck_capacity
-        kg_yr = (model.specs["Meals_per_day"] * 365 * 3.64) / (
+        kg_yr = (model.specs["Meals_per_day"] * 365 * model.energy_per_meal) / (
                 self.efficiency * self.energy_content)  # energy content in MJ/kg
         transport_cost = transport_cost * kg_yr
         self.transport_cost = pd.Series(transport_cost[model.rows, model.cols], index=model.gdf.index)
@@ -455,13 +453,16 @@ class Biomass(Technology):
                  pm25=844,
                  forest_path=None,
                  friction_path=None,
-                 travel_time=None):
+                 travel_time=None,
+                 collection_capacity=25):
         super().__init__(name, carbon_intensity, energy_content, tech_life,
                          inv_cost, fuel_cost, time_of_cooking,
                          om_cost, efficiency, pm25)
+        self.forest_condition = None
         self.travel_time = travel_time
         self.forest_path = forest_path
         self.friction_path = friction_path
+        self.collection_capacity = collection_capacity
 
     def transportation_time(self, friction_path, forest_path, model, align=False):
         forest = RasterLayer(self.name, 'Forest', layer_path=forest_path, resample='mode')
@@ -472,15 +473,16 @@ class Biomass(Technology):
             friction.align(model.base_layer.path, os.path.join(model.output_directory, self.name, 'Friction'))
 
         forest.add_friction_raster(friction)
-        forest.travel_time(os.path.join(model.output_directory, self.name), condition=self.forest_condition)
+        forest.travel_time(condition=self.forest_condition)
 
         self.travel_time = 2 * pd.Series(forest.distance_raster.layer[model.rows, model.cols],
                                          index=model.gdf.index)
 
     def total_time(self, model):
         self.transportation_time(self.friction_path, self.forest_path, model)
+        trips_per_yr = self.energy / (self.collection_capacity * self.energy_content)
         self.total_time_yr = self.time_of_cooking * model.specs['Meals_per_day'] * 365 + (
-                self.travel_time + self.time_of_collection) * 52 * 2
+                self.travel_time + self.time_of_collection) * trips_per_yr
 
 
 class Electricity(Technology):
@@ -539,28 +541,28 @@ class Electricity(Technology):
             self.tiers = model.gdf['tiers'].copy()
             del model.gdf['tiers']
             add_capacity = (self.tiers < 3)
-        self.capacity = self.energy / (3.6 * self.time_of_cooking * 365)
-        self.capacity_cost = self.capacity * self.grid_capacity_cost * add_capacity
+        self.capacity = self.energy * add_capacity / (3.6 * self.time_of_cooking * 365)
+        self.capacity_cost = self.capacity * self.grid_capacity_cost
 
     def get_carbon_intensity(self):
         grid_emissions = sum([gen * self.carbon_intensities[fuel] for fuel, gen in self.generation.items()])
         grid_generation = sum(self.generation.values())
         self.carbon_intensity = grid_emissions / grid_generation * 1000  # to convert from Mton/PJ to kg/GJ
 
-    def carb(self, specs_file, gdf):
+    def carb(self, model):
         self.get_carbon_intensity()
-        super().carb(specs_file, gdf)
+        super().carb(model)
 
-    def discounted_inv(self, gdf, specs_file):
-        super().discounted_inv(gdf, specs_file)
+    def discounted_inv(self, model):
+        super().discounted_inv(model)
         self.discounted_investments += self.connection_cost
 
     def total_costs(self):
         super().total_costs()
         self.costs += self.capacity_cost
 
-    def net_benefit(self, model):
-        super().net_benefit(model)
+    def net_benefit(self, model, w_health=1, w_environment=1, w_social=1, w_costs=1):
+        super().net_benefit(model, w_health, w_environment, w_social, w_costs)
         model.gdf.loc[model.gdf['Current_elec'] == 0, "net_benefit_{}".format(self.name)] = np.nan
         factor = model.gdf['Elec_pop_calib'] / model.gdf['Calibrated_pop']
         factor[factor > 1] = 1
@@ -619,7 +621,6 @@ class Biogas(Technology):
 
         model.gdf["m3_biogas_hh"] = fraction * model.gdf["available_biogas"]
 
-
         del model.gdf["Cattles"]
         del model.gdf["Buffaloes"]
         del model.gdf["Sheeps"]
@@ -632,14 +633,7 @@ class Biogas(Technology):
         model.raster_to_dataframe(temp.layer, name="Temperature", method='read',
                                   nodata=temp.meta['nodata'], fill_nodata='interpolate')
         if isinstance(water, VectorLayer):
-            water.layer["class"] = 0
-            water.layer['class'] = np.where(water.layer['bws_label'].isin(['Low (<10%)',
-                                                                           'Low - Medium (10-20%)']), 1, 0)
-            water.layer.to_crs(model.project_crs, inplace=True)
-            out_folder = os.path.join(model.output_directory, "Biogas", "Water scarcity")
-            water.rasterize(model.cell_size[0], model.cell_size[1], "class", out_folder, nodata=0)
-
-            model.raster_to_dataframe(os.path.join(out_folder, water.name + ".tif"), name="Water", method='sample')
+            model.raster_to_dataframe(water.layer, name="Water", method='read')
             model.gdf.loc[model.gdf["Water"] == 0, "m3_biogas_hh"] = 0
 
         model.gdf.loc[model.gdf["Temperature"] < 10, "m3_biogas_hh"] = 0
@@ -650,9 +644,7 @@ class Biogas(Technology):
         model.gdf.loc[(model.gdf["biogas_energy_hh"] < self.energy), "biogas_energy_hh"] = 0
         model.gdf.loc[(model.gdf["biogas_energy_hh"] == 0), "biogas_energy"] = 0
 
-
-
-    def recalibrate_livestock(self, model, admin, buffaloes, cattles, poultry, goats, pigs, sheeps):
+    def recalibrate_livestock(self, model, buffaloes, cattles, poultry, goats, pigs, sheeps):
         paths = {
             'Buffaloes': buffaloes,
             'Cattles': cattles,
@@ -662,58 +654,15 @@ class Biogas(Technology):
             'Sheeps': sheeps}
 
         for name, path in paths.items():
-            folder = os.path.join(model.output_directory, self.name, 'livestock', name)
-            os.makedirs(folder, exist_ok=True)
-
-            layer = RasterLayer(os.path.join(self.name, 'livestock'), name,
-                                layer_path=path, resample='nearest')
-            transform = layer.calculate_default_transform(model.project_crs)[0]
-            layer.align(model.base_layer.path)
-            layer.layer[layer.layer == layer.meta['nodata']] = np.nan
-            layer.meta['nodata'] = np.nan
-            factor = (model.cell_size[0] ** 2) / (transform[0] ** 2)
-            layer.layer *= factor
-            layer.save(folder)
-
+            layer = RasterLayer('Livestock', name,
+                                layer_path=path)
             model.raster_to_dataframe(layer.layer, name=name, method='read',
                                       nodata=layer.meta['nodata'], fill_nodata='interpolate')
-            # layer.mask(admin, folder, all_touched=True)
-            # admin_zones = zonal_stats(admin.to_crs(layer.meta['crs']), path, stats='sum',
-            #                           prefix='orig_', geojson_out=True, all_touched=False)
-            #
-            # geostats = gpd.GeoDataFrame.from_features(admin_zones)
-            #
-            # geostats.crs = layer.meta['crs']
-            # geostats.to_crs(model.project_crs, inplace=True)
 
-            # layer.reproject(model.project_crs, output_path=folder, cell_width=model.cell_size[0],
-            #                 cell_height=model.cell_size[1])
-            # admin_zones = zonal_stats(geostats, folder + r"/" + name + ".tif", stats='sum', prefix='r_',
-            #                           geojson_out=True,
-            #                           all_touched=False)
-            #
-            # geostats = gpd.GeoDataFrame.from_features(admin_zones)
-            #
-            # geostats["ratio"] = geostats['orig_sum'] / geostats['r_sum']
-            #
-            # admin_image, admin_out_meta = rasterize(geostats, folder + r'/' + name + '.tif',
-            #                                         outpul_file=None,
-            #                                         value='ratio', nodata=np.nan, compression='NONE', all_touched=True,
-            #                                         save=False, dtype='float32')
-
-            # with rasterio.open(folder + r'/' + name + '.tif') as src:
-            #     band = src.read(1)
-            #     new_band = band * admin_image
-
-            # with rasterio.open(folder + r'/final_' + name + '.tif', 'w', **admin_out_meta) as dst:
-            #     dst.write(new_band, 1)
-
-            # model.raster_to_dataframe(folder + r'/final_' + name + '.tif', name=name, method='sample')
-            # model.gdf[name] = model.gdf[name].fillna(0)
-
-    def net_benefit(self, model):
-        super().net_benefit(model)
-        model.gdf.loc[model.gdf['biogas_energy_hh'] == 0, "net_benefit_{}".format(self.name)] = 0
+    def net_benefit(self, model, w_health=1, w_environment=1, w_social=1, w_costs=1):
+        super().net_benefit(model, w_health, w_environment, w_social, w_costs)
+        model.gdf.loc[(model.gdf['biogas_energy_hh'] == 0) & \
+                      (model.gdf["net_benefit_{}".format(self.name)] > 0), "net_benefit_{}".format(self.name)] = 0
         factor = model.gdf['biogas_energy'] / (self.energy * model.gdf['Households'])
         factor[factor > 1] = 1
         self.households = model.gdf['Households'] * factor

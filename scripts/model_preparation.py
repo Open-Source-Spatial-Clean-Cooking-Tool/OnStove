@@ -54,7 +54,7 @@ model.extract_wealth_index(wealth_index, file_type=file_type,
 
 # Read MV lines
 path = snakemake.input.mv_lines
-mv_lines = VectorLayer('Electricity', 'MV_lines', layer_path=path)
+mv_lines = VectorLayer('Electricity', 'MV_lines', layer_path=path, distance='proximity')
 
 # Read HV lines
 # path = snakemake.input.hv_lines
@@ -90,14 +90,12 @@ print(f'[{country}] Calculating base fuel parameters')
 model.base_fuel.health_parameters(model)
 
 # 11.2. Carbon emissions and related costs
-model.base_fuel.carb(model.specs, model.gdf)
+model.base_fuel.carb(model)
 
 # 11.3. Time for travelling, collecting fuel, and cooking
 # paths to GIS layers
 model.base_fuel.friction_path = snakemake.input.biomass_friction
 model.base_fuel.forest_path = snakemake.input.forest
-
-# Calculate total time
 model.base_fuel.forest_condition = lambda x: x > 30
 model.base_fuel.total_time(model)
 
@@ -119,18 +117,19 @@ model.techs['Collected_Improved_Biomass'].forest_condition = lambda x: x > 30
 
 # 14. Adding GIS data for Improved Biomass collected (ICS biomass)
 if 'Biogas' in model.techs.keys():
+    # TODO: Need to finish this, add livestock data
     print(f'[{country}] Adding biogas data')
-    buffaloes = r"..\Clean cooking Africa paper\01. Data\GIS-data\Global livestock\Buffaloes\5_Bf_2010_Da.tif"
-    cattles = r"..\Clean cooking Africa paper\01. Data\GIS-data\Global livestock\Cattle\5_Ct_2010_Da.tif"
-    poultry = r"..\Clean cooking Africa paper\01. Data\GIS-data\Global livestock\Chickens\5_Ch_2010_Da.tif"
-    goats = r"..\Clean cooking Africa paper\01. Data\GIS-data\Global livestock\Goats\5_Gt_2010_Da.tif"
-    pigs = r"..\Clean cooking Africa paper\01. Data\GIS-data\Global livestock\Pigs\5_Pg_2010_Da.tif"
-    sheeps = r"..\Clean cooking Africa paper\01. Data\GIS-data\Global livestock\Sheep\5_Sh_2010_Da.tif"
+    buffaloes = snakemake.input.buffaloes
+    cattles = snakemake.input.cattles
+    poultry = snakemake.input.poultry
+    goats = snakemake.input.goats
+    pigs = snakemake.input.pigs
+    sheeps = snakemake.input.sheeps
     temp = RasterLayer('Biogas', 'Temperature', snakemake.input.temperature)
-    water = VectorLayer('Biogas', 'Water scarcity', snakemake.input.water, bbox=model.mask_layer.layer)
+    water = RasterLayer('Biogas', 'Water scarcity', snakemake.input.water)
 
     print(f'[{country}] Recalibrating livestock')
-    model.techs['Biogas'].recalibrate_livestock(model, model.mask_layer.layer, buffaloes,
+    model.techs['Biogas'].recalibrate_livestock(model, buffaloes,
                                                 cattles, poultry, goats, pigs, sheeps)
     print(f'[{country}] Calculating potential biogas')
     model.techs['Biogas'].friction_path = snakemake.input.biomass_friction
