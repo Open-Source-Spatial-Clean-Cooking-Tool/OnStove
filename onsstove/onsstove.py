@@ -56,7 +56,7 @@ class DataProcessor:
     def add_layer(self, category, name, layer_path, layer_type, query=None,
                   postgres=False, base_layer=False, resample='nearest',
                   normalization=None, inverse=False, distance=None,
-                  distance_limit=float('inf'), window=False):
+                  distance_limit=float('inf'), window=False, rescale=False):
         """
         Adds a new layer (type VectorLayer or RasterLayer) to the MCA class
 
@@ -64,8 +64,6 @@ class DataProcessor:
         ----------
         arg1 :
         """
-        output_path = os.path.join(self.output_directory, category, name)
-        os.makedirs(output_path, exist_ok=True)
 
         if layer_type == 'vector':
             if postgres:
@@ -92,7 +90,8 @@ class DataProcessor:
                 window = bounds
             layer = RasterLayer(category, name, layer_path,
                                 normalization=normalization, inverse=inverse,
-                                distance=distance, resample=resample, window=window)
+                                distance=distance, resample=resample,
+                                window=window, rescale=rescale)
 
             if base_layer:
                 if not self.cell_size:
@@ -105,6 +104,7 @@ class DataProcessor:
                                  layer.meta['transform'][0]
 
                 if (layer.meta['crs'] != self.project_crs) or (cell_size_diff > 0.01):
+                    output_path = os.path.join(self.output_directory, category, name)
                     layer.reproject(self.project_crs,
                                     output_path=output_path,
                                     cell_width=self.cell_size[0],
@@ -152,6 +152,8 @@ class DataProcessor:
                 layer.mask(self.mask_layer.layer, output_path, all_touched=all_touched)
                 if isinstance(layer.friction, RasterLayer):
                     layer.friction.mask(self.mask_layer.layer, output_path)
+                if isinstance(layer.distance_raster, RasterLayer):
+                    layer.distance_raster.mask(self.mask_layer.layer, output_path)
 
     def align_layers(self, datasets='all'):
         datasets = self.get_layers(datasets)
@@ -317,6 +319,7 @@ class OnSSTOVE(DataProcessor):
         self.techs = None
         self.base_fuel = None
         self.i = {}
+        self.energy_per_meal = 3.64
 
     def get_layers(self, layers):
         if layers == 'all':
@@ -491,15 +494,18 @@ class OnSSTOVE(DataProcessor):
 
         for layer in [hv_lines, mv_lines, transformers]:
             if layer:
-                output_path = os.path.join(self.output_directory,
-                                           layer.category,
-                                           layer.name)
-                layer.get_distance_raster(self.base_layer.path,
-                                          output_path,
-                                          self.mask_layer.layer)
-                layer.distance_raster.layer /= 1000  # to convert from meters to km
-                self.raster_to_dataframe(layer.distance_raster.layer,
-                                         name=layer.distance_raster.name,
+                # TODO: test that this works!!!
+                # output_path = os.path.join(self.output_directory,
+                #                            layer.category,
+                #                            layer.name)
+                data, meta = layer.get_distance_raster(self.base_layer.path,
+                                          create_raster=False,
+                                          # output_path,
+                                          # self.mask_layer.layer
+                                          )
+                data /= 1000  # to convert from meters to km
+                self.raster_to_dataframe(data,
+                                         name=layer.name + '_dist',
                                          method='read')
 
     def population_to_dataframe(self, layer=None):
@@ -620,10 +626,13 @@ class OnSSTOVE(DataProcessor):
         """
         min_value = np.nanmin(self.gdf['relative_wealth'])
         max_value = np.nanmax(self.gdf['relative_wealth'])
-        norm_layer = (self.gdf['relative_wealth'] - min_value) / (max_value - min_value) * (0.5 - 0.2) + 0.2
-        self.gdf['value_of_time'] = norm_layer * self.specs['Minimum_wage'] / 30 / 24  # convert $/months to $/h
+        if 'wage_range' not in self.specs.keys():
+            self.specs['wage_range'] = (0.2, 0.5)
+        wage_range = (self.specs['wage_range'][1] - self.specs['wage_range'][0])
+        norm_layer = (self.gdf['relative_wealth'] - min_value) / (max_value - min_value) * wage_range + self.specs['wage_range'][0]
+        self.gdf['value_of_time'] = norm_layer * self.specs['Minimum_wage'] / 30 / 8  # convert $/months to $/h (8 working hours per day)
 
-    def run(self, technologies='all', x1=1, x2=1):
+    def run(self, technologies='all'):
         if technologies == 'all':
             techs = [tech for tech in self.techs.values()]
         elif isinstance(technologies, list):
@@ -650,7 +659,13 @@ class OnSSTOVE(DataProcessor):
             tech.discount_fuel_cost(self)
             tech.salvage(self)
             print(f'Calculating net benefit for {tech.name}...\n')
-            tech.net_benefit(self, x1, x2)
+            if 'w_benefits' not in self.specs.keys():
+                w_benefits = 1
+                w_costs = 1
+            else:
+                w_benefits = self.specs['w_benefits']
+                w_costs = self.specs['w_costs']
+            tech.net_benefit(self, w_benefits, w_costs)
 
         print('Getting maximum net benefit technologies...')
         self.maximum_net_benefit(techs)

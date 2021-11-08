@@ -1,6 +1,10 @@
+import os
 import sys
+import numpy as np
+
 sys.path.append(r"C:\Users\camilorg\Box Sync\OnSSTOVE")
 from onsstove.onsstove import DataProcessor
+from onsstove.layer import VectorLayer
 
 # 1. Create a data processor
 output_directory = snakemake.params.output_directory
@@ -43,10 +47,6 @@ data.add_layer(category='Biomass', name='Friction', layer_path=friction_path, la
                resample='average', window=True)
 
 # Electricity
-# print('Adding HV lines')
-# hv_path = snakemake.input.hv_lines
-# data.add_layer(category='Electricity', name='HV_lines', layer_path=hv_path, layer_type='vector')
-
 print(f'[{country}] Adding MV lines')
 mv_path = snakemake.input.mv_lines
 data.add_layer(category='Electricity', name='MV_lines', layer_path=mv_path,
@@ -73,10 +73,38 @@ data.add_layer(category='Biogas', name='Temperature', layer_path=temperature,
 data.layers['Biogas']['Temperature'].save(f'{data.output_directory}/Biogas/Temperature')
 data.mask_layers(datasets={'Biogas': ['Temperature']})
 
-# 4. Mask reproject and align all required layers
-# print('Reprojecting all layers')
-# data.reproject_layers(datasets='all')
+# Livestock
+print(f'[{country}] Adding livestock')
+buffaloes = snakemake.input.buffaloes
+cattles = snakemake.input.cattles
+poultry = snakemake.input.poultry
+goats = snakemake.input.goats
+pigs = snakemake.input.pigs
+sheeps = snakemake.input.sheeps
 
+for key, path in {'buffaloes': buffaloes,
+             'cattles': cattles,
+             'poultry': poultry,
+             'goats': goats,
+             'pigs': pigs,
+             'sheeps': sheeps}.items():
+    data.add_layer(category='Biogas/Livestock', name=key, layer_path=path,
+                   layer_type='raster', resample='nearest', window=True, rescale=True)
+
+print(f'[{country}] Adding water scarcity')
+water = VectorLayer('Biogas', 'Water scarcity', snakemake.input.water, bbox=data.mask_layer.layer)
+water.layer["class"] = 0
+water.layer['class'] = np.where(water.layer['bws_label'].isin(['Low (<10%)',
+                                                               'Low - Medium (10-20%)']), 1, 0)
+water.layer.to_crs(data.project_crs, inplace=True)
+out_folder = os.path.join(data.output_directory, "Biogas", "Water scarcity")
+water.rasterize(cell_height=data.cell_size[0], cell_width=data.cell_size[1],
+                attribute="class", output=out_folder, nodata=0)
+data.add_layer(category='Biogas', name='Water scarcity',
+               layer_path=os.path.join(out_folder, 'Water scarcity.tif'),
+               layer_type='raster', resample='nearest')
+
+# 4. Mask reproject and align all required layers
 print(f'[{country}] Aligning all layers')
 data.align_layers(datasets='all')
 

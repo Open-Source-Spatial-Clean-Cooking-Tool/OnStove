@@ -15,6 +15,7 @@ model = OnSSTOVE.read_model(snakemake.input.model)
 print(f'[{country}] Scenario data')
 path = snakemake.input.scenario_file
 model.read_scenario_data(path, delimiter=',')
+model.output_directory = snakemake.params.output_directory
 
 # 3. Calculating benefits and costs of each technology and getting the max benefit technology for each cell
 model.run(technologies='all')
@@ -45,5 +46,5 @@ model.to_image('max_benefit_tech', cmap='tab10', legend_position=(1, 0.9),
                title=f'Maximum benefit technology | {country}', dpi=600)
 
 print(f'[{country}] Saving the results')
-summary.to_csv(os.path.join(model.output_directory, 'Output', 'summary.csv'))
-model.gdf.to_csv(os.path.join(model.output_directory, 'Output', 'results.csv'))
+summary.to_csv(os.path.join(snakemake.params.output_directory, 'Output', 'summary.csv'))
+model.gdf.to_csv(os.path.join(snakemake.params.output_directory, 'Output', 'results.csv'))

@@ -112,24 +112,31 @@ class Technology:
         return paf
 
     @staticmethod
-    def discount_factor(model):
+    def discount_factor(specs):
         """
         :param model: onsstove instance containing the informtion of the model
         :return: discount factor to be used for all costs in the net benefit fucntion and the years of analysis
         """
-        if model.specs["Start_year"] == model.specs["End_year"]:
+        if specs["Start_year"] == specs["End_year"]:
             proj_life = 1
         else:
-            proj_life = model.specs["End_year"] - model.specs["Start_year"]
+            proj_life = specs["End_year"] - specs["Start_year"]
 
-        year = np.arange(proj_life)
+        year = np.arange(proj_life) + 1
 
-        discount_factor = (1 + model.specs["Discount_rate_tech"]) ** year
+        discount_factor = (1 + specs["Discount_rate_tech"]) ** year
 
         return discount_factor, proj_life
 
+    def required_energy(self, model):
+        self.energy = model.specs["Meals_per_day"] * 365 * model.energy_per_meal / self.efficiency
+        # discount_rate, proj_life = self.discount_factor(specs_file)
+        # energy_needed = self.energy * np.ones(proj_life)
+        # self.discounted_energy = (energy_needed / discount_rate)
+
     def carb(self, model):
-        self.carbon = (model.energy_per_meal * model.specs["Meals_per_day"] * 365 * self.carbon_intensity) / (self.efficiency * 1000)
+        self.required_energy(model)
+        self.carbon = (self.energy * self.carbon_intensity) / 1000
 
     def carbon_emissions(self, model):
         self.carb(model)
@@ -295,7 +302,7 @@ class Technology:
         discount_rate, proj_life = self.discount_factor(model.specs)
 
         investments = np.zeros(proj_life)
-        investments[0] = self.inv_cost
+        # investments[0] = self.inv_cost
 
         i = self.tech_life
         while i < proj_life:
@@ -303,15 +310,8 @@ class Technology:
             i = i + self.tech_life
 
         discounted_investments = investments / discount_rate
-
-        self.discounted_investments = discounted_investments.sum()
-
-    def required_energy(self, model):
-
-        self.energy = model.specs["Meals_per_day"] * 365 * model.energy_per_meal / self.efficiency
-        # discount_rate, proj_life = self.discount_factor(specs_file)
-        # energy_needed = self.energy * np.ones(proj_life)
-        # self.discounted_energy = (energy_needed / discount_rate)
+        # TODO: the + self.inv_cost  is a workaround to account for the investment in year 0
+        self.discounted_investments = discounted_investments.sum() + self.inv_cost
 
     def discount_fuel_cost(self, model):
         self.required_energy(model)
@@ -341,15 +341,15 @@ class Technology:
                     1 + model.specs["Discount_rate"]) ** (proj_life)
 
     def total_costs(self):
-        self.costs = (self.discounted_fuel_cost + self.discounted_investments +
+        self.costs = (self.discounted_fuel_cost + self.discounted_investments + #- self.time_value +
                       self.discounted_om_costs - self.discounted_salvage_cost)
 
-    def net_benefit(self, model, x1=1, x2=1):
+    def net_benefit(self, model, w_benefits, w_costs):
         self.total_costs()
         self.benefits = self.distributed_morbidity + self.distributed_mortality + self.decreased_carbon_costs + self.time_value
         model.gdf["costs_{}".format(self.name)] = self.costs
         model.gdf["benefits_{}".format(self.name)] = self.benefits
-        model.gdf["net_benefit_{}".format(self.name)] = x1 * self.benefits - x2 * self.costs
+        model.gdf["net_benefit_{}".format(self.name)] = w_benefits * self.benefits - w_costs * self.costs
         self.factor = pd.Series(np.ones(model.gdf.shape[0]), index=model.gdf.index)
         self.households = model.gdf['Households']
 
@@ -453,7 +453,8 @@ class Biomass(Technology):
                  pm25=844,
                  forest_path=None,
                  friction_path=None,
-                 travel_time=None):
+                 travel_time=None,
+                 collection_capacity=25):
         super().__init__(name, carbon_intensity, energy_content, tech_life,
                          inv_cost, fuel_cost, time_of_cooking,
                          om_cost, efficiency, pm25)
@@ -461,6 +462,7 @@ class Biomass(Technology):
         self.travel_time = travel_time
         self.forest_path = forest_path
         self.friction_path = friction_path
+        self.collection_capacity = collection_capacity
 
     def transportation_time(self, friction_path, forest_path, model, align=False):
         forest = RasterLayer(self.name, 'Forest', layer_path=forest_path, resample='mode')
@@ -471,7 +473,7 @@ class Biomass(Technology):
             friction.align(model.base_layer.path, os.path.join(model.output_directory, self.name, 'Friction'))
 
         forest.add_friction_raster(friction)
-        forest.travel_time(os.path.join(model.output_directory, self.name), condition=self.forest_condition)
+        forest.travel_time(condition=self.forest_condition)
 
         self.travel_time = 2 * pd.Series(forest.distance_raster.layer[model.rows, model.cols],
                                          index=model.gdf.index)
@@ -631,14 +633,15 @@ class Biogas(Technology):
         model.raster_to_dataframe(temp.layer, name="Temperature", method='read',
                                   nodata=temp.meta['nodata'], fill_nodata='interpolate')
         if isinstance(water, VectorLayer):
-            water.layer["class"] = 0
-            water.layer['class'] = np.where(water.layer['bws_label'].isin(['Low (<10%)',
-                                                                           'Low - Medium (10-20%)']), 1, 0)
-            water.layer.to_crs(model.project_crs, inplace=True)
-            out_folder = os.path.join(model.output_directory, "Biogas", "Water scarcity")
-            water.rasterize(model.cell_size[0], model.cell_size[1], "class", out_folder, nodata=0)
+            # water.layer["class"] = 0
+            # water.layer['class'] = np.where(water.layer['bws_label'].isin(['Low (<10%)',
+            #                                                                'Low - Medium (10-20%)']), 1, 0)
+            # water.layer.to_crs(model.project_crs, inplace=True)
+            # out_folder = os.path.join(model.output_directory, "Biogas", "Water scarcity")
+            # water.rasterize(cell_height=model.cell_size[0], cell_width=model.cell_size[1],
+            #                 attribute="class", output=out_folder, nodata=0)
 
-            model.raster_to_dataframe(os.path.join(out_folder, water.name + ".tif"), name="Water", method='sample')
+            model.raster_to_dataframe(water.layer, name="Water", method='read')
             model.gdf.loc[model.gdf["Water"] == 0, "m3_biogas_hh"] = 0
 
         model.gdf.loc[model.gdf["Temperature"] < 10, "m3_biogas_hh"] = 0
@@ -659,26 +662,28 @@ class Biogas(Technology):
             'Sheeps': sheeps}
 
         for name, path in paths.items():
-            folder = os.path.join(model.output_directory, self.name, 'livestock', name)
-            os.makedirs(folder, exist_ok=True)
+            # folder = os.path.join(model.output_directory, self.name, 'livestock', name)
+            # os.makedirs(folder, exist_ok=True)
 
-            layer = RasterLayer(os.path.join(self.name, 'livestock'), name,
-                                layer_path=path, resample='nearest')
-            transform = layer.calculate_default_transform(model.project_crs)[0]
-            layer.align(model.base_layer.path)
-            layer.layer[layer.layer == layer.meta['nodata']] = np.nan
-            layer.meta['nodata'] = np.nan
-            factor = (model.cell_size[0] ** 2) / (transform[0] ** 2)
-            layer.layer *= factor
-            layer.save(folder)
+            layer = RasterLayer('Livestock', name,
+                                layer_path=path)
+            # TODO: need to test this
+            # layer.align(model.base_layer.path, folder)
+            # transform = layer.calculate_default_transform(model.project_crs)[0]
+            # layer.align(model.base_layer.path)
+            # layer.layer[layer.layer == layer.meta['nodata']] = np.nan
+            # layer.meta['nodata'] = np.nan
+            # factor = (model.cell_size[0] ** 2) / (transform[0] ** 2)
+            # layer.layer *= factor
+            # layer.save(folder)
 
             model.raster_to_dataframe(layer.layer, name=name, method='read',
                                       nodata=layer.meta['nodata'], fill_nodata='interpolate')
 
-
     def net_benefit(self, model, x1=1, x2=1):
         super().net_benefit(model, x1, x2)
-        model.gdf.loc[model.gdf['biogas_energy_hh'] == 0, "net_benefit_{}".format(self.name)] = 0
+        model.gdf.loc[(model.gdf['biogas_energy_hh'] == 0) & \
+                      (model.gdf["net_benefit_{}".format(self.name)] > 0), "net_benefit_{}".format(self.name)] = 0
         factor = model.gdf['biogas_energy'] / (self.energy * model.gdf['Households'])
         factor[factor > 1] = 1
         self.households = model.gdf['Households'] * factor
