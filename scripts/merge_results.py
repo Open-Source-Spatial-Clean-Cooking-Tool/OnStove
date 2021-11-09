@@ -37,11 +37,22 @@ summary_all = summary_all.append(summary_all.sum(numeric_only=True), ignore_inde
 summary_all['max_benefit_tech'] = summary_all['max_benefit_tech'].fillna('Total')
 summary_all['country'] = summary_all['country'].fillna('Africa')
 summary_africa = summary_all.groupby('max_benefit_tech').sum()
+summary_africa['time_saved'] = summary_africa['time_saved'] / (summary_africa['Calibrated_pop'] * 1000000 * 365)
 summary_africa.to_csv(snakemake.output.summary)
 
 print('Creating max benefit technology map')
+tech_codes = {"ICS": 2, "LPG": 4, "Traditional biomass": 0,
+              "Electricity": 5, "Biogas": 3, "Charcoal": 1,
+              "Biogas and ICS": 32, "Biogas and LPG": 34,
+              "Biogas and Traditional biomass": 30, "Electricity and Biogas": 53,
+              "Biogas and Charcoal": 31, "Electricity and ICS": 52,
+              "Electricity and LPG": 54, "Electricity and Traditional biomass": 50,
+              "Electricity and Charcoal": 51, "Biogas and Electricity": 53}
+
 df_all['max_benefit_tech'] = df_all['max_benefit_tech'].str.replace('_', ' ')
-tech_codes = {tech: i for i, tech in enumerate(df_all['max_benefit_tech'].unique())}
+df_all['max_benefit_tech'] = df_all['max_benefit_tech'].str.replace('Collected Traditional Biomass', 'Traditional biomass')
+df_all['max_benefit_tech'] = df_all['max_benefit_tech'].str.replace('Collected Improved Biomass', 'ICS')
+# tech_codes = {tech: i for i, tech in enumerate(df_all['max_benefit_tech'].unique())}
 df_all['max_benefit_tech_code'] = [tech_codes[s] for s in df_all['max_benefit_tech']]
 
 df_all['geometry'] = df_all['geometry'].apply(wkt.loads)

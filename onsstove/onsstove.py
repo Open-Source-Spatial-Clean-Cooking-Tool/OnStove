@@ -541,9 +541,9 @@ class OnSSTOVE(DataProcessor):
         if method == 'sample':
             with rasterio.open(layer) as src:
                 if src.meta['crs'] != self.gdf.crs:
-                    self.gdf[name] = sample_raster(layer, self.gdf.to_crs(src.meta['crs']))
+                    data = sample_raster(layer, self.gdf.to_crs(src.meta['crs']))
                 else:
-                    self.gdf[name] = sample_raster(layer, self.gdf)
+                    data = sample_raster(layer, self.gdf)
         elif method == 'read':
             if fill_nodata:
                 if fill_nodata == 'interpolate':
@@ -554,11 +554,15 @@ class OnSSTOVE(DataProcessor):
                         rows, cols = np.where(np.isnan(mask) & ~np.isnan(self.base_layer.layer))
                         mask[rows, cols] = 0
                         layer = fillnodata(layer, mask=mask,
-                                           max_search_distance=10)
+                                           max_search_distance=100)
                 else:
                     raise ValueError('fill_nodata can only be None or "interpolate"')
 
-            self.gdf[name] = layer[self.rows, self.cols]
+                data = layer[self.rows, self.cols]
+        if name:
+            self.gdf[name] = data
+        else:
+            return data
 
     def calibrate_urban_current_and_future_GHS(self, GHS_path):
         self.raster_to_dataframe(GHS_path, name="IsUrban", method='sample')
