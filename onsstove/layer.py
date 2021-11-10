@@ -10,6 +10,7 @@ from rasterio.transform import array_bounds
 from rasterio import warp, features
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
+from matplotlib.colors import ListedColormap, to_rgb
 import time, sys
 
 from .raster import *
@@ -519,6 +520,10 @@ class RasterLayer(Layer):
 
         if ax is None:
             fig, ax = plt.subplots(1, 1, figsize=(16, 9))
+
+        if isinstance(cmap, dict):
+            values = np.sort(np.unique(layer[~np.isnan(layer)]))
+            cmap = ListedColormap([to_rgb(cmap[i]) for i in values])
         cax = ax.imshow(layer, cmap=cmap, extent=extent)
 
         ax.set_axis_off()
@@ -537,6 +542,8 @@ class RasterLayer(Layer):
             admin_layer.plot(color='lightgrey', linewidth=1, ax=ax, zorder=0)
         if title:
             plt.title(title, loc='left')
+
+        return cmap
 
     def save_png(self, output_path, cmap='viridis', ticks=None, tick_labels=None,
                  cumulative_count=None, categories=None, legend_position=(1.05, 1),
