@@ -1,10 +1,14 @@
 import geopandas as gpd
 import pandas as pd
 import rasterio
+from matplotlib.colors import to_rgb
 from rasterio import features
 from shapely import wkt
 
-df_all = pd.DataFrame({'country': [], 'max_benefit_tech': [], 'geometry': []})
+df_all = pd.DataFrame({'country': [], 'max_benefit_tech': [], 'Calibrated_pop': [],
+                       'maximum_net_benefit': [], 'deaths_avoided': [], 'health_costs_avoided': [],
+                       'time_saved': [], 'reduced_emissions': [], 'investment_costs': [],
+                       'fuel_costs': [], 'emissions_costs_saved': []})
 
 print('Reading country results')
 for file, country in zip(snakemake.input.results, snakemake.params.countries):
@@ -14,6 +18,15 @@ for file, country in zip(snakemake.input.results, snakemake.params.countries):
 
     df['max_benefit_tech'] += ' and '
     df = df.groupby('index').agg({'max_benefit_tech': 'sum',
+                                  'Calibrated_pop': 'sum',
+                                  'maximum_net_benefit': 'sum',
+                                  'deaths_avoided': 'sum',
+                                  'health_costs_avoided': 'sum',
+                                  'time_saved': 'sum',
+                                  'reduced_emissions': 'sum',
+                                  'investment_costs': 'sum',
+                                  'fuel_costs': 'sum',
+                                  'emissions_costs_saved': 'sum',
                                   'geometry': 'first'})
     df['country'] = country
     df['max_benefit_tech'] = df['max_benefit_tech'].str[0:-5]
@@ -37,12 +50,22 @@ summary_all = summary_all.append(summary_all.sum(numeric_only=True), ignore_inde
 summary_all['max_benefit_tech'] = summary_all['max_benefit_tech'].fillna('Total')
 summary_all['country'] = summary_all['country'].fillna('Africa')
 summary_africa = summary_all.groupby('max_benefit_tech').sum()
+# TODO: rename the columns to include the units
+summary_africa['time_saved'] = summary_africa['time_saved'] / (summary_africa['Calibrated_pop'] * 1000000 * 365)
 summary_africa.to_csv(snakemake.output.summary)
 
 print('Creating max benefit technology map')
+labels = {"Biogas and Electricity": "Electricity and Biogas",
+          'Collected Traditional Biomass': 'Traditional biomass',
+          'Collected Improved Biomass': 'ICS'}
+
 df_all['max_benefit_tech'] = df_all['max_benefit_tech'].str.replace('_', ' ')
+df_all['max_benefit_tech'] = df_all['max_benefit_tech'].str.replace('Collected Traditional Biomass', 'Traditional biomass')
+df_all['max_benefit_tech'] = df_all['max_benefit_tech'].str.replace('Collected Improved Biomass', 'ICS')
+df_all['max_benefit_tech'] = df_all['max_benefit_tech'].str.replace('Biogas and Electricity', 'Electricity and Biogas')
 tech_codes = {tech: i for i, tech in enumerate(df_all['max_benefit_tech'].unique())}
 df_all['max_benefit_tech_code'] = [tech_codes[s] for s in df_all['max_benefit_tech']]
+df_all.to_csv(snakemake.output.results, index=False)
 
 df_all['geometry'] = df_all['geometry'].apply(wkt.loads)
 gdf_all = gpd.GeoDataFrame(df_all, crs='epsg:3857')
@@ -63,14 +86,15 @@ rasterized = features.rasterize(
                         dtype=rasterio.uint8)
 
 with rasterio.open(
-        snakemake.output.map, 'w',
-        driver='GTiff',
-        dtype=rasterized.dtype,
-        count=1,
-        crs=3857,
-        width=width,
-        height=height,
-        transform=transform,
-        nodata=111
+    snakemake.output.map, 'w',
+    driver='GTiff',
+    dtype=rasterized.dtype,
+    count=1,
+    crs=3857,
+    width=width,
+    height=height,
+    transform=transform,
+    nodata=111,
+    compress='DEFLATE'
 ) as dst:
     dst.write(rasterized, indexes=1)

@@ -19,11 +19,8 @@ COUNTRIES = ['AGO', 'BDI', 'BEN', 'BFA', 'BWA', 'CAF', 'CIV', 'CMR',
 
 rule all:
     input:
-        # expand("../Clean cooking Africa paper/06. Results/{scenario}/{country}/{sensitivity}/Output/results.csv",
-        #        country=COUNTRIES,
-        #        sensitivity=SENSITIVITY,
-        #        scenario=SCENARIOS)
-        expand("../Clean cooking Africa paper/06. Results/{scenario}/Africa/{sensitivity}/max_benefit_tech.tif",
+        expand("../Clean cooking Africa paper/06. Results/{scenario}/{country}/{sensitivity}/Output/results.csv",
+               country=COUNTRIES,
                sensitivity=SENSITIVITY,
                scenario=SCENARIOS)
 
@@ -119,7 +116,7 @@ rule run_model:
           output_directory = "../Clean cooking Africa paper/06. Results/{scenario}/{country}/{sensitivity}",
           country = "{country}"
     output:
-          results = "../Clean cooking Africa paper/06. Results/{scenario}/{country}/{sensitivity}/Output/results.csv",
+          results = "../Clean cooking Africa paper/06. Results/{scenario}/{country}/{sensitivity}/Output/results.pkl",
     script:
           "scripts/model_run.py"
 
@@ -135,6 +132,27 @@ rule merge_results:
           countries = COUNTRIES
     output:
           map = "../Clean cooking Africa paper/06. Results/{scenario}/Africa/{sensitivity}/max_benefit_tech.tif",
-          summary = "../Clean cooking Africa paper/06. Results/{scenario}/Africa/{sensitivity}/summary.csv"
+          summary = "../Clean cooking Africa paper/06. Results/{scenario}/Africa/{sensitivity}/summary.csv",
+          results = "../Clean cooking Africa paper/06. Results/{scenario}/Africa/{sensitivity}/results.gz"
     script:
           "scripts/merge_results.py"
+
+rule get_map:
+    input:
+         expand("../Clean cooking Africa paper/06. Results/{scenario}/Africa/{sensitivity}/max_benefit_tech.tif",
+               sensitivity=SENSITIVITY,
+               scenario=SCENARIOS)
+
+rule colormap:
+    input:
+         results = rules.merge_results.output.results
+    output:
+          colormap = "../Clean cooking Africa paper/06. Results/{scenario}/Africa/{sensitivity}/ColorMap.clr"
+    script:
+          "scripts/colormap_generator.py"
+
+rule get_colormap:
+    input:
+         expand("../Clean cooking Africa paper/06. Results/{scenario}/Africa/{sensitivity}/ColorMap.clr",
+               sensitivity=SENSITIVITY,
+               scenario=SCENARIOS)

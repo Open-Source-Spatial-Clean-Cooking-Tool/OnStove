@@ -427,7 +427,9 @@ class LPG(Technology):
         kg_yr = (model.specs["Meals_per_day"] * 365 * model.energy_per_meal) / (
                 self.efficiency * self.energy_content)  # energy content in MJ/kg
         transport_cost = transport_cost * kg_yr
-        self.transport_cost = pd.Series(transport_cost[model.rows, model.cols], index=model.gdf.index)
+        transport_cost[transport_cost < 0] = np.nan
+        self.transport_cost = model.raster_to_dataframe(transport_cost, nodata=np.nan,
+                                                        fill_nodata='interpolate', method='read')
 
     def discount_fuel_cost(self, model):
         self.transportation_cost(model)

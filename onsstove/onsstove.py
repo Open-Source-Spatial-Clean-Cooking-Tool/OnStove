@@ -4,6 +4,7 @@ from csv import DictReader
 import psycopg2
 import pandas as pd
 import scipy.spatial
+from matplotlib.colors import to_rgb
 from rasterio.warp import transform_bounds
 
 from onsstove.technology import Technology, LPG, Biomass, Electricity, Biogas
@@ -424,8 +425,8 @@ class OnSSTOVE(DataProcessor):
 
         self.combined_weight = (elec_dist * self.specs["infra_weight"] + pop * self.specs["pop_weight"] +
                                 ntl * self.specs["NTL_weight"]) / (
-                                           self.specs["infra_weight"] + self.specs["pop_weight"] +
-                                           self.specs["NTL_weight"])
+                                       self.specs["infra_weight"] + self.specs["pop_weight"] +
+                                       self.specs["NTL_weight"])
 
     def current_elec(self):
         self.normalize_for_electricity()
@@ -499,10 +500,10 @@ class OnSSTOVE(DataProcessor):
                 #                            layer.category,
                 #                            layer.name)
                 data, meta = layer.get_distance_raster(self.base_layer.path,
-                                          create_raster=False,
-                                          # output_path,
-                                          # self.mask_layer.layer
-                                          )
+                                                       create_raster=False,
+                                                       # output_path,
+                                                       # self.mask_layer.layer
+                                                       )
                 data /= 1000  # to convert from meters to km
                 self.raster_to_dataframe(data,
                                          name=layer.name + '_dist',
@@ -516,10 +517,10 @@ class OnSSTOVE(DataProcessor):
         if not layer:
             if self.base_layer:
                 layer = self.base_layer.layer.copy()
-                meta =  self.base_layer.meta
+                meta = self.base_layer.meta
             else:
                 raise ValueError("No population layer was provided as input to the method or in the model base_layer")
-        layer[layer==meta['nodata']] = np.nan
+        layer[layer == meta['nodata']] = np.nan
         layer[layer == 0] = np.nan
         layer[layer < 1] = np.nan
         self.rows, self.cols = np.where(~np.isnan(layer))
@@ -541,9 +542,9 @@ class OnSSTOVE(DataProcessor):
         if method == 'sample':
             with rasterio.open(layer) as src:
                 if src.meta['crs'] != self.gdf.crs:
-                    self.gdf[name] = sample_raster(layer, self.gdf.to_crs(src.meta['crs']))
+                    data = sample_raster(layer, self.gdf.to_crs(src.meta['crs']))
                 else:
-                    self.gdf[name] = sample_raster(layer, self.gdf)
+                    data = sample_raster(layer, self.gdf)
         elif method == 'read':
             if fill_nodata:
                 if fill_nodata == 'interpolate':
@@ -554,11 +555,15 @@ class OnSSTOVE(DataProcessor):
                         rows, cols = np.where(np.isnan(mask) & ~np.isnan(self.base_layer.layer))
                         mask[rows, cols] = 0
                         layer = fillnodata(layer, mask=mask,
-                                           max_search_distance=10)
+                                           max_search_distance=100)
                 else:
                     raise ValueError('fill_nodata can only be None or "interpolate"')
 
-            self.gdf[name] = layer[self.rows, self.cols]
+            data = layer[self.rows, self.cols]
+        if name:
+            self.gdf[name] = data
+        else:
+            return data
 
     def calibrate_urban_current_and_future_GHS(self, GHS_path):
         self.raster_to_dataframe(GHS_path, name="IsUrban", method='sample')
@@ -629,8 +634,10 @@ class OnSSTOVE(DataProcessor):
         if 'wage_range' not in self.specs.keys():
             self.specs['wage_range'] = (0.2, 0.5)
         wage_range = (self.specs['wage_range'][1] - self.specs['wage_range'][0])
-        norm_layer = (self.gdf['relative_wealth'] - min_value) / (max_value - min_value) * wage_range + self.specs['wage_range'][0]
-        self.gdf['value_of_time'] = norm_layer * self.specs['Minimum_wage'] / 30 / 8  # convert $/months to $/h (8 working hours per day)
+        norm_layer = (self.gdf['relative_wealth'] - min_value) / (max_value - min_value) * wage_range + \
+                     self.specs['wage_range'][0]
+        self.gdf['value_of_time'] = norm_layer * self.specs[
+            'Minimum_wage'] / 30 / 8  # convert $/months to $/h (8 working hours per day)
 
     def run(self, technologies='all'):
         if technologies == 'all':
@@ -851,60 +858,70 @@ class OnSSTOVE(DataProcessor):
         else:
             raise ValueError("file_type needs to be either csv, raster, polygon or point.")
 
-    def _create_layer(self, variable):
-        layer = self.base_layer.layer.copy()
-        tech_codes = None
+    def _create_layer(self, variable, labels=None, cmap=None):
+        layer = np.empty(self.base_layer.layer.shape)
+        layer[:] = np.nan
+        codes = None
         if isinstance(self.gdf[variable].iloc[0], str):
             dff = self.gdf.copy().reset_index(drop=False)
+            if isinstance(labels, dict):
+                for value, label in labels.items():
+                    dff.loc[dff[variable] == value.replace('_', ' '), variable] = label
             dff[variable] += ' and '
             dff = dff.groupby('index').agg({variable: 'sum'})
-            dff[variable] = [s[0:len(s) - 5] for s in dff[variable]]
-            tech_codes = {tech.replace('_', ' '): i for i, tech in enumerate(dff[variable].unique())}
-            layer[self.rows, self.cols] = [tech_codes[tech.replace('_', ' ')] for tech in dff[variable]]
+            dff[variable] = [s[0:len(s) - 5].replace('_', ' ') for s in dff[variable]]
+            if isinstance(labels, dict):
+                for value, label in labels.items():
+                    dff.loc[dff[variable] == value.replace('_', ' '), variable] = label
+            codes = {tech: i for i, tech in enumerate(dff[variable].unique())}
+            if isinstance(cmap, dict):
+                cmap = {i: cmap[tech] for i, tech in enumerate(dff[variable].unique())}
+            layer[self.rows, self.cols] = [codes[tech] for tech in dff[variable]]
         else:
             dff = self.gdf.copy().reset_index(drop=False)
             dff = dff.groupby('index').agg({variable: 'sum'})
             layer[self.rows, self.cols] = dff[variable]
         raster = RasterLayer('Output', variable)
         raster.layer = layer
-
-        return raster, tech_codes
-
-    def to_raster(self, variable):
-        raster, tech_codes = self._create_layer(variable)
         raster.meta = self.base_layer.meta
+        raster.meta.update(nodata=np.nan, dtype='float32')
+        raster.bounds = self.base_layer.bounds
+
+        return raster, codes, cmap
+
+    def to_raster(self, variable, labels=None, cmap=None):
+        raster, codes, cmap = self._create_layer(variable, labels=labels, cmap=cmap)
         raster.save(os.path.join(self.output_directory, 'Output'))
         print(f'Layer saved in {os.path.join(self.output_directory, "Output", variable + ".tif")}\n')
-        if tech_codes:
-            print('Variable codes:')
-            for tech, value in tech_codes.items():
-                print('    ' + tech + ':', value)
-            print('')
+        if codes and cmap:
+            with open(os.path.join(self.output_directory, 'ColorMap.clr'), 'w') as f:
+                for label, code in codes.items():
+                    r = int(to_rgb(cmap[code])[0] * 255)
+                    g = int(to_rgb(cmap[code])[1] * 255)
+                    b = int(to_rgb(cmap[code])[2] * 255)
+                    f.write(f'{code} {r} {g} {b} 255 {label}\n')
 
     def plot(self, variable, cmap='viridis', cumulative_count=None, legend_position=(1.05, 1),
-             admin_layer=None):
-        raster, tech_codes = self._create_layer(variable)
-        raster.bounds = self.base_layer.bounds
-        raster.meta = self.base_layer.meta
+             admin_layer=None, labels=None):
+        raster, codes, cmap = self._create_layer(variable, labels=labels, cmap=cmap)
         if isinstance(admin_layer, gpd.GeoDataFrame):
             admin_layer = admin_layer
         elif not admin_layer:
             admin_layer = self.mask_layer.layer
-        return raster.plot(cmap=cmap, cumulative_count=cumulative_count,
-                           categories=tech_codes, legend_position=legend_position,
-                           admin_layer=admin_layer)
+        raster.plot(cmap=cmap, cumulative_count=cumulative_count,
+                    categories=codes, legend_position=legend_position,
+                    admin_layer=admin_layer)
 
     def to_image(self, variable, cmap='viridis', cumulative_count=None, legend_position=(1.05, 1),
-                 admin_layer=None, title=None, dpi=300):
-        raster, tech_codes = self._create_layer(variable)
+                 admin_layer=None, title=None, dpi=300, labels=None):
+        raster, codes, cmap = self._create_layer(variable, labels=labels, cmap=cmap)
         raster.bounds = self.base_layer.bounds
-        raster.meta = self.base_layer.meta
         if isinstance(admin_layer, gpd.GeoDataFrame):
             admin_layer = admin_layer
         elif not admin_layer:
             admin_layer = self.mask_layer.layer
         raster.save_png(self.output_directory, cmap=cmap, cumulative_count=cumulative_count,
-                        categories=tech_codes, legend_position=legend_position,
+                        categories=codes, legend_position=legend_position,
                         admin_layer=admin_layer, title=title, dpi=dpi)
 
     def to_json(self, name):
