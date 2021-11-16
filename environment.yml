@@ -8,15 +8,12 @@ dependencies:
   - dill
   - geopandas==0.10.0
   - json
+  - jupyterlab
   - matplotlib
-  - notebook
-  - plotly
   - psycopg2
   - psutil
   - python-decouple
-  - python-kaleido
   - rasterio==1.2.9
   - rasterstats
   - scikit-learn
   - scikit-image
-  - seaborn
