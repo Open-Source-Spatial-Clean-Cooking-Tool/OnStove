@@ -4,6 +4,8 @@ from csv import DictReader
 import psycopg2
 import pandas as pd
 import scipy.spatial
+import matplotlib.pyplot as plt
+from matplotlib import cm
 from matplotlib.colors import to_rgb
 from rasterio.warp import transform_bounds
 
@@ -288,6 +290,57 @@ class DataProcessor:
                 output_path = os.path.join(self.output_directory,
                                            category, name)
                 layer.save(output_path)
+
+    @staticmethod
+    def autopct_format(values):
+        def my_format(pct):
+            total = sum(values)
+            val = int(round(pct * total / 100.0))
+            return '{v:d}'.format(v=val) if (val / total) > 0.01 else ''
+
+        return my_format
+
+    def plot_share(self, index='clean cooking potential index', layer=('demand', 'population'),
+                   title='Clean Cooking Potential Index', output_file=None):
+        levels = []
+        if index.lower() in 'clean cooking potential index':
+            data = self.clean_cooking_index.layer
+        elif index.lower() in 'assistance need index':
+            data = self.assistance_need_index.layer
+        elif index.lower() in 'supply index':
+            data = self.supply_index.layer
+
+        for level in [0.2, 0.4, 0.6, 0.8, 1]:
+            levels.append(np.where(
+                (data >= (level - 0.2)) & (data < level)))
+
+        share = []
+        for level in levels:
+            value = np.nansum(self.layers[layer[0]][layer[1]].layer[level])
+            if np.isnan(value):
+                value = 0
+            share.append(value)
+        share.reverse()
+
+        cmap = cm.get_cmap('magma_r', 5)
+
+        fig, ax = plt.subplots(figsize=(7, 5))
+
+        ax.pie(share,
+               autopct=self.autopct_format(np.array(share) / 1000),
+               pctdistance=1.2, textprops={'fontsize': 16},
+               startangle=140,
+               colors=cmap.colors)
+        ax.legend(title='',
+                  title_fontsize=16,
+                  labels=['High', '', 'Medium', '', 'Low'],
+                  bbox_to_anchor=(1.05, 0.8), borderaxespad=0.,
+                  prop={'size': 16})
+        ax.set_title(f'{title}\n(thousands)', loc='left', fontsize=18)
+
+        if output_file:
+            plt.savefig(os.path.join(self.output_directory, output_file),
+                        dpi=150, bbox_inches='tight')
 
     def to_pickle(self, name):
         self.conn = None

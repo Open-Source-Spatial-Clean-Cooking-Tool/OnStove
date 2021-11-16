@@ -543,8 +543,6 @@ class RasterLayer(Layer):
         if title:
             plt.title(title, loc='left')
 
-        return cmap
-
     def save_png(self, output_path, cmap='viridis', ticks=None, tick_labels=None,
                  cumulative_count=None, categories=None, legend_position=(1.05, 1),
                  admin_layer=None, title=None, dpi=300):
