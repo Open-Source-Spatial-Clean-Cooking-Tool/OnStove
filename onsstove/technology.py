@@ -537,6 +537,16 @@ class LPG(Technology):
         self.transportation_cost(model)
         super().discount_fuel_cost(model)
 
+    def transport_emissions(self):
+        # Diesel consumption per h is assumed to be 14 l/h (14 l/100km)
+        # Carbon intensity from https://www.eia.gov/environment/emissions/co2_vol_mass.php
+        diesel_consumption = self.travel_time * 14
+        total_emissions = 2.69 * diesel_consumption/1000
+        return total_emissions
+
+    def carb(self, model):
+        super().carb(model)
+        self.carbon += self.transport_emissions()
 
 class Biomass(Technology):
     """
