@@ -64,4 +64,4 @@ model.to_image('max_benefit_tech', cmap=cmap, legend_position=(1, 0.9),
 
 print(f'[{country}] Saving the results')
 summary.to_csv(os.path.join(snakemake.params.output_directory, 'Output', 'summary.csv'))
-model.to_pickle(snakemake.output.results)
+model.to_pickle('results.pkl')

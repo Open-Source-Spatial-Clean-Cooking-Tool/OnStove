@@ -821,9 +821,13 @@ class OnSSTOVE(DataProcessor):
                                  self.gdf["Households"]
 
     def reduced_emissions(self):
-
-        self.gdf["reduced_emissions"] = self.gdf.apply(
-            lambda row: self.techs[row['max_benefit_tech']].decreased_carbon_emissions, axis=1) * self.gdf["Households"]
+        # TODO: Fix this
+        try:
+            self.gdf["reduced_emissions"] = self.gdf.apply(
+                lambda row: self.techs[row['max_benefit_tech']].decreased_carbon_emissions, axis=1) * self.gdf["Households"]
+        except:
+            self.gdf["reduced_emissions"] = self.gdf.apply(
+                lambda row: self.techs[row['max_benefit_tech']].decreased_carbon_emissions[row.name], axis=1) * self.gdf["Households"]
 
     def investment_costs(self):
 
@@ -842,9 +846,14 @@ class OnSSTOVE(DataProcessor):
                                      "Households"]
 
     def emissions_costs_saved(self):
+        # TODO: Fix this
+        try:
+            self.gdf["emissions_costs_saved"] = self.gdf.apply(
+                lambda row: self.techs[row['max_benefit_tech']].decreased_carbon_costs, axis=1) * self.gdf["Households"]
+        except:
+            self.gdf["emissions_costs_saved"] = self.gdf.apply(
+                lambda row: self.techs[row['max_benefit_tech']].decreased_carbon_costs[row.name], axis=1) * self.gdf["Households"]
 
-        self.gdf["emissions_costs_saved"] = self.gdf.apply(
-            lambda row: self.techs[row['max_benefit_tech']].decreased_carbon_costs, axis=1) * self.gdf["Households"]
 
     def gdf_to_csv(self, scenario_name):
 
