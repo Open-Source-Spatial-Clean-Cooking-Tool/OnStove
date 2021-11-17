@@ -1,5 +1,5 @@
 import sys
-sys.path.append(r"C:\Users\camilorg\Box Sync\OnSSTOVE")
+sys.path.append(r"C:\Users\khavari\Box\OnSSTOVE")
 
 from onsstove.layer import VectorLayer, RasterLayer
 from onsstove.onsstove import OnSSTOVE
