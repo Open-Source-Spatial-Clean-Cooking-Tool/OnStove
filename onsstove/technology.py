@@ -136,7 +136,7 @@ class Technology:
 
     def carb(self, model):
         self.required_energy(model)
-        self.carbon = (self.energy * self.carbon_intensity) / 1000
+        self.carbon = pd.Series([(self.energy * self.carbon_intensity) / 1000] * model.gdf.shape[0], index=model.gdf.index)
 
     def carbon_emissions(self, model):
         self.carb(model)
@@ -460,7 +460,7 @@ class LPG(Technology):
 
     def __init__(self,
                  name=None,
-                 carbon_intensity=0,
+                 carbon_intensity=0, # Kg/GJ
                  energy_content=0,
                  tech_life=0,  # in years
                  inv_cost=0,  # in USD
@@ -533,6 +533,19 @@ class LPG(Technology):
         self.transportation_cost(model)
         super().discount_fuel_cost(model)
 
+    def transport_emissions(self, model):
+        # Diesel consumption per h is assumed to be 14 l/h (14 l/100km)
+        # Carbon intensity from https://www.eia.gov/environment/emissions/co2_vol_mass.php
+        # is 10.19 kg/gallon, converted to liters is 2.69 kg/liter
+        kg_yr = (model.specs["Meals_per_day"] * 365 * model.energy_per_meal) / (
+                self.efficiency * self.energy_content)
+        diesel_consumption = self.travel_time * 14
+        hh_emissions = 2.69 * diesel_consumption / self.truck_capacity * kg_yr # kgCO2/l * l/trip * trip/kgLPG * kgLPG/yr
+        return model.raster_to_dataframe(hh_emissions, nodata=np.nan, method = 'read')
+
+    def carb(self, model):
+        super().carb(model)
+        self.carbon += self.transport_emissions(model)
 
 class Biomass(Technology):
     """
