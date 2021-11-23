@@ -1,5 +1,5 @@
 import sys
-sys.path.append(r"C:\Users\khavari\Box\OnSSTOVE")
+sys.path.append(r"C:\Users\camilorg\Box sync\OnSSTOVE")
 import os
 
 import numpy as np
@@ -63,5 +63,5 @@ model.to_image('max_benefit_tech', cmap=cmap, legend_position=(1, 0.9),
                labels=labels)
 
 print(f'[{country}] Saving the results')
-summary.to_csv(os.path.join(snakemake.params.output_directory, 'Output', 'summary.csv'))
+summary.to_csv(os.path.join(snakemake.params.output_directory, 'summary.csv'))
 model.to_pickle('results.pkl')

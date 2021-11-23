@@ -616,6 +616,7 @@ class OnSSTOVE(DataProcessor):
         if name:
             self.gdf[name] = data
         else:
+            # TODO: check if changing this to pandas series
             return data
 
     def calibrate_urban_current_and_future_GHS(self, GHS_path):
@@ -822,12 +823,12 @@ class OnSSTOVE(DataProcessor):
 
     def reduced_emissions(self):
         # TODO: Fix this
-        try:
-            self.gdf["reduced_emissions"] = self.gdf.apply(
-                lambda row: self.techs[row['max_benefit_tech']].decreased_carbon_emissions, axis=1) * self.gdf["Households"]
-        except:
-            self.gdf["reduced_emissions"] = self.gdf.apply(
+
+        self.gdf["reduced_emissions"] = self.gdf.apply(
                 lambda row: self.techs[row['max_benefit_tech']].decreased_carbon_emissions[row.name], axis=1) * self.gdf["Households"]
+        # except:
+        #     self.gdf["reduced_emissions"] = self.gdf.apply(
+        #         lambda row: self.techs[row['max_benefit_tech']].decreased_carbon_emissions, axis=1) * self.gdf["Households"]
 
     def investment_costs(self):
 
@@ -847,12 +848,12 @@ class OnSSTOVE(DataProcessor):
 
     def emissions_costs_saved(self):
         # TODO: Fix this
-        try:
-            self.gdf["emissions_costs_saved"] = self.gdf.apply(
-                lambda row: self.techs[row['max_benefit_tech']].decreased_carbon_costs, axis=1) * self.gdf["Households"]
-        except:
-            self.gdf["emissions_costs_saved"] = self.gdf.apply(
+
+        self.gdf["emissions_costs_saved"] = self.gdf.apply(
                 lambda row: self.techs[row['max_benefit_tech']].decreased_carbon_costs[row.name], axis=1) * self.gdf["Households"]
+        # except:
+        #     self.gdf["emissions_costs_saved"] = self.gdf.apply(
+        #         lambda row: self.techs[row['max_benefit_tech']].decreased_carbon_costs, axis=1) * self.gdf["Households"]
 
 
     def gdf_to_csv(self, scenario_name):
