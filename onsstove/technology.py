@@ -149,11 +149,17 @@ class Technology:
 
     def health_parameters(self, model):
         rr_alri, rr_copd, rr_ihd, rr_lc, rr_stroke = self.relative_risk()
-        self.paf_alri = self.paf(rr_alri, 1 - model.specs['clean_cooking_access'])
-        self.paf_copd = self.paf(rr_copd, 1 - model.specs['clean_cooking_access'])
-        self.paf_ihd = self.paf(rr_ihd, 1 - model.specs['clean_cooking_access'])
-        self.paf_lc = self.paf(rr_lc, 1 - model.specs['clean_cooking_access'])
-        self.paf_stroke = self.paf(rr_stroke, 1 - model.specs['clean_cooking_access'])
+        self.paf_alri_r = self.paf(rr_alri, 1 - model.specs['rural_clean_cooking_access'])
+        self.paf_copd_r = self.paf(rr_copd, 1 - model.specs['rural_clean_cooking_access'])
+        self.paf_ihd_r = self.paf(rr_ihd, 1 - model.specs['rural_clean_cooking_access'])
+        self.paf_lc_r = self.paf(rr_lc, 1 - model.specs['rural_clean_cooking_access'])
+        self.paf_stroke_r = self.paf(rr_stroke, 1 - model.specs['rural_clean_cooking_access'])
+
+        self.paf_alri_u = self.paf(rr_alri, 1 - model.specs['urban_clean_cooking_access'])
+        self.paf_copd_u = self.paf(rr_copd, 1 - model.specs['urban_clean_cooking_access'])
+        self.paf_ihd_u = self.paf(rr_ihd, 1 - model.specs['urban_clean_cooking_access'])
+        self.paf_lc_u = self.paf(rr_lc, 1 - model.specs['urban_clean_cooking_access'])
+        self.paf_stroke_u = self.paf(rr_stroke, 1 - model.specs['urban_clean_cooking_access'])
 
     def mortality(self, model):
         """
@@ -165,11 +171,17 @@ class Technology:
         """
         self.health_parameters(model)
 
-        mort_alri = model.gdf["Calibrated_pop"].sum() * (model.base_fuel.paf_alri - self.paf_alri) * (model.specs["Mort_ALRI"] / 100000)
-        mort_copd = model.gdf["Calibrated_pop"].sum() * (model.base_fuel.paf_copd - self.paf_copd) * (model.specs["Mort_COPD"] / 100000)
-        mort_ihd = model.gdf["Calibrated_pop"].sum() * (model.base_fuel.paf_ihd - self.paf_ihd) * (model.specs["Mort_IHD"] / 100000)
-        mort_lc = model.gdf["Calibrated_pop"].sum() * (model.base_fuel.paf_lc - self.paf_lc) * (model.specs["Mort_LC"] / 100000)
-        mort_stroke = model.gdf["Calibrated_pop"].sum() * (model.base_fuel.paf_stroke - self.paf_stroke) * (model.specs["Mort_STROKE"] / 100000)
+        mort_alri_u = model.gdf.loc[model.gdf["IsUrban"] > 20, "Calibrated_pop"].sum() * (model.base_fuel.paf_alri_u - self.paf_alri_u) * (model.specs["Mort_ALRI"] / 100000)
+        mort_copd_u = model.gdf.loc[model.gdf["IsUrban"] > 20, "Calibrated_pop"].sum() * (model.base_fuel.paf_copd_u - self.paf_copd_u) * (model.specs["Mort_COPD"] / 100000)
+        mort_ihd_u = model.gdf.loc[model.gdf["IsUrban"] > 20, "Calibrated_pop"].sum() * (model.base_fuel.paf_ihd_u - self.paf_ihd_u) * (model.specs["Mort_IHD"] / 100000)
+        mort_lc_u = model.gdf.loc[model.gdf["IsUrban"] > 20, "Calibrated_pop"].sum() * (model.base_fuel.paf_lc_u - self.paf_lc_u) * (model.specs["Mort_LC"] / 100000)
+        mort_stroke_u = model.gdf.loc[model.gdf["IsUrban"] > 20, "Calibrated_pop"].sum() * (model.base_fuel.paf_stroke_u - self.paf_stroke_u) * (model.specs["Mort_STROKE"] / 100000)
+
+        mort_alri_r = model.gdf.loc[model.gdf["IsUrban"] < 20, "Calibrated_pop"].sum() * (model.base_fuel.paf_alri_r - self.paf_alri_r) * (model.specs["Mort_ALRI"] / 100000)
+        mort_copd_r = model.gdf.loc[model.gdf["IsUrban"] < 20, "Calibrated_pop"].sum() * (model.base_fuel.paf_copd_r - self.paf_copd_r) * (model.specs["Mort_COPD"] / 100000)
+        mort_ihd_r = model.gdf.loc[model.gdf["IsUrban"] < 20, "Calibrated_pop"].sum() * (model.base_fuel.paf_ihd_r - self.paf_ihd_r) * (model.specs["Mort_IHD"] / 100000)
+        mort_lc_r = model.gdf.loc[model.gdf["IsUrban"] < 20, "Calibrated_pop"].sum() * (model.base_fuel.paf_lc_r - self.paf_lc_r) * (model.specs["Mort_LC"] / 100000)
+        mort_stroke_r = model.gdf.loc[model.gdf["IsUrban"] < 20, "Calibrated_pop"].sum() * (model.base_fuel.paf_stroke_r - self.paf_stroke_r) * (model.specs["Mort_STROKE"] / 100000)
 
         cl_copd = {1: 0.3, 2: 0.2, 3: 0.17, 4: 0.17, 5: 0.16}
         cl_alri = {1: 0.7, 2: 0.1, 3: 0.07, 4: 0.07, 5: 0.06}
@@ -178,32 +190,72 @@ class Technology:
         cl_stroke = {1: 0.2, 2: 0.1, 3: 0.24, 4: 0.23, 5: 0.23}
 
         i = 1
-        mort_vector = []
+        mort_vector_u = []
+        mort_vector_r = []
+
         while i < 6:
-            mortality_alri = cl_alri[i] * model.specs["VSL"] * mort_alri / (1 + model.specs["Discount_rate"]) ** (i - 1)
-            mortality_copd = cl_copd[i] * model.specs["VSL"] * mort_copd / (
+            mortality_alri_u = cl_alri[i] * model.specs["VSL"] * mort_alri_u / (1 + model.specs["Discount_rate"]) ** (i - 1)
+            mortality_copd_u = cl_copd[i] * model.specs["VSL"] * mort_copd_u / (
                     1 + model.specs["Discount_rate"]) ** (i - 1)
-            mortality_lc = cl_lc[i] * model.specs["VSL"] * mort_lc / (
+            mortality_lc_u = cl_lc[i] * model.specs["VSL"] * mort_lc_u / (
                     1 + model.specs["Discount_rate"]) ** (i - 1)
-            mortality_ihd = cl_ihd[i] * model.specs["VSL"] * mort_ihd / (
+            mortality_ihd_u = cl_ihd[i] * model.specs["VSL"] * mort_ihd_u / (
                     1 + model.specs["Discount_rate"]) ** (i - 1)
-            mortality_stroke = cl_stroke[i] * model.specs["VSL"] * mort_stroke / (1 + model.specs["Discount_rate"]) ** (i - 1)
+            mortality_stroke_u = cl_stroke[i] * model.specs["VSL"] * mort_stroke_u / (1 + model.specs["Discount_rate"]) ** (i - 1)
 
-            mort_total = (1 + model.specs["Health_spillovers_parameter"]) * (
-                    mortality_alri + mortality_copd + mortality_lc + mortality_ihd + mortality_stroke)
+            mort_total_u = (1 + model.specs["Health_spillovers_parameter"]) * (
+                    mortality_alri_u + mortality_copd_u + mortality_lc_u + mortality_ihd_u + mortality_stroke_u)
 
-            mort_vector.append(mort_total)
+            mort_vector_u.append(mort_total_u)
+
+            mortality_alri_r = cl_alri[i] * model.specs["VSL"] * mort_alri_r / (1 + model.specs["Discount_rate"]) ** (i - 1)
+            mortality_copd_r = cl_copd[i] * model.specs["VSL"] * mort_copd_r / (
+                    1 + model.specs["Discount_rate"]) ** (i - 1)
+            mortality_lc_r = cl_lc[i] * model.specs["VSL"] * mort_lc_r / (
+                    1 + model.specs["Discount_rate"]) ** (i - 1)
+            mortality_ihd_r = cl_ihd[i] * model.specs["VSL"] * mort_ihd_r / (
+                    1 + model.specs["Discount_rate"]) ** (i - 1)
+            mortality_stroke_r = cl_stroke[i] * model.specs["VSL"] * mort_stroke_r / (1 + model.specs["Discount_rate"]) ** (i - 1)
+
+            mort_total_r = (1 + model.specs["Health_spillovers_parameter"]) * (
+                    mortality_alri_r + mortality_copd_r + mortality_lc_r + mortality_ihd_r + mortality_stroke_r)
+
+            mort_vector_r.append(mort_total_r)
 
             i += 1
 
-        mortality = np.sum(mort_vector)
+        mortality_u = np.sum(mort_vector_u)
+        mortality_r = np.sum(mort_vector_r)
 
         #  Distributed mortality per household
-        self.distributed_mortality = model.gdf["Calibrated_pop"] / (
-                    model.gdf["Calibrated_pop"].sum() * model.gdf['Households']) * mortality
+        distributed_mortality = pd.Series(index = model.gdf.index)
+
+        distributed_mortality[model.gdf["IsUrban"] > 20] = model.gdf.loc[model.gdf["IsUrban"] > 20, "Calibrated_pop"] / (
+                    model.gdf.loc[model.gdf["IsUrban"] > 20, "Calibrated_pop"].sum() * model.gdf.loc[model.gdf["IsUrban"] > 20, 'Households']) * mortality_u
+
+        distributed_mortality[model.gdf["IsUrban"] < 20] = model.gdf.loc[model.gdf["IsUrban"] < 20, "Calibrated_pop"] / (
+                model.gdf.loc[model.gdf["IsUrban"] < 20, "Calibrated_pop"].sum() * model.gdf.loc[model.gdf["IsUrban"] < 20, 'Households']) * mortality_r
+
+        self.distributed_mortality = distributed_mortality
         #  Total deaths avoided
-        self.deaths_avoided = (mort_alri + mort_copd + mort_lc + mort_ihd + mort_stroke) * (
-                    model.gdf["Calibrated_pop"] / (model.gdf["Calibrated_pop"].sum() * model.gdf['Households']))
+
+        deaths_avoided = pd.Series(index=model.gdf.index)
+        deaths_avoided[model.gdf["IsUrban"] > 20] = (mort_alri_u + mort_copd_u + mort_lc_u + mort_ihd_u + mort_stroke_u) * (
+                                                           model.gdf.loc[model.gdf["IsUrban"] > 20, "Calibrated_pop"] / (model.gdf.loc[model.gdf["IsUrban"] > 20, "Calibrated_pop"].sum() *
+                                                                       model.gdf.loc[model.gdf[
+                                                                                         "IsUrban"] > 20, 'Households']))
+
+        deaths_avoided[model.gdf["IsUrban"] < 20] = (
+                                                               mort_alri_r + mort_copd_r + mort_lc_r + mort_ihd_r + mort_stroke_r) * (
+                                                           model.gdf.loc[
+                                                               model.gdf["IsUrban"] < 20, "Calibrated_pop"] / (
+                                                                   model.gdf.loc[model.gdf[
+                                                                                     "IsUrban"] < 20, "Calibrated_pop"].sum() *
+                                                                   model.gdf.loc[model.gdf[
+                                                                                     "IsUrban"] < 20, 'Households']))
+
+        self.deaths_avoided = deaths_avoided
+
 
     def morbidity(self, model):
         """
@@ -215,11 +267,18 @@ class Technology:
         """
         self.health_parameters(model)
 
-        morb_alri = model.gdf["Calibrated_pop"].sum() * (model.base_fuel.paf_alri - self.paf_alri) * (model.specs["Morb_ALRI"] / 100000)
-        morb_copd = model.gdf["Calibrated_pop"].sum() * (model.base_fuel.paf_copd - self.paf_copd) * (model.specs["Morb_COPD"] / 100000)
-        morb_ihd = model.gdf["Calibrated_pop"].sum() * (model.base_fuel.paf_ihd - self.paf_ihd) * (model.specs["Morb_IHD"] / 100000)
-        morb_lc = model.gdf["Calibrated_pop"].sum() * (model.base_fuel.paf_lc - self.paf_lc) * (model.specs["Morb_LC"] / 100000)
-        morb_stroke = model.gdf["Calibrated_pop"].sum() * (model.base_fuel.paf_stroke - self.paf_stroke) * (model.specs["Morb_STROKE"] / 100000)
+        morb_alri_u = model.gdf.loc[model.gdf["IsUrban"] > 20, "Calibrated_pop"].sum() * (model.base_fuel.paf_alri_u - self.paf_alri_u) * (model.specs["Morb_ALRI"] / 100000)
+        morb_copd_u = model.gdf.loc[model.gdf["IsUrban"] > 20, "Calibrated_pop"].sum() * (model.base_fuel.paf_copd_u - self.paf_copd_u) * (model.specs["Morb_COPD"] / 100000)
+        morb_ihd_u = model.gdf.loc[model.gdf["IsUrban"] > 20, "Calibrated_pop"].sum() * (model.base_fuel.paf_ihd_u - self.paf_ihd_u) * (model.specs["Morb_IHD"] / 100000)
+        morb_lc_u = model.gdf.loc[model.gdf["IsUrban"] > 20, "Calibrated_pop"].sum() * (model.base_fuel.paf_lc_u - self.paf_lc_u) * (model.specs["Morb_LC"] / 100000)
+        morb_stroke_u = model.gdf.loc[model.gdf["IsUrban"] > 20, "Calibrated_pop"].sum() * (model.base_fuel.paf_stroke_u - self.paf_stroke_u) * (model.specs["Morb_STROKE"] / 100000)
+
+        morb_alri_r = model.gdf.loc[model.gdf["IsUrban"] < 20, "Calibrated_pop"].sum() * (model.base_fuel.paf_alri_r - self.paf_alri_r) * (model.specs["Morb_ALRI"] / 100000)
+        morb_copd_r = model.gdf.loc[model.gdf["IsUrban"] < 20, "Calibrated_pop"].sum() * (model.base_fuel.paf_copd_r - self.paf_copd_r) * (model.specs["Morb_COPD"] / 100000)
+        morb_ihd_r = model.gdf.loc[model.gdf["IsUrban"] < 20, "Calibrated_pop"].sum() * (model.base_fuel.paf_ihd_r - self.paf_ihd_r) * (model.specs["Morb_IHD"] / 100000)
+        morb_lc_r = model.gdf.loc[model.gdf["IsUrban"] < 20, "Calibrated_pop"].sum() * (model.base_fuel.paf_lc_r - self.paf_lc_r) * (model.specs["Morb_LC"] / 100000)
+        morb_stroke_r = model.gdf.loc[model.gdf["IsUrban"] < 20, "Calibrated_pop"].sum() * (model.base_fuel.paf_stroke_r - self.paf_stroke_r) * (model.specs["Morb_STROKE"] / 100000)
+
 
         cl_copd = {1: 0.3, 2: 0.2, 3: 0.17, 4: 0.17, 5: 0.16}
         cl_alri = {1: 0.7, 2: 0.1, 3: 0.07, 4: 0.07, 5: 0.06}
@@ -228,30 +287,73 @@ class Technology:
         cl_stroke = {1: 0.2, 2: 0.1, 3: 0.24, 4: 0.23, 5: 0.23}
 
         i = 1
-        morb_vector = []
+        morb_vector_u = []
+        morb_vector_r = []
+
         while i < 6:
-            morbidity_alri = cl_alri[i] * model.specs["COI_ALRI"] * morb_alri / (1 + model.specs["Discount_rate"]) ** (
+            morbidity_alri_u = cl_alri[i] * model.specs["COI_ALRI"] * morb_alri_u / (1 + model.specs["Discount_rate"]) ** (
                     i - 1)
-            morbidity_copd = cl_copd[i] * model.specs["COI_COPD"] * morb_copd / (1 + model.specs["Discount_rate"]) ** (
+            morbidity_copd_u = cl_copd[i] * model.specs["COI_COPD"] * morb_copd_u / (1 + model.specs["Discount_rate"]) ** (
                     i - 1)
-            morbidity_lc = cl_lc[i] * model.specs["COI_LC"] * morb_lc / (1 + model.specs["Discount_rate"]) ** (i - 1)
-            morbidity_ihd = cl_ihd[i] * model.specs["COI_IHD"] * morb_ihd / (1 + model.specs["Discount_rate"]) ** (i - 1)
-            morbidity_stroke = cl_stroke[i] * model.specs["COI_STROKE"] * morb_stroke / (1 + model.specs["Discount_rate"]) ** (
+            morbidity_lc_u = cl_lc[i] * model.specs["COI_LC"] * morb_lc_u / (1 + model.specs["Discount_rate"]) ** (i - 1)
+            morbidity_ihd_u = cl_ihd[i] * model.specs["COI_IHD"] * morb_ihd_u / (1 + model.specs["Discount_rate"]) ** (i - 1)
+            morbidity_stroke_u = cl_stroke[i] * model.specs["COI_STROKE"] * morb_stroke_u / (1 + model.specs["Discount_rate"]) ** (
                     i - 1)
 
-            morb_total = (1 + model.specs["Health_spillovers_parameter"]) * (
-                    morbidity_alri + morbidity_copd + morbidity_lc + morbidity_ihd + morbidity_stroke)
+            morb_total_u = (1 + model.specs["Health_spillovers_parameter"]) * (
+                    morbidity_alri_u + morbidity_copd_u + morbidity_lc_u + morbidity_ihd_u + morbidity_stroke_u)
 
-            morb_vector.append(morb_total)
+            morb_vector_u.append(morb_total_u)
+
+            morbidity_alri_r = cl_alri[i] * model.specs["COI_ALRI"] * morb_alri_r / (1 + model.specs["Discount_rate"]) ** (
+                    i - 1)
+            morbidity_copd_r = cl_copd[i] * model.specs["COI_COPD"] * morb_copd_r / (1 + model.specs["Discount_rate"]) ** (
+                    i - 1)
+            morbidity_lc_r = cl_lc[i] * model.specs["COI_LC"] * morb_lc_r / (1 + model.specs["Discount_rate"]) ** (i - 1)
+            morbidity_ihd_r = cl_ihd[i] * model.specs["COI_IHD"] * morb_ihd_r / (1 + model.specs["Discount_rate"]) ** (i - 1)
+            morbidity_stroke_r = cl_stroke[i] * model.specs["COI_STROKE"] * morb_stroke_r / (1 + model.specs["Discount_rate"]) ** (
+                    i - 1)
+
+            morb_total_r = (1 + model.specs["Health_spillovers_parameter"]) * (
+                    morbidity_alri_r + morbidity_copd_r + morbidity_lc_r + morbidity_ihd_r + morbidity_stroke_r)
+
+            morb_vector_r.append(morb_total_r)
 
             i += 1
 
-        morbidity = np.sum(morb_vector)
+        morbidity_u = np.sum(morb_vector_u)
+        morbidity_r = np.sum(morb_vector_r)
 
-        self.distributed_morbidity = model.gdf["Calibrated_pop"] / (
-                    model.gdf["Calibrated_pop"].sum() * model.gdf['Households']) * morbidity
-        self.cases_avoided = (morb_alri + morb_copd + morb_lc + morb_ihd + morb_stroke) * (
-                    model.gdf["Calibrated_pop"] / (model.gdf["Calibrated_pop"].sum() * model.gdf['Households']))
+        distributed_morbidity = pd.Series(index=model.gdf.index)
+
+        distributed_morbidity[model.gdf["IsUrban"] > 20] = model.gdf.loc[
+                                                               model.gdf["IsUrban"] > 20, "Calibrated_pop"] / (
+                                                                   model.gdf.loc[model.gdf[
+                                                                                     "IsUrban"] > 20, "Calibrated_pop"].sum() *
+                                                                   model.gdf.loc[model.gdf[
+                                                                                     "IsUrban"] > 20, 'Households']) * morbidity_u
+
+        distributed_morbidity[model.gdf["IsUrban"] < 20] = model.gdf.loc[
+                                                               model.gdf["IsUrban"] < 20, "Calibrated_pop"] / (
+                                                                   model.gdf.loc[model.gdf["IsUrban"] < 20, "Calibrated_pop"].sum() *
+                                                                   model.gdf.loc[model.gdf[
+                                                                                     "IsUrban"] < 20, 'Households']) * morbidity_r
+
+        self.distributed_morbidity = distributed_morbidity
+
+
+        cases_avoided = pd.Series(index = model.gdf.index)
+        cases_avoided[model.gdf["IsUrban"] > 20] = (morb_alri_u + morb_copd_u + morb_lc_u + morb_ihd_u + morb_stroke_u) * (
+                model.gdf.loc[model.gdf["IsUrban"] > 20, "Calibrated_pop"]/ (model.gdf.loc[model.gdf["IsUrban"] > 20, "Calibrated_pop"].sum() * model.gdf.loc[model.gdf[
+                                                                                     "IsUrban"] > 20, 'Households']))
+
+        cases_avoided[model.gdf["IsUrban"] < 20] = (morb_alri_r + morb_copd_r + morb_lc_r + morb_ihd_r + morb_stroke_r) * (
+                model.gdf.loc[model.gdf["IsUrban"] < 20, "Calibrated_pop"] / (
+                    model.gdf.loc[model.gdf["IsUrban"] < 20, "Calibrated_pop"].sum() * model.gdf.loc[model.gdf[
+                                                                                                         "IsUrban"] < 20, 'Households']))
+
+        self.cases_avoided = cases_avoided
+
 
     def salvage(self, model):
         """
