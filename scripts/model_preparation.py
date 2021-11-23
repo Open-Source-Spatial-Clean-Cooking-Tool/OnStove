@@ -40,11 +40,12 @@ model.calibrate_urban_current_and_future_GHS(ghs_path)
 print(f'[{country}] Adding wealth index')
 wealth_index = snakemake.input.wealth_index
 if country in ['SOM', 'SDN', 'SSD']:
-    file_type = 'polygon'
+    poverty = wealth_index.repace('relative_wealth_index.csv', 'poverty.shp')
+    model.extract_wealth_index(poverty, file_type='polygon',
+                               x_column="longitude", y_column="latitude", wealth_column="rwi")
 else:
-    file_type = 'csv'
-model.extract_wealth_index(wealth_index, file_type=file_type,
-                           x_column="longitude", y_column="latitude", wealth_column="rwi")
+    model.extract_wealth_index(wealth_index, file_type='csv',
+                               x_column="longitude", y_column="latitude", wealth_column="rwi")
 
 
 # wealth_index = r"../EGI Energy Systems\06 Projects\2021 Nepal Geospatial cooking\02 - work\GIS-data\Demand\Wealth Index\Wealth index 2011.tif"

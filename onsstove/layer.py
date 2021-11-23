@@ -15,18 +15,17 @@ import time, sys
 
 from .raster import *
 
-try:
-    from skimage.graph.mcp import MCP_Geometric
-except Exception as e:
+
+def try_import():
     try:
+        from skimage.graph.mcp import MCP_Geometric
+        return MCP_Geometric
+    except Exception as e:
         print('Trying import again...')
         time.sleep(1)
-        from skimage.graph.mcp import MCP_Geometric
+        return try_import()
 
-        print('Import successful...')
-    except Exception as e:
-        sys.exit('exiting due to exception: {}'.format(e))
-
+MCP_Geometric = try_import()
 
 class Layer:
     """
@@ -83,7 +82,7 @@ class Layer:
                                            inverse=self.inverse,
                                            normalization=self.normalization)
 
-        self.distance_raster.layer = cumulative_costs #+ (self.friction.layer * 1000 / 60)
+        self.distance_raster.layer = cumulative_costs  # + (self.friction.layer * 1000 / 60)
         self.distance_raster.meta = self.friction.meta.copy()
         self.distance_raster.bounds = self.friction.bounds
         if output_path:
@@ -491,7 +490,7 @@ class RasterLayer(Layer):
                 layer[(layer >= qs[i - 1]) & (layer < qs[i])] = qs[i]
         return layer
 
-    def category_legend(self, im, categories, legend_position=(1.05, 1)):
+    def category_legend(self, im, categories, legend_position=(1.05, 1), title=''):
         values = list(categories.values())
         titles = list(categories.keys())
 
@@ -499,13 +498,14 @@ class RasterLayer(Layer):
         # create a patch (proxy artist) for every color
         patches = [mpatches.Patch(color=colors[i], label="{}".format(titles[i])) for i in range(len(values))]
         # put those patched as legend-handles into the legend
-        plt.legend(handles=patches, bbox_to_anchor=legend_position, loc=2, borderaxespad=0.)
-
+        legend = plt.legend(handles=patches, bbox_to_anchor=legend_position, loc=2, borderaxespad=0.)
+        legend.set_title(title, prop={'size': 12, 'weight': 'bold'})
+        legend._legend_box.align = "left"
         plt.grid(True)
 
     def plot(self, cmap='viridis', ticks=None, tick_labels=None,
              cumulative_count=None, quantiles=None, categories=None, legend_position=(1.05, 1),
-             admin_layer=None, title=None, ax=None):
+             admin_layer=None, title=None, ax=None, legend=True, legend_title='', rasterized=True):
         extent = [self.bounds[0], self.bounds[2],
                   self.bounds[1], self.bounds[3]]  # [left, right, bottom, top]
 
@@ -516,6 +516,8 @@ class RasterLayer(Layer):
         else:
             layer = self.layer
 
+        layer = layer.astype('float32')
+
         layer[layer == self.meta['nodata']] = np.nan
 
         if ax is None:
@@ -524,33 +526,36 @@ class RasterLayer(Layer):
         if isinstance(cmap, dict):
             values = np.sort(np.unique(layer[~np.isnan(layer)]))
             cmap = ListedColormap([to_rgb(cmap[i]) for i in values])
-        cax = ax.imshow(layer, cmap=cmap, extent=extent)
+        cax = ax.imshow(layer, cmap=cmap, extent=extent, interpolation='none', rasterized=rasterized)
 
         ax.set_axis_off()
-        if categories:
-            self.category_legend(cax, categories, legend_position=legend_position)
-        else:
-            colorbar = dict(shrink=0.8)
-            if ticks:
-                colorbar['ticks'] = ticks
-            cbar = plt.colorbar(cax, **colorbar)
+        if legend:
+            if categories:
+                self.category_legend(cax, categories, legend_position=legend_position, title=legend_title)
+            else:
+                colorbar = dict(shrink=0.8)
+                if ticks:
+                    colorbar['ticks'] = ticks
+                cbar = plt.colorbar(cax, **colorbar)
 
-            if tick_labels:
-                cbar.ax.set_yticklabels(tick_labels)
-            cbar.ax.set_ylabel(self.name.replace('_', ' '))
+                if tick_labels:
+                    cbar.ax.set_yticklabels(tick_labels)
+                cbar.ax.set_ylabel(self.name.replace('_', ' '))
         if isinstance(admin_layer, gpd.GeoDataFrame):
-            admin_layer.plot(color='lightgrey', linewidth=1, ax=ax, zorder=0)
+            if admin_layer.crs != self.meta['crs']:
+                admin_layer.to_crs(self.meta['crs'], inplace=True)
+            admin_layer.plot(color=to_rgb('#f1f1f1ff'), linewidth=1, ax=ax, zorder=0, rasterized=rasterized)
         if title:
             plt.title(title, loc='left')
 
-    def save_png(self, output_path, cmap='viridis', ticks=None, tick_labels=None,
-                 cumulative_count=None, categories=None, legend_position=(1.05, 1),
-                 admin_layer=None, title=None, dpi=300):
+    def save_image(self, output_path, type='png', cmap='viridis', ticks=None, tick_labels=None,
+                   cumulative_count=None, categories=None, legend_position=(1.05, 1),
+                   admin_layer=None, title=None, dpi=300, legend=True, legend_title='', rasterized=True):
         os.makedirs(output_path, exist_ok=True)
         output_file = os.path.join(output_path,
-                                   self.name + '.png')
+                                   self.name + f'.{type}')
         self.plot(cmap=cmap, ticks=ticks, tick_labels=tick_labels, cumulative_count=cumulative_count,
-                  categories=categories, legend_position=legend_position,
-                  admin_layer=admin_layer, title=title)
+                  categories=categories, legend_position=legend_position, rasterized=rasterized,
+                  admin_layer=admin_layer, title=title, legend=legend, legend_title=legend_title)
         plt.savefig(output_file, dpi=dpi, bbox_inches='tight')
         plt.close()

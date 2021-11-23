@@ -1,14 +1,14 @@
 SCENARIOS = ['LPG International price - Rural-Urban']
 SENSITIVITY, = glob_wildcards("../Clean cooking Africa paper/04. OnSSTOVE inputs/LPG International price - Rural-Urban/Sensitivity_files/{sensitivity}/BDI_scenario_file.csv")
 
-COUNTRIES = ['ZAF']
+COUNTRIES = ['BDI']
 
-#COUNTRIES = ['AGO', 'BDI', 'BEN', 'BFA', 'BWA', 'CAF', 'CIV', 'CMR',
-#             'COD', 'COG', 'ERI', 'ETH', 'GAB', 'GHA', 'GIN',
-#             'GMB', 'GNB', 'GNQ', 'KEN', 'LBR', 'LSO', 'MDG', 'MLI',
-#             'MOZ', 'MRT', 'MWI', 'NAM', 'NER', 'NGA', 'RWA',
-#             'SEN', 'SLE', 'SWZ', 'TCD', 'TGO', 'TZA',
-#             'UGA', 'ZAF', 'ZMB', 'ZWE']
+# COUNTRIES = ['AGO', 'BDI', 'BEN', 'BFA', 'BWA', 'CAF', 'CIV', 'CMR',
+#              'COD', 'COG', 'ERI', 'ETH', 'GAB', 'GHA', 'GIN',
+#              'GMB', 'GNB', 'GNQ', 'KEN', 'LBR', 'LSO', 'MDG', 'MLI',
+#              'MOZ', 'MRT', 'MWI', 'NAM', 'NER', 'NGA', 'RWA',
+#              'SEN', 'SLE', 'SWZ', 'TCD', 'TGO', 'TZA',
+#              'UGA', 'ZAF', 'ZMB', 'ZWE']
 
 # COUNTRIES = ['AGO', 'BDI', 'BEN', 'BFA', 'BWA', 'CAF', 'CIV', 'CMR',
 #              'COD', 'COG', 'DJI', 'ERI', 'ETH', 'GAB', 'GHA', 'GIN',
