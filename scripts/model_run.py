@@ -57,11 +57,14 @@ model.to_raster('maximum_net_benefit')
 # model.to_raster('investment_costs')
 
 model.to_image('maximum_net_benefit', cmap='Spectral', cumulative_count=[0.01, 0.99],
-               title=f'Maximum net benefit | {country}', dpi=600)
+               title=f'Maximum net benefit | {country}', dpi=600,
+               rasterized=True)
 model.to_image('max_benefit_tech', cmap=cmap, legend_position=(1, 0.9),
                title=f'Maximum benefit technology | {country}', dpi=600,
-               labels=labels)
+               labels=labels, legend=True, legend_title='Maximum benefit\ncooking technology', rasterized=True)
 
 print(f'[{country}] Saving the results')
+
 summary.to_csv(os.path.join(snakemake.params.output_directory, 'summary.csv'))
 model.to_pickle('results.pkl')
+

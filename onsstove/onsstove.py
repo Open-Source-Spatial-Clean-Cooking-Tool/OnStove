@@ -965,7 +965,7 @@ class OnSSTOVE(DataProcessor):
                     f.write(f'{code} {r} {g} {b} 255 {label}\n')
 
     def plot(self, variable, cmap='viridis', cumulative_count=None, legend_position=(1.05, 1),
-             admin_layer=None, labels=None):
+             admin_layer=None, labels=None, legend=True, legend_title='', rasterized=True):
         raster, codes, cmap = self._create_layer(variable, labels=labels, cmap=cmap)
         if isinstance(admin_layer, gpd.GeoDataFrame):
             admin_layer = admin_layer
@@ -973,19 +973,20 @@ class OnSSTOVE(DataProcessor):
             admin_layer = self.mask_layer.layer
         raster.plot(cmap=cmap, cumulative_count=cumulative_count,
                     categories=codes, legend_position=legend_position,
-                    admin_layer=admin_layer)
+                    admin_layer=admin_layer, legend=legend, legend_title=legend_title, rasterized=rasterized)
 
-    def to_image(self, variable, cmap='viridis', cumulative_count=None, legend_position=(1.05, 1),
-                 admin_layer=None, title=None, dpi=300, labels=None):
+    def to_image(self, variable, type='png',cmap='viridis', cumulative_count=None, legend_position=(1.05, 1),
+                 admin_layer=None, title=None, dpi=300, labels=None, legend=True, legend_title='', rasterized=True):
         raster, codes, cmap = self._create_layer(variable, labels=labels, cmap=cmap)
         raster.bounds = self.base_layer.bounds
         if isinstance(admin_layer, gpd.GeoDataFrame):
             admin_layer = admin_layer
         elif not admin_layer:
             admin_layer = self.mask_layer.layer
-        raster.save_png(self.output_directory, cmap=cmap, cumulative_count=cumulative_count,
-                        categories=codes, legend_position=legend_position,
-                        admin_layer=admin_layer, title=title, dpi=dpi)
+        raster.save_image(self.output_directory, type=type, cmap=cmap, cumulative_count=cumulative_count,
+                         categories=codes, legend_position=legend_position,
+                         admin_layer=admin_layer, title=title, dpi=dpi,
+                          legend=legend, legend_title=legend_title, rasterized=rasterized)
 
     def to_json(self, name):
         self.gdf.to_file(os.path.join(self.output_directory, name), driver='GeoJSON')

@@ -203,8 +203,7 @@ class Technology:
                     1 + model.specs["Discount_rate"]) ** (i - 1)
             mortality_stroke_u = cl_stroke[i] * model.specs["VSL"] * mort_stroke_u / (1 + model.specs["Discount_rate"]) ** (i - 1)
 
-            mort_total_u = (1 + model.specs["Health_spillovers_parameter"]) * (
-                    mortality_alri_u + mortality_copd_u + mortality_lc_u + mortality_ihd_u + mortality_stroke_u)
+            mort_total_u = mortality_alri_u + mortality_copd_u + mortality_lc_u + mortality_ihd_u + mortality_stroke_u
 
             mort_vector_u.append(mort_total_u)
 
@@ -217,8 +216,7 @@ class Technology:
                     1 + model.specs["Discount_rate"]) ** (i - 1)
             mortality_stroke_r = cl_stroke[i] * model.specs["VSL"] * mort_stroke_r / (1 + model.specs["Discount_rate"]) ** (i - 1)
 
-            mort_total_r = (1 + model.specs["Health_spillovers_parameter"]) * (
-                    mortality_alri_r + mortality_copd_r + mortality_lc_r + mortality_ihd_r + mortality_stroke_r)
+            mort_total_r = mortality_alri_r + mortality_copd_r + mortality_lc_r + mortality_ihd_r + mortality_stroke_r
 
             mort_vector_r.append(mort_total_r)
 
@@ -300,8 +298,7 @@ class Technology:
             morbidity_stroke_u = cl_stroke[i] * model.specs["COI_STROKE"] * morb_stroke_u / (1 + model.specs["Discount_rate"]) ** (
                     i - 1)
 
-            morb_total_u = (1 + model.specs["Health_spillovers_parameter"]) * (
-                    morbidity_alri_u + morbidity_copd_u + morbidity_lc_u + morbidity_ihd_u + morbidity_stroke_u)
+            morb_total_u = morbidity_alri_u + morbidity_copd_u + morbidity_lc_u + morbidity_ihd_u + morbidity_stroke_u
 
             morb_vector_u.append(morb_total_u)
 
@@ -314,8 +311,7 @@ class Technology:
             morbidity_stroke_r = cl_stroke[i] * model.specs["COI_STROKE"] * morb_stroke_r / (1 + model.specs["Discount_rate"]) ** (
                     i - 1)
 
-            morb_total_r = (1 + model.specs["Health_spillovers_parameter"]) * (
-                    morbidity_alri_r + morbidity_copd_r + morbidity_lc_r + morbidity_ihd_r + morbidity_stroke_r)
+            morb_total_r = morbidity_alri_r + morbidity_copd_r + morbidity_lc_r + morbidity_ihd_r + morbidity_stroke_r
 
             morb_vector_r.append(morb_total_r)
 
