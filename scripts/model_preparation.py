@@ -85,20 +85,20 @@ print(f'[{country}] Reading tech data')
 path = snakemake.input.techs_file
 model.read_tech_data(path, delimiter=',')
 
-# 11. Calculate parameters of base fuel (Biomass)
-print(f'[{country}] Calculating base fuel parameters')
-# 11.1. Health costs
-model.base_fuel.health_parameters(model)
-
-# 11.2. Carbon emissions and related costs
-model.base_fuel.carb(model)
-
-# 11.3. Time for travelling, collecting fuel, and cooking
-# paths to GIS layers
-model.base_fuel.friction_path = snakemake.input.biomass_friction
-model.base_fuel.forest_path = snakemake.input.forest
-model.base_fuel.forest_condition = lambda x: x > 30
-model.base_fuel.total_time(model)
+# # 11. Calculate parameters of base fuel (Biomass)
+# print(f'[{country}] Calculating base fuel parameters')
+# # 11.1. Health costs
+# model.base_fuel.health_parameters(model)
+#
+# # 11.2. Carbon emissions and related costs
+# model.base_fuel.carb(model)
+#
+# # 11.3. Time for travelling, collecting fuel, and cooking
+# # paths to GIS layers
+# model.base_fuel.friction_path = snakemake.input.biomass_friction
+# model.base_fuel.forest_path = snakemake.input.forest
+# model.base_fuel.forest_condition = lambda x: x > 30
+# model.base_fuel.total_time(model)
 
 # Adding tiers data to Electricity
 print(f'[{country}] Electricity tiers data')
@@ -110,13 +110,19 @@ print(f'[{country}] LPG data')
 travel_time = RasterLayer('LPG', 'Traveltime', snakemake.input.traveltime_cities)
 model.techs['LPG'].travel_time = travel_time.layer * 2 / 60
 
-# 13. Adding GIS data for Improved Biomass collected (ICS biomass)
+# 13. Adding GIS data for Traditional Biomass
+print(f'[{country}] Improved Biomass collected data')
+model.techs['Collected_Traditional_Biomass'].friction_path = snakemake.input.biomass_friction
+model.techs['Collected_Traditional_Biomass'].forest_path = snakemake.input.forest
+model.techs['Collected_Traditional_Biomass'].forest_condition = lambda x: x > 30
+
+# 14. Adding GIS data for Improved Biomass (ICS biomass)
 print(f'[{country}] Improved Biomass collected data')
 model.techs['Collected_Improved_Biomass'].friction_path = snakemake.input.biomass_friction
 model.techs['Collected_Improved_Biomass'].forest_path = snakemake.input.forest
 model.techs['Collected_Improved_Biomass'].forest_condition = lambda x: x > 30
 
-# 14. Adding GIS data for Improved Biomass collected (ICS biomass)
+# 15. Adding GIS data for Improved Biomass collected (ICS biomass)
 if 'Biogas' in model.techs.keys():
     # TODO: Need to finish this, add livestock data
     print(f'[{country}] Adding biogas data')
