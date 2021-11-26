@@ -410,12 +410,55 @@ class OnSSTOVE(DataProcessor):
                         config[row['Param']] = float(row['Value'])
                     elif row['data_type'] == 'string':
                         config[row['Param']] = str(row['Value'])
+                    elif row['data_type'] == 'bool':
+                        config[row['Param']] = str(row['Value']).lower() in ['true', 't', 'yes', 'y', '1']
                     else:
                         raise ValueError("Config file data type not recognised.")
         if self.specs is None:
             self.specs = config
         else:
             self.specs.update(config)
+
+    def set_base_fuel(self, techs: list = None):
+        """
+        Defines the base fuel properties according to the technologies
+        tagged as is_base = True or a list of technologies as input.
+        If no technologies are passed as input and no technologies are tagged
+        as is_base = True, then it calculates the base fuel properties considering
+        all technologies in the model
+        """
+        if techs is None:
+            techs = self.techs.values()
+        base_fuels = []
+        for tech in techs:
+            if tech.is_base:
+                base_fuels.append(tech)
+        if len(base_fuels) == 1:
+            self.base_fuel = base_fuels[0]
+        else:
+            if len(base_fuels) == 0:
+                base_fuels = techs
+            base_fuel = Technology(name='Base fuel')
+            base_fuel.carbon = 0
+            base_fuel.total_time_yr = 0
+            for tech in base_fuels:
+                if tech.carbon is None:
+                    tech.carb(self)
+                if tech.total_time_yr is None:
+                    tech.total_time(self)
+                tech.health_parameters(self)
+                current_share = (self.gdf['IsUrban'] > 20) * tech.current_share_urban
+                current_share[self.gdf['IsUrban'] < 20] = tech.current_share_rural
+                # for prop in ['carbon', 'pm25', 'total_time_yr']:
+                base_fuel.carbon += tech.carbon * current_share
+                base_fuel.total_time_yr += tech.total_time_yr * current_share
+                for paf in ['paf_alri_r', 'paf_copd_r', 'paf_ihd_r',
+                            'paf_lc_r', 'paf_stroke_r']:
+                    base_fuel[paf] += tech[paf] * tech.current_share_rural
+                for paf in ['paf_alri_u', 'paf_copd_u', 'paf_ihd_u',
+                            'paf_lc_u', 'paf_stroke_u']:
+                    base_fuel[paf] += tech[paf] * tech.current_share_urban
+            self.base_fuel = base_fuel
 
     def read_tech_data(self, path_to_config: str, delimiter=','):
         """
@@ -428,7 +471,7 @@ class OnSSTOVE(DataProcessor):
             for row in config_file:
                 if row['Value']:
                     if row['Fuel'] not in techs:
-                        if row['Fuel'] == 'LPG':
+                        if 'lpg' in row['Fuel'].lower():
                             techs[row['Fuel']] = LPG()
                         elif 'biomass' in row['Fuel'].lower():
                             techs[row['Fuel']] = Biomass()
@@ -445,14 +488,21 @@ class OnSSTOVE(DataProcessor):
                     elif row['data_type'] == 'string':
                         techs[row['Fuel']][row['Param']] = str(row['Value'])
                     elif row['data_type'] == 'bool':
-                        techs[row['Fuel']][row['Param']] = bool(row['Value'])
+                        techs[row['Fuel']][row['Param']] = str(row['Value']).lower() in ['true', 't', 'yes', 'y', '1']
                     else:
                         raise ValueError("Config file data type not recognised.")
-        for name, tech in techs.items():
-            if tech.is_base:
-                self.base_fuel = tech
 
         self.techs = techs
+
+    def get_clean_cooking_access(self):
+        clean_cooking_access_u = 0
+        clean_cooking_access_r = 0
+        for tech in self.techs.values():
+            if tech.is_clean:
+                clean_cooking_access_u += tech.current_share_urban
+                clean_cooking_access_r += tech.current_share_rural
+        self.clean_cooking_access_u = clean_cooking_access_u
+        self.clean_cooking_access_r = clean_cooking_access_r
 
     def normalize(self, column, inverse=False):
 
@@ -694,6 +744,11 @@ class OnSSTOVE(DataProcessor):
             'Minimum_wage'] / 30 / 8  # convert $/months to $/h (8 working hours per day)
 
     def run(self, technologies='all'):
+        print(f'[{self.specs["Country_name"]}] Calculating clean cooking access')
+        self.get_clean_cooking_access()
+        if self.base_fuel is None:
+            print(f'[{self.specs["Country_name"]}] Calculating base fuel properties')
+            self.set_base_fuel(self.techs.values())
         if technologies == 'all':
             techs = [tech for tech in self.techs.values()]
         elif isinstance(technologies, list):

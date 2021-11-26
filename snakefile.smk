@@ -82,7 +82,7 @@ rule process_data:
 
 rule prepare_model:
     input:
-         prep_file = r"..\Clean cooking Africa paper\04. OnSSTOVE inputs\{scenario}\Prep_files\Copies/{country}_prep_file.csv",
+         prep_file = r"..\Clean cooking Africa paper\04. OnSSTOVE inputs\{scenario}\Prep_files/{country}_prep_file.csv",
          wealth_index = r"..\Clean cooking Africa paper\01. Data\GIS-data\Poverty\{country}_relative_wealth_index.csv" ,
          techs_file = r"..\Clean cooking Africa paper\04. OnSSTOVE inputs\{scenario}\Technical_specs\{country}_file_tech_specs.csv",
          mask_layer = rules.process_data.output.mask_layer,
