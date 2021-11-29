@@ -449,7 +449,7 @@ class OnSSTOVE(DataProcessor):
                 tech.health_parameters(self)
                 current_share = (self.gdf['IsUrban'] > 20) * tech.current_share_urban
                 current_share[self.gdf['IsUrban'] < 20] = tech.current_share_rural
-                # for prop in ['carbon', 'pm25', 'total_time_yr']:
+
                 base_fuel.carbon += tech.carbon * current_share
                 base_fuel.total_time_yr += tech.total_time_yr * current_share
                 for paf in ['paf_alri_r', 'paf_copd_r', 'paf_ihd_r',

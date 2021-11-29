@@ -18,7 +18,9 @@ model.read_scenario_data(path, delimiter=',')
 model.output_directory = snakemake.params.output_directory
 
 # 3. Calculating benefits and costs of each technology and getting the max benefit technology for each cell
-model.run(technologies='all')
+model.run(technologies=['Electricity', 'LPG', 'Biogas',
+                        'Collected_Improved_Biomass', 'Collected_Traditional_Biomass'
+                        ])
 
 # 4. Printing the results
 summary = model.gdf.groupby(['max_benefit_tech']).agg({'Calibrated_pop': lambda row: np.nansum(row) / 1000000,
