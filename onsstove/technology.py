@@ -690,7 +690,8 @@ class LPG(Technology):
                 self.efficiency * self.energy_content)
         diesel_consumption = self.travel_time * 14
         hh_emissions = 2.69 * diesel_consumption / self.truck_capacity * kg_yr  # kgCO2/l * l/trip * trip/kgLPG * kgLPG/yr
-        return model.raster_to_dataframe(hh_emissions, nodata=np.nan, method='read')
+        return model.raster_to_dataframe(hh_emissions, nodata=np.nan,
+                                         fill_nodata='interpolate', method='read')
 
     def carb(self, model):
         super().carb(model)
@@ -738,9 +739,8 @@ class Biomass(Technology):
         forest.add_friction_raster(friction)
         forest.travel_time(condition=self.forest_condition)
 
-        self.travel_time = 2 * pd.Series(forest.distance_raster.layer[model.rows, model.cols],
-                                         index=model.gdf.index)
-
+        self.travel_time = 2 * model.raster_to_dataframe(forest.distance_raster.layer, nodata=np.nan,
+                                                         fill_nodata='interpolate', method='read')
     def total_time(self, model):
         self.transportation_time(self.friction_path, self.forest_path, model)
         trips_per_yr = self.energy / (self.collection_capacity * self.energy_content)
@@ -895,7 +895,8 @@ class Biogas(Technology):
         model.raster_to_dataframe(temp.layer, name="Temperature", method='read',
                                   nodata=temp.meta['nodata'], fill_nodata='interpolate')
         if isinstance(water, VectorLayer):
-            model.raster_to_dataframe(water.layer, name="Water", method='read')
+            model.raster_to_dataframe(water.layer, name="Water",
+                                      fill_nodata='interpolate', method='read')
             model.gdf.loc[model.gdf["Water"] == 0, "m3_biogas_hh"] = 0
 
         model.gdf.loc[model.gdf["Temperature"] < 10, "m3_biogas_hh"] = 0
