@@ -458,17 +458,33 @@ class OnSSTOVE(DataProcessor):
             base_fuel = Technology(name='Base fuel')
             base_fuel.carbon = 0
             base_fuel.total_time_yr = 0
+
             for tech in base_fuels:
-                if tech.carbon is None:
-                    tech.carb(self)
-                if tech.total_time_yr is None:
-                    tech.total_time(self)
-                tech.health_parameters(self)
+
                 current_share = (self.gdf['IsUrban'] > 20) * tech.current_share_urban
                 current_share[self.gdf['IsUrban'] < 20] = tech.current_share_rural
 
+
+                tech.carb(self)
+                tech.total_time(self)
+                tech.required_energy(self)
+
+                if isinstance(tech, LPG):
+                    tech.transportation_cost(self)
+
+                base_fuel.tech_life += tech.tech_life * current_share
+
+
+                tech.health_parameters(self)
+
                 base_fuel.carbon += tech.carbon * current_share
                 base_fuel.total_time_yr += tech.total_time_yr * current_share
+                base_fuel.inv_cost += tech.inv_cost * current_share
+                base_fuel.fuel_cost += tech.fuel_cost * current_share
+                base_fuel.energy_content += tech.energy_content * current_share
+                base_fuel.energy += tech.energy * current_share
+                base_fuel.transport_cost += tech.transport_cost * current_share
+
                 for paf in ['paf_alri_r', 'paf_copd_r', 'paf_ihd_r',
                             'paf_lc_r', 'paf_stroke_r']:
                     base_fuel[paf] += tech[paf] * tech.current_share_rural
@@ -916,7 +932,7 @@ class OnSSTOVE(DataProcessor):
     def extract_investment_costs(self):
 
         self.gdf["investment_costs"] = self.gdf.apply(
-            lambda row: self.techs[row['max_benefit_tech']].discounted_investments, axis=1) * self.gdf["Households"]
+            lambda row: self.techs[row['max_benefit_tech']].discounted_investments[row.name], axis=1) * self.gdf["Households"]
 
     def extract_om_costs(self):
 
@@ -932,7 +948,7 @@ class OnSSTOVE(DataProcessor):
     def extract_salvage(self):
 
         self.gdf["salvage_value"] = self.gdf.apply(
-            lambda row: self.techs[row['max_benefit_tech']].discounted_salvage_cost, axis=1) * self.gdf["Households"]
+            lambda row: self.techs[row['max_benefit_tech']].discounted_salvage_cost[row.name], axis=1) * self.gdf["Households"]
 
     def extract_emissions_costs_saved(self):
         # TODO: Fix this

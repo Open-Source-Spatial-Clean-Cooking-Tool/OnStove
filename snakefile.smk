@@ -1,8 +1,8 @@
 SCENARIOS = ['LPG International price - Rural-Urban']
-SENSITIVITY = ['All_benefits']
-# SENSITIVITY, = glob_wildcards("../Clean cooking Africa paper/04. OnSSTOVE inputs/LPG International price - Rural-Urban/Sensitivity_files/{sensitivity}/BDI_scenario_file.csv")
+#SENSITIVITY = ['All_benefits']
+SENSITIVITY, = glob_wildcards("../Clean cooking Africa paper/04. OnSSTOVE inputs/LPG International price - Rural-Urban/Sensitivity_files/{sensitivity}/BDI_scenario_file.csv")
 
-COUNTRIES = ['RWA']
+COUNTRIES = ['ZAF']
 
 
 # COUNTRIES = ['AGO', 'BDI', 'BEN', 'BFA', 'BWA', 'CAF', 'CIV', 'CMR',

@@ -52,6 +52,7 @@ class Technology:
         self.is_clean = is_clean
         self.current_share_urban = current_share_urban
         self.current_share_rural = current_share_rural
+        self.energy = 0
         for paf in ['paf_alri_', 'paf_copd_', 'paf_ihd_', 'paf_lc_', 'paf_stroke_']:
             for s in ['u', 'r']:
                 self[paf + s] = 0
@@ -509,10 +510,14 @@ class Technology:
         discount_rate, proj_life = self.discount_factor(model.specs)
         salvage = np.zeros(proj_life)
         used_life = proj_life % self.tech_life
+        used_life_base = proj_life % model.base_fuel.tech_life
 
+        base_salvage = model.base_fuel.inv_cost * (1 - used_life_base / model.base_fuel.tech_life)
         salvage[-1] = self.inv_cost * (1 - used_life / self.tech_life)
 
-        discounted_salvage = salvage.sum() / discount_rate
+        salvage = salvage.sum() - base_salvage
+
+        discounted_salvage = salvage / discount_rate
 
         self.discounted_salvage_cost = discounted_salvage
 
@@ -555,15 +560,19 @@ class Technology:
             investments[i] = self.inv_cost
             i = i + self.tech_life
 
-        discounted_investments = investments / discount_rate
+
+        #discounted_investments = (model.base_fuel.inv_cost - investments) / discount_rate
         # TODO: the + self.inv_cost  is a workaround to account for the investment in year 0
-        self.discounted_investments = discounted_investments.sum() + self.inv_cost
+        investments_discounted = np.array([sum((investments - x) / discount_rate) for x in model.base_fuel.inv_cost])
+        self.discounted_investments = pd.Series(investments_discounted, index=model.gdf.index) + self.inv_cost
 
     def discount_fuel_cost(self, model):
         self.required_energy(model)
         discount_rate, proj_life = self.discount_factor(model.specs)
 
-        cost = (self.energy * self.fuel_cost / self.energy_content + self.transport_cost) * np.ones(model.gdf.shape[0])
+        base_cost = (model.base_fuel.energy * model.base_fuel.fuel_cost / model.base_fuel.energy_content + model.base_fuel.transport_cost) * np.ones(model.gdf.shape[0])
+
+        cost = (self.energy * self.fuel_cost / self.energy_content + self.transport_cost) * np.ones(model.gdf.shape[0]) - base_cost
 
         fuel_cost = [np.ones(proj_life) * x for x in cost]
 
@@ -581,7 +590,8 @@ class Technology:
         # else:
         proj_life = model.specs['End_year'] - model.specs['Start_year']
         self.total_time(model)
-        self.total_time_saved = model.base_fuel.total_time_yr - self.total_time_yr  # time saved per household
+        #self.total_time_saved = model.base_fuel.total_time_yr - self.total_time_yr  # time saved per household
+        self.total_time_saved = model.base_fuel.total_time_yr - self.total_time_yr
         # time value of time saved per sq km
         self.time_value = self.total_time_saved * model.gdf["value_of_time"] / (
                 1 + model.specs["Discount_rate"]) ** (proj_life)
