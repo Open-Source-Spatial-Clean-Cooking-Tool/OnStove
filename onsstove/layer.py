@@ -526,7 +526,7 @@ class RasterLayer(Layer):
         if isinstance(cmap, dict):
             values = np.sort(np.unique(layer[~np.isnan(layer)]))
             cmap = ListedColormap([to_rgb(cmap[i]) for i in values])
-        cax = ax.imshow(layer, cmap=cmap, extent=extent, interpolation='none', rasterized=rasterized)
+        cax = ax.imshow(layer, cmap=cmap, extent=extent, interpolation='none', zorder=1, rasterized=rasterized)
 
         ax.set_axis_off()
         if legend:

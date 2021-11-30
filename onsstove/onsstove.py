@@ -9,6 +9,20 @@ from matplotlib import cm
 from matplotlib.colors import to_rgb
 from rasterio.warp import transform_bounds
 
+from plotnine import (
+    ggplot,
+    aes,
+    geom_col,
+    geom_text,
+    ylim,
+    scale_x_discrete,
+    scale_fill_manual,
+    coord_flip,
+    theme_minimal,
+    theme,
+    labs
+)
+
 from onsstove.technology import Technology, LPG, Biomass, Electricity, Biogas
 from .raster import *
 from .layer import VectorLayer, RasterLayer
@@ -435,6 +449,9 @@ class OnSSTOVE(DataProcessor):
                 base_fuels.append(tech)
         if len(base_fuels) == 1:
             self.base_fuel = base_fuels[0]
+            self.base_fuel.carb(self)
+            self.base_fuel.total_time(self)
+            self.base_fuel.health_parameters(self)
         else:
             if len(base_fuels) == 0:
                 base_fuels = techs
@@ -791,19 +808,25 @@ class OnSSTOVE(DataProcessor):
         self.maximum_net_benefit(techs)
         print('Extracting indicators...')
         print('    - Lives saved')
-        self.lives_saved()
+        self.extract_lives_saved()
         print('    - Health costs')
-        self.health_costs_saved()
+        self.extract_health_costs_saved()
         print('    - Time saved')
         self.extract_time_saved()
-        print('    - Reduced emissions')
-        self.reduced_emissions()
+        print('    - Opportunity cost')
+        self.extract_opportunity_cost()
+        print('    - Avoided emissions')
+        self.extract_reduced_emissions()
+        print('    - Avoided emissions costs')
+        self.extract_emissions_costs_saved()
         print('    - Investment costs')
-        self.investment_costs()
+        self.extract_investment_costs()
         print('    - Fuel costs')
-        self.fuel_costs()
-        print('    - Reduced emissions externalities')
-        self.emissions_costs_saved()
+        self.extract_fuel_costs()
+        print('    - OM costs')
+        self.extract_om_costs()
+        print('    - Salvage value')
+        self.extract_salvage()
         print('Done')
 
     def _get_column_functs(self):
@@ -860,11 +883,11 @@ class OnSSTOVE(DataProcessor):
         self.gdf.drop('index_right', axis=1, inplace=True)
         self.gdf.sort_index(inplace=True)
 
-    def lives_saved(self):
+    def extract_lives_saved(self):
         self.gdf["deaths_avoided"] = self.gdf.apply(
             lambda row: self.techs[row['max_benefit_tech']].deaths_avoided[row.name], axis=1) * self.gdf["Households"]
 
-    def health_costs_saved(self):
+    def extract_health_costs_saved(self):
 
         self.gdf["health_costs_avoided"] = self.gdf.apply(
             lambda row: self.techs[row['max_benefit_tech']].distributed_morbidity[row.name] +
@@ -876,7 +899,12 @@ class OnSSTOVE(DataProcessor):
             lambda row: self.techs[row['max_benefit_tech']].total_time_saved[row.name], axis=1) * \
                                  self.gdf["Households"]
 
-    def reduced_emissions(self):
+    def extract_opportunity_cost(self):
+        self.gdf["opportunity_cost_gained"] = self.gdf.apply(
+            lambda row: self.techs[row['max_benefit_tech']].time_value[row.name], axis=1) * \
+                                 self.gdf["Households"]
+
+    def extract_reduced_emissions(self):
         # TODO: Fix this
 
         self.gdf["reduced_emissions"] = self.gdf.apply(
@@ -885,23 +913,28 @@ class OnSSTOVE(DataProcessor):
         #     self.gdf["reduced_emissions"] = self.gdf.apply(
         #         lambda row: self.techs[row['max_benefit_tech']].decreased_carbon_emissions, axis=1) * self.gdf["Households"]
 
-    def investment_costs(self):
+    def extract_investment_costs(self):
 
         self.gdf["investment_costs"] = self.gdf.apply(
             lambda row: self.techs[row['max_benefit_tech']].discounted_investments, axis=1) * self.gdf["Households"]
 
-    def om_costs(self):
+    def extract_om_costs(self):
 
         self.gdf["om_costs"] = self.gdf.apply(
             lambda row: self.techs[row['max_benefit_tech']].discounted_om_costs, axis=1) * self.gdf["Households"]
 
-    def fuel_costs(self):
+    def extract_fuel_costs(self):
 
         self.gdf["fuel_costs"] = self.gdf.apply(
             lambda row: self.techs[row['max_benefit_tech']].discounted_fuel_cost[row.name], axis=1) * self.gdf[
                                      "Households"]
 
-    def emissions_costs_saved(self):
+    def extract_salvage(self):
+
+        self.gdf["salvage_value"] = self.gdf.apply(
+            lambda row: self.techs[row['max_benefit_tech']].discounted_salvage_cost, axis=1) * self.gdf["Households"]
+
+    def extract_emissions_costs_saved(self):
         # TODO: Fix this
 
         self.gdf["emissions_costs_saved"] = self.gdf.apply(
@@ -1048,3 +1081,60 @@ class OnSSTOVE(DataProcessor):
 
     def read_data(self, path):
         self.gdf = gpd.read_file(path)
+
+    def summary(self, inplace=False):
+        summary = self.gdf.groupby(['max_benefit_tech']).agg({'Calibrated_pop': lambda row: np.nansum(row) / 1000000,
+                                                               'maximum_net_benefit': lambda row: np.nansum(
+                                                                   row) / 1000000,
+                                                               'deaths_avoided': 'sum',
+                                                               'health_costs_avoided': lambda row: np.nansum(
+                                                                   row) / 1000000,
+                                                               'time_saved': 'sum',
+                                                               'opportunity_cost_gained': lambda row: np.nansum(
+                                                                   row) / 1000000,
+                                                               'reduced_emissions': lambda row: np.nansum(
+                                                                   row) / 1000000000,
+                                                               'emissions_costs_saved': lambda row: np.nansum(
+                                                                   row) / 1000000,
+                                                               'investment_costs': lambda row: np.nansum(row) / 1000000,
+                                                               'fuel_costs': lambda row: np.nansum(row) / 1000000,
+                                                               'om_costs': lambda row: np.nansum(row) / 1000000,
+                                                               'salvage_value': lambda row: np.nansum(row) / 1000000,
+                                                               }).reset_index()
+        if inplace:
+            self.summary = summary
+        else:
+            return summary
+
+    def plot_split(self, cmap=None, labels=None, save=False, height=1.5, width=2.5):
+        df = self.summary.copy()
+        df['max_benefit_tech'] = df['max_benefit_tech'].replace(labels)
+
+        tech_list = df.sort_values('Calibrated_pop')['max_benefit_tech'].tolist()
+        ccolor = 'black'
+
+        p = (ggplot(df)
+             + geom_col(aes(x='max_benefit_tech', y='Calibrated_pop', fill='max_benefit_tech'))
+             + geom_text(aes(y=df['Calibrated_pop'], x='max_benefit_tech',
+                             label=df['Calibrated_pop'] / df['Calibrated_pop'].sum()),
+                         format_string='{:.0%}',
+                         color=ccolor, size=8, va='center', ha='left')
+             + ylim(0, df['Calibrated_pop'].max() * 1.1)
+             + scale_x_discrete(limits=tech_list)
+             + scale_fill_manual(cmap)
+             + coord_flip()
+             + theme_minimal()
+             + theme(legend_position='none')
+             + labs(x='', y='Population (Millions)', fill='Cooking technology')
+             )
+        if save:
+            file = os.path.join(self.output_directory, 'tech_split.pdf')
+            p.save(file, height=height, width=width)
+        else:
+            return p
+
+    def plot_costs_benefits(self):
+        pass
+
+    def plot_benefit_distribution(self):
+        pass

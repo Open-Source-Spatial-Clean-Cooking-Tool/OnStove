@@ -23,15 +23,7 @@ model.run(technologies=['Electricity', 'LPG', 'Biogas',
                         ])
 
 # 4. Printing the results
-summary = model.gdf.groupby(['max_benefit_tech']).agg({'Calibrated_pop': lambda row: np.nansum(row) / 1000000,
-                                             'maximum_net_benefit': lambda row: np.nansum(row) / 1000000,
-                                             'deaths_avoided': 'sum',
-                                             'health_costs_avoided': lambda row: np.nansum(row) / 1000000,
-                                             'time_saved': 'sum',
-                                             'reduced_emissions': lambda row: np.nansum(row) / 1000000000,
-                                             'investment_costs': lambda row: np.nansum(row) / 1000000,
-                                             'fuel_costs': lambda row: np.nansum(row) / 1000000,
-                                             'emissions_costs_saved': lambda row: np.nansum(row) / 1000000})
+model.summary(inplace=True)
 
 # 5. Saving data to raster files
 # TODO: Update this to the ones in the nb
@@ -65,8 +57,10 @@ model.to_image('max_benefit_tech', cmap=cmap, legend_position=(1, 0.9),
                title=f'Maximum benefit technology | {country}', dpi=600,
                labels=labels, legend=True, legend_title='Maximum benefit\ncooking technology', rasterized=True)
 
+model.plot_split(cmap=cmap, labels=labels, save=True, height=1.5, width=2.5)
+
 print(f'[{country}] Saving the results')
 
-summary.to_csv(os.path.join(snakemake.params.output_directory, 'summary.csv'))
+model.summary.to_csv(os.path.join(snakemake.params.output_directory, 'summary.csv'), index=False)
 model.to_pickle('results.pkl')
 
