@@ -423,6 +423,17 @@ class RasterLayer(Layer):
             self.normalized = RasterLayer(self.category, self.name + ' - normalized',
                                           layer_path=output_file)
 
+    def polygonize(self, mask=None):
+        results = (
+            {'properties': {'raster_val': v}, 'geometry': s}
+             for i, (s, v)
+             in enumerate(features.shapes(self.layer, transform=self.meta['transform'])))
+
+        geoms = list(results)
+        polygon = gpd.GeoDataFrame.from_features(geoms)
+        polygon.crs = self.meta['crs']
+        return polygon
+
     def save(self, output_path, sufix=''):
         output_file = os.path.join(output_path,
                                    self.name + f'{sufix}.tif')

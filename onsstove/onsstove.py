@@ -1053,7 +1053,7 @@ class OnSSTOVE(DataProcessor):
                     f.write(f'{code} {r} {g} {b} 255 {label}\n')
 
     def plot(self, variable, cmap='viridis', cumulative_count=None, legend_position=(1.05, 1),
-             admin_layer=None, labels=None, legend=True, legend_title='', rasterized=True):
+             admin_layer=None, title=None, labels=None, legend=True, legend_title='', rasterized=True):
         raster, codes, cmap = self._create_layer(variable, labels=labels, cmap=cmap)
         if isinstance(admin_layer, gpd.GeoDataFrame):
             admin_layer = admin_layer
@@ -1061,7 +1061,8 @@ class OnSSTOVE(DataProcessor):
             admin_layer = self.mask_layer.layer
         raster.plot(cmap=cmap, cumulative_count=cumulative_count,
                     categories=codes, legend_position=legend_position,
-                    admin_layer=admin_layer, legend=legend, legend_title=legend_title, rasterized=rasterized)
+                    admin_layer=admin_layer, title=title, legend=legend,
+                    legend_title=legend_title, rasterized=rasterized)
 
     def to_image(self, variable, type='png',cmap='viridis', cumulative_count=None, legend_position=(1.05, 1),
                  admin_layer=None, title=None, dpi=300, labels=None, legend=True, legend_title='', rasterized=True):
