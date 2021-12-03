@@ -854,10 +854,18 @@ class OnSSTOVE(DataProcessor):
 
     def maximum_net_benefit(self, techs):
         net_benefit_cols = [col for col in self.gdf if 'net_benefit_' in col]
-        self.gdf["max_benefit_tech"] = self.gdf[net_benefit_cols].idxmax(axis=1)
+        benefits_cols = [col for col in self.gdf if 'benefits_' in col]
 
-        self.gdf['max_benefit_tech'] = self.gdf['max_benefit_tech'].str.replace("net_benefit_", "")
-        self.gdf["maximum_net_benefit"] = self.gdf[net_benefit_cols].max(axis=1)
+        for benefit, net in zip(benefits_cols, net_benefit_cols):
+            self.gdf[net + '_temp'] = self.gdf[net]
+            self.gdf.loc[self.gdf[benefit] < 0, net + '_temp'] = np.nan
+
+        temps = [col for col in self.gdf if '_temp' in col]
+        self.gdf["max_benefit_tech"] = self.gdf[temps].idxmax(axis=1)
+
+        self.gdf['max_benefit_tech'] = self.gdf['max_benefit_tech'].str.replace("net_benefit_" , "")
+        self.gdf['max_benefit_tech'] = self.gdf['max_benefit_tech'].str.replace("_temp", "")
+        self.gdf["maximum_net_benefit"] = self.gdf[temps].max(axis=1)
 
         gdf = gpd.GeoDataFrame()
         for tech in techs:
@@ -866,10 +874,14 @@ class OnSSTOVE(DataProcessor):
             dff = self.gdf.loc[current].copy()
             if current.sum() > 0:
                 dff.loc[current, "maximum_net_benefit"] *= tech.factor.loc[current]
+                dff.loc[current, f'net_benefit_{tech.name}_temp'] = np.nan
 
-                second_benefit_cols = [col for col in dff if 'net_benefit_' in col]
-                second_benefit_cols.remove(f'net_benefit_{tech.name}')
-                second_best = dff.loc[current, second_benefit_cols].idxmax(axis=1).str.replace("net_benefit_", "")
+                second_benefit_cols = temps.copy()
+                second_benefit_cols.remove(f'net_benefit_{tech.name}_temp')
+                second_best = dff.loc[current, second_benefit_cols].idxmax(axis=1)
+
+                second_best = second_best.str.replace("net_benefit_" , "")
+                second_best = second_best.str.replace("_temp", "")
 
                 second_best_value = dff.loc[current, second_benefit_cols].max(axis=1) * (1 - tech.factor.loc[current])
                 second_tech_net_benefit = second_best_value
@@ -887,6 +899,11 @@ class OnSSTOVE(DataProcessor):
                 gdf = gdf.append(dff)
 
         self.gdf = self.gdf.append(gdf)
+        isna = self.gdf["max_benefit_tech"].isna()
+        self.gdf.loc[isna, 'max_benefit_tech'] = self.gdf.loc[isna, net_benefit_cols].idxmax(axis=1)
+        self.gdf['max_benefit_tech'] = self.gdf['max_benefit_tech'].str.replace("net_benefit_" , "")
+        self.gdf['max_benefit_tech'] = self.gdf['max_benefit_tech'].str.replace("_temp", "")
+        self.gdf.loc[isna, "maximum_net_benefit"] = self.gdf.loc[isna, net_benefit_cols].max(axis=1)
 
     def add_admin_names(self, admin, column_name):
 

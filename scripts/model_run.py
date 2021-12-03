@@ -57,7 +57,8 @@ model.to_image('max_benefit_tech', cmap=cmap, legend_position=(1, 0.9),
                title=f'Maximum benefit technology | {country}', dpi=600,
                labels=labels, legend=True, legend_title='Maximum benefit\ncooking technology', rasterized=True)
 
-model.plot_split(cmap=cmap, labels=labels, save=True, height=1.5, width=2.5)
+#TODO: Make it work
+#model.plot_split(cmap=cmap, labels=labels, save=True, height=1.5, width=2.5)
 
 print(f'[{country}] Saving the results')
 
