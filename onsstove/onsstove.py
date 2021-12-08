@@ -868,10 +868,11 @@ class OnSSTOVE(DataProcessor):
         self.gdf["maximum_net_benefit"] = self.gdf[temps].max(axis=1)
 
         gdf = gpd.GeoDataFrame()
+        gdf_copy = self.gdf.copy()
         for tech in techs:
-            current = (tech.households < self.gdf['Households']) & \
-                      (self.gdf["max_benefit_tech"] == tech.name)
-            dff = self.gdf.loc[current].copy()
+            current = (tech.households < gdf_copy['Households']) & \
+                      (gdf_copy["max_benefit_tech"] == tech.name)
+            dff = gdf_copy.loc[current].copy()
             if current.sum() > 0:
                 dff.loc[current, "maximum_net_benefit"] *= tech.factor.loc[current]
                 dff.loc[current, f'net_benefit_{tech.name}_temp'] = np.nan
@@ -883,8 +884,7 @@ class OnSSTOVE(DataProcessor):
                 second_best = second_best.str.replace("net_benefit_" , "")
                 second_best = second_best.str.replace("_temp", "")
 
-                second_best_value = dff.loc[current, second_benefit_cols].max(axis=1) * (1 - tech.factor.loc[current])
-                second_tech_net_benefit = second_best_value
+                second_tech_net_benefit = dff.loc[current, second_benefit_cols].max(axis=1) * (1 - tech.factor.loc[current])
 
                 dff['max_benefit_tech'] = second_best
                 dff['maximum_net_benefit'] = second_tech_net_benefit
