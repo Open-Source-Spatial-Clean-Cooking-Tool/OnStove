@@ -934,8 +934,7 @@ class Biogas(Technology):
 
     def net_benefit(self, model, w_health=1, w_environment=1, w_social=1, w_costs=1):
         super().net_benefit(model, w_health, w_environment, w_social, w_costs)
-        model.gdf.loc[(model.gdf['biogas_energy_hh'] == 0) & \
-                      (model.gdf["net_benefit_{}".format(self.name)] > 0), "net_benefit_{}".format(self.name)] = 0
+        model.gdf.loc[(model.gdf['biogas_energy_hh'] == 0), "net_benefit_{}".format(self.name)] = np.nan
         factor = model.gdf['biogas_energy'] / (self.energy * model.gdf['Households'])
         factor[factor > 1] = 1
         self.households = model.gdf['Households'] * factor

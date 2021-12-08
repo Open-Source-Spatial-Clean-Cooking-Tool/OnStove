@@ -899,11 +899,20 @@ class OnSSTOVE(DataProcessor):
                 gdf = gdf.append(dff)
 
         self.gdf = self.gdf.append(gdf)
+
+        for net in net_benefit_cols:
+            self.gdf[net + '_temp'] = self.gdf[net]
+
+        temps = [col for col in self.gdf if 'temp' in col]
+
+        for tech in self.gdf["max_benefit_tech"].unique():
+            self.gdf[f'net_benefit_{tech}_temp'] = np.nan
+
         isna = self.gdf["max_benefit_tech"].isna()
-        self.gdf.loc[isna, 'max_benefit_tech'] = self.gdf.loc[isna, net_benefit_cols].idxmax(axis=1)
+        self.gdf.loc[isna, 'max_benefit_tech'] = self.gdf.loc[isna, temps].idxmax(axis=1)
         self.gdf['max_benefit_tech'] = self.gdf['max_benefit_tech'].str.replace("net_benefit_" , "")
         self.gdf['max_benefit_tech'] = self.gdf['max_benefit_tech'].str.replace("_temp", "")
-        self.gdf.loc[isna, "maximum_net_benefit"] = self.gdf.loc[isna, net_benefit_cols].max(axis=1)
+        self.gdf.loc[isna, "maximum_net_benefit"] = self.gdf.loc[isna, temps].max(axis=1)
 
     def add_admin_names(self, admin, column_name):
 
