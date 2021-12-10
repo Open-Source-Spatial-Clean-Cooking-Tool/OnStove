@@ -451,7 +451,10 @@ class OnSSTOVE(DataProcessor):
             self.base_fuel = base_fuels[0]
             self.base_fuel.carb(self)
             self.base_fuel.total_time(self)
+            self.base_fuel.required_energy(self)
             self.base_fuel.health_parameters(self)
+            if isinstance(tech, LPG):
+                self.base_fuel.transportation_cost(self)
         else:
             if len(base_fuels) == 0:
                 base_fuels = techs

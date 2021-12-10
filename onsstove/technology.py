@@ -516,7 +516,7 @@ class Technology:
         salvage[-1] = self.inv_cost * (1 - used_life / self.tech_life)
 
         salvage = salvage.sum() - base_salvage
-
+        # TODO: this needs to be changed to use a series for each salvage value
         discounted_salvage = salvage / discount_rate
 
         self.discounted_salvage_cost = discounted_salvage
@@ -536,7 +536,7 @@ class Technology:
         while i < proj_life:
             operation_and_maintenance[i] = 0
             i = i + self.tech_life
-
+        # TODO: this needs to be changed to use a series for each om value
         discounted_om_cost = operation_and_maintenance.sum() / discount_rate
 
         self.discounted_om_costs = discounted_om_cost
@@ -934,6 +934,7 @@ class Biogas(Technology):
 
     def net_benefit(self, model, w_health=1, w_environment=1, w_social=1, w_costs=1):
         super().net_benefit(model, w_health, w_environment, w_social, w_costs)
+        # model.gdf.loc[(model.gdf['biogas_energy_hh'] == 0), "benefits_{}".format(self.name)] = np.nan
         model.gdf.loc[(model.gdf['biogas_energy_hh'] == 0), "net_benefit_{}".format(self.name)] = np.nan
         factor = model.gdf['biogas_energy'] / (self.energy * model.gdf['Households'])
         factor[factor > 1] = 1

@@ -48,7 +48,7 @@ model.to_raster('net_benefit_LPG')
 model.to_raster('net_benefit_Collected_Traditional_Biomass')
 model.to_raster('net_benefit_Collected_Improved_Biomass')
 model.to_raster('maximum_net_benefit')
-# model.to_raster('investment_costs')
+model.to_raster('investment_costs')
 
 model.to_image('maximum_net_benefit', cmap='Spectral', cumulative_count=[0.01, 0.99],
                title=f'Maximum net benefit | {country}', dpi=600,
