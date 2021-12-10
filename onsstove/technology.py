@@ -560,10 +560,20 @@ class Technology:
             investments[i] = self.inv_cost
             i = i + self.tech_life
 
+        base_investments = np.zeros(model.base_fuel.inv_cost.shape[0])
+        j = 0
+        for cost, life in zip(model.base_fuel.inv_cost, model.base_fuel.tech_life):
+            _base_investments = np.zeros(proj_life)
+            i = life
+            while i < proj_life:
+                _base_investments[life] = cost
+                base_investments[j] = _base_investments
+                i = i + life
+                j += 1
 
         #discounted_investments = (model.base_fuel.inv_cost - investments) / discount_rate
         # TODO: the + self.inv_cost  is a workaround to account for the investment in year 0
-        investments_discounted = np.array([sum((investments - x) / discount_rate) for x in model.base_fuel.inv_cost])
+        investments_discounted = np.array([sum((investments - x) / discount_rate) for x in base_investments])
         self.discounted_investments = pd.Series(investments_discounted, index=model.gdf.index) + (self.inv_cost - model.base_fuel.inv_cost)
 
     def discount_fuel_cost(self, model):

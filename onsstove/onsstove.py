@@ -22,7 +22,8 @@ from plotnine import (
     coord_flip,
     theme_minimal,
     theme,
-    labs
+    labs,
+    scale_fill_brewer
 )
 
 from onsstove.technology import Technology, LPG, Biomass, Electricity, Biogas
@@ -480,7 +481,6 @@ class OnSSTOVE(DataProcessor):
                     tech.transportation_cost(self)
 
                 base_fuel.tech_life += tech.tech_life * current_share
-
 
                 tech.health_parameters(self)
 
@@ -1134,7 +1134,7 @@ class OnSSTOVE(DataProcessor):
     def read_data(self, path):
         self.gdf = gpd.read_file(path)
 
-    def summary(self, inplace=False):
+    def summary(self):
         summary = self.gdf.groupby(['max_benefit_tech']).agg({'Calibrated_pop': lambda row: np.nansum(row) / 1000000,
                                                                'maximum_net_benefit': lambda row: np.nansum(
                                                                    row) / 1000000,
@@ -1153,13 +1153,11 @@ class OnSSTOVE(DataProcessor):
                                                                'om_costs': lambda row: np.nansum(row) / 1000000,
                                                                'salvage_value': lambda row: np.nansum(row) / 1000000,
                                                                }).reset_index()
-        if inplace:
-            self.summary = summary
-        else:
-            return summary
+
+        return summary
 
     def plot_split(self, cmap=None, labels=None, save=False, height=1.5, width=2.5):
-        df = self.summary.copy()
+        df = self.summary()
         df['max_benefit_tech'] = df['max_benefit_tech'].replace(labels)
 
         tech_list = df.sort_values('Calibrated_pop')['max_benefit_tech'].tolist()
@@ -1171,7 +1169,7 @@ class OnSSTOVE(DataProcessor):
                              label=df['Calibrated_pop'] / df['Calibrated_pop'].sum()),
                          format_string='{:.0%}',
                          color=ccolor, size=8, va='center', ha='left')
-             + ylim(0, df['Calibrated_pop'].max() * 1.1)
+             + ylim(0, df['Calibrated_pop'].max() * 1.15)
              + scale_x_discrete(limits=tech_list)
              + scale_fill_manual(cmap)
              + coord_flip()
@@ -1185,8 +1183,52 @@ class OnSSTOVE(DataProcessor):
         else:
             return p
 
-    def plot_costs_benefits(self):
-        pass
+    def plot_costs_benefits(self, cmap=None, labels=None, save=False, height=1.5, width=2.5):
+        df = self.summary()
+        df['max_benefit_tech'] = df['max_benefit_tech'].replace(labels)
+        df['investment_costs'] -= df['salvage_value']
+        df['fuel_costs'] *= -1
+        df['investment_costs'] *= -1
+        df['om_costs'] *= -1
+
+        dff = df.melt(id_vars=['max_benefit_tech'], value_vars=['health_costs_avoided',
+                                                                'investment_costs',
+                                                                'fuel_costs',
+                                                                'emissions_costs_saved',
+                                                                'om_costs',
+                                                                'opportunity_cost_gained'])
+
+        dff['variable'] = dff['variable'].str.replace('_', ' ').str.capitalize()
+
+        if cmap is None:
+            cmap = {'Health costs avoided': '#542788', 'Investment costs': '#b35806',
+                    'Fuel costs': '#f1a340', 'Emissions costs saved': '#998ec3',
+                    'Om costs': '#fee0b6', 'Opportunity cost gained': '#d8daeb'}
+
+        tech_list = df.sort_values('Calibrated_pop')['max_benefit_tech'].tolist()
+        cat_order = ['Health costs avoided',
+                     'Emissions costs saved',
+                     'Opportunity cost gained',
+                     'Investment costs',
+                     'Fuel costs',
+                     'Om costs']
+
+        dff['variable'] = pd.Categorical(dff['variable'], categories=cat_order, ordered=True)
+
+        p = (ggplot(dff)
+             + geom_col(aes(x='max_benefit_tech', y='value/1000', fill='variable'))
+             + scale_x_discrete(limits=tech_list)
+             + scale_fill_manual(cmap)
+             + coord_flip()
+             + theme_minimal()
+             + labs(x='', y='Billion USD', fill='Cost / Benefit')
+             )
+
+        if save:
+            file = os.path.join(self.output_directory, 'benefits_costs.pdf')
+            p.save(file, height=height, width=width)
+        else:
+            return p
 
     def plot_benefit_distribution(self):
         pass
