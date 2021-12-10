@@ -1,3 +1,5 @@
+from copy import copy
+
 import dill
 from csv import DictReader
 
@@ -448,27 +450,48 @@ class OnSSTOVE(DataProcessor):
             if tech.is_base:
                 base_fuels.append(tech)
         if len(base_fuels) == 1:
-            self.base_fuel = base_fuels[0]
+            self.base_fuel = copy(base_fuels[0])
             self.base_fuel.carb(self)
             self.base_fuel.total_time(self)
+            self.base_fuel.required_energy(self)
             self.base_fuel.health_parameters(self)
+            if isinstance(tech, LPG):
+                self.base_fuel.transportation_cost(self)
+            self.base_fuel.inv_cost = pd.Series([self.base_fuel.inv_cost] * self.gdf.shape[0],
+                                                index=self.gdf.index)
         else:
             if len(base_fuels) == 0:
                 base_fuels = techs
             base_fuel = Technology(name='Base fuel')
             base_fuel.carbon = 0
             base_fuel.total_time_yr = 0
+
             for tech in base_fuels:
-                if tech.carbon is None:
-                    tech.carb(self)
-                if tech.total_time_yr is None:
-                    tech.total_time(self)
-                tech.health_parameters(self)
+
                 current_share = (self.gdf['IsUrban'] > 20) * tech.current_share_urban
                 current_share[self.gdf['IsUrban'] < 20] = tech.current_share_rural
 
+
+                tech.carb(self)
+                tech.total_time(self)
+                tech.required_energy(self)
+
+                if isinstance(tech, LPG):
+                    tech.transportation_cost(self)
+
+                base_fuel.tech_life += tech.tech_life * current_share
+
+
+                tech.health_parameters(self)
+
                 base_fuel.carbon += tech.carbon * current_share
                 base_fuel.total_time_yr += tech.total_time_yr * current_share
+                base_fuel.inv_cost += tech.inv_cost * current_share
+                base_fuel.fuel_cost += tech.fuel_cost * current_share
+                base_fuel.energy_content += tech.energy_content * current_share
+                base_fuel.energy += tech.energy * current_share
+                base_fuel.transport_cost += tech.transport_cost * current_share
+
                 for paf in ['paf_alri_r', 'paf_copd_r', 'paf_ihd_r',
                             'paf_lc_r', 'paf_stroke_r']:
                     base_fuel[paf] += tech[paf] * tech.current_share_rural
@@ -838,25 +861,38 @@ class OnSSTOVE(DataProcessor):
 
     def maximum_net_benefit(self, techs):
         net_benefit_cols = [col for col in self.gdf if 'net_benefit_' in col]
-        self.gdf["max_benefit_tech"] = self.gdf[net_benefit_cols].idxmax(axis=1)
+        benefits_cols = [col for col in self.gdf if 'benefits_' in col]
+
+        for benefit, net in zip(benefits_cols, net_benefit_cols):
+            self.gdf[net + '_temp'] = self.gdf[net]
+            self.gdf.loc[self.gdf[benefit] < 0, net + '_temp'] = np.nan
+
+        temps = [col for col in self.gdf if '_temp' in col]
+        self.gdf["max_benefit_tech"] = self.gdf[temps].idxmax(axis=1)
 
         self.gdf['max_benefit_tech'] = self.gdf['max_benefit_tech'].str.replace("net_benefit_", "")
-        self.gdf["maximum_net_benefit"] = self.gdf[net_benefit_cols].max(axis=1)
+        self.gdf['max_benefit_tech'] = self.gdf['max_benefit_tech'].str.replace("_temp", "")
+        self.gdf["maximum_net_benefit"] = self.gdf[temps].max(axis=1)
 
         gdf = gpd.GeoDataFrame()
+        gdf_copy = self.gdf.copy()
         for tech in techs:
-            current = (tech.households < self.gdf['Households']) & \
-                      (self.gdf["max_benefit_tech"] == tech.name)
-            dff = self.gdf.loc[current].copy()
+            current = (tech.households < gdf_copy['Households']) & \
+                      (gdf_copy["max_benefit_tech"] == tech.name)
+            dff = gdf_copy.loc[current].copy()
             if current.sum() > 0:
                 dff.loc[current, "maximum_net_benefit"] *= tech.factor.loc[current]
+                dff.loc[current, f'net_benefit_{tech.name}_temp'] = np.nan
 
-                second_benefit_cols = [col for col in dff if 'net_benefit_' in col]
-                second_benefit_cols.remove(f'net_benefit_{tech.name}')
-                second_best = dff.loc[current, second_benefit_cols].idxmax(axis=1).str.replace("net_benefit_", "")
+                second_benefit_cols = temps.copy()
+                second_benefit_cols.remove(f'net_benefit_{tech.name}_temp')
+                second_best = dff.loc[current, second_benefit_cols].idxmax(axis=1)
 
-                second_best_value = dff.loc[current, second_benefit_cols].max(axis=1) * (1 - tech.factor.loc[current])
-                second_tech_net_benefit = second_best_value
+
+                second_best = second_best.str.replace("net_benefit_", "")
+                second_best = second_best.str.replace("_temp", "")
+
+                second_tech_net_benefit = dff.loc[current, second_benefit_cols].max(axis=1) * (1 - tech.factor.loc[current])
 
                 dff['max_benefit_tech'] = second_best
                 dff['maximum_net_benefit'] = second_tech_net_benefit
@@ -871,6 +907,21 @@ class OnSSTOVE(DataProcessor):
                 gdf = gdf.append(dff)
 
         self.gdf = self.gdf.append(gdf)
+
+        for net in net_benefit_cols:
+            self.gdf[net + '_temp'] = self.gdf[net]
+
+        temps = [col for col in self.gdf if 'temp' in col]
+
+        for tech in self.gdf["max_benefit_tech"].unique():
+            index = self.gdf.loc[self.gdf['max_benefit_tech'] == tech].index
+            self.gdf.loc[index, f'net_benefit_{tech}_temp'] = np.nan
+
+        isna = self.gdf["max_benefit_tech"].isna()
+        self.gdf.loc[isna, 'max_benefit_tech'] = self.gdf.loc[isna, temps].idxmax(axis=1)
+        self.gdf['max_benefit_tech'] = self.gdf['max_benefit_tech'].str.replace("net_benefit_", "")
+        self.gdf['max_benefit_tech'] = self.gdf['max_benefit_tech'].str.replace("_temp", "")
+        self.gdf.loc[isna, "maximum_net_benefit"] = self.gdf.loc[isna, temps].max(axis=1)
 
     def add_admin_names(self, admin, column_name):
 
@@ -916,7 +967,7 @@ class OnSSTOVE(DataProcessor):
     def extract_investment_costs(self):
 
         self.gdf["investment_costs"] = self.gdf.apply(
-            lambda row: self.techs[row['max_benefit_tech']].discounted_investments, axis=1) * self.gdf["Households"]
+            lambda row: self.techs[row['max_benefit_tech']].discounted_investments[row.name], axis=1) * self.gdf["Households"]
 
     def extract_om_costs(self):
 
@@ -932,7 +983,7 @@ class OnSSTOVE(DataProcessor):
     def extract_salvage(self):
 
         self.gdf["salvage_value"] = self.gdf.apply(
-            lambda row: self.techs[row['max_benefit_tech']].discounted_salvage_cost, axis=1) * self.gdf["Households"]
+            lambda row: self.techs[row['max_benefit_tech']].discounted_salvage_cost[row.name], axis=1) * self.gdf["Households"]
 
     def extract_emissions_costs_saved(self):
         # TODO: Fix this

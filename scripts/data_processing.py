@@ -2,7 +2,7 @@ import os
 import sys
 import numpy as np
 
-sys.path.append(r"C:\Users\camilorg\Box Sync\OnSSTOVE")
+sys.path.append(r"C:\Users\camilorg\Box sync\OnSSTOVE")
 from onsstove.onsstove import DataProcessor
 from onsstove.layer import VectorLayer
 
