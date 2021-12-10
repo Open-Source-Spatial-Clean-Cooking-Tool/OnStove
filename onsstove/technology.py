@@ -536,10 +536,10 @@ class Technology:
         while i < proj_life:
             operation_and_maintenance[i] = 0
             i = i + self.tech_life
-        # TODO: this needs to be changed to use a series for each om value
-        discounted_om_cost = operation_and_maintenance.sum() / discount_rate
+        # TODO: this needs to be changed to use a series for each om value adn relative to the base fuel
+        discounted_om_cost = operation_and_maintenance / discount_rate
 
-        self.discounted_om_costs = discounted_om_cost
+        self.discounted_om_costs = discounted_om_cost.sum()
 
     def discounted_inv(self, model):
         """
@@ -564,7 +564,7 @@ class Technology:
         #discounted_investments = (model.base_fuel.inv_cost - investments) / discount_rate
         # TODO: the + self.inv_cost  is a workaround to account for the investment in year 0
         investments_discounted = np.array([sum((investments - x) / discount_rate) for x in model.base_fuel.inv_cost])
-        self.discounted_investments = pd.Series(investments_discounted, index=model.gdf.index) + self.inv_cost
+        self.discounted_investments = pd.Series(investments_discounted, index=model.gdf.index) + (self.inv_cost - model.base_fuel.inv_cost)
 
     def discount_fuel_cost(self, model):
         self.required_energy(model)

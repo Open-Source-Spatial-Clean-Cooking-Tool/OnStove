@@ -1,3 +1,5 @@
+from copy import copy
+
 import dill
 from csv import DictReader
 
@@ -448,13 +450,15 @@ class OnSSTOVE(DataProcessor):
             if tech.is_base:
                 base_fuels.append(tech)
         if len(base_fuels) == 1:
-            self.base_fuel = base_fuels[0]
+            self.base_fuel = copy(base_fuels[0])
             self.base_fuel.carb(self)
             self.base_fuel.total_time(self)
             self.base_fuel.required_energy(self)
             self.base_fuel.health_parameters(self)
             if isinstance(tech, LPG):
                 self.base_fuel.transportation_cost(self)
+            self.base_fuel.inv_cost = pd.Series([self.base_fuel.inv_cost] * self.gdf.shape[0],
+                                                index=self.gdf.index)
         else:
             if len(base_fuels) == 0:
                 base_fuels = techs
