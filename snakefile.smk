@@ -1,8 +1,11 @@
+import os
+cwd = os.getcwd()
+
 SCENARIOS = ['LPG International price - Rural-Urban']
 SENSITIVITY = ['All_benefits', 'Health_benefits', 'Social_benefits', 'Environment_benefits']
 # SENSITIVITY, = glob_wildcards("../Clean cooking Africa paper/04. OnSSTOVE inputs/LPG International price - Rural-Urban/Sensitivity_files/{sensitivity}/BDI_scenario_file.csv")
 
-COUNTRIES = ['ZAF']
+COUNTRIES = ['AGO', 'BDI', 'ZAF', 'TZA']
 
 # COUNTRIES = ['AGO', 'BDI', 'BEN', 'BFA', 'BWA', 'CAF', 'CIV', 'CMR',
 #              'COD', 'COG', 'ERI', 'ETH', 'GAB', 'GHA', 'GIN',
@@ -120,6 +123,29 @@ rule run_model:
           results = "../Clean cooking Africa paper/06. Results/{scenario}/{country}/{sensitivity}/results.pkl",
     script:
           "scripts/model_run.py"
+
+rule main_plot:
+    input:
+         tech_split = "../Clean cooking Africa paper/06. Results/{scenario}/{country}/{sensitivity}/tech_split.pdf",
+         max_benefits = "../Clean cooking Africa paper/06. Results/{scenario}/{country}/{sensitivity}/max_benefits_box.pdf",
+         benefits_costs = "../Clean cooking Africa paper/06. Results/{scenario}/{country}/{sensitivity}/benefits_costs.pdf",
+         max_benefit_tech = "../Clean cooking Africa paper/06. Results/{scenario}/{country}/{sensitivity}/max_benefit_tech.pdf"
+    params:
+          path = "../Clean cooking Africa paper/06. Results/{scenario}/{country}/{sensitivity}/",
+    output:
+          main_plot = "../Clean cooking Africa paper/06. Results/{scenario}/{country}/{sensitivity}/main_plot.pdf"
+    shell:
+         """
+         pdflatex "\\newcommand\path{{"{params.path}"}}\input{{scripts/main_plot.tex}}" -output-directory "{params.path}"
+         """
+
+rule get_main_plot:
+    input:
+         expand("../Clean cooking Africa paper/06. Results/{scenario}/{country}/{sensitivity}/main_plot.pdf",
+                country=COUNTRIES,
+                sensitivity=SENSITIVITY,
+                scenario=SCENARIOS)
+
 
 rule merge_results:
     input:

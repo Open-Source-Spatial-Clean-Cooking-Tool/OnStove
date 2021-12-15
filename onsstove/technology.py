@@ -3,7 +3,7 @@ import pandas as pd
 import os
 import rasterio
 
-from math import exp
+from math import exp, ceil
 
 from rasterio.fill import fillnodata
 
@@ -564,11 +564,11 @@ class Technology:
         j = 0
         for cost, life in zip(model.base_fuel.inv_cost, model.base_fuel.tech_life):
             _base_investments = np.zeros(proj_life)
-            i = life
+            i = ceil(life)
             while i < proj_life:
-                _base_investments[life] = cost
+                _base_investments[i] = cost
                 base_investments[j] = _base_investments
-                i = i + life
+                i = i + ceil(life)
                 j += 1
 
         #discounted_investments = (model.base_fuel.inv_cost - investments) / discount_rate

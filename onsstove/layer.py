@@ -501,7 +501,7 @@ class RasterLayer(Layer):
                 layer[(layer >= qs[i - 1]) & (layer < qs[i])] = qs[i]
         return layer
 
-    def category_legend(self, im, categories, legend_position=(1.05, 1), title=''):
+    def category_legend(self, im, categories, legend_position=(1.05, 1), title='', legend_cols=1):
         values = list(categories.values())
         titles = list(categories.keys())
 
@@ -509,14 +509,14 @@ class RasterLayer(Layer):
         # create a patch (proxy artist) for every color
         patches = [mpatches.Patch(color=colors[i], label="{}".format(titles[i])) for i in range(len(values))]
         # put those patched as legend-handles into the legend
-        legend = plt.legend(handles=patches, bbox_to_anchor=legend_position, loc=2, borderaxespad=0.)
+        legend = plt.legend(handles=patches, bbox_to_anchor=legend_position, loc=2, borderaxespad=0., ncol=legend_cols)
         legend.set_title(title, prop={'size': 12, 'weight': 'bold'})
         legend._legend_box.align = "left"
-        plt.grid(True)
 
     def plot(self, cmap='viridis', ticks=None, tick_labels=None,
              cumulative_count=None, quantiles=None, categories=None, legend_position=(1.05, 1),
-             admin_layer=None, title=None, ax=None, legend=True, legend_title='', rasterized=True):
+             admin_layer=None, title=None, ax=None, dpi=150, legend=True, legend_title='', legend_cols=1,
+             rasterized=True):
         extent = [self.bounds[0], self.bounds[2],
                   self.bounds[1], self.bounds[3]]  # [left, right, bottom, top]
 
@@ -532,17 +532,17 @@ class RasterLayer(Layer):
         layer[layer == self.meta['nodata']] = np.nan
 
         if ax is None:
-            fig, ax = plt.subplots(1, 1, figsize=(16, 9))
+            fig, ax = plt.subplots(1, 1, figsize=(16, 9), dpi=dpi)
 
         if isinstance(cmap, dict):
             values = np.sort(np.unique(layer[~np.isnan(layer)]))
             cmap = ListedColormap([to_rgb(cmap[i]) for i in values])
         cax = ax.imshow(layer, cmap=cmap, extent=extent, interpolation='none', zorder=1, rasterized=rasterized)
 
-        ax.set_axis_off()
         if legend:
             if categories:
-                self.category_legend(cax, categories, legend_position=legend_position, title=legend_title)
+                self.category_legend(cax, categories, legend_position=legend_position,
+                                     title=legend_title, legend_cols=legend_cols)
             else:
                 colorbar = dict(shrink=0.8)
                 if ticks:
@@ -559,14 +559,24 @@ class RasterLayer(Layer):
         if title:
             plt.title(title, loc='left')
 
+        ax.get_xaxis().set_visible(False)
+        ax.get_yaxis().set_visible(False)
+
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.spines['bottom'].set_visible(False)
+        ax.spines['left'].set_visible(False)
+
     def save_image(self, output_path, type='png', cmap='viridis', ticks=None, tick_labels=None,
                    cumulative_count=None, categories=None, legend_position=(1.05, 1),
-                   admin_layer=None, title=None, dpi=300, legend=True, legend_title='', rasterized=True):
+                   admin_layer=None, title=None, ax=None, dpi=300,
+                   legend=True, legend_title='', legend_cols=1, rasterized=True):
         os.makedirs(output_path, exist_ok=True)
         output_file = os.path.join(output_path,
                                    self.name + f'.{type}')
         self.plot(cmap=cmap, ticks=ticks, tick_labels=tick_labels, cumulative_count=cumulative_count,
                   categories=categories, legend_position=legend_position, rasterized=rasterized,
-                  admin_layer=admin_layer, title=title, legend=legend, legend_title=legend_title)
-        plt.savefig(output_file, dpi=dpi, bbox_inches='tight')
+                  admin_layer=admin_layer, title=title, ax=ax, dpi=dpi,
+                  legend=legend, legend_title=legend_title, legend_cols=legend_cols)
+        plt.savefig(output_file, dpi=dpi, bbox_inches='tight', transparent=True)
         plt.close()
