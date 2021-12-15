@@ -10,6 +10,7 @@ dependencies:
   - json
   - jupyterlab
   - matplotlib
+  - plotnine
   - psycopg2
   - psutil
   - python-decouple
