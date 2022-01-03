@@ -73,8 +73,11 @@ class Layer:
         row, col = self.start_points(condition=condition)
         pointlist = np.column_stack((row, col))
         # TODO: create method for restricted areas
-        cumulative_costs, traceback = mcp.find_costs(starts=pointlist)
-        cumulative_costs[np.where(cumulative_costs == float('inf'))] = np.nan
+        if len(pointlist)>0:
+            cumulative_costs, traceback = mcp.find_costs(starts=pointlist)
+            cumulative_costs[np.where(cumulative_costs == float('inf'))] = np.nan
+        else:
+            cumulative_costs = np.full(self.friction.layer.shape, 2)
 
         self.distance_raster = RasterLayer(self.category,
                                            self.name + ' - traveltime',
@@ -87,7 +90,6 @@ class Layer:
         self.distance_raster.bounds = self.friction.bounds
         if output_path:
             self.distance_raster.save(output_path)
-
 
 class VectorLayer(Layer):
     """
