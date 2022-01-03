@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 from matplotlib import cm
 from matplotlib.colors import to_rgb
 from rasterio.warp import transform_bounds
+from matplotlib.offsetbox import (TextArea, AnnotationBbox, VPacker, HPacker)
 
 from plotnine import (
     ggplot,
@@ -19,10 +20,15 @@ from plotnine import (
     ylim,
     scale_x_discrete,
     scale_fill_manual,
+    scale_color_manual,
     coord_flip,
     theme_minimal,
     theme,
-    labs
+    labs,
+    geom_boxplot,
+    geom_density,
+    after_stat,
+    scale_y_log10
 )
 
 from onsstove.technology import Technology, LPG, Biomass, Electricity, Biogas
@@ -480,7 +486,6 @@ class OnSSTOVE(DataProcessor):
                     tech.transportation_cost(self)
 
                 base_fuel.tech_life += tech.tech_life * current_share
-
 
                 tech.health_parameters(self)
 
@@ -1103,29 +1108,79 @@ class OnSSTOVE(DataProcessor):
                     b = int(to_rgb(cmap[code])[2] * 255)
                     f.write(f'{code} {r} {g} {b} 255 {label}\n')
 
-    def plot(self, variable, cmap='viridis', cumulative_count=None, legend_position=(1.05, 1),
-             admin_layer=None, labels=None, legend=True, legend_title='', rasterized=True):
+    def plot(self, variable, cmap='viridis', cumulative_count=None, legend_position=(1.05, 1), dpi=150,
+             admin_layer=None, title=None, labels=None, legend=True, legend_title='', legend_cols=1, rasterized=True,
+             stats=False, stats_position=(1.05, 0.5)):
         raster, codes, cmap = self._create_layer(variable, labels=labels, cmap=cmap)
         if isinstance(admin_layer, gpd.GeoDataFrame):
             admin_layer = admin_layer
         elif not admin_layer:
             admin_layer = self.mask_layer.layer
+        if stats:
+            fig, ax = plt.subplots(1, 1, figsize=(16, 9), dpi=dpi)
+            self.add_statistics(ax, stats_position)
+        else:
+            ax = None
+
         raster.plot(cmap=cmap, cumulative_count=cumulative_count,
                     categories=codes, legend_position=legend_position,
-                    admin_layer=admin_layer, legend=legend, legend_title=legend_title, rasterized=rasterized)
+                    admin_layer=admin_layer, title=title, legend=legend,
+                    legend_title=legend_title, legend_cols=legend_cols, rasterized=rasterized,
+                    ax=ax)
 
-    def to_image(self, variable, type='png',cmap='viridis', cumulative_count=None, legend_position=(1.05, 1),
-                 admin_layer=None, title=None, dpi=300, labels=None, legend=True, legend_title='', rasterized=True):
+    def add_statistics(self, ax, stats_position):
+        summary = self.summary(total=True)
+        deaths = TextArea("Deaths avoided", textprops=dict(fontsize=12, color='black'))
+        health = TextArea("Health costs avoided", textprops=dict(fontsize=12, color='black'))
+        emissions = TextArea("Emissions avoided", textprops=dict(fontsize=12, color='black'))
+        time = TextArea("Time saved", textprops=dict(fontsize=12, color='black'))
+
+        texts_vbox = VPacker(children=[deaths, health, emissions, time], pad=0, sep=6)
+
+        deaths_avoided = summary.loc['total', 'deaths_avoided']
+        health_costs_avoided = summary.loc['total', 'health_costs_avoided']
+        reduced_emissions = summary.loc['total', 'reduced_emissions']
+        time_saved = summary.loc['total', 'time_saved']
+
+        deaths = TextArea(f"{deaths_avoided:.0f} pp/yr", textprops=dict(fontsize=12, color='black'))
+        health = TextArea(f"{health_costs_avoided:.2f} b.USD", textprops=dict(fontsize=12, color='black'))
+        emissions = TextArea(f"{reduced_emissions:.2f} Mton", textprops=dict(fontsize=12, color='black'))
+        time = TextArea(f"{time_saved:.2f} h/pp.day", textprops=dict(fontsize=12, color='black'))
+
+        values_vbox = VPacker(children=[deaths, health, emissions, time], pad=0, sep=6, align='right')
+
+        hvox = HPacker(children=[texts_vbox, values_vbox], pad=0, sep=6)
+
+        ab = AnnotationBbox(hvox, stats_position,
+                            xycoords='axes fraction',
+                            box_alignment=(0, 0),
+                            pad=0.0,
+                            bboxprops=dict(boxstyle='round',
+                                           facecolor='#f1f1f1ff',
+                                           edgecolor='lightgray'))
+
+        ax.add_artist(ab)
+
+    def to_image(self, variable, type='png', cmap='viridis', cumulative_count=None, legend_position=(1.05, 1),
+                 admin_layer=None, title=None, dpi=300, labels=None, legend=True, legend_title='', legend_cols=1,
+                 rasterized=True, stats=False, stats_position=(1.05, 0.5)):
         raster, codes, cmap = self._create_layer(variable, labels=labels, cmap=cmap)
         raster.bounds = self.base_layer.bounds
         if isinstance(admin_layer, gpd.GeoDataFrame):
             admin_layer = admin_layer
         elif not admin_layer:
             admin_layer = self.mask_layer.layer
+
+        if stats:
+            fig, ax = plt.subplots(1, 1, figsize=(16, 9), dpi=dpi)
+            self.add_statistics(ax, stats_position)
+        else:
+            ax = None
+
         raster.save_image(self.output_directory, type=type, cmap=cmap, cumulative_count=cumulative_count,
-                         categories=codes, legend_position=legend_position,
-                         admin_layer=admin_layer, title=title, dpi=dpi,
-                          legend=legend, legend_title=legend_title, rasterized=rasterized)
+                          categories=codes, legend_position=legend_position,
+                          admin_layer=admin_layer, title=title, ax=ax, dpi=dpi,
+                          legend=legend, legend_title=legend_title, legend_cols=legend_cols, rasterized=rasterized)
 
     def to_json(self, name):
         self.gdf.to_file(os.path.join(self.output_directory, name), driver='GeoJSON')
@@ -1133,7 +1188,7 @@ class OnSSTOVE(DataProcessor):
     def read_data(self, path):
         self.gdf = gpd.read_file(path)
 
-    def summary(self, inplace=False):
+    def summary(self, total=False):
         summary = self.gdf.groupby(['max_benefit_tech']).agg({'Calibrated_pop': lambda row: np.nansum(row) / 1000000,
                                                                'maximum_net_benefit': lambda row: np.nansum(
                                                                    row) / 1000000,
@@ -1152,13 +1207,18 @@ class OnSSTOVE(DataProcessor):
                                                                'om_costs': lambda row: np.nansum(row) / 1000000,
                                                                'salvage_value': lambda row: np.nansum(row) / 1000000,
                                                                }).reset_index()
-        if inplace:
-            self.summary = summary
-        else:
-            return summary
+        if total:
+            total = summary.sum().rename('total')
+            total['max_benefit_tech'] = 'total'
+            total['maximum_net_benefit'] = sum(summary['maximum_net_benefit'] * summary['Calibrated_pop']) / total['Calibrated_pop']
+            summary = summary.append(total)
+
+        summary['time_saved'] /= (summary['Calibrated_pop'] * 1000000 * 365)
+
+        return summary
 
     def plot_split(self, cmap=None, labels=None, save=False, height=1.5, width=2.5):
-        df = self.summary.copy()
+        df = self.summary()
         df['max_benefit_tech'] = df['max_benefit_tech'].replace(labels)
 
         tech_list = df.sort_values('Calibrated_pop')['max_benefit_tech'].tolist()
@@ -1170,7 +1230,7 @@ class OnSSTOVE(DataProcessor):
                              label=df['Calibrated_pop'] / df['Calibrated_pop'].sum()),
                          format_string='{:.0%}',
                          color=ccolor, size=8, va='center', ha='left')
-             + ylim(0, df['Calibrated_pop'].max() * 1.1)
+             + ylim(0, df['Calibrated_pop'].max() * 1.15)
              + scale_x_discrete(limits=tech_list)
              + scale_fill_manual(cmap)
              + coord_flip()
@@ -1184,8 +1244,137 @@ class OnSSTOVE(DataProcessor):
         else:
             return p
 
-    def plot_costs_benefits(self):
-        pass
+    def plot_costs_benefits(self, cmap=None, labels=None, save=False, height=1.5, width=2.5):
+        df = self.summary()
+        df['max_benefit_tech'] = df['max_benefit_tech'].replace(labels)
+        df['investment_costs'] -= df['salvage_value']
+        df['fuel_costs'] *= -1
+        df['investment_costs'] *= -1
+        df['om_costs'] *= -1
 
-    def plot_benefit_distribution(self):
-        pass
+        dff = df.melt(id_vars=['max_benefit_tech'], value_vars=['health_costs_avoided',
+                                                                'investment_costs',
+                                                                'fuel_costs',
+                                                                'emissions_costs_saved',
+                                                                'om_costs',
+                                                                'opportunity_cost_gained'])
+
+        dff['variable'] = dff['variable'].str.replace('_', ' ').str.capitalize()
+
+        if cmap is None:
+            cmap = {'Health costs avoided': '#542788', 'Investment costs': '#b35806',
+                    'Fuel costs': '#f1a340', 'Emissions costs saved': '#998ec3',
+                    'Om costs': '#fee0b6', 'Opportunity cost gained': '#d8daeb'}
+
+        tech_list = df.sort_values('Calibrated_pop')['max_benefit_tech'].tolist()
+        cat_order = ['Health costs avoided',
+                     'Emissions costs saved',
+                     'Opportunity cost gained',
+                     'Investment costs',
+                     'Fuel costs',
+                     'Om costs']
+
+        dff['variable'] = pd.Categorical(dff['variable'], categories=cat_order, ordered=True)
+
+        p = (ggplot(dff)
+             + geom_col(aes(x='max_benefit_tech', y='value/1000', fill='variable'))
+             + scale_x_discrete(limits=tech_list)
+             + scale_fill_manual(cmap)
+             + coord_flip()
+             + theme_minimal()
+             + labs(x='', y='Billion USD', fill='Cost / Benefit')
+             )
+
+        if save:
+            file = os.path.join(self.output_directory, 'benefits_costs.pdf')
+            p.save(file, height=height, width=width)
+        else:
+            return p
+
+    def plot_benefit_distribution(self, type='box', groupby='None', cmap=None, labels=None, save=False, height=1.5, width=2.5):
+        if type.lower() == 'box':
+            if groupby.lower() == 'isurban':
+                df = self.gdf.groupby(['IsUrban', 'max_benefit_tech'])[['health_costs_avoided',
+                                                                        'opportunity_cost_gained',
+                                                                        'emissions_costs_saved',
+                                                                        'salvage_value',
+                                                                        'investment_costs',
+                                                                        'fuel_costs',
+                                                                        'om_costs',
+                                                                        'Households',
+                                                                        'Calibrated_pop']].sum()
+                df.reset_index(inplace=True)
+                df['max_benefit_tech'] = df['max_benefit_tech'].replace(labels)
+                tech_list = df.groupby('max_benefit_tech')[['Calibrated_pop']].sum()
+                tech_list = tech_list.reset_index().sort_values('Calibrated_pop')['max_benefit_tech'].tolist()
+                x = 'max_benefit_tech'
+            elif groupby.lower() == 'urbanrural':
+                df = self.gdf.copy()
+                df['Urban'] = df['IsUrban'] > 20
+                df['Urban'].replace({True: 'Urban', False: 'Rural'}, inplace=True)
+                x = 'Urban'
+            else:
+                df = self.gdf
+                tech_list = df.groupby('max_benefit_tech')[['Calibrated_pop']].sum()
+                tech_list = tech_list.reset_index().sort_values('Calibrated_pop')['max_benefit_tech'].tolist()
+                x = 'max_benefit_tech'
+            p = (ggplot(df)
+                 + geom_boxplot(aes(x=x,
+                                    y='(health_costs_avoided + opportunity_cost_gained + emissions_costs_saved' +
+                                      ' + salvage_value - investment_costs - fuel_costs - om_costs) / Households',
+                                    fill='max_benefit_tech',
+                                    color='max_benefit_tech'
+                                    ),
+                                alpha=0.5, outlier_alpha=0.1, raster=True)
+                 + scale_fill_manual(cmap)
+                 + scale_color_manual(cmap, guide=False)
+                 + coord_flip()
+                 + theme_minimal()
+                 + labs(y='Net benefit per household (kUSD/yr)', fill='Cooking technology')
+                 )
+            if groupby.lower() == 'urbanrural':
+                p += labs(x='Settlement')
+            else:
+                p += theme(legend_position="none")
+                p += scale_x_discrete(limits=tech_list)
+                p += labs(x='')
+
+        elif type.lower() == 'density':
+            df = self.gdf.groupby(['IsUrban', 'max_benefit_tech'])[['health_costs_avoided',
+                                                                    'opportunity_cost_gained',
+                                                                    'emissions_costs_saved',
+                                                                    'salvage_value',
+                                                                    'investment_costs',
+                                                                    'fuel_costs',
+                                                                    'om_costs',
+                                                                    'Households',
+                                                                    'Calibrated_pop']].sum()
+            df.reset_index(inplace=True)
+            df['max_benefit_tech'] = df['max_benefit_tech'].replace(labels)
+            p = (ggplot(df)
+                 + geom_density(aes(
+                        x='(health_costs_avoided + opportunity_cost_gained + emissions_costs_saved' +
+                                      ' + salvage_value - investment_costs - fuel_costs - om_costs) / Households',
+                        y=after_stat('count'),
+                        fill='max_benefit_tech', color='max_benefit_tech'),
+                                alpha=0.1)
+                 + scale_fill_manual(cmap, guide=False)
+                 + scale_color_manual(cmap)
+                 + theme_minimal()
+                 + labs(x='Net benefit per household (kUSD/yr)', color='Cooking technology')
+                 )
+        # compute lower and upper whiskers
+        # ylim1 = dff['maximum_net_benefit'].quantile([0.1, 1])/1000
+
+        # scale y limits based on ylim1
+        # p = p + coord_flip()
+
+        if save:
+            if groupby.lower() not in ['none', '']:
+                sufix = f'_{groupby}'
+            else:
+                sufix = ''
+            file = os.path.join(self.output_directory, f'max_benefits_{type}{sufix}.pdf')
+            p.save(file, height=height, width=width, dpi=600)
+        else:
+            return p

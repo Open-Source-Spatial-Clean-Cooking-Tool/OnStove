@@ -1,0 +1,28 @@
+\documentclass{standalone}%
+\usepackage{graphicx}
+\usepackage{varwidth}
+\usepackage{overpic}
+
+\providecommand\path{"../../Clean cooking Africa paper/06. Results/LPG International price - Rural-Urban/AGO/Environment_benefits/"}
+\graphicspath{\path}
+
+\begin{document}
+	\begin{varwidth}{4.5in}
+		~
+		
+		\hspace{1cm}\Huge\textbf{a}\\
+		\includegraphics{tech_split.pdf}
+		
+		\hspace{1cm}\Huge\textbf{c}\\
+		\includegraphics{max_benefits_box.pdf}
+		
+		\hspace{1cm}\Huge\textbf{d}\\
+		\includegraphics{benefits_costs.pdf}
+	\end{varwidth}
+
+	\begin{varwidth}{20in}
+		\begin{overpic}[abs,unit=1mm]{max_benefit_tech.pdf}
+			\put (0,173) {\Huge\textbf{b}}
+		\end{overpic}
+	\end{varwidth}
+\end{document}
