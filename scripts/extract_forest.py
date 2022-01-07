@@ -1,5 +1,7 @@
-import sys, os
-sys.path.append(r"C:\Users\khavari\Box\OnSTOVE")
+import sys
+from decouple import config
+import os
+sys.path.append(config('ONSSTOVE'))
 import rasterio
 from onsstove.raster import merge_rasters
 from onsstove.layer import VectorLayer

@@ -767,6 +767,10 @@ class Biomass(Technology):
         self.total_time_yr = self.time_of_cooking * model.specs['Meals_per_day'] * 365 + (
                 self.travel_time + self.time_of_collection) * trips_per_yr
 
+    def carb(self, model):
+        super().carb(model)
+        self.carbon *= model.specs['fnrb']
+
 
 class Electricity(Technology):
     """

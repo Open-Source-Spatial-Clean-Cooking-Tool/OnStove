@@ -2,15 +2,10 @@ import os
 cwd = os.getcwd()
 
 SCENARIOS = ['LPG International price - Rural-Urban']
-SENSITIVITY = ['All_benefits', 'Health_benefits', 'Social_benefits', 'Environment_benefits']
+SENSITIVITY = ['All_benefits']#, 'Health_benefits', 'Social_benefits', 'Environment_benefits']
 # SENSITIVITY, = glob_wildcards("../Clean cooking Africa paper/04. OnSSTOVE inputs/LPG International price - Rural-Urban/Sensitivity_files/{sensitivity}/BDI_scenario_file.csv")
 
-
-COUNTRIES = ['DJI']
-
-
-COUNTRIES = ['AGO', 'BDI', 'ZAF', 'TZA']
-
+COUNTRIES = ['BDI']
 
 # COUNTRIES = ['AGO', 'BDI', 'BEN', 'BFA', 'BWA', 'CAF', 'CIV', 'CMR',
 #              'COD', 'COG', 'ERI', 'ETH', 'GAB', 'GHA', 'GIN',

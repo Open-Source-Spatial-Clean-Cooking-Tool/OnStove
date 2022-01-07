@@ -1,5 +1,6 @@
 import sys
-sys.path.append(r"C:\Users\khavari\Box\OnSSTOVE")
+from decouple import config
+sys.path.append(config('ONSSTOVE'))
 
 from onsstove.layer import VectorLayer, RasterLayer
 from onsstove.onsstove import OnSSTOVE
