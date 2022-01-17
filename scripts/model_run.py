@@ -20,8 +20,8 @@ model.output_directory = snakemake.params.output_directory
 
 # 3. Calculating benefits and costs of each technology and getting the max benefit technology for each cell
 model.run(technologies=['Electricity', 'LPG', 'Biogas',
-                        'Collected_Improved_Biomass', 'Collected_Traditional_Biomass'
-                        ])
+                        'Collected_Improved_Biomass', 'Collected_Traditional_Biomass','Charcoal ICS',
+                        'Traditional_Charcoal'])
 
 # 5. Saving data to raster files
 # cmap = {"ICS": '#57365A', "LPG": '#6987B7', "Traditional biomass": '#673139', "Charcoal": '#B6195E',
@@ -31,13 +31,13 @@ model.run(technologies=['Electricity', 'LPG', 'Biogas',
 #         "Electricity": '#D0DF53', "Electricity and ICS": "#4D7126",
 #         "Electricity and LPG": "#004D40", "Electricity and Traditional biomass": "#FFC107",
 #         "Electricity and Charcoal": "#1E88E5", "Electricity and Biogas": "#484673"}
-cmap = {"ICS": '#6F4070', "LPG": '#66C5CC', "Traditional biomass": '#994E95', "Charcoal": '#666666',
+cmap = {"ICS": '#6F4070', "LPG": '#66C5CC', "Traditional biomass": '#994E95', "Traditional Charcoal": '#666666',
         "Biogas": '#73AF48', "Biogas and ICS": "#F6029E",
         "Biogas and LPG": "#f97b72",  "Biogas and Traditional biomass": "#266AA6",
         "Biogas and Charcoal": "#3B05DF", "Biogas and Electricity": "#484673",
         "Electricity": '#CC503E', "Electricity and ICS": "#B497E7",
         "Electricity and LPG": "#E17C05", "Electricity and Traditional biomass": "#FFC107",
-        "Electricity and Charcoal": "#661100", "Electricity and Biogas": "#0F8554"}
+        "Electricity and Charcoal": "#661100", "Electricity and Biogas": "#0F8554", "Electricity and Traditional Charcoal" : "#000000"}
 
 labels = {"Biogas and Electricity": "Electricity and Biogas",
           'Collected Traditional Biomass': 'Traditional biomass',

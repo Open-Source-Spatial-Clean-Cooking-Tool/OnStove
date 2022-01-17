@@ -842,7 +842,7 @@ class Electricity(Technology):
                  tech_life=0,  # in years
                  inv_cost=0,  # in USD
                  connection_cost=0,  # cost of additional infrastructure
-                 grid_capacity_cost=0,
+                 grid_capacity_cost=None,
                  fuel_cost=0,
                  time_of_cooking=0,
                  om_cost=0,  # percentage of investement cost
@@ -854,7 +854,12 @@ class Electricity(Technology):
                          om_cost, efficiency, pm25, is_clean=True)
         # Carbon intensity of fossil fuel plants in kg/GWh
         self.generation = {}
+
         self.capacities = {}
+
+        self.capacity = {}
+        self.grid_capacity_cost = grid_capacity_cost
+
         self.tiers_path = None
         self.connection_cost = connection_cost
         self.carbon_intensities = {'coal': 0.090374363, 'natural_gas': 0.050300655,
@@ -863,11 +868,26 @@ class Electricity(Technology):
                                    'still_gas': 0.060849859, 'flared_natural_gas': 0.051855075,
                                    'waste': 0.010736111, 'biofuels_and_waste': 0.010736111,
                                    'nuclear': 0, 'hydro': 0, 'wind': 0,
+
                                    'solar': 0, 'other': 0, 'geothermal': 0}
+
+                                   'solar': 0, 'geothermal': 0, 'other': 0}
+
+        # TODO: make this general, with other fuel mix this crash
+        self.grid_capacity_costs = {'oil': 1467,'natural_gas' : 550,
+                                   'biofuels_and_waste': 2117,
+                                   'nuclear': 4000, 'hydro': 2100, 'coal' : 1600,'wind': 1925,
+                                   'solar': 1400, 'geothermal' : 2917}
 
     def __setitem__(self, idx, value):
         if 'generation' in idx:
             self.generation[idx.lower().replace('generation_', '')] = value
+
+        elif 'capacity' in idx:
+            self.capacity[idx.lower().replace('capacity_', '')] = value
+        elif 'carbon_intensity' in idx:
+            self.carbon_intensities[idx.lower().replace('carbon_intensity_', '')] = value
+
         elif 'grid_capacity_cost' in idx:
             self.grid_capacity_cost = value
         elif 'capacity' in idx:
@@ -889,6 +909,9 @@ class Electricity(Technology):
             self.tiers = model.gdf['Electricity_tiers'].copy()
             add_capacity = (self.tiers < 3)
 
+        if self.grid_capacity_cost is None:
+            self.get_grid_capacity_cost()
+
         self.capacity = self.energy * add_capacity / (3.6 * self.time_of_cooking * 365)
         self.capacity_cost = self.capacity * self.grid_capacity_cost
 
@@ -897,9 +920,18 @@ class Electricity(Technology):
         grid_generation = sum(self.generation.values())
         self.carbon_intensity = grid_emissions / grid_generation * 1000  # to convert from Mton/PJ to kg/GJ
 
+
     # def carb(self, model):
     #     self.get_carbon_intensity()
     #     super().carb(model)
+
+    def get_grid_capacity_cost(self):
+        self.grid_capacity_cost = sum([self.grid_capacity_costs[fuel] * (cap/sum(self.capacity.values())) for fuel, cap in self.capacity.items()])
+
+    def carb(self, model):
+        self.get_carbon_intensity()
+        super().carb(model)
+
 
     def discounted_inv(self, model):
         super().discounted_inv(model)

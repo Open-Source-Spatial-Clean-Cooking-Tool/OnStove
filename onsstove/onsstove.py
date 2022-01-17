@@ -894,9 +894,10 @@ class OnSSTOVE(DataProcessor):
                 second_benefit_cols.remove(f'net_benefit_{tech.name}_temp')
                 second_best = dff.loc[current, second_benefit_cols].idxmax(axis=1)
 
-
+                second_best.replace(np.nan, 'NaN', inplace=True)
                 second_best = second_best.str.replace("net_benefit_", "")
                 second_best = second_best.str.replace("_temp", "")
+                second_best.replace('NaN', np.nan, inplace=True)
 
                 second_tech_net_benefit = dff.loc[current, second_benefit_cols].max(axis=1) * (1 - tech.factor.loc[current])
 
@@ -1053,9 +1054,9 @@ class OnSSTOVE(DataProcessor):
             gdf = gpd.read_file(wealth_index)
             gdf.to_crs(self.gdf.crs, inplace=True)
 
-            gdf.rename(columns={wealth_column: "relative_wealth"})
+            gdf.rename(columns={wealth_column: "relative_wealth"}, inplace = True)
 
-            self.gdf = gpd.sjoin(self.gdf, gdf["relative_wealth"], how="inner", op='intersects')
+            self.gdf = gpd.sjoin(self.gdf, gdf[["relative_wealth", "geometry"]], how="left")
         elif file_type == "raster":
             layer = RasterLayer('Demographics', 'Wealth', layer_path=wealth_index, resample='average')
 
