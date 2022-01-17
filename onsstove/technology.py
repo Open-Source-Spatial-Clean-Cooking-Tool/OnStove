@@ -15,10 +15,16 @@ class Technology:
     """
     Standard technology class.
     """
-
+    # TODO: check if is_clean is needed
     def __init__(self,
                  name=None,
-                 carbon_intensity=0,
+                 carbon_intensity=None,
+                 co2_intensity=0,
+                 ch4_intensity=0,
+                 n2o_intensity=0,
+                 co_intensity=0,
+                 bc_intensity=0,
+                 oc_intensity=0,
                  energy_content=0,
                  tech_life=0,  # in years
                  inv_cost=0,  # in USD
@@ -35,6 +41,12 @@ class Technology:
 
         self.name = name
         self.carbon_intensity = carbon_intensity
+        self.co2_intensity = co2_intensity
+        self.ch4_intensity = ch4_intensity
+        self.n2o_intensity = n2o_intensity
+        self.co_intensity = co_intensity
+        self.bc_intensity = bc_intensity
+        self.oc_intensity = oc_intensity
         self.energy_content = energy_content
         self.tech_life = tech_life
         self.fuel_cost = fuel_cost
@@ -64,6 +76,18 @@ class Technology:
             self.energy_content = value
         elif idx == 'carbon_intensity':
             self.carbon_intensity = value
+        elif idx.lower() == 'co2_intensity':
+            self.co2_intensity = value
+        elif idx.lower() == 'ch4_intensity':
+            self.ch4_intensity = value
+        elif idx.lower() == 'n2o_intensity':
+            self.n2o_intensity = value
+        elif idx.lower() == 'co_intensity':
+            self.co_intensity = value
+        elif idx.lower() == 'bc_intensity':
+            self.bc_intensity = value
+        elif idx.lower() == 'oc_intensity':
+            self.oc_intensity = value
         elif idx == 'fuel_cost':
             self.fuel_cost = value
         elif idx == 'tech_life':
@@ -122,6 +146,18 @@ class Technology:
             return self.energy_content
         elif idx == 'carbon_intensity':
             return self.carbon_intensity
+        elif idx.lower() == 'co2_intensity':
+            return self.co2_intensity
+        elif idx.lower() == 'ch4_intensity':
+            return self.ch4_intensity
+        elif idx.lower() == 'n2o_intensity':
+            return self.n2o_intensity
+        elif idx.lower() == 'co_intensity':
+            return self.co_intensity
+        elif idx.lower() == 'bc_intensity':
+            return self.bc_intensity
+        elif idx.lower() == 'oc_intensity':
+            return self.oc_intensity
         elif idx == 'fuel_cost':
             return self.fuel_cost
         elif idx == 'tech_life':
@@ -230,8 +266,14 @@ class Technology:
         # energy_needed = self.energy * np.ones(proj_life)
         # self.discounted_energy = (energy_needed / discount_rate)
 
+    def get_carbon_intensity(self, model):
+        pollutants = ['co2', 'ch4', 'n2o', 'co', 'bc', 'oc']
+        self.carbon_intensity = sum([self[f'{pollutant}_intensity'] * model.gwp[pollutant] for pollutant in pollutants])
+
     def carb(self, model):
         self.required_energy(model)
+        if self.carbon_intensity is None:
+            self.get_carbon_intensity(model)
         self.carbon = pd.Series([(self.energy * self.carbon_intensity) / 1000] * model.gdf.shape[0],
                                 index=model.gdf.index)
 
@@ -629,7 +671,13 @@ class LPG(Technology):
 
     def __init__(self,
                  name=None,
-                 carbon_intensity=0,  # Kg/GJ
+                 carbon_intensity=None,  # Kg/GJ
+                 co2_intensity=63,
+                 ch4_intensity=0.003,
+                 n2o_intensity=0.0001,
+                 co_intensity=0,
+                 bc_intensity=0.0044,
+                 oc_intensity=0.0091,
                  energy_content=0,
                  tech_life=0,  # in years
                  inv_cost=0,  # in USD
@@ -644,8 +692,9 @@ class LPG(Technology):
                  diesel_per_hour=14,
                  lpg_path=None,
                  friction_path=None):
-        super().__init__(name, carbon_intensity, energy_content, tech_life,
-                         inv_cost, fuel_cost, time_of_cooking,
+        super().__init__(name, carbon_intensity, co2_intensity, ch4_intensity,
+                         n2o_intensity, co_intensity, bc_intensity, oc_intensity,
+                         energy_content, tech_life, inv_cost, fuel_cost, time_of_cooking,
                          om_cost, efficiency, pm25, is_clean=True)
         self.travel_time = travel_time
         self.truck_capacity = truck_capacity
@@ -726,7 +775,13 @@ class Biomass(Technology):
 
     def __init__(self,
                  name=None,
-                 carbon_intensity=0,
+                 carbon_intensity=None,
+                 co2_intensity=112,
+                 ch4_intensity=0.864,
+                 n2o_intensity=0.0039,
+                 co_intensity=0,
+                 bc_intensity=0.1075,
+                 oc_intensity=0.308,
                  energy_content=0,
                  tech_life=0,  # in years
                  inv_cost=0,  # in USD
@@ -739,7 +794,9 @@ class Biomass(Technology):
                  friction_path=None,
                  travel_time=None,
                  collection_capacity=25):
-        super().__init__(name, carbon_intensity, energy_content, tech_life,
+        super().__init__(name, carbon_intensity, co2_intensity, ch4_intensity,
+                         n2o_intensity, co_intensity, bc_intensity, oc_intensity,
+                         energy_content, tech_life,
                          inv_cost, fuel_cost, time_of_cooking,
                          om_cost, efficiency, pm25, is_clean=False)
         self.forest_condition = None
@@ -767,6 +824,10 @@ class Biomass(Technology):
         self.total_time_yr = self.time_of_cooking * model.specs['Meals_per_day'] * 365 + (
                 self.travel_time + self.time_of_collection) * trips_per_yr
 
+    def carb(self, model):
+        super().carb(model)
+        self.carbon *= model.specs['fnrb']
+
 
 class Electricity(Technology):
     """
@@ -776,7 +837,7 @@ class Electricity(Technology):
 
     def __init__(self,
                  name=None,
-                 carbon_intensity=0,
+                 carbon_intensity=None,
                  energy_content=0,
                  tech_life=0,  # in years
                  inv_cost=0,  # in USD
@@ -787,13 +848,18 @@ class Electricity(Technology):
                  om_cost=0,  # percentage of investement cost
                  efficiency=0,  # ratio
                  pm25=41):
-        super().__init__(name, carbon_intensity, energy_content, tech_life,
+        super().__init__(name, carbon_intensity, None, None, None,
+                         None, None, None, energy_content, tech_life,
                          inv_cost, fuel_cost, time_of_cooking,
                          om_cost, efficiency, pm25, is_clean=True)
         # Carbon intensity of fossil fuel plants in kg/GWh
         self.generation = {}
+
+        self.capacities = {}
+
         self.capacity = {}
         self.grid_capacity_cost = grid_capacity_cost
+
         self.tiers_path = None
         self.connection_cost = connection_cost
         self.carbon_intensities = {'coal': 0.090374363, 'natural_gas': 0.050300655,
@@ -802,6 +868,9 @@ class Electricity(Technology):
                                    'still_gas': 0.060849859, 'flared_natural_gas': 0.051855075,
                                    'waste': 0.010736111, 'biofuels_and_waste': 0.010736111,
                                    'nuclear': 0, 'hydro': 0, 'wind': 0,
+
+                                   'solar': 0, 'other': 0, 'geothermal': 0}
+
                                    'solar': 0, 'geothermal': 0, 'other': 0}
 
         # TODO: make this general, with other fuel mix this crash
@@ -813,12 +882,18 @@ class Electricity(Technology):
     def __setitem__(self, idx, value):
         if 'generation' in idx:
             self.generation[idx.lower().replace('generation_', '')] = value
+
         elif 'capacity' in idx:
             self.capacity[idx.lower().replace('capacity_', '')] = value
         elif 'carbon_intensity' in idx:
             self.carbon_intensities[idx.lower().replace('carbon_intensity_', '')] = value
+
         elif 'grid_capacity_cost' in idx:
             self.grid_capacity_cost = value
+        elif 'capacity' in idx:
+            self.capacities[idx.lower().replace('capacity_', '')] = value
+        elif 'carbon_intensity' in idx:
+            self.carbon_intensities[idx.lower().replace('carbon_intensity_', '')] = value
         elif 'connection_cost' in idx:
             self.connection_cost = value
         else:
@@ -840,10 +915,15 @@ class Electricity(Technology):
         self.capacity = self.energy * add_capacity / (3.6 * self.time_of_cooking * 365)
         self.capacity_cost = self.capacity * self.grid_capacity_cost
 
-    def get_carbon_intensity(self):
+    def get_carbon_intensity(self, model):
         grid_emissions = sum([gen * self.carbon_intensities[fuel] for fuel, gen in self.generation.items()])
         grid_generation = sum(self.generation.values())
         self.carbon_intensity = grid_emissions / grid_generation * 1000  # to convert from Mton/PJ to kg/GJ
+
+
+    # def carb(self, model):
+    #     self.get_carbon_intensity()
+    #     super().carb(model)
 
     def get_grid_capacity_cost(self):
         self.grid_capacity_cost = sum([self.grid_capacity_costs[fuel] * (cap/sum(self.capacity.values())) for fuel, cap in self.capacity.items()])
@@ -851,6 +931,7 @@ class Electricity(Technology):
     def carb(self, model):
         self.get_carbon_intensity()
         super().carb(model)
+
 
     def discounted_inv(self, model):
         super().discounted_inv(model)
@@ -877,7 +958,13 @@ class Biogas(Technology):
 
     def __init__(self,
                  name=None,
-                 carbon_intensity=0,
+                 carbon_intensity=None,
+                 co2_intensity=0,
+                 ch4_intensity=0.0288,
+                 n2o_intensity=0.0006,
+                 co_intensity=0,
+                 bc_intensity=0.0043,
+                 oc_intensity=0.0091,
                  energy_content=0,
                  tech_life=0,  # in years
                  inv_cost=0,  # in USD
@@ -885,11 +972,13 @@ class Biogas(Technology):
                  time_of_cooking=0,
                  om_cost=0,  # percentage of investement cost
                  efficiency=0,  # ratio
-                 pm25=173,
+                 pm25=43,
                  utilization_factor=0.5,
                  digestor_eff=0.4,
                  friction_path=None):
-        super().__init__(name, carbon_intensity, energy_content, tech_life,
+        super().__init__(name, carbon_intensity, co2_intensity, ch4_intensity,
+                         n2o_intensity, co_intensity, bc_intensity, oc_intensity,
+                         energy_content, tech_life,
                          inv_cost, fuel_cost, time_of_cooking,
                          om_cost, efficiency, pm25, is_clean=True)
         # TODO: Check what's the difference between these two factors

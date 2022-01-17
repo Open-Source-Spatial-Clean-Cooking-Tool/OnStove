@@ -1,5 +1,7 @@
-import os
 import sys
+from decouple import config
+import os
+sys.path.append(config('ONSSTOVE'))
 import numpy as np
 
 sys.path.append(r"C:\Users\khavari\Box\OnSSTOVE")
