@@ -15,6 +15,7 @@ class Technology:
     """
     Standard technology class.
     """
+
     # TODO: check if is_clean is needed
     def __init__(self,
                  name=None,
@@ -311,26 +312,26 @@ class Technology:
         self.health_parameters(model)
 
         mort_alri_u = model.gdf.loc[model.gdf["IsUrban"] > 20, "Calibrated_pop"].sum() * (
-                    model.base_fuel.paf_alri_u - self.paf_alri_u) * (model.specs["Mort_ALRI"] / 100000)
+                model.base_fuel.paf_alri_u - self.paf_alri_u) * (model.specs["Mort_ALRI"] / 100000)
         mort_copd_u = model.gdf.loc[model.gdf["IsUrban"] > 20, "Calibrated_pop"].sum() * (
-                    model.base_fuel.paf_copd_u - self.paf_copd_u) * (model.specs["Mort_COPD"] / 100000)
+                model.base_fuel.paf_copd_u - self.paf_copd_u) * (model.specs["Mort_COPD"] / 100000)
         mort_ihd_u = model.gdf.loc[model.gdf["IsUrban"] > 20, "Calibrated_pop"].sum() * (
-                    model.base_fuel.paf_ihd_u - self.paf_ihd_u) * (model.specs["Mort_IHD"] / 100000)
+                model.base_fuel.paf_ihd_u - self.paf_ihd_u) * (model.specs["Mort_IHD"] / 100000)
         mort_lc_u = model.gdf.loc[model.gdf["IsUrban"] > 20, "Calibrated_pop"].sum() * (
-                    model.base_fuel.paf_lc_u - self.paf_lc_u) * (model.specs["Mort_LC"] / 100000)
+                model.base_fuel.paf_lc_u - self.paf_lc_u) * (model.specs["Mort_LC"] / 100000)
         mort_stroke_u = model.gdf.loc[model.gdf["IsUrban"] > 20, "Calibrated_pop"].sum() * (
-                    model.base_fuel.paf_stroke_u - self.paf_stroke_u) * (model.specs["Mort_STROKE"] / 100000)
+                model.base_fuel.paf_stroke_u - self.paf_stroke_u) * (model.specs["Mort_STROKE"] / 100000)
 
         mort_alri_r = model.gdf.loc[model.gdf["IsUrban"] < 20, "Calibrated_pop"].sum() * (
-                    model.base_fuel.paf_alri_r - self.paf_alri_r) * (model.specs["Mort_ALRI"] / 100000)
+                model.base_fuel.paf_alri_r - self.paf_alri_r) * (model.specs["Mort_ALRI"] / 100000)
         mort_copd_r = model.gdf.loc[model.gdf["IsUrban"] < 20, "Calibrated_pop"].sum() * (
-                    model.base_fuel.paf_copd_r - self.paf_copd_r) * (model.specs["Mort_COPD"] / 100000)
+                model.base_fuel.paf_copd_r - self.paf_copd_r) * (model.specs["Mort_COPD"] / 100000)
         mort_ihd_r = model.gdf.loc[model.gdf["IsUrban"] < 20, "Calibrated_pop"].sum() * (
-                    model.base_fuel.paf_ihd_r - self.paf_ihd_r) * (model.specs["Mort_IHD"] / 100000)
+                model.base_fuel.paf_ihd_r - self.paf_ihd_r) * (model.specs["Mort_IHD"] / 100000)
         mort_lc_r = model.gdf.loc[model.gdf["IsUrban"] < 20, "Calibrated_pop"].sum() * (
-                    model.base_fuel.paf_lc_r - self.paf_lc_r) * (model.specs["Mort_LC"] / 100000)
+                model.base_fuel.paf_lc_r - self.paf_lc_r) * (model.specs["Mort_LC"] / 100000)
         mort_stroke_r = model.gdf.loc[model.gdf["IsUrban"] < 20, "Calibrated_pop"].sum() * (
-                    model.base_fuel.paf_stroke_r - self.paf_stroke_r) * (model.specs["Mort_STROKE"] / 100000)
+                model.base_fuel.paf_stroke_r - self.paf_stroke_r) * (model.specs["Mort_STROKE"] / 100000)
 
         cl_copd = {1: 0.3, 2: 0.2, 3: 0.17, 4: 0.17, 5: 0.16}
         cl_alri = {1: 0.7, 2: 0.1, 3: 0.07, 4: 0.07, 5: 0.06}
@@ -344,7 +345,7 @@ class Technology:
 
         while i < 6:
             mortality_alri_u = cl_alri[i] * model.specs["VSL"] * mort_alri_u / (1 + model.specs["Discount_rate"]) ** (
-                        i - 1)
+                    i - 1)
             mortality_copd_u = cl_copd[i] * model.specs["VSL"] * mort_copd_u / (
                     1 + model.specs["Discount_rate"]) ** (i - 1)
             mortality_lc_u = cl_lc[i] * model.specs["VSL"] * mort_lc_u / (
@@ -352,14 +353,14 @@ class Technology:
             mortality_ihd_u = cl_ihd[i] * model.specs["VSL"] * mort_ihd_u / (
                     1 + model.specs["Discount_rate"]) ** (i - 1)
             mortality_stroke_u = cl_stroke[i] * model.specs["VSL"] * mort_stroke_u / (
-                        1 + model.specs["Discount_rate"]) ** (i - 1)
+                    1 + model.specs["Discount_rate"]) ** (i - 1)
 
             mort_total_u = mortality_alri_u + mortality_copd_u + mortality_lc_u + mortality_ihd_u + mortality_stroke_u
 
             mort_vector_u.append(mort_total_u)
 
             mortality_alri_r = cl_alri[i] * model.specs["VSL"] * mort_alri_r / (1 + model.specs["Discount_rate"]) ** (
-                        i - 1)
+                    i - 1)
             mortality_copd_r = cl_copd[i] * model.specs["VSL"] * mort_copd_r / (
                     1 + model.specs["Discount_rate"]) ** (i - 1)
             mortality_lc_r = cl_lc[i] * model.specs["VSL"] * mort_lc_r / (
@@ -367,7 +368,7 @@ class Technology:
             mortality_ihd_r = cl_ihd[i] * model.specs["VSL"] * mort_ihd_r / (
                     1 + model.specs["Discount_rate"]) ** (i - 1)
             mortality_stroke_r = cl_stroke[i] * model.specs["VSL"] * mort_stroke_r / (
-                        1 + model.specs["Discount_rate"]) ** (i - 1)
+                    1 + model.specs["Discount_rate"]) ** (i - 1)
 
             mort_total_r = mortality_alri_r + mortality_copd_r + mortality_lc_r + mortality_ihd_r + mortality_stroke_r
 
@@ -400,13 +401,13 @@ class Technology:
 
         deaths_avoided = pd.Series(index=model.gdf.index)
         deaths_avoided[model.gdf["IsUrban"] > 20] = (
-                                                                mort_alri_u + mort_copd_u + mort_lc_u + mort_ihd_u + mort_stroke_u) * (
+                                                            mort_alri_u + mort_copd_u + mort_lc_u + mort_ihd_u + mort_stroke_u) * (
                                                             model.gdf.loc[
                                                                 model.gdf["IsUrban"] > 20, "Calibrated_pop"] / (
-                                                                        model.gdf.loc[model.gdf[
-                                                                                          "IsUrban"] > 20, "Calibrated_pop"].sum() *
-                                                                        model.gdf.loc[model.gdf[
-                                                                                          "IsUrban"] > 20, 'Households']))
+                                                                    model.gdf.loc[model.gdf[
+                                                                                      "IsUrban"] > 20, "Calibrated_pop"].sum() *
+                                                                    model.gdf.loc[model.gdf[
+                                                                                      "IsUrban"] > 20, 'Households']))
 
         deaths_avoided[model.gdf["IsUrban"] < 20] = (
                                                             mort_alri_r + mort_copd_r + mort_lc_r + mort_ihd_r + mort_stroke_r) * (
@@ -430,26 +431,26 @@ class Technology:
         self.health_parameters(model)
 
         morb_alri_u = model.gdf.loc[model.gdf["IsUrban"] > 20, "Calibrated_pop"].sum() * (
-                    model.base_fuel.paf_alri_u - self.paf_alri_u) * (model.specs["Morb_ALRI"] / 100000)
+                model.base_fuel.paf_alri_u - self.paf_alri_u) * (model.specs["Morb_ALRI"] / 100000)
         morb_copd_u = model.gdf.loc[model.gdf["IsUrban"] > 20, "Calibrated_pop"].sum() * (
-                    model.base_fuel.paf_copd_u - self.paf_copd_u) * (model.specs["Morb_COPD"] / 100000)
+                model.base_fuel.paf_copd_u - self.paf_copd_u) * (model.specs["Morb_COPD"] / 100000)
         morb_ihd_u = model.gdf.loc[model.gdf["IsUrban"] > 20, "Calibrated_pop"].sum() * (
-                    model.base_fuel.paf_ihd_u - self.paf_ihd_u) * (model.specs["Morb_IHD"] / 100000)
+                model.base_fuel.paf_ihd_u - self.paf_ihd_u) * (model.specs["Morb_IHD"] / 100000)
         morb_lc_u = model.gdf.loc[model.gdf["IsUrban"] > 20, "Calibrated_pop"].sum() * (
-                    model.base_fuel.paf_lc_u - self.paf_lc_u) * (model.specs["Morb_LC"] / 100000)
+                model.base_fuel.paf_lc_u - self.paf_lc_u) * (model.specs["Morb_LC"] / 100000)
         morb_stroke_u = model.gdf.loc[model.gdf["IsUrban"] > 20, "Calibrated_pop"].sum() * (
-                    model.base_fuel.paf_stroke_u - self.paf_stroke_u) * (model.specs["Morb_STROKE"] / 100000)
+                model.base_fuel.paf_stroke_u - self.paf_stroke_u) * (model.specs["Morb_STROKE"] / 100000)
 
         morb_alri_r = model.gdf.loc[model.gdf["IsUrban"] < 20, "Calibrated_pop"].sum() * (
-                    model.base_fuel.paf_alri_r - self.paf_alri_r) * (model.specs["Morb_ALRI"] / 100000)
+                model.base_fuel.paf_alri_r - self.paf_alri_r) * (model.specs["Morb_ALRI"] / 100000)
         morb_copd_r = model.gdf.loc[model.gdf["IsUrban"] < 20, "Calibrated_pop"].sum() * (
-                    model.base_fuel.paf_copd_r - self.paf_copd_r) * (model.specs["Morb_COPD"] / 100000)
+                model.base_fuel.paf_copd_r - self.paf_copd_r) * (model.specs["Morb_COPD"] / 100000)
         morb_ihd_r = model.gdf.loc[model.gdf["IsUrban"] < 20, "Calibrated_pop"].sum() * (
-                    model.base_fuel.paf_ihd_r - self.paf_ihd_r) * (model.specs["Morb_IHD"] / 100000)
+                model.base_fuel.paf_ihd_r - self.paf_ihd_r) * (model.specs["Morb_IHD"] / 100000)
         morb_lc_r = model.gdf.loc[model.gdf["IsUrban"] < 20, "Calibrated_pop"].sum() * (
-                    model.base_fuel.paf_lc_r - self.paf_lc_r) * (model.specs["Morb_LC"] / 100000)
+                model.base_fuel.paf_lc_r - self.paf_lc_r) * (model.specs["Morb_LC"] / 100000)
         morb_stroke_r = model.gdf.loc[model.gdf["IsUrban"] < 20, "Calibrated_pop"].sum() * (
-                    model.base_fuel.paf_stroke_r - self.paf_stroke_r) * (model.specs["Morb_STROKE"] / 100000)
+                model.base_fuel.paf_stroke_r - self.paf_stroke_r) * (model.specs["Morb_STROKE"] / 100000)
 
         cl_copd = {1: 0.3, 2: 0.2, 3: 0.17, 4: 0.17, 5: 0.16}
         cl_alri = {1: 0.7, 2: 0.1, 3: 0.07, 4: 0.07, 5: 0.06}
@@ -463,17 +464,17 @@ class Technology:
 
         while i < 6:
             morbidity_alri_u = cl_alri[i] * model.specs["COI_ALRI"] * morb_alri_u / (
-                        1 + model.specs["Discount_rate"]) ** (
+                    1 + model.specs["Discount_rate"]) ** (
                                        i - 1)
             morbidity_copd_u = cl_copd[i] * model.specs["COI_COPD"] * morb_copd_u / (
-                        1 + model.specs["Discount_rate"]) ** (
+                    1 + model.specs["Discount_rate"]) ** (
                                        i - 1)
             morbidity_lc_u = cl_lc[i] * model.specs["COI_LC"] * morb_lc_u / (1 + model.specs["Discount_rate"]) ** (
-                        i - 1)
+                    i - 1)
             morbidity_ihd_u = cl_ihd[i] * model.specs["COI_IHD"] * morb_ihd_u / (1 + model.specs["Discount_rate"]) ** (
-                        i - 1)
+                    i - 1)
             morbidity_stroke_u = cl_stroke[i] * model.specs["COI_STROKE"] * morb_stroke_u / (
-                        1 + model.specs["Discount_rate"]) ** (
+                    1 + model.specs["Discount_rate"]) ** (
                                          i - 1)
 
             morb_total_u = morbidity_alri_u + morbidity_copd_u + morbidity_lc_u + morbidity_ihd_u + morbidity_stroke_u
@@ -481,17 +482,17 @@ class Technology:
             morb_vector_u.append(morb_total_u)
 
             morbidity_alri_r = cl_alri[i] * model.specs["COI_ALRI"] * morb_alri_r / (
-                        1 + model.specs["Discount_rate"]) ** (
+                    1 + model.specs["Discount_rate"]) ** (
                                        i - 1)
             morbidity_copd_r = cl_copd[i] * model.specs["COI_COPD"] * morb_copd_r / (
-                        1 + model.specs["Discount_rate"]) ** (
+                    1 + model.specs["Discount_rate"]) ** (
                                        i - 1)
             morbidity_lc_r = cl_lc[i] * model.specs["COI_LC"] * morb_lc_r / (1 + model.specs["Discount_rate"]) ** (
-                        i - 1)
+                    i - 1)
             morbidity_ihd_r = cl_ihd[i] * model.specs["COI_IHD"] * morb_ihd_r / (1 + model.specs["Discount_rate"]) ** (
-                        i - 1)
+                    i - 1)
             morbidity_stroke_r = cl_stroke[i] * model.specs["COI_STROKE"] * morb_stroke_r / (
-                        1 + model.specs["Discount_rate"]) ** (
+                    1 + model.specs["Discount_rate"]) ** (
                                          i - 1)
 
             morb_total_r = morbidity_alri_r + morbidity_copd_r + morbidity_lc_r + morbidity_ihd_r + morbidity_stroke_r
@@ -523,16 +524,16 @@ class Technology:
 
         cases_avoided = pd.Series(index=model.gdf.index)
         cases_avoided[model.gdf["IsUrban"] > 20] = (
-                                                               morb_alri_u + morb_copd_u + morb_lc_u + morb_ihd_u + morb_stroke_u) * (
+                                                           morb_alri_u + morb_copd_u + morb_lc_u + morb_ihd_u + morb_stroke_u) * (
                                                            model.gdf.loc[
                                                                model.gdf["IsUrban"] > 20, "Calibrated_pop"] / (
-                                                                       model.gdf.loc[model.gdf[
-                                                                                         "IsUrban"] > 20, "Calibrated_pop"].sum() *
-                                                                       model.gdf.loc[model.gdf[
-                                                                                         "IsUrban"] > 20, 'Households']))
+                                                                   model.gdf.loc[model.gdf[
+                                                                                     "IsUrban"] > 20, "Calibrated_pop"].sum() *
+                                                                   model.gdf.loc[model.gdf[
+                                                                                     "IsUrban"] > 20, 'Households']))
 
         cases_avoided[model.gdf["IsUrban"] < 20] = (
-                                                               morb_alri_r + morb_copd_r + morb_lc_r + morb_ihd_r + morb_stroke_r) * (
+                                                           morb_alri_r + morb_copd_r + morb_lc_r + morb_ihd_r + morb_stroke_r) * (
                                                            model.gdf.loc[
                                                                model.gdf["IsUrban"] < 20, "Calibrated_pop"] / (
                                                                    model.gdf.loc[model.gdf[
@@ -613,18 +614,22 @@ class Technology:
                 i = i + ceil(life)
                 j += 1
 
-        #discounted_investments = (model.base_fuel.inv_cost - investments) / discount_rate
+        # discounted_investments = (model.base_fuel.inv_cost - investments) / discount_rate
         # TODO: the + self.inv_cost  is a workaround to account for the investment in year 0
         investments_discounted = np.array([sum((investments - x) / discount_rate) for x in base_investments])
-        self.discounted_investments = pd.Series(investments_discounted, index=model.gdf.index) + (self.inv_cost - model.base_fuel.inv_cost)
+        self.discounted_investments = pd.Series(investments_discounted, index=model.gdf.index) + (
+                self.inv_cost - model.base_fuel.inv_cost)
 
     def discount_fuel_cost(self, model):
         self.required_energy(model)
         discount_rate, proj_life = self.discount_factor(model.specs)
 
-        base_cost = (model.base_fuel.energy * model.base_fuel.fuel_cost / model.base_fuel.energy_content + model.base_fuel.transport_cost) * np.ones(model.gdf.shape[0])
+        base_cost = (
+                            model.base_fuel.energy * model.base_fuel.fuel_cost / model.base_fuel.energy_content + model.base_fuel.transport_cost) * np.ones(
+            model.gdf.shape[0])
 
-        cost = (self.energy * self.fuel_cost / self.energy_content + self.transport_cost) * np.ones(model.gdf.shape[0]) - base_cost
+        cost = (self.energy * self.fuel_cost / self.energy_content + self.transport_cost) * np.ones(
+            model.gdf.shape[0]) - base_cost
 
         fuel_cost = [np.ones(proj_life) * x for x in cost]
 
@@ -642,7 +647,7 @@ class Technology:
         # else:
         proj_life = model.specs['End_year'] - model.specs['Start_year']
         self.total_time(model)
-        #self.total_time_saved = model.base_fuel.total_time_yr - self.total_time_yr  # time saved per household
+        # self.total_time_saved = model.base_fuel.total_time_yr - self.total_time_yr  # time saved per household
         self.total_time_saved = model.base_fuel.total_time_yr - self.total_time_yr
         # time value of time saved per sq km
         self.time_value = self.total_time_saved * model.gdf["value_of_time"] / (
@@ -655,7 +660,7 @@ class Technology:
     def net_benefit(self, model, w_health=1, w_environment=1, w_social=1, w_costs=1):
         self.total_costs()
         self.benefits = w_health * (
-                    self.distributed_morbidity + self.distributed_mortality) + w_environment * self.decreased_carbon_costs + w_social * self.time_value
+                self.distributed_morbidity + self.distributed_mortality) + w_environment * self.decreased_carbon_costs + w_social * self.time_value
         model.gdf["costs_{}".format(self.name)] = self.costs
         model.gdf["benefits_{}".format(self.name)] = self.benefits
         model.gdf["net_benefit_{}".format(self.name)] = self.benefits - w_costs * self.costs
@@ -818,6 +823,7 @@ class Biomass(Technology):
 
         self.travel_time = 2 * model.raster_to_dataframe(forest.distance_raster.layer, nodata=np.nan,
                                                          fill_nodata='interpolate', method='read')
+
     def total_time(self, model):
         self.transportation_time(self.friction_path, self.forest_path, model)
         trips_per_yr = self.energy / (self.collection_capacity * self.energy_content)
@@ -855,8 +861,6 @@ class Electricity(Technology):
         # Carbon intensity of fossil fuel plants in kg/GWh
         self.generation = {}
 
-        self.capacities = {}
-
         self.capacity = {}
         self.grid_capacity_cost = grid_capacity_cost
 
@@ -868,34 +872,34 @@ class Electricity(Technology):
                                    'still_gas': 0.060849859, 'flared_natural_gas': 0.051855075,
                                    'waste': 0.010736111, 'biofuels_and_waste': 0.010736111,
                                    'nuclear': 0, 'hydro': 0, 'wind': 0,
-
                                    'solar': 0, 'other': 0, 'geothermal': 0}
 
-                                   'solar': 0, 'geothermal': 0, 'other': 0}
-
         # TODO: make this general, with other fuel mix this crash
-        self.grid_capacity_costs = {'oil': 1467,'natural_gas' : 550,
-                                   'biofuels_and_waste': 2117,
-                                   'nuclear': 4000, 'hydro': 2100, 'coal' : 1600,'wind': 1925,
-                                   'solar': 1400, 'geothermal' : 2917}
+        self.grid_capacity_costs = {'oil': 1467, 'natural_gas': 550,
+                                    'biofuels_and_waste': 2117,
+                                    'nuclear': 4000, 'hydro': 2100, 'coal': 1600, 'wind': 1925,
+                                    'solar': 1400, 'geothermal': 2917}
+
+        self.grid_techs_life = {'oil': 35, 'natural_gas': 30,
+                                'biofuels_and_waste': 25,
+                                'nuclear': 50, 'hydro': 60, 'coal': 40, 'wind': 22,
+                                'solar': 25, 'geothermal': 30}
 
     def __setitem__(self, idx, value):
         if 'generation' in idx:
             self.generation[idx.lower().replace('generation_', '')] = value
-
+        elif 'grid_capacity_cost' in idx:
+            self.grid_capacity_cost = value
         elif 'capacity' in idx:
             self.capacity[idx.lower().replace('capacity_', '')] = value
         elif 'carbon_intensity' in idx:
             self.carbon_intensities[idx.lower().replace('carbon_intensity_', '')] = value
-
-        elif 'grid_capacity_cost' in idx:
-            self.grid_capacity_cost = value
-        elif 'capacity' in idx:
-            self.capacities[idx.lower().replace('capacity_', '')] = value
         elif 'carbon_intensity' in idx:
             self.carbon_intensities[idx.lower().replace('carbon_intensity_', '')] = value
         elif 'connection_cost' in idx:
             self.connection_cost = value
+        elif 'grid_cap_life' in idx:
+            self.grid_cap_life = value
         else:
             super().__setitem__(idx, value)
 
@@ -911,27 +915,47 @@ class Electricity(Technology):
 
         if self.grid_capacity_cost is None:
             self.get_grid_capacity_cost()
+            salvage = self.grid_salvage(model)
+        else:
+            salvage = self.grid_salvage(model, True)
 
         self.capacity = self.energy * add_capacity / (3.6 * self.time_of_cooking * 365)
-        self.capacity_cost = self.capacity * self.grid_capacity_cost
+        self.capacity_cost = self.capacity * (self.grid_capacity_cost - salvage)
 
     def get_carbon_intensity(self, model):
         grid_emissions = sum([gen * self.carbon_intensities[fuel] for fuel, gen in self.generation.items()])
         grid_generation = sum(self.generation.values())
         self.carbon_intensity = grid_emissions / grid_generation * 1000  # to convert from Mton/PJ to kg/GJ
 
-
     # def carb(self, model):
     #     self.get_carbon_intensity()
     #     super().carb(model)
 
     def get_grid_capacity_cost(self):
-        self.grid_capacity_cost = sum([self.grid_capacity_costs[fuel] * (cap/sum(self.capacity.values())) for fuel, cap in self.capacity.items()])
+        self.grid_capacity_cost = sum(
+            [self.grid_capacity_costs[fuel] * (cap / sum(self.capacity.values())) for fuel, cap in
+             self.capacity.items()])
+
+    def grid_salvage(self, model, single=False):
+        discount_rate, proj_life = self.discount_factor(model.specs)
+        if single:
+            used_life = proj_life % self.grid_cap_life
+            salvage = self.grid_capacity_cost * (1 - used_life / self.grid_cap_life)
+        else:
+            salvage_values = []
+
+            for tech, cap in self.capacity.items():
+                used_life = proj_life % self.grid_techs_life[tech]
+                salvage = self.grid_capacity_costs[tech] * (1 - used_life / self.grid_techs_life[tech])
+                salvage_values.append(salvage * cap / sum(self.capacity.values()))
+
+            salvage = sum(salvage_values)
+
+        return salvage / discount_rate
 
     def carb(self, model):
-        self.get_carbon_intensity()
+        self.get_carbon_intensity(model)
         super().carb(model)
-
 
     def discounted_inv(self, model):
         super().discounted_inv(model)
@@ -1000,7 +1024,7 @@ class Biogas(Technology):
         from_pig = model.gdf["Pigs"] * 5 * 0.75 * 0.14 * 470
         from_poultry = model.gdf["Poultry"] * 0.12 * 0.25 * 0.75 * 450
 
-        fraction = self.read_friction(model, self.friction_path) / (1000000 *0.2)
+        fraction = self.read_friction(model, self.friction_path) / (1000000 * 0.2)
         self.fraction = fraction
 
         model.gdf["available_biogas"] = ((from_cattle + from_buffalo + from_goat + from_pig + from_poultry + \
