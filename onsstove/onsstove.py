@@ -494,6 +494,7 @@ class OnSSTOVE(DataProcessor):
                 base_fuel.carbon += tech.carbon * current_share
                 base_fuel.total_time_yr += tech.total_time_yr * current_share
                 base_fuel.inv_cost += tech.inv_cost * current_share
+                # TODO: we can't do this for fuel_cost and energy_content as the units may differ
                 base_fuel.fuel_cost += tech.fuel_cost * current_share
                 base_fuel.energy_content += tech.energy_content * current_share
                 base_fuel.energy += tech.energy * current_share
@@ -902,16 +903,20 @@ class OnSSTOVE(DataProcessor):
 
                 second_tech_net_benefit = dff.loc[current, second_benefit_cols].max(axis=1) * (1 - tech.factor.loc[current])
 
+                elec_factor = dff['Elec_pop_calib'] / dff['Calibrated_pop']
                 dff['max_benefit_tech'] = second_best
                 dff['maximum_net_benefit'] = second_tech_net_benefit
                 dff['Calibrated_pop'] *= (1 - tech.factor.loc[current])
                 dff['Households'] *= (1 - tech.factor.loc[current])
 
-                if tech.name == 'Electricity':
-                    dff['Elec_pop_calib'] *= 0
-                    self.gdf.loc[current, 'Elec_pop_calib'] *= tech.factor.loc[current]
                 self.gdf.loc[current, 'Calibrated_pop'] *= tech.factor.loc[current]
                 self.gdf.loc[current, 'Households'] *= tech.factor.loc[current]
+                if tech.name == 'Electricity':
+                    dff['Elec_pop_calib'] *= 0
+                #     self.gdf.loc[current, 'Elec_pop_calib'] *= tech.factor.loc[current]
+                else:
+                    self.gdf.loc[current, 'Elec_pop_calib'] = self.gdf.loc[current, 'Calibrated_pop'] * elec_factor
+                    dff['Elec_pop_calib'] = dff['Calibrated_pop'] * elec_factor
                 gdf = gdf.append(dff)
 
         self.gdf = self.gdf.append(gdf)
