@@ -917,7 +917,6 @@ class Electricity(Technology):
             self.get_grid_capacity_cost()
             salvage = self.grid_salvage(model)
         else:
-            print('entered')
             salvage = self.grid_salvage(model, True)
 
         self.capacity = self.energy * add_capacity / (3.6 * self.time_of_cooking * 365)
@@ -1080,4 +1079,5 @@ class Biogas(Technology):
         model.gdf.loc[(model.gdf['biogas_energy_hh'] == 0), "net_benefit_{}".format(self.name)] = np.nan
         factor = model.gdf['biogas_energy'] / (self.energy * model.gdf['Households'])
         factor[factor > 1] = 1
+        self.factor = factor
         self.households = model.gdf['Households'] * factor
