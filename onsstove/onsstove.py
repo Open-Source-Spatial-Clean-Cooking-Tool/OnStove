@@ -396,6 +396,7 @@ class OnSSTOVE(DataProcessor):
         self.base_fuel = None
         self.i = {}
         self.energy_per_meal = 3.64
+        # TODO: remove from here and make it an input in the specs file
         self.gwp = {'co2': 1, 'ch4': 25, 'n2o': 298, 'co': 2, 'bc': 900, 'oc': -46}
 
     def get_layers(self, layers):
