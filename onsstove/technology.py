@@ -917,6 +917,7 @@ class Electricity(Technology):
             self.get_grid_capacity_cost()
             salvage = self.grid_salvage(model)
         else:
+            print('entered')
             salvage = self.grid_salvage(model, True)
 
         self.capacity = self.energy * add_capacity / (3.6 * self.time_of_cooking * 365)
@@ -951,7 +952,7 @@ class Electricity(Technology):
 
             salvage = sum(salvage_values)
 
-        return salvage / discount_rate
+        return salvage / discount_rate[0]
 
     def carb(self, model):
         self.get_carbon_intensity(model)
@@ -968,6 +969,8 @@ class Electricity(Technology):
     def net_benefit(self, model, w_health=1, w_environment=1, w_social=1, w_costs=1):
         super().net_benefit(model, w_health, w_environment, w_social, w_costs)
         model.gdf.loc[model.gdf['Current_elec'] == 0, "net_benefit_{}".format(self.name)] = np.nan
+        # model.gdf.loc[model.gdf['Current_elec'] == 0, "costs_{}".format(self.name)] = np.nan
+        # model.gdf.loc[model.gdf['Current_elec'] == 0, "benefits_{}".format(self.name)] = np.nan
         factor = model.gdf['Elec_pop_calib'] / model.gdf['Calibrated_pop']
         factor[factor > 1] = 1
         self.factor = factor
