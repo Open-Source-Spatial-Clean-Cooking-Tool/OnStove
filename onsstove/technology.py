@@ -69,6 +69,7 @@ class Technology:
         for paf in ['paf_alri_', 'paf_copd_', 'paf_ihd_', 'paf_lc_', 'paf_stroke_']:
             for s in ['u', 'r']:
                 self[paf + s] = 0
+        self.discounted_fuel_cost = 0
 
     def __setitem__(self, idx, value):
         if idx == 'name':
@@ -620,22 +621,27 @@ class Technology:
         self.discounted_investments = pd.Series(investments_discounted, index=model.gdf.index) + (
                 self.inv_cost - model.base_fuel.inv_cost)
 
-    def discount_fuel_cost(self, model):
+    def discount_fuel_cost(self, model, relative=True):
         self.required_energy(model)
         discount_rate, proj_life = self.discount_factor(model.specs)
 
-        base_cost = (
-                            model.base_fuel.energy * model.base_fuel.fuel_cost / model.base_fuel.energy_content + model.base_fuel.transport_cost) * np.ones(
-            model.gdf.shape[0])
+        # base_cost = (
+        #                     model.base_fuel.energy * model.base_fuel.fuel_cost / model.base_fuel.energy_content + model.base_fuel.transport_cost) * np.ones(
+        #     model.gdf.shape[0])
 
         cost = (self.energy * self.fuel_cost / self.energy_content + self.transport_cost) * np.ones(
-            model.gdf.shape[0]) - base_cost
+            model.gdf.shape[0]) #- base_cost
 
         fuel_cost = [np.ones(proj_life) * x for x in cost]
 
         fuel_cost_discounted = np.array([sum(x / discount_rate) for x in fuel_cost])
 
-        self.discounted_fuel_cost = pd.Series(fuel_cost_discounted, index=model.gdf.index)
+        if relative:
+            discounted_base_fuel_cost = model.base_fuel.discounted_fuel_cost
+        else:
+            discounted_base_fuel_cost = 0
+
+        self.discounted_fuel_cost = pd.Series(fuel_cost_discounted, index=model.gdf.index) - discounted_base_fuel_cost
 
     def total_time(self, model):
         self.total_time_yr = (self.time_of_cooking + self.time_of_collection) * 365
@@ -752,9 +758,9 @@ class LPG(Technology):
         self.transport_cost = model.raster_to_dataframe(transport_cost, nodata=np.nan,
                                                         fill_nodata='interpolate', method='read')
 
-    def discount_fuel_cost(self, model):
+    def discount_fuel_cost(self, model, relative=True):
         self.transportation_cost(model)
-        super().discount_fuel_cost(model)
+        super().discount_fuel_cost(model, relative)
 
     def transport_emissions(self, model):
         # Diesel consumption per h is assumed to be 14 l/h (14 l/100km)

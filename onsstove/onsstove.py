@@ -495,10 +495,13 @@ class OnSSTOVE(DataProcessor):
                 base_fuel.total_time_yr += tech.total_time_yr * current_share
                 base_fuel.inv_cost += tech.inv_cost * current_share
                 # TODO: we can't do this for fuel_cost and energy_content as the units may differ
-                base_fuel.fuel_cost += tech.fuel_cost * current_share
-                base_fuel.energy_content += tech.energy_content * current_share
-                base_fuel.energy += tech.energy * current_share
-                base_fuel.transport_cost += tech.transport_cost * current_share
+                # base_fuel.fuel_cost += tech.fuel_cost * current_share
+                # base_fuel.energy_content += tech.energy_content * current_share
+                # base_fuel.energy += tech.energy * current_share
+                # base_fuel.transport_cost += tech.transport_cost * current_share
+
+                tech.discount_fuel_cost(self, relative=False)
+                base_fuel.discounted_fuel_cost += tech.discounted_fuel_cost * current_share
 
                 for paf in ['paf_alri_r', 'paf_copd_r', 'paf_ihd_r',
                             'paf_lc_r', 'paf_stroke_r']:
