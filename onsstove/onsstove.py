@@ -494,11 +494,6 @@ class OnSSTOVE(DataProcessor):
                 base_fuel.carbon += tech.carbon * current_share
                 base_fuel.total_time_yr += tech.total_time_yr * current_share
                 base_fuel.inv_cost += tech.inv_cost * current_share
-                # TODO: we can't do this for fuel_cost and energy_content as the units may differ
-                # base_fuel.fuel_cost += tech.fuel_cost * current_share
-                # base_fuel.energy_content += tech.energy_content * current_share
-                # base_fuel.energy += tech.energy * current_share
-                # base_fuel.transport_cost += tech.transport_cost * current_share
 
                 tech.discount_fuel_cost(self, relative=False)
                 base_fuel.discounted_fuel_cost += tech.discounted_fuel_cost * current_share
@@ -952,30 +947,27 @@ class OnSSTOVE(DataProcessor):
 
     def extract_lives_saved(self):
         self.gdf["deaths_avoided"] = self.gdf.apply(
-            lambda row: self.techs[row['max_benefit_tech']].deaths_avoided[row.name], axis=1) * self.gdf["Households"]
+            lambda row: self.techs[row['max_benefit_tech']].deaths_avoided[row.name], axis=1) #* self.gdf["Households"]
 
     def extract_health_costs_saved(self):
 
         self.gdf["health_costs_avoided"] = self.gdf.apply(
             lambda row: self.techs[row['max_benefit_tech']].distributed_morbidity[row.name] +
-                        self.techs[row['max_benefit_tech']].distributed_mortality[row.name], axis=1) * self.gdf[
-                                               "Households"]
+                        self.techs[row['max_benefit_tech']].distributed_mortality[row.name], axis=1) #* self.gdf["Households"]
 
     def extract_time_saved(self):
         self.gdf["time_saved"] = self.gdf.apply(
-            lambda row: self.techs[row['max_benefit_tech']].total_time_saved[row.name], axis=1) * \
-                                 self.gdf["Households"]
+            lambda row: self.techs[row['max_benefit_tech']].total_time_saved[row.name], axis=1) #* self.gdf["Households"]
 
     def extract_opportunity_cost(self):
         self.gdf["opportunity_cost_gained"] = self.gdf.apply(
-            lambda row: self.techs[row['max_benefit_tech']].time_value[row.name], axis=1) * \
-                                 self.gdf["Households"]
+            lambda row: self.techs[row['max_benefit_tech']].time_value[row.name], axis=1) #* self.gdf["Households"]
 
     def extract_reduced_emissions(self):
         # TODO: Fix this
 
         self.gdf["reduced_emissions"] = self.gdf.apply(
-                lambda row: self.techs[row['max_benefit_tech']].decreased_carbon_emissions[row.name], axis=1) * self.gdf["Households"]
+                lambda row: self.techs[row['max_benefit_tech']].decreased_carbon_emissions[row.name], axis=1) #* self.gdf["Households"]
         # except:
         #     self.gdf["reduced_emissions"] = self.gdf.apply(
         #         lambda row: self.techs[row['max_benefit_tech']].decreased_carbon_emissions, axis=1) * self.gdf["Households"]
@@ -983,29 +975,28 @@ class OnSSTOVE(DataProcessor):
     def extract_investment_costs(self):
 
         self.gdf["investment_costs"] = self.gdf.apply(
-            lambda row: self.techs[row['max_benefit_tech']].discounted_investments[row.name], axis=1) * self.gdf["Households"]
+            lambda row: self.techs[row['max_benefit_tech']].discounted_investments[row.name], axis=1) #* self.gdf["Households"]
 
     def extract_om_costs(self):
 
         self.gdf["om_costs"] = self.gdf.apply(
-            lambda row: self.techs[row['max_benefit_tech']].discounted_om_costs, axis=1) * self.gdf["Households"]
+            lambda row: self.techs[row['max_benefit_tech']].discounted_om_costs, axis=1) #* self.gdf["Households"]
 
     def extract_fuel_costs(self):
 
         self.gdf["fuel_costs"] = self.gdf.apply(
-            lambda row: self.techs[row['max_benefit_tech']].discounted_fuel_cost[row.name], axis=1) * self.gdf[
-                                     "Households"]
+            lambda row: self.techs[row['max_benefit_tech']].discounted_fuel_cost[row.name], axis=1) #* self.gdf["Households"]
 
     def extract_salvage(self):
 
         self.gdf["salvage_value"] = self.gdf.apply(
-            lambda row: self.techs[row['max_benefit_tech']].discounted_salvage_cost[row.name], axis=1) * self.gdf["Households"]
+            lambda row: self.techs[row['max_benefit_tech']].discounted_salvage_cost[row.name], axis=1) #* self.gdf["Households"]
 
     def extract_emissions_costs_saved(self):
         # TODO: Fix this
 
         self.gdf["emissions_costs_saved"] = self.gdf.apply(
-                lambda row: self.techs[row['max_benefit_tech']].decreased_carbon_costs[row.name], axis=1) * self.gdf["Households"]
+                lambda row: self.techs[row['max_benefit_tech']].decreased_carbon_costs[row.name], axis=1) #* self.gdf["Households"]
         # except:
         #     self.gdf["emissions_costs_saved"] = self.gdf.apply(
         #         lambda row: self.techs[row['max_benefit_tech']].decreased_carbon_costs, axis=1) * self.gdf["Households"]
@@ -1076,7 +1067,7 @@ class OnSSTOVE(DataProcessor):
         else:
             raise ValueError("file_type needs to be either csv, raster, polygon or point.")
 
-    def _create_layer(self, variable, labels=None, cmap=None):
+    def _create_layer(self, variable, labels=None, cmap=None, metric='mean'):
         layer = np.empty(self.base_layer.layer.shape)
         layer[:] = np.nan
         codes = None
@@ -1096,9 +1087,16 @@ class OnSSTOVE(DataProcessor):
                 cmap = {i: cmap[tech] for i, tech in enumerate(dff[variable].unique())}
             layer[self.rows, self.cols] = [codes[tech] for tech in dff[variable]]
         else:
+            # TODO: change all parameters to be per household
+            # TODO: edit the summary method to account for these changes
             dff = self.gdf.copy().reset_index(drop=False)
-            dff = dff.groupby('index').agg({variable: 'sum'})
-            layer[self.rows, self.cols] = dff[variable]
+            if metric == 'total':
+                dff['variable'] = dff[variable] * dff['Households']
+                dff = dff.groupby('index')['variable'].sum()
+            else:
+                dff = dff.groupby('index').agg({variable: metric})[variable]
+            variable = variable + '_' + metric
+            layer[self.rows, self.cols] = dff
         raster = RasterLayer('Output', variable)
         raster.layer = layer
         raster.meta = self.base_layer.meta
@@ -1107,8 +1105,8 @@ class OnSSTOVE(DataProcessor):
 
         return raster, codes, cmap
 
-    def to_raster(self, variable, labels=None, cmap=None):
-        raster, codes, cmap = self._create_layer(variable, labels=labels, cmap=cmap)
+    def to_raster(self, variable, labels=None, cmap=None, metric='mean'):
+        raster, codes, cmap = self._create_layer(variable, labels=labels, cmap=cmap, metric=metric)
         raster.save(os.path.join(self.output_directory, 'Output'))
         print(f'Layer saved in {os.path.join(self.output_directory, "Output", variable + ".tif")}\n')
         if codes and cmap:
@@ -1121,8 +1119,8 @@ class OnSSTOVE(DataProcessor):
 
     def plot(self, variable, cmap='viridis', cumulative_count=None, legend_position=(1.05, 1), dpi=150,
              admin_layer=None, title=None, labels=None, legend=True, legend_title='', legend_cols=1, rasterized=True,
-             stats=False, stats_position=(1.05, 0.5)):
-        raster, codes, cmap = self._create_layer(variable, labels=labels, cmap=cmap)
+             stats=False, stats_position=(1.05, 0.5), metric='mean'):
+        raster, codes, cmap = self._create_layer(variable, labels=labels, cmap=cmap, metric=metric)
         if isinstance(admin_layer, gpd.GeoDataFrame):
             admin_layer = admin_layer
         elif not admin_layer:
@@ -1140,7 +1138,7 @@ class OnSSTOVE(DataProcessor):
                     ax=ax)
 
     def add_statistics(self, ax, stats_position):
-        summary = self.summary(total=True)
+        summary = self.summary(total=True, pretty=False)
         deaths = TextArea("Deaths avoided", textprops=dict(fontsize=12, color='black'))
         health = TextArea("Health costs avoided", textprops=dict(fontsize=12, color='black'))
         emissions = TextArea("Emissions avoided", textprops=dict(fontsize=12, color='black'))
@@ -1174,8 +1172,8 @@ class OnSSTOVE(DataProcessor):
 
     def to_image(self, variable, type='png', cmap='viridis', cumulative_count=None, legend_position=(1.05, 1),
                  admin_layer=None, title=None, dpi=300, labels=None, legend=True, legend_title='', legend_cols=1,
-                 rasterized=True, stats=False, stats_position=(1.05, 0.5)):
-        raster, codes, cmap = self._create_layer(variable, labels=labels, cmap=cmap)
+                 rasterized=True, stats=False, stats_position=(1.05, 0.5), metric='mean'):
+        raster, codes, cmap = self._create_layer(variable, labels=labels, cmap=cmap, metric=metric)
         raster.bounds = self.base_layer.bounds
         if isinstance(admin_layer, gpd.GeoDataFrame):
             admin_layer = admin_layer
@@ -1199,37 +1197,50 @@ class OnSSTOVE(DataProcessor):
     def read_data(self, path):
         self.gdf = gpd.read_file(path)
 
-    def summary(self, total=False):
-        summary = self.gdf.groupby(['max_benefit_tech']).agg({'Calibrated_pop': lambda row: np.nansum(row) / 1000000,
-                                                               'maximum_net_benefit': lambda row: np.nansum(
-                                                                   row) / 1000000,
-                                                               'deaths_avoided': 'sum',
-                                                               'health_costs_avoided': lambda row: np.nansum(
-                                                                   row) / 1000000,
-                                                               'time_saved': 'sum',
-                                                               'opportunity_cost_gained': lambda row: np.nansum(
-                                                                   row) / 1000000,
-                                                               'reduced_emissions': lambda row: np.nansum(
-                                                                   row) / 1000000000,
-                                                               'emissions_costs_saved': lambda row: np.nansum(
-                                                                   row) / 1000000,
-                                                               'investment_costs': lambda row: np.nansum(row) / 1000000,
-                                                               'fuel_costs': lambda row: np.nansum(row) / 1000000,
-                                                               'om_costs': lambda row: np.nansum(row) / 1000000,
-                                                               'salvage_value': lambda row: np.nansum(row) / 1000000,
-                                                               }).reset_index()
+    def summary(self, total=True, pretty=True):
+        dff = self.gdf.copy()
+        for attribute in ['maximum_net_benefit', 'deaths_avoided', 'health_costs_avoided', 'time_saved',
+                          'opportunity_cost_gained', 'reduced_emissions', 'reduced_emissions', 'emissions_costs_saved',
+                          'investment_costs', 'fuel_costs', 'om_costs', 'salvage_value']:
+            dff[attribute] *= dff['Households']
+        summary = dff.groupby(['max_benefit_tech']).agg({'Calibrated_pop': lambda row: np.nansum(row) / 1000000,
+                                                         'maximum_net_benefit': lambda row: np.nansum(row) / 1000000,
+                                                         'deaths_avoided': 'sum',
+                                                         'health_costs_avoided': lambda row: np.nansum(row) / 1000000,
+                                                         'time_saved': 'sum',
+                                                         'opportunity_cost_gained': lambda row: np.nansum(row) / 1000000,
+                                                         'reduced_emissions': lambda row: np.nansum(row) / 1000000000,
+                                                         'emissions_costs_saved': lambda row: np.nansum(row) / 1000000,
+                                                         'investment_costs': lambda row: np.nansum(row) / 1000000,
+                                                         'fuel_costs': lambda row: np.nansum(row) / 1000000,
+                                                         'om_costs': lambda row: np.nansum(row) / 1000000,
+                                                         'salvage_value': lambda row: np.nansum(row) / 1000000,
+                                                         }).reset_index()
         if total:
             total = summary.sum().rename('total')
             total['max_benefit_tech'] = 'total'
-            total['maximum_net_benefit'] = sum(summary['maximum_net_benefit'] * summary['Calibrated_pop']) / total['Calibrated_pop']
             summary = summary.append(total)
 
         summary['time_saved'] /= (summary['Calibrated_pop'] * 1000000 * 365)
+        if pretty:
+            summary.rename(columns={'max_benefit_tech': 'Max benefit technology',
+                                    'Calibrated_pop': 'Population (Million)',
+                                    'maximum_net_benefit': 'Total net benefit (MMUSD)',
+                                    'deaths_avoided': 'Total deaths avoided (pp/yr)',
+                                    'health_costs_avoided': 'Health costs avoided (MMUSD)',
+                                    'time_saved': 'hours/pp.day',
+                                    'opportunity_cost_gained': 'Opportunity cost avoided (MMUSD)',
+                                    'reduced_emissions': 'Reduced emissions (Mton CO2eq)',
+                                    'emissions_costs_saved': 'Emissions costs saved (MMUSD)',
+                                    'investment_costs': 'Investment costs (MMUSD)',
+                                    'fuel_costs': 'Fuel costs (MMUSD)',
+                                    'om_costs': 'O&M costs (MMUSD)',
+                                    'salvage_value': 'Salvage value (MMUSD)'}, inplace=True)
 
         return summary
 
     def plot_split(self, cmap=None, labels=None, save=False, height=1.5, width=2.5):
-        df = self.summary()
+        df = self.summary(total=False, pretty=False)
         df['max_benefit_tech'] = df['max_benefit_tech'].replace(labels)
 
         tech_list = df.sort_values('Calibrated_pop')['max_benefit_tech'].tolist()
@@ -1256,7 +1267,7 @@ class OnSSTOVE(DataProcessor):
             return p
 
     def plot_costs_benefits(self, cmap=None, labels=None, save=False, height=1.5, width=2.5):
-        df = self.summary()
+        df = self.summary(total=False, pretty=False)
         df['max_benefit_tech'] = df['max_benefit_tech'].replace(labels)
         df['investment_costs'] -= df['salvage_value']
         df['fuel_costs'] *= -1
@@ -1332,7 +1343,7 @@ class OnSSTOVE(DataProcessor):
             p = (ggplot(df)
                  + geom_boxplot(aes(x=x,
                                     y='(health_costs_avoided + opportunity_cost_gained + emissions_costs_saved' +
-                                      ' + salvage_value - investment_costs - fuel_costs - om_costs) / Households',
+                                      ' + salvage_value - investment_costs - fuel_costs - om_costs)',
                                     fill='max_benefit_tech',
                                     color='max_benefit_tech'
                                     ),
@@ -1365,7 +1376,7 @@ class OnSSTOVE(DataProcessor):
             p = (ggplot(df)
                  + geom_density(aes(
                         x='(health_costs_avoided + opportunity_cost_gained + emissions_costs_saved' +
-                                      ' + salvage_value - investment_costs - fuel_costs - om_costs) / Households',
+                                      ' + salvage_value - investment_costs - fuel_costs - om_costs)',
                         y=after_stat('count'),
                         fill='max_benefit_tech', color='max_benefit_tech'),
                                 alpha=0.1)
