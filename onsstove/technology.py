@@ -1017,11 +1017,28 @@ class Biogas(Technology):
         self.utilization_factor = utilization_factor
         self.digestor_eff = digestor_eff
         self.friction_path = friction_path
+        self.water = None
+        self.temperature = None
 
     def read_friction(self, model, friction_path):
         friction = RasterLayer(self.name, 'Friction', layer_path=friction_path, resample='average')
         data = friction.layer[model.rows, model.cols]
-        return (self.time_of_collection * 60) / data  # (h * 60 min/h) / (min/m)
+        return data / 60
+
+    def required_energy_hh(self, model):
+        self.required_energy(model)
+        return self.energy / self.digestor_eff
+
+    def get_collection_time(self, model):
+        self.available_biogas(model)
+        required_energy_hh = self.required_energy_hh(model)
+
+        friction = self.read_friction(model, self.friction_path)
+        time_of_collection = required_energy_hh / (model.gdf["biogas_energy"] / (1000000 * 0.2))
+        time_of_collection *= friction
+        time_of_collection[time_of_collection > 10] = 10
+        self.time_of_collection = time_of_collection
+
 
     def available_biogas(self, model):
         # Biogas production potential in liters per day
@@ -1032,37 +1049,31 @@ class Biogas(Technology):
         from_pig = model.gdf["Pigs"] * 5 * 0.75 * 0.14 * 470
         from_poultry = model.gdf["Poultry"] * 0.12 * 0.25 * 0.75 * 450
 
-        fraction = self.read_friction(model, self.friction_path) / (1000000 * 0.2)
-        self.fraction = fraction
+        # fraction = self.read_friction(model, self.friction_path) / (1000000 * 0.2)
+        # self.fraction = fraction
 
         model.gdf["available_biogas"] = ((from_cattle + from_buffalo + from_goat + from_pig + from_poultry + \
                                           from_sheep) * self.digestor_eff / 1000) * 365
 
-        model.gdf["m3_biogas_hh"] = fraction * model.gdf["available_biogas"]
+        # model.gdf["m3_biogas_hh"] = fraction * model.gdf["available_biogas"]
 
-        del model.gdf["Cattles"]
-        del model.gdf["Buffaloes"]
-        del model.gdf["Sheeps"]
-        del model.gdf["Goats"]
-        del model.gdf["Pigs"]
-        del model.gdf["Poultry"]
+        if self.temperature is not None:
+            if isinstance(self.temperature, str):
+                self.temperature = RasterLayer('Biogas', 'Temperature', self.temperature)
 
-    def available_energy(self, model, temp, water=None):
-        self.required_energy(model)
-        model.raster_to_dataframe(temp.layer, name="Temperature", method='read',
-                                  nodata=temp.meta['nodata'], fill_nodata='interpolate')
-        if isinstance(water, VectorLayer):
-            model.raster_to_dataframe(water.layer, name="Water",
+            model.raster_to_dataframe(self.temperature.layer, name="Temperature", method='read',
+                                      nodata=self.temperature.meta['nodata'], fill_nodata='interpolate')
+            model.gdf.loc[model.gdf["Temperature"] < 10, "available_biogas"] = 0
+            model.gdf.loc[(model.gdf["IsUrban"] > 20), "available_biogas"] = 0
+
+        if self.water is not None:
+            if isinstance(self.water, str):
+                self.water = VectorLayer('Biogas', 'Water scarcity', self.water, bbox=model.mask_layer.layer)
+            model.raster_to_dataframe(self.water.layer, name="Water",
                                       fill_nodata='interpolate', method='read')
-            model.gdf.loc[model.gdf["Water"] == 0, "m3_biogas_hh"] = 0
-
-        model.gdf.loc[model.gdf["Temperature"] < 10, "m3_biogas_hh"] = 0
-        model.gdf.loc[(model.gdf["IsUrban"] > 20), "m3_biogas_hh"] = 0
+            model.gdf.loc[model.gdf["Water"] == 0, "available_biogas"] = 0
 
         model.gdf["biogas_energy"] = model.gdf["available_biogas"] * self.energy_content
-        model.gdf["biogas_energy_hh"] = model.gdf["m3_biogas_hh"] * self.energy_content
-        model.gdf.loc[(model.gdf["biogas_energy_hh"] < self.energy), "biogas_energy_hh"] = 0
-        model.gdf.loc[(model.gdf["biogas_energy_hh"] == 0), "biogas_energy"] = 0
 
     def recalibrate_livestock(self, model, buffaloes, cattles, poultry, goats, pigs, sheeps):
         paths = {
@@ -1079,11 +1090,24 @@ class Biogas(Technology):
             model.raster_to_dataframe(layer.layer, name=name, method='read',
                                       nodata=layer.meta['nodata'], fill_nodata='interpolate')
 
+    def total_time(self, model):
+        self.get_collection_time(model)
+        super().total_time(model)
+
     def net_benefit(self, model, w_health=1, w_environment=1, w_social=1, w_costs=1):
         super().net_benefit(model, w_health, w_environment, w_social, w_costs)
         # model.gdf.loc[(model.gdf['biogas_energy_hh'] == 0), "benefits_{}".format(self.name)] = np.nan
-        model.gdf.loc[(model.gdf['biogas_energy_hh'] == 0), "net_benefit_{}".format(self.name)] = np.nan
-        factor = model.gdf['biogas_energy'] / (self.energy * model.gdf['Households'])
+        required_energy_hh = self.required_energy_hh(model)
+        model.gdf.loc[(model.gdf['biogas_energy'] < required_energy_hh), "benefits_{}".format(self.name)] = np.nan
+        model.gdf.loc[(model.gdf['biogas_energy'] < required_energy_hh), "net_benefit_{}".format(self.name)] = np.nan
+        factor = model.gdf['biogas_energy'] / (required_energy_hh * model.gdf['Households'])
         factor[factor > 1] = 1
         self.factor = factor
         self.households = model.gdf['Households'] * factor
+
+        del model.gdf["Cattles"]
+        del model.gdf["Buffaloes"]
+        del model.gdf["Sheeps"]
+        del model.gdf["Goats"]
+        del model.gdf["Pigs"]
+        del model.gdf["Poultry"]

@@ -1087,8 +1087,6 @@ class OnSSTOVE(DataProcessor):
                 cmap = {i: cmap[tech] for i, tech in enumerate(dff[variable].unique())}
             layer[self.rows, self.cols] = [codes[tech] for tech in dff[variable]]
         else:
-            # TODO: change all parameters to be per household
-            # TODO: edit the summary method to account for these changes
             dff = self.gdf.copy().reset_index(drop=False)
             if metric == 'total':
                 dff['variable'] = dff[variable] * dff['Households']
