@@ -103,7 +103,6 @@ model.read_tech_data(path, delimiter=',')
 # Adding tiers data to Electricity
 print(f'[{country}] Electricity tiers data')
 model.techs['Electricity'].tiers_path = snakemake.input.tiers
-model.techs['Electricity'].get_capacity_cost(model)
 
 # 12. Reading GIS data for LPG supply
 print(f'[{country}] LPG data')
@@ -132,16 +131,16 @@ if 'Biogas' in model.techs.keys():
     goats = snakemake.input.goats
     pigs = snakemake.input.pigs
     sheeps = snakemake.input.sheeps
-    temp = RasterLayer('Biogas', 'Temperature', snakemake.input.temperature)
-    water = RasterLayer('Biogas', 'Water scarcity', snakemake.input.water)
+    model.techs['Biogas'].temperature = RasterLayer('Biogas', 'Temperature', snakemake.input.temperature)
+    model.techs['Biogas'].water = RasterLayer('Biogas', 'Water scarcity', snakemake.input.water)
 
     print(f'[{country}] Recalibrating livestock')
     model.techs['Biogas'].recalibrate_livestock(model, buffaloes,
                                                 cattles, poultry, goats, pigs, sheeps)
     print(f'[{country}] Calculating potential biogas')
     model.techs['Biogas'].friction_path = snakemake.input.biomass_friction
-    model.techs['Biogas'].available_biogas(model)
-    model.techs['Biogas'].available_energy(model, temp, water)
+    # model.techs['Biogas'].available_biogas(model)
+    # model.techs['Biogas'].available_energy(model, temp, water)
 
 # 15. Saving the prepared model inputs
 print(f'[{country}] Saving the model')
