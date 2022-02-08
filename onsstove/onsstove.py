@@ -697,9 +697,9 @@ class OnSSTOVE(DataProcessor):
         elif method == 'read':
             if fill_nodata:
                 if fill_nodata == 'interpolate':
-                    if np.isnan(layer[self.rows, self.cols]).sum() > 0:
-                        mask = layer.copy()
-                        mask[mask == nodata] = np.nan
+                    mask = layer.copy()
+                    mask[mask == nodata] = np.nan
+                    if np.isnan(mask[self.rows, self.cols]).sum() > 0:
                         mask[~np.isnan(mask)] = 1
                         rows, cols = np.where(np.isnan(mask) & ~np.isnan(self.base_layer.layer))
                         mask[rows, cols] = 0

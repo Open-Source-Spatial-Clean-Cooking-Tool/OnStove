@@ -827,7 +827,8 @@ class Biomass(Technology):
         forest.add_friction_raster(friction)
         forest.travel_time(condition=self.forest_condition)
 
-        self.travel_time = 2 * model.raster_to_dataframe(forest.distance_raster.layer, nodata=np.nan,
+        self.travel_time = 2 * model.raster_to_dataframe(forest.distance_raster.layer,
+                                                         nodata=forest.distance_raster.meta['nodata'],
                                                          fill_nodata='interpolate', method='read')
 
     def total_time(self, model):
@@ -1022,7 +1023,8 @@ class Biogas(Technology):
 
     def read_friction(self, model, friction_path):
         friction = RasterLayer(self.name, 'Friction', layer_path=friction_path, resample='average')
-        data = friction.layer[model.rows, model.cols]
+        data = model.raster_to_dataframe(friction.layer, nodata=friction.meta['nodata'],
+                                         fill_nodata='interpolate', method='read')
         return data / 60
 
     def required_energy_hh(self, model):
