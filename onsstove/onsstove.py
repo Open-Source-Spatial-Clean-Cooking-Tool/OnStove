@@ -467,6 +467,8 @@ class OnSSTOVE(DataProcessor):
                 self.base_fuel.transportation_cost(self)
             self.base_fuel.inv_cost = pd.Series([self.base_fuel.inv_cost] * self.gdf.shape[0],
                                                 index=self.gdf.index)
+            self.base_fuel.om_cost = pd.Series([self.base_fuel.om_cost] * self.gdf.shape[0],
+                                                index=self.gdf.index)
         else:
             if len(base_fuels) == 0:
                 base_fuels = techs
@@ -494,6 +496,7 @@ class OnSSTOVE(DataProcessor):
                 base_fuel.carbon += tech.carbon * current_share
                 base_fuel.total_time_yr += tech.total_time_yr * current_share
                 base_fuel.inv_cost += tech.inv_cost * current_share
+                base_fuel.om_cost += tech.om_cost * current_share
 
                 tech.discount_fuel_cost(self, relative=False)
                 base_fuel.discounted_fuel_cost += tech.discounted_fuel_cost * current_share
@@ -681,8 +684,6 @@ class OnSSTOVE(DataProcessor):
                                      'Pop': layer[self.rows, self.cols]})
         self.gdf.crs = self.project_crs
 
-    # TODO: add an inplace option with True as default, that will save the result in the
-    #  dataframe or will return it as a pandas series with the same indices
     def raster_to_dataframe(self, layer, name=None, method='sample',
                             nodata=np.nan, fill_nodata=None):
         """
@@ -980,7 +981,7 @@ class OnSSTOVE(DataProcessor):
     def extract_om_costs(self):
 
         self.gdf["om_costs"] = self.gdf.apply(
-            lambda row: self.techs[row['max_benefit_tech']].discounted_om_costs, axis=1) #* self.gdf["Households"]
+            lambda row: self.techs[row['max_benefit_tech']].discounted_om_costs[row.name], axis=1) #* self.gdf["Households"]
 
     def extract_fuel_costs(self):
 

@@ -573,17 +573,20 @@ class Technology:
         discountedOM costs for each stove during the project lifetime
         """
         discount_rate, proj_life = self.discount_factor(model.specs)
-        operation_and_maintenance = self.om_cost * np.ones(proj_life) * self.inv_cost
-        operation_and_maintenance[0] = 0
+        operation_and_maintenance = self.om_cost * np.ones(proj_life) #* self.inv_cost
+        # operation_and_maintenance[0] = 0
 
-        i = self.tech_life
-        while i < proj_life:
-            operation_and_maintenance[i] = 0
-            i = i + self.tech_life
+        # i = self.tech_life
+        # while i < proj_life:
+        #     operation_and_maintenance[i] = 0
+        #     i = i + self.tech_life
         # TODO: this needs to be changed to use a series for each om value adn relative to the base fuel
-        discounted_om_cost = operation_and_maintenance / discount_rate
 
-        self.discounted_om_costs = discounted_om_cost.sum()
+        # self.discounted_om_costs = discounted_om_cost
+
+        discounted_om = np.array([sum((operation_and_maintenance - x) / discount_rate) for
+                                  x in model.base_fuel.om_cost])
+        self.discounted_om_costs = pd.Series(discounted_om, index=model.gdf.index)
 
     def discounted_inv(self, model):
         """
@@ -606,6 +609,7 @@ class Technology:
 
         base_investments = np.zeros(model.base_fuel.inv_cost.shape[0])
         j = 0
+        # TODO: make sure the shapes of the base_fuel and the tech are consistent
         for cost, life in zip(model.base_fuel.inv_cost, model.base_fuel.tech_life):
             _base_investments = np.zeros(proj_life)
             i = ceil(life)
@@ -616,7 +620,6 @@ class Technology:
                 j += 1
 
         # discounted_investments = (model.base_fuel.inv_cost - investments) / discount_rate
-        # TODO: the + self.inv_cost  is a workaround to account for the investment in year 0
         investments_discounted = np.array([sum((investments - x) / discount_rate) for x in base_investments])
         self.discounted_investments = pd.Series(investments_discounted, index=model.gdf.index) + (
                 self.inv_cost - model.base_fuel.inv_cost)
