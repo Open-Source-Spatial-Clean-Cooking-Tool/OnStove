@@ -2,11 +2,11 @@ import os
 cwd = os.getcwd()
 
 SCENARIOS = ['LPG International price - Rural-Urban']
-SENSITIVITY = ['All_benefits']#, 'Health_benefits', 'Social_benefits', 'Environment_benefits']
+SENSITIVITY = ['All_benefits', 'Health_benefits', 'Social_benefits', 'Environment_benefits']
 # SENSITIVITY, = glob_wildcards("../Clean cooking Africa paper/04. OnSSTOVE inputs/LPG International price - Rural-Urban/Sensitivity_files/{sensitivity}/BDI_scenario_file.csv")
 
 
-COUNTRIES = ['AGO']
+COUNTRIES = ['NGA', 'SDN', 'CAF', 'NGA', 'RWA']
 
 
 # COUNTRIES = ['AGO', 'BDI', 'BEN', 'BFA', 'BWA', 'CAF', 'CIV', 'CMR',
@@ -84,20 +84,9 @@ rule process_data:
     script:
           "scripts/data_processing.py"
 
-wealth_index = r"..\Clean cooking Africa paper\01. Data\GIS-data\Poverty\{country}_relative_wealth_index.csv"
-
-for i in COUNTRIES:
-	if (i == 'SOM'):
-    		wealth_index = r"..\Clean cooking Africa paper\01. Data\GIS-data\Poverty\SOM_relative_wealth_index.shp"
-	if (i == 'SDN'):
-    		wealth_index = r"..\Clean cooking Africa paper\01. Data\GIS-data\Poverty\SDN_relative_wealth_index.shp"
-	if (i == 'SSD'):
-    		wealth_index = r"..\Clean cooking Africa paper\01. Data\GIS-data\Poverty\SSD_relative_wealth_index.shp"
-
 rule prepare_model:
     input:
          prep_file = r"..\Clean cooking Africa paper\04. OnSSTOVE inputs\{scenario}\Prep_files/{country}_prep_file.csv",
-         wealth_index = wealth_index,
          techs_file = r"..\Clean cooking Africa paper\04. OnSSTOVE inputs\{scenario}\Technical_specs\{country}_file_tech_specs.csv",
          mask_layer = rules.process_data.output.mask_layer,
          population = rules.process_data.output.population,
@@ -117,6 +106,7 @@ rule prepare_model:
          pigs = rules.process_data.output.pigs,
          sheeps = rules.process_data.output.sheeps
     params:
+          wealth_index = r"..\Clean cooking Africa paper\01. Data\GIS-data\Poverty\{country}_relative_wealth_index",
           output_directory = "../Clean cooking Africa paper/06. Results/{scenario}/{country}",
           country = "{country}"
     output:

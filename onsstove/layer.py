@@ -77,7 +77,7 @@ class Layer:
             cumulative_costs, traceback = mcp.find_costs(starts=pointlist)
             cumulative_costs[np.where(cumulative_costs == float('inf'))] = np.nan
         else:
-            cumulative_costs = np.full(self.friction.layer.shape, 2)
+            cumulative_costs = np.full(self.friction.layer.shape, 2.0)
 
         self.distance_raster = RasterLayer(self.category,
                                            self.name + ' - traveltime',
