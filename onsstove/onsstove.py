@@ -1224,17 +1224,17 @@ class OnSSTOVE(DataProcessor):
         if pretty:
             summary.rename(columns={'max_benefit_tech': 'Max benefit technology',
                                     'Calibrated_pop': 'Population (Million)',
-                                    'maximum_net_benefit': 'Total net benefit (MMUSD)',
+                                    'maximum_net_benefit': 'Total net benefit (MUSD)',
                                     'deaths_avoided': 'Total deaths avoided (pp/yr)',
-                                    'health_costs_avoided': 'Health costs avoided (MMUSD)',
+                                    'health_costs_avoided': 'Health costs avoided (MUSD)',
                                     'time_saved': 'hours/pp.day',
-                                    'opportunity_cost_gained': 'Opportunity cost avoided (MMUSD)',
+                                    'opportunity_cost_gained': 'Opportunity cost avoided (MUSD)',
                                     'reduced_emissions': 'Reduced emissions (Mton CO2eq)',
-                                    'emissions_costs_saved': 'Emissions costs saved (MMUSD)',
-                                    'investment_costs': 'Investment costs (MMUSD)',
-                                    'fuel_costs': 'Fuel costs (MMUSD)',
-                                    'om_costs': 'O&M costs (MMUSD)',
-                                    'salvage_value': 'Salvage value (MMUSD)'}, inplace=True)
+                                    'emissions_costs_saved': 'Emissions costs saved (MUSD)',
+                                    'investment_costs': 'Investment costs (MUSD)',
+                                    'fuel_costs': 'Fuel costs (MUSD)',
+                                    'om_costs': 'O&M costs (MUSD)',
+                                    'salvage_value': 'Salvage value (MUSD)'}, inplace=True)
 
         return summary
 
@@ -1342,7 +1342,7 @@ class OnSSTOVE(DataProcessor):
             p = (ggplot(df)
                  + geom_boxplot(aes(x=x,
                                     y='(health_costs_avoided + opportunity_cost_gained + emissions_costs_saved' +
-                                      ' + salvage_value - investment_costs - fuel_costs - om_costs)',
+                                      ' - investment_costs - fuel_costs - om_costs)',
                                     fill='max_benefit_tech',
                                     color='max_benefit_tech'
                                     ),
