@@ -10,7 +10,7 @@ from rasterio.transform import array_bounds
 from rasterio import warp, features
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
-from matplotlib.colors import ListedColormap, to_rgb
+from matplotlib.colors import ListedColormap, to_rgb, to_hex
 import time, sys
 
 from .raster import *
@@ -490,17 +490,21 @@ class RasterLayer(Layer):
         layer[layer < min_val] = min_val
         return layer
 
-    def quantiles(self, quantiles):
+    def get_quantiles(self, quantiles):
         x = self.layer.flat
         x = x[~np.isnan(x)].copy()
-        qs = np.quantile(x, quantiles)
+        return np.quantile(x, quantiles).astype('float32')
+
+    def quantiles(self, quantiles):
+        qs = self.get_quantiles(quantiles)
         layer = self.layer.copy()
         i = 0
         while i < (len(qs)):
             if i == 0:
-                layer[(layer >= 0) & (layer < qs[i])] = qs[i]
+                layer[(layer >= 0) & (layer <= qs[i])] = quantiles[i] * 100
             else:
-                layer[(layer >= qs[i - 1]) & (layer < qs[i])] = qs[i]
+                layer[(layer > qs[i - 1]) & (layer <= qs[i])] = quantiles[i] * 100
+            i += 1
         return layer
 
     def category_legend(self, im, categories, legend_position=(1.05, 1), title='', legend_cols=1):
@@ -526,6 +530,10 @@ class RasterLayer(Layer):
             layer = self.cumulative_count(cumulative_count)
         elif quantiles:
             layer = self.quantiles(quantiles)
+            qs = self.get_quantiles(quantiles)
+            categories = {i: j * 100 for i, j in zip(qs, quantiles)}
+            legend = True
+            legend_title = 'Quantiles'
         else:
             layer = self.layer
 
@@ -582,3 +590,42 @@ class RasterLayer(Layer):
                   legend=legend, legend_title=legend_title, legend_cols=legend_cols)
         plt.savefig(output_file, dpi=dpi, bbox_inches='tight', transparent=True)
         plt.close()
+
+    def save_style(self, output_path, cmap='magma', quantiles=False):
+        if quantiles:
+            qs = self.get_quantiles((0, 0.25, 0.5, 0.75, 1))
+        else:
+            qs = np.linspace(np.nanmin(self.layer), np.nanmax(self.layer), num=5)
+        colors = plt.get_cmap(cmap, 5).colors
+        string = f"""<?xml version="1.0" encoding="UTF-8"?>
+<StyledLayerDescriptor xmlns="http://www.opengis.net/sld" version="1.0.0" xmlns:ogc="http://www.opengis.net/ogc" xmlns:sld="http://www.opengis.net/sld" xmlns:gml="http://www.opengis.net/gml">
+  <UserLayer>
+    <sld:LayerFeatureConstraints>
+      <sld:FeatureTypeConstraint/>
+    </sld:LayerFeatureConstraints>
+    <sld:UserStyle>
+      <sld:Name>{self.name}</sld:Name>
+      <sld:FeatureTypeStyle>
+        <sld:Rule>
+          <sld:RasterSymbolizer>
+            <sld:ChannelSelection>
+              <sld:GrayChannel>
+                <sld:SourceChannelName>1</sld:SourceChannelName>
+              </sld:GrayChannel>
+            </sld:ChannelSelection>
+            <sld:ColorMap type="ramp">
+              <sld:ColorMapEntry label="{int(qs[0])}" color="{to_hex(colors[0])}" quantity="{qs[0]}"/>
+              <sld:ColorMapEntry label="{int(qs[1])}" color="{to_hex(colors[1])}" quantity="{qs[1]}"/>
+              <sld:ColorMapEntry label="{int(qs[2])}" color="{to_hex(colors[2])}" quantity="{qs[2]}"/>
+              <sld:ColorMapEntry label="{int(qs[3])}" color="{to_hex(colors[3])}" quantity="{qs[3]}"/>
+              <sld:ColorMapEntry label="{int(qs[4])}" color="{to_hex(colors[4])}" quantity="{qs[4]}"/>
+            </sld:ColorMap>
+          </sld:RasterSymbolizer>
+        </sld:Rule>
+      </sld:FeatureTypeStyle>
+    </sld:UserStyle>
+  </UserLayer>
+</StyledLayerDescriptor>
+"""
+        with open(os.path.join(output_path, f'{self.name}.sld'), 'w') as f:
+            f.write(string)
