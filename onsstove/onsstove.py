@@ -1092,6 +1092,11 @@ class OnSSTOVE(DataProcessor):
             if metric == 'total':
                 dff['variable'] = dff[variable] * dff['Households']
                 dff = dff.groupby('index')['variable'].sum()
+            elif metric == 'per_100k':
+                dff['variable'] = dff[variable] * dff['Households']
+                dff = dff.groupby('index')[['variable', 'Calibrated_pop']].sum()
+                dff['variable'] = dff['variable'] * 100000 / dff['Calibrated_pop']
+                dff = dff['variable']
             else:
                 dff = dff.groupby('index').agg({variable: metric})[variable]
             variable = variable + '_' + metric
@@ -1116,7 +1121,8 @@ class OnSSTOVE(DataProcessor):
                     b = int(to_rgb(cmap[code])[2] * 255)
                     f.write(f'{code} {r} {g} {b} 255 {label}\n')
 
-    def plot(self, variable, cmap='viridis', cumulative_count=None, legend_position=(1.05, 1), dpi=150,
+    def plot(self, variable, cmap='viridis', cumulative_count=None, quantiles=None,
+             legend_position=(1.05, 1), dpi=150,
              admin_layer=None, title=None, labels=None, legend=True, legend_title='', legend_cols=1, rasterized=True,
              stats=False, stats_position=(1.05, 0.5), metric='mean'):
         raster, codes, cmap = self._create_layer(variable, labels=labels, cmap=cmap, metric=metric)
@@ -1131,6 +1137,7 @@ class OnSSTOVE(DataProcessor):
             ax = None
 
         raster.plot(cmap=cmap, cumulative_count=cumulative_count,
+                    quantiles=quantiles,
                     categories=codes, legend_position=legend_position,
                     admin_layer=admin_layer, title=title, legend=legend,
                     legend_title=legend_title, legend_cols=legend_cols, rasterized=rasterized,
