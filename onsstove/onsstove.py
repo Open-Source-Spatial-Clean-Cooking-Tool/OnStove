@@ -685,7 +685,7 @@ class OnSSTOVE(DataProcessor):
         self.gdf.crs = self.project_crs
 
     def raster_to_dataframe(self, layer, name=None, method='sample',
-                            nodata=np.nan, fill_nodata=None):
+                            nodata=np.nan, fill_nodata=None, fill_default_value=0):
         """
         Takes a RasterLayer and a method (sample or read), gets the values from the raster layer using the population points previously extracted and saves the values in a new column of OnSSTOVE.gdf
         """
@@ -706,6 +706,7 @@ class OnSSTOVE(DataProcessor):
                         mask[rows, cols] = 0
                         layer = fillnodata(layer, mask=mask,
                                            max_search_distance=100)
+                        layer[(mask == 0) & (np.isnan(layer))] = fill_default_value
                 else:
                     raise ValueError('fill_nodata can only be None or "interpolate"')
 
@@ -1068,21 +1069,22 @@ class OnSSTOVE(DataProcessor):
         else:
             raise ValueError("file_type needs to be either csv, raster, polygon or point.")
 
-    def _create_layer(self, variable, labels=None, cmap=None, metric='mean'):
+    def re_name(self, df, labels, variable):
+        for value, label in labels.items():
+            df[variable] = df[variable].str.replace('_', ' ')
+            df.loc[df[variable] == value, variable] = label
+
+    def create_layer(self, variable, labels=None, cmap=None, metric='mean'):
         layer = np.empty(self.base_layer.layer.shape)
         layer[:] = np.nan
         codes = None
         if isinstance(self.gdf[variable].iloc[0], str):
             dff = self.gdf.copy().reset_index(drop=False)
             if isinstance(labels, dict):
-                for value, label in labels.items():
-                    dff.loc[dff[variable] == value.replace('_', ' '), variable] = label
+                self.re_name(dff, labels, variable)
             dff[variable] += ' and '
             dff = dff.groupby('index').agg({variable: 'sum'})
-            dff[variable] = [s[0:len(s) - 5].replace('_', ' ') for s in dff[variable]]
-            if isinstance(labels, dict):
-                for value, label in labels.items():
-                    dff.loc[dff[variable] == value.replace('_', ' '), variable] = label
+            dff[variable] = [s[0:len(s) - 5] for s in dff[variable]]
             codes = {tech: i for i, tech in enumerate(dff[variable].unique())}
             if isinstance(cmap, dict):
                 cmap = {i: cmap[tech] for i, tech in enumerate(dff[variable].unique())}
@@ -1110,7 +1112,7 @@ class OnSSTOVE(DataProcessor):
         return raster, codes, cmap
 
     def to_raster(self, variable, labels=None, cmap=None, metric='mean'):
-        raster, codes, cmap = self._create_layer(variable, labels=labels, cmap=cmap, metric=metric)
+        raster, codes, cmap = self.create_layer(variable, labels=labels, cmap=cmap, metric=metric)
         raster.save(os.path.join(self.output_directory, 'Output'))
         print(f'Layer saved in {os.path.join(self.output_directory, "Output", variable + ".tif")}\n')
         if codes and cmap:
@@ -1125,7 +1127,7 @@ class OnSSTOVE(DataProcessor):
              legend_position=(1.05, 1), dpi=150,
              admin_layer=None, title=None, labels=None, legend=True, legend_title='', legend_cols=1, rasterized=True,
              stats=False, stats_position=(1.05, 0.5), metric='mean'):
-        raster, codes, cmap = self._create_layer(variable, labels=labels, cmap=cmap, metric=metric)
+        raster, codes, cmap = self.create_layer(variable, labels=labels, cmap=cmap, metric=metric)
         if isinstance(admin_layer, gpd.GeoDataFrame):
             admin_layer = admin_layer
         elif not admin_layer:
@@ -1179,7 +1181,7 @@ class OnSSTOVE(DataProcessor):
     def to_image(self, variable, type='png', cmap='viridis', cumulative_count=None, legend_position=(1.05, 1),
                  admin_layer=None, title=None, dpi=300, labels=None, legend=True, legend_title='', legend_cols=1,
                  rasterized=True, stats=False, stats_position=(1.05, 0.5), metric='mean'):
-        raster, codes, cmap = self._create_layer(variable, labels=labels, cmap=cmap, metric=metric)
+        raster, codes, cmap = self.create_layer(variable, labels=labels, cmap=cmap, metric=metric)
         raster.bounds = self.base_layer.bounds
         if isinstance(admin_layer, gpd.GeoDataFrame):
             admin_layer = admin_layer
@@ -1247,7 +1249,7 @@ class OnSSTOVE(DataProcessor):
 
     def plot_split(self, cmap=None, labels=None, save=False, height=1.5, width=2.5):
         df = self.summary(total=False, pretty=False)
-        df['max_benefit_tech'] = df['max_benefit_tech'].replace(labels)
+        self.re_name(df, labels, 'max_benefit_tech')
 
         tech_list = df.sort_values('Calibrated_pop')['max_benefit_tech'].tolist()
         ccolor = 'black'
@@ -1274,7 +1276,7 @@ class OnSSTOVE(DataProcessor):
 
     def plot_costs_benefits(self, cmap=None, labels=None, save=False, height=1.5, width=2.5):
         df = self.summary(total=False, pretty=False)
-        df['max_benefit_tech'] = df['max_benefit_tech'].replace(labels)
+        self.re_name(df, labels, 'max_benefit_tech')
         df['investment_costs'] -= df['salvage_value']
         df['fuel_costs'] *= -1
         df['investment_costs'] *= -1
@@ -1332,17 +1334,19 @@ class OnSSTOVE(DataProcessor):
                                                                         'Households',
                                                                         'Calibrated_pop']].sum()
                 df.reset_index(inplace=True)
-                df['max_benefit_tech'] = df['max_benefit_tech'].replace(labels)
+                self.re_name(df, labels, 'max_benefit_tech')
                 tech_list = df.groupby('max_benefit_tech')[['Calibrated_pop']].sum()
                 tech_list = tech_list.reset_index().sort_values('Calibrated_pop')['max_benefit_tech'].tolist()
                 x = 'max_benefit_tech'
             elif groupby.lower() == 'urbanrural':
                 df = self.gdf.copy()
+                self.re_name(df, labels, 'max_benefit_tech')
                 df['Urban'] = df['IsUrban'] > 20
                 df['Urban'].replace({True: 'Urban', False: 'Rural'}, inplace=True)
                 x = 'Urban'
             else:
-                df = self.gdf
+                df = self.gdf.copy()
+                self.re_name(df, labels, 'max_benefit_tech')
                 tech_list = df.groupby('max_benefit_tech')[['Calibrated_pop']].sum()
                 tech_list = tech_list.reset_index().sort_values('Calibrated_pop')['max_benefit_tech'].tolist()
                 x = 'max_benefit_tech'
@@ -1378,7 +1382,7 @@ class OnSSTOVE(DataProcessor):
                                                                     'Households',
                                                                     'Calibrated_pop']].sum()
             df.reset_index(inplace=True)
-            df['max_benefit_tech'] = df['max_benefit_tech'].replace(labels)
+            self.re_name(df, labels, 'max_benefit_tech')
             p = (ggplot(df)
                  + geom_density(aes(
                         x='(health_costs_avoided + opportunity_cost_gained + emissions_costs_saved' +
