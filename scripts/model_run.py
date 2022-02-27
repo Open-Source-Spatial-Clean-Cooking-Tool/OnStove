@@ -26,30 +26,24 @@ model.run(technologies=['Electricity', 'LPG', 'Biogas',
                         ])
 
 # 5. Saving data to raster files
-# cmap = {"ICS": '#57365A', "LPG": '#6987B7', "Traditional biomass": '#673139', "Charcoal": '#B6195E',
-#         "Biogas": '#3BE2C5', "Biogas and ICS": "#F6029E",
-#         "Biogas and LPG": "#C021C0",  "Biogas and Traditional biomass": "#266AA6",
-#         "Biogas and Charcoal": "#3B05DF", "Biogas and Electricity": "#484673",
-#         "Electricity": '#D0DF53', "Electricity and ICS": "#4D7126",
-#         "Electricity and LPG": "#004D40", "Electricity and Traditional biomass": "#FFC107",
-#         "Electricity and Charcoal": "#1E88E5", "Electricity and Biogas": "#484673"}
-cmap = {"Biomass ICS": '#6F4070', "LPG": '#66C5CC', "Traditional Biomass": '#FFB6C1',
-        "Traditional Charcoal": '#364135', "Charcoal ICS": '#d4bdc5',
+cmap = {"Biomass ICS": '#6F4070', "LPG": '#66C5CC', "Biomass": '#FFB6C1',
+        "Charcoal": '#364135', "Charcoal ICS": '#d4bdc5',
         "Biogas": '#73AF48', "Biogas and Biomass ICS": "#F6029E",
-        "Biogas and LPG": "#f97b72",  "Biogas and Traditional Biomass": "#266AA6",
-        "Biogas and Traditional Charcoal": "#3B05DF",
+        "Biogas and LPG": "#f97b72",  "Biogas and Biomass": "#266AA6",
+        "Biogas and Charcoal": "#3B05DF",
         "Biogas and Charcoal ICS": "#3B59DF",
         "Biogas and Electricity": "#484673",
         "Electricity": '#CC503E', "Electricity and Biomass ICS": "#B497E7",
-        "Electricity and LPG": "#E17C05", "Electricity and Traditional Biomass": "#FFC107",
+        "Electricity and LPG": "#E17C05", "Electricity and Biomass": "#FFC107",
         "Electricity and Charcoal ICS": "#660000",
         "Electricity and Biogas": "#0F8554",
-        "Electricity and Traditional Charcoal": "#000000"}
+        "Electricity and Charcoal": "#FF0000"}
 
 
 labels = {"Biogas and Electricity": "Electricity and Biogas",
-          'Collected Traditional Biomass': 'Traditional Biomass',
-          'Collected Improved Biomass': 'Biomass ICS'}
+          'Collected Traditional Biomass': 'Biomass',
+          'Collected Improved Biomass': 'Biomass ICS',
+          'Traditional Charcoal': 'Charcoal'}
 
 print(f'[{country}] Saving the rasters')
 # model.gdf['max_benefit_tech'] = model.gdf['max_benefit_tech'].str.replace('_', ' ')

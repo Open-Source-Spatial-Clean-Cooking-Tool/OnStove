@@ -2,19 +2,13 @@ import os
 cwd = os.getcwd()
 
 SCENARIOS = ['LPG International price - Rural-Urban']
-SENSITIVITY = ['All_benefits', 'Health_benefits', 'Social_benefits', 'Environment_benefits']
-# SENSITIVITY, = glob_wildcards("../Clean cooking Africa paper/04. OnSSTOVE inputs/LPG International price - Rural-Urban/Sensitivity_files/{sensitivity}/BDI_scenario_file.csv")
+#SENSITIVITY = ['all_benefits']
+SENSITIVITY, = glob_wildcards("../Clean cooking Africa paper/04. OnSSTOVE inputs/LPG International price - Rural-Urban/Sensitivity_files/{sensitivity}/BDI_scenario_file.csv")
 
 
-COUNTRIES = ['ERI', 'ZAF', 'BDI']
+# COUNTRIES = ['SOM']
 
-
-# COUNTRIES = ['AGO', 'BDI', 'BEN', 'BFA', 'BWA', 'CAF', 'CIV', 'CMR',
-#              'COD', 'COG', 'ERI', 'ETH', 'GAB', 'GHA', 'GIN',
-#              'GMB', 'GNB', 'GNQ', 'KEN', 'LBR', 'LSO', 'MDG', 'MLI',
-#              'MOZ', 'MRT', 'MWI', 'NAM', 'NER', 'NGA', 'RWA',
-#              'SEN', 'SLE', 'SWZ', 'TCD', 'TGO', 'TZA',
-#              'UGA', 'ZAF', 'ZMB', 'ZWE']
+COUNTRIES = ['Africa']
 
 # COUNTRIES = ['AGO', 'BDI', 'BEN', 'BFA', 'BWA', 'CAF', 'CIV', 'CMR',
 #              'COD', 'COG', 'DJI', 'ERI', 'ETH', 'GAB', 'GHA', 'GIN',
@@ -23,10 +17,16 @@ COUNTRIES = ['ERI', 'ZAF', 'BDI']
 #              'SEN', 'SLE', 'SOM', 'SSD', 'SWZ', 'TCD', 'TGO', 'TZA',
 #              'UGA', 'ZAF', 'ZMB', 'ZWE']
 
+# rule all:
+#     input:
+#         expand("../Clean cooking Africa paper/06. Results/{scenario}/{country}/{sensitivity}/results.pkl",
+#                country=COUNTRIES,
+#                sensitivity=SENSITIVITY,
+#                scenario=SCENARIOS)
+
 rule all:
     input:
-        expand("../Clean cooking Africa paper/06. Results/{scenario}/{country}/{sensitivity}/results.pkl",
-               country=COUNTRIES,
+         expand("../Clean cooking Africa paper/06. Results/{scenario}/Africa/{sensitivity}/results.pkl",
                sensitivity=SENSITIVITY,
                scenario=SCENARIOS)
 
@@ -153,35 +153,11 @@ rule merge_results:
     input:
          results = expand("../Clean cooking Africa paper/06. Results/{{scenario}}/{country}/{{sensitivity}}/results.pkl",
                            country=COUNTRIES),
-         summaries = expand("../Clean cooking Africa paper/06. Results/{{scenario}}/{country}/{{sensitivity}}/summary.csv",
-                            country=COUNTRIES),
          boundaries = rules.process_data.input.mask_layer
     params:
-          output_directory = "../Clean cooking Africa paper/06. Results/Africa/{scenario}/{sensitivity}",
+          output_directory = "../Clean cooking Africa paper/06. Results/{scenario}/Africa/{sensitivity}",
           countries = COUNTRIES
     output:
-          map = "../Clean cooking Africa paper/06. Results/{scenario}/Africa/{sensitivity}/max_benefit_tech.tif",
-          summary = "../Clean cooking Africa paper/06. Results/{scenario}/Africa/{sensitivity}/summary.csv",
-          results = "../Clean cooking Africa paper/06. Results/{scenario}/Africa/{sensitivity}/results.gz"
+          results = "../Clean cooking Africa paper/06. Results/{scenario}/Africa/{sensitivity}/results.pkl"
     script:
           "scripts/merge_results.py"
-
-rule get_map:
-    input:
-         expand("../Clean cooking Africa paper/06. Results/{scenario}/Africa/{sensitivity}/max_benefit_tech.tif",
-               sensitivity=SENSITIVITY,
-               scenario=SCENARIOS)
-
-rule colormap:
-    input:
-         results = rules.merge_results.output.results
-    output:
-          colormap = "../Clean cooking Africa paper/06. Results/{scenario}/Africa/{sensitivity}/ColorMap.clr"
-    script:
-          "scripts/colormap_generator.py"
-
-rule get_colormap:
-    input:
-         expand("../Clean cooking Africa paper/06. Results/{scenario}/Africa/{sensitivity}/ColorMap.clr",
-               sensitivity=SENSITIVITY,
-               scenario=SCENARIOS)
