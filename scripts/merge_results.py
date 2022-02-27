@@ -1,100 +1,73 @@
+import sys
 import geopandas as gpd
 import pandas as pd
-import rasterio
-from matplotlib.colors import to_rgb
-from rasterio import features
-from shapely import wkt
+from decouple import config
 
-df_all = pd.DataFrame({'country': [], 'max_benefit_tech': [], 'Calibrated_pop': [],
+sys.path.append(config('ONSSTOVE'))
+
+from onsstove.layer import VectorLayer
+from onsstove.onsstove import OnSSTOVE
+
+cmap = {"Biomass ICS": '#6F4070', "LPG": '#66C5CC', "Biomass": '#FFB6C1',
+        "Charcoal": '#364135', "Charcoal ICS": '#d4bdc5',
+        "Biogas": '#73AF48', "Biogas and Biomass ICS": "#F6029E",
+        "Biogas and LPG": "#f97b72",  "Biogas and Biomass": "#266AA6",
+        "Biogas and Charcoal": "#3B05DF",
+        "Biogas and Charcoal ICS": "#3B59DF",
+        "Biogas and Electricity": "#484673",
+        "Electricity": '#CC503E', "Electricity and Biomass ICS": "#B497E7",
+        "Electricity and LPG": "#E17C05", "Electricity and Biomass": "#FFC107",
+        "Electricity and Charcoal ICS": "#660000",
+        "Electricity and Biogas": "#0F8554",
+        "Electricity and Charcoal": "#FF0000"}
+
+
+labels = {"Biogas and Electricity": "Electricity and Biogas",
+          'Collected Traditional Biomass': 'Biomass',
+          'Collected Improved Biomass': 'Biomass ICS',
+          'Traditional Charcoal': 'Charcoal'}
+
+df = pd.DataFrame({'country': [], 'Households': [], 'max_benefit_tech': [], 'Calibrated_pop': [],
                        'maximum_net_benefit': [], 'deaths_avoided': [], 'health_costs_avoided': [],
                        'time_saved': [], 'reduced_emissions': [], 'investment_costs': [],
-                       'fuel_costs': [], 'emissions_costs_saved': []})
+                       'om_costs': [], 'fuel_costs': [], 'emissions_costs_saved': [],
+                       'opportunity_cost_gained': [], 'salvage_value': [], 'geometry': []})
+
+print('Creating Africa model...')
+africa = OnSSTOVE()
+africa.output_directory = snakemake.params.output_directory
+
+mask_layer = VectorLayer('admin', 'adm_1', layer_path=snakemake.input.boundaries)
+mask_layer.layer = mask_layer.layer.to_crs(3857)
+africa.mask_layer = mask_layer
+africa.gdf = gpd.GeoDataFrame(df, crs='epsg:3857')
 
 print('Reading country results')
 for file, country in zip(snakemake.input.results, snakemake.params.countries):
     print(f'    - {country}')
-    df = pd.read_csv(file)
-    df.rename(columns={'Unnamed: 0': 'index'}, inplace=True)
+    model = OnSSTOVE.read_model(file)
 
-    df['max_benefit_tech'] += ' and '
-    df = df.groupby('index').agg({'max_benefit_tech': 'sum',
-                                  'Calibrated_pop': 'sum',
-                                  'maximum_net_benefit': 'sum',
-                                  'deaths_avoided': 'sum',
-                                  'health_costs_avoided': 'sum',
-                                  'time_saved': 'sum',
-                                  'reduced_emissions': 'sum',
-                                  'investment_costs': 'sum',
-                                  'fuel_costs': 'sum',
-                                  'emissions_costs_saved': 'sum',
-                                  'geometry': 'first'})
-    df['country'] = country
-    df['max_benefit_tech'] = df['max_benefit_tech'].str[0:-5]
-    df_all = df_all.append(df, ignore_index=True)
+    model.gdf['country'] = country
+    africa.gdf = africa.gdf.append(model.gdf[df.columns], ignore_index=True)
 
-summary_all = pd.DataFrame({'max_benefit_tech': [], 'Calibrated_pop': [],
-                            'maximum_net_benefit': [], 'deaths_avoided': [],
-                            'health_costs_avoided': [], 'time_saved': [],
-                            'reduced_emissions': [], 'investment_costs': [],
-                            'fuel_costs': [], 'emissions_costs_saved': []})
+print('Creating index...')
+index = {str(g): i for i, g in enumerate(africa.gdf['geometry'].unique())}
+africa.gdf['index'] = [index[str(i)] for i in africa.gdf['geometry']]
 
-print('Reading country summaries')
-for file, country in zip(snakemake.input.summaries, snakemake.params.countries):
-    print(f'    - {country}')
-    summary = pd.read_csv(file)
-    summary['country'] = country
-    summary_all = summary_all.append(summary, ignore_index=True)
+print('Saving graphs...')
+africa.plot_split(cmap=cmap, labels=labels, save=True, height=1.5, width=3.5)
+africa.plot_costs_benefits(labels=labels, save=True, height=1.5, width=2)
+africa.plot_benefit_distribution(type='box', groupby='None', cmap=cmap,
+                                 labels=labels, save=True, height=1.5, width=3.5)
 
-print('Writing Africa summary')
-summary_all = summary_all.append(summary_all.sum(numeric_only=True), ignore_index=True)
-summary_all['max_benefit_tech'] = summary_all['max_benefit_tech'].fillna('Total')
-summary_all['country'] = summary_all['country'].fillna('Africa')
-summary_africa = summary_all.groupby('max_benefit_tech').sum()
-# TODO: rename the columns to include the units
-summary_africa['time_saved'] = summary_africa['time_saved'] / (summary_africa['Calibrated_pop'] * 1000000 * 365)
-summary_africa.to_csv(snakemake.output.summary)
+print('Creating map...')
+africa.to_image('max_benefit_tech', cmap=cmap, legend_position=(0.03, 0.47),
+                type='pdf', dpi=300, stats=True, stats_position=(-0.002, 0.5), stats_fontsize=10,
+                labels=labels, legend=True, legend_title='Maximum benefit\ncooking technology',
+                rasterized=True)
 
-print('Creating max benefit technology map')
-labels = {"Biogas and Electricity": "Electricity and Biogas",
-          'Collected Traditional Biomass': 'Traditional biomass',
-          'Collected Improved Biomass': 'ICS'}
+print('Creating raster...')
+model.to_raster('max_benefit_tech', labels=labels, cmap=cmap)
 
-df_all['max_benefit_tech'] = df_all['max_benefit_tech'].str.replace('_', ' ')
-df_all['max_benefit_tech'] = df_all['max_benefit_tech'].str.replace('Collected Traditional Biomass', 'Traditional biomass')
-df_all['max_benefit_tech'] = df_all['max_benefit_tech'].str.replace('Collected Improved Biomass', 'ICS')
-df_all['max_benefit_tech'] = df_all['max_benefit_tech'].str.replace('Biogas and Electricity', 'Electricity and Biogas')
-tech_codes = {tech: i for i, tech in enumerate(df_all['max_benefit_tech'].unique())}
-df_all['max_benefit_tech_code'] = [tech_codes[s] for s in df_all['max_benefit_tech']]
-df_all.to_csv(snakemake.output.results, index=False)
-
-df_all['geometry'] = df_all['geometry'].apply(wkt.loads)
-gdf_all = gpd.GeoDataFrame(df_all, crs='epsg:3857')
-
-boundaries = gpd.read_file(snakemake.input.boundaries)
-boundaries.to_crs(3857, inplace=True)
-
-total_bounds = boundaries['geometry'].total_bounds
-height = round((total_bounds[3] - total_bounds[1]) / 1000)
-width = round((total_bounds[2] - total_bounds[0]) / 1000)
-transform = rasterio.transform.from_bounds(*total_bounds, width, height)
-rasterized = features.rasterize(
-                        ((g, v) for v, g in zip(gdf_all['max_benefit_tech_code'].values, gdf_all['geometry'].values)),
-                        out_shape=(height, width),
-                        transform=transform,
-                        all_touched=True,
-                        fill=111,
-                        dtype=rasterio.uint8)
-
-with rasterio.open(
-    snakemake.output.map, 'w',
-    driver='GTiff',
-    dtype=rasterized.dtype,
-    count=1,
-    crs=3857,
-    width=width,
-    height=height,
-    transform=transform,
-    nodata=111,
-    compress='DEFLATE'
-) as dst:
-    dst.write(rasterized, indexes=1)
+print('Saving results...')
+africa.to_pickle('results.pkl')

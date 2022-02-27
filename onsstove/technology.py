@@ -258,7 +258,7 @@ class Technology:
 
         year = np.arange(proj_life) + 1
 
-        discount_factor = (1 + specs["Discount_rate_private"]) ** year
+        discount_factor = (1 + specs["Discount_rate_social"]) ** year
 
         return discount_factor, proj_life
 
@@ -345,31 +345,31 @@ class Technology:
         mort_vector_r = []
 
         while i < 6:
-            mortality_alri_u = cl_alri[i] * model.specs["VSL"] * mort_alri_u / (1 + model.specs["Discount_rate_private"]) ** (
+            mortality_alri_u = cl_alri[i] * model.specs["VSL"] * mort_alri_u / (1 + model.specs["Discount_rate_social"]) ** (
                     i - 1)
             mortality_copd_u = cl_copd[i] * model.specs["VSL"] * mort_copd_u / (
-                    1 + model.specs["Discount_rate_private"]) ** (i - 1)
+                    1 + model.specs["Discount_rate_social"]) ** (i - 1)
             mortality_lc_u = cl_lc[i] * model.specs["VSL"] * mort_lc_u / (
-                    1 + model.specs["Discount_rate_private"]) ** (i - 1)
+                    1 + model.specs["Discount_rate_social"]) ** (i - 1)
             mortality_ihd_u = cl_ihd[i] * model.specs["VSL"] * mort_ihd_u / (
-                    1 + model.specs["Discount_rate_private"]) ** (i - 1)
+                    1 + model.specs["Discount_rate_social"]) ** (i - 1)
             mortality_stroke_u = cl_stroke[i] * model.specs["VSL"] * mort_stroke_u / (
-                    1 + model.specs["Discount_rate_private"]) ** (i - 1)
+                    1 + model.specs["Discount_rate_social"]) ** (i - 1)
 
             mort_total_u = mortality_alri_u + mortality_copd_u + mortality_lc_u + mortality_ihd_u + mortality_stroke_u
 
             mort_vector_u.append(mort_total_u)
 
-            mortality_alri_r = cl_alri[i] * model.specs["VSL"] * mort_alri_r / (1 + model.specs["Discount_rate_private"]) ** (
+            mortality_alri_r = cl_alri[i] * model.specs["VSL"] * mort_alri_r / (1 + model.specs["Discount_rate_social"]) ** (
                     i - 1)
             mortality_copd_r = cl_copd[i] * model.specs["VSL"] * mort_copd_r / (
-                    1 + model.specs["Discount_rate_private"]) ** (i - 1)
+                    1 + model.specs["Discount_rate_social"]) ** (i - 1)
             mortality_lc_r = cl_lc[i] * model.specs["VSL"] * mort_lc_r / (
-                    1 + model.specs["Discount_rate_private"]) ** (i - 1)
+                    1 + model.specs["Discount_rate_social"]) ** (i - 1)
             mortality_ihd_r = cl_ihd[i] * model.specs["VSL"] * mort_ihd_r / (
-                    1 + model.specs["Discount_rate_private"]) ** (i - 1)
+                    1 + model.specs["Discount_rate_social"]) ** (i - 1)
             mortality_stroke_r = cl_stroke[i] * model.specs["VSL"] * mort_stroke_r / (
-                    1 + model.specs["Discount_rate_private"]) ** (i - 1)
+                    1 + model.specs["Discount_rate_social"]) ** (i - 1)
 
             mort_total_r = mortality_alri_r + mortality_copd_r + mortality_lc_r + mortality_ihd_r + mortality_stroke_r
 
@@ -465,17 +465,17 @@ class Technology:
 
         while i < 6:
             morbidity_alri_u = cl_alri[i] * model.specs["COI_ALRI"] * morb_alri_u / (
-                    1 + model.specs["Discount_rate_private"]) ** (
+                    1 + model.specs["Discount_rate_social"]) ** (
                                        i - 1)
             morbidity_copd_u = cl_copd[i] * model.specs["COI_COPD"] * morb_copd_u / (
-                    1 + model.specs["Discount_rate_private"]) ** (
+                    1 + model.specs["Discount_rate_social"]) ** (
                                        i - 1)
-            morbidity_lc_u = cl_lc[i] * model.specs["COI_LC"] * morb_lc_u / (1 + model.specs["Discount_rate_private"]) ** (
+            morbidity_lc_u = cl_lc[i] * model.specs["COI_LC"] * morb_lc_u / (1 + model.specs["Discount_rate_social"]) ** (
                     i - 1)
-            morbidity_ihd_u = cl_ihd[i] * model.specs["COI_IHD"] * morb_ihd_u / (1 + model.specs["Discount_rate_private"]) ** (
+            morbidity_ihd_u = cl_ihd[i] * model.specs["COI_IHD"] * morb_ihd_u / (1 + model.specs["Discount_rate_social"]) ** (
                     i - 1)
             morbidity_stroke_u = cl_stroke[i] * model.specs["COI_STROKE"] * morb_stroke_u / (
-                    1 + model.specs["Discount_rate_private"]) ** (
+                    1 + model.specs["Discount_rate_social"]) ** (
                                          i - 1)
 
             morb_total_u = morbidity_alri_u + morbidity_copd_u + morbidity_lc_u + morbidity_ihd_u + morbidity_stroke_u
@@ -483,17 +483,17 @@ class Technology:
             morb_vector_u.append(morb_total_u)
 
             morbidity_alri_r = cl_alri[i] * model.specs["COI_ALRI"] * morb_alri_r / (
-                    1 + model.specs["Discount_rate_private"]) ** (
+                    1 + model.specs["Discount_rate_social"]) ** (
                                        i - 1)
             morbidity_copd_r = cl_copd[i] * model.specs["COI_COPD"] * morb_copd_r / (
-                    1 + model.specs["Discount_rate_private"]) ** (
+                    1 + model.specs["Discount_rate_social"]) ** (
                                        i - 1)
-            morbidity_lc_r = cl_lc[i] * model.specs["COI_LC"] * morb_lc_r / (1 + model.specs["Discount_rate_private"]) ** (
+            morbidity_lc_r = cl_lc[i] * model.specs["COI_LC"] * morb_lc_r / (1 + model.specs["Discount_rate_social"]) ** (
                     i - 1)
-            morbidity_ihd_r = cl_ihd[i] * model.specs["COI_IHD"] * morb_ihd_r / (1 + model.specs["Discount_rate_private"]) ** (
+            morbidity_ihd_r = cl_ihd[i] * model.specs["COI_IHD"] * morb_ihd_r / (1 + model.specs["Discount_rate_social"]) ** (
                     i - 1)
             morbidity_stroke_r = cl_stroke[i] * model.specs["COI_STROKE"] * morb_stroke_r / (
-                    1 + model.specs["Discount_rate_private"]) ** (
+                    1 + model.specs["Discount_rate_social"]) ** (
                                          i - 1)
 
             morb_total_r = morbidity_alri_r + morbidity_copd_r + morbidity_lc_r + morbidity_ihd_r + morbidity_stroke_r
@@ -660,7 +660,7 @@ class Technology:
         self.total_time_saved = model.base_fuel.total_time_yr - self.total_time_yr
         # time value of time saved per sq km
         self.time_value = self.total_time_saved * model.gdf["value_of_time"] / (
-                1 + model.specs["Discount_rate_private"]) ** (proj_life)
+                1 + model.specs["Discount_rate_social"]) ** (proj_life)
 
     def total_costs(self):
         self.costs = (self.discounted_fuel_cost + self.discounted_investments +  # - self.time_value +
@@ -840,10 +840,19 @@ class Biomass(Technology):
         self.total_time_yr = self.time_of_cooking * model.specs['Meals_per_day'] * 365 + (
                 self.travel_time + self.time_of_collection) * trips_per_yr
 
-    def carb(self, model):
-        super().carb(model)
-        self.carbon *= model.specs['fnrb']
+    def get_carbon_intensity(self, model):
+        intensity = self['co2_intensity']
+        self['co2_intensity'] *= model.specs['fnrb']
+        super().get_carbon_intensity(model)
+        self['co2_intensity'] = intensity
 
+
+class Charcoal(Technology):
+    def get_carbon_intensity(self, model):
+        intensity = self['co2_intensity']
+        self['co2_intensity'] *= model.specs['fnrb']
+        super().get_carbon_intensity(model)
+        self['co2_intensity'] = intensity
 
 class Electricity(Technology):
     """
@@ -902,8 +911,8 @@ class Electricity(Technology):
             self.grid_capacity_cost = value
         elif 'capacity' in idx:
             self.capacity[idx.lower().replace('capacity_', '')] = value
-        elif 'carbon_intensity' in idx:
-            self.carbon_intensities[idx.lower().replace('carbon_intensity_', '')] = value
+        elif 'carbon_intensity' == idx:
+            self.carbon_intensity = value
         elif 'carbon_intensity' in idx:
             self.carbon_intensities[idx.lower().replace('carbon_intensity_', '')] = value
         elif 'connection_cost' in idx:
@@ -964,7 +973,8 @@ class Electricity(Technology):
         return salvage / discount_rate[0]
 
     def carb(self, model):
-        self.get_carbon_intensity(model)
+        if self.carbon_intensity is None:
+            self.get_carbon_intensity(model)
         super().carb(model)
 
     def discounted_inv(self, model):

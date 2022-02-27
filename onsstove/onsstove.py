@@ -31,7 +31,7 @@ from plotnine import (
     scale_y_log10
 )
 
-from onsstove.technology import Technology, LPG, Biomass, Electricity, Biogas
+from onsstove.technology import Technology, LPG, Biomass, Electricity, Biogas, Charcoal
 from .raster import *
 from .layer import VectorLayer, RasterLayer
 
@@ -391,6 +391,8 @@ class OnSSTOVE(DataProcessor):
         Initializes the class and sets an empty layers dictionaries.
         """
         super().__init__(project_crs, cell_size, output_directory)
+        self.rows = None
+        self.cols = None
         self.specs = None
         self.techs = None
         self.base_fuel = None
@@ -524,6 +526,8 @@ class OnSSTOVE(DataProcessor):
                             techs[row['Fuel']] = LPG()
                         elif 'biomass' in row['Fuel'].lower():
                             techs[row['Fuel']] = Biomass()
+                        elif 'charcoal' in row['Fuel'].lower():
+                            techs[row['Fuel']] = Charcoal()
                         elif 'biogas' in row['Fuel'].lower():
                             techs[row['Fuel']] = Biogas()
                         elif 'electricity' in row['Fuel'].lower():
@@ -1074,23 +1078,56 @@ class OnSSTOVE(DataProcessor):
             df[variable] = df[variable].str.replace('_', ' ')
             df.loc[df[variable] == value, variable] = label
 
+    def points_to_raster(self, dff, variable):
+        total_bounds = self.mask_layer.layer['geometry'].total_bounds
+        height = round((total_bounds[3] - total_bounds[1]) / 1000)
+        width = round((total_bounds[2] - total_bounds[0]) / 1000)
+        transform = rasterio.transform.from_bounds(*total_bounds, width, height)
+        rasterized = features.rasterize(
+            ((g, v) for v, g in zip(dff[variable].values, dff['geometry'].values)),
+            out_shape=(height, width),
+            transform=transform,
+            all_touched=True,
+            fill=111,
+            dtype=rasterio.uint8)
+        meta = dict(driver='GTiff',
+                    dtype=rasterized.dtype,
+                    count=1,
+                    crs=3857,
+                    width=width,
+                    height=height,
+                    transform=transform,
+                    nodata=111,
+                    compress='DEFLATE')
+        return rasterized, meta, total_bounds
+
     def create_layer(self, variable, labels=None, cmap=None, metric='mean'):
-        layer = np.empty(self.base_layer.layer.shape)
-        layer[:] = np.nan
         codes = None
-        if isinstance(self.gdf[variable].iloc[0], str):
+        if self.base_layer is not None:
+            layer = np.empty(self.base_layer.layer.shape)
+            layer[:] = np.nan
             dff = self.gdf.copy().reset_index(drop=False)
+        else:
+            dff = self.gdf.copy()
+
+        if isinstance(self.gdf[variable].iloc[0], str):
             if isinstance(labels, dict):
                 self.re_name(dff, labels, variable)
             dff[variable] += ' and '
-            dff = dff.groupby('index').agg({variable: 'sum'})
+            dff = dff.groupby('index').agg({variable: 'sum', 'geometry': 'first'})
             dff[variable] = [s[0:len(s) - 5] for s in dff[variable]]
             codes = {tech: i for i, tech in enumerate(dff[variable].unique())}
             if isinstance(cmap, dict):
                 cmap = {i: cmap[tech] for i, tech in enumerate(dff[variable].unique())}
-            layer[self.rows, self.cols] = [codes[tech] for tech in dff[variable]]
+
+            if self.rows is not None:
+                layer[self.rows, self.cols] = [codes[tech] for tech in dff[variable]]
+                meta = self.base_layer.meta
+                bounds = self.base_layer.bounds
+            else:
+                dff['codes'] = [codes[tech] for tech in dff['max_benefit_tech']]
+                layer, meta, bounds = self.points_to_raster(dff, 'codes')
         else:
-            dff = self.gdf.copy().reset_index(drop=False)
             if metric == 'total':
                 dff['variable'] = dff[variable] * dff['Households']
                 dff = dff.groupby('index')['variable'].sum()
@@ -1101,13 +1138,18 @@ class OnSSTOVE(DataProcessor):
                 dff = dff['variable']
             else:
                 dff = dff.groupby('index').agg({variable: metric})[variable]
+            if self.rows is not None:
+                layer[self.rows, self.cols] = dff
+                meta = self.base_layer.meta
+                bounds = self.base_layer.bounds
+            else:
+                layer, meta, bounds = self.points_to_raster(dff, variable)
             variable = variable + '_' + metric
-            layer[self.rows, self.cols] = dff
         raster = RasterLayer('Output', variable)
         raster.layer = layer
-        raster.meta = self.base_layer.meta
-        raster.meta.update(nodata=np.nan, dtype='float32')
-        raster.bounds = self.base_layer.bounds
+        raster.meta = meta
+        # raster.meta.update(nodata=np.nan, dtype='float32')
+        raster.bounds = bounds
 
         return raster, codes, cmap
 
@@ -1126,7 +1168,7 @@ class OnSSTOVE(DataProcessor):
     def plot(self, variable, cmap='viridis', cumulative_count=None, quantiles=None,
              legend_position=(1.05, 1), dpi=150,
              admin_layer=None, title=None, labels=None, legend=True, legend_title='', legend_cols=1, rasterized=True,
-             stats=False, stats_position=(1.05, 0.5), metric='mean'):
+             stats=False, stats_position=(1.05, 0.5), stats_fontsize=12, metric='mean'):
         raster, codes, cmap = self.create_layer(variable, labels=labels, cmap=cmap, metric=metric)
         if isinstance(admin_layer, gpd.GeoDataFrame):
             admin_layer = admin_layer
@@ -1134,7 +1176,7 @@ class OnSSTOVE(DataProcessor):
             admin_layer = self.mask_layer.layer
         if stats:
             fig, ax = plt.subplots(1, 1, figsize=(16, 9), dpi=dpi)
-            self.add_statistics(ax, stats_position)
+            self.add_statistics(ax, stats_position, stats_fontsize)
         else:
             ax = None
 
@@ -1145,12 +1187,12 @@ class OnSSTOVE(DataProcessor):
                     legend_title=legend_title, legend_cols=legend_cols, rasterized=rasterized,
                     ax=ax)
 
-    def add_statistics(self, ax, stats_position):
+    def add_statistics(self, ax, stats_position, fontsize=12):
         summary = self.summary(total=True, pretty=False)
-        deaths = TextArea("Deaths avoided", textprops=dict(fontsize=12, color='black'))
-        health = TextArea("Health costs avoided", textprops=dict(fontsize=12, color='black'))
-        emissions = TextArea("Emissions avoided", textprops=dict(fontsize=12, color='black'))
-        time = TextArea("Time saved", textprops=dict(fontsize=12, color='black'))
+        deaths = TextArea("Deaths avoided", textprops=dict(fontsize=fontsize, color='black'))
+        health = TextArea("Health costs avoided", textprops=dict(fontsize=fontsize, color='black'))
+        emissions = TextArea("Emissions avoided", textprops=dict(fontsize=fontsize, color='black'))
+        time = TextArea("Time saved", textprops=dict(fontsize=fontsize, color='black'))
 
         texts_vbox = VPacker(children=[deaths, health, emissions, time], pad=0, sep=6)
 
@@ -1159,10 +1201,10 @@ class OnSSTOVE(DataProcessor):
         reduced_emissions = summary.loc['total', 'reduced_emissions']
         time_saved = summary.loc['total', 'time_saved']
 
-        deaths = TextArea(f"{deaths_avoided:.0f} pp/yr", textprops=dict(fontsize=12, color='black'))
-        health = TextArea(f"{health_costs_avoided:.2f} b.USD", textprops=dict(fontsize=12, color='black'))
-        emissions = TextArea(f"{reduced_emissions:.2f} Mton", textprops=dict(fontsize=12, color='black'))
-        time = TextArea(f"{time_saved:.2f} h/pp.day", textprops=dict(fontsize=12, color='black'))
+        deaths = TextArea(f"{deaths_avoided:.0f} pp/yr", textprops=dict(fontsize=fontsize, color='black'))
+        health = TextArea(f"{health_costs_avoided:.2f} b.USD", textprops=dict(fontsize=fontsize, color='black'))
+        emissions = TextArea(f"{reduced_emissions:.2f} Mton", textprops=dict(fontsize=fontsize, color='black'))
+        time = TextArea(f"{time_saved:.2f} h/pp.day", textprops=dict(fontsize=fontsize, color='black'))
 
         values_vbox = VPacker(children=[deaths, health, emissions, time], pad=0, sep=6, align='right')
 
@@ -1180,9 +1222,8 @@ class OnSSTOVE(DataProcessor):
 
     def to_image(self, variable, type='png', cmap='viridis', cumulative_count=None, legend_position=(1.05, 1),
                  admin_layer=None, title=None, dpi=300, labels=None, legend=True, legend_title='', legend_cols=1,
-                 rasterized=True, stats=False, stats_position=(1.05, 0.5), metric='mean'):
+                 rasterized=True, stats=False, stats_position=(1.05, 0.5), stats_fontsize=12, metric='mean'):
         raster, codes, cmap = self.create_layer(variable, labels=labels, cmap=cmap, metric=metric)
-        raster.bounds = self.base_layer.bounds
         if isinstance(admin_layer, gpd.GeoDataFrame):
             admin_layer = admin_layer
         elif not admin_layer:
@@ -1190,7 +1231,7 @@ class OnSSTOVE(DataProcessor):
 
         if stats:
             fig, ax = plt.subplots(1, 1, figsize=(16, 9), dpi=dpi)
-            self.add_statistics(ax, stats_position)
+            self.add_statistics(ax, stats_position, stats_fontsize)
         else:
             ax = None
 
@@ -1205,8 +1246,10 @@ class OnSSTOVE(DataProcessor):
     def read_data(self, path):
         self.gdf = gpd.read_file(path)
 
-    def summary(self, total=True, pretty=True):
+    def summary(self, total=True, pretty=True, labels=None):
         dff = self.gdf.copy()
+        if labels is not None:
+            self.re_name(dff, labels, 'max_benefit_tech')
         for attribute in ['maximum_net_benefit', 'deaths_avoided', 'health_costs_avoided', 'time_saved',
                           'opportunity_cost_gained', 'reduced_emissions', 'reduced_emissions', 'emissions_costs_saved',
                           'investment_costs', 'fuel_costs', 'om_costs', 'salvage_value']:
@@ -1248,8 +1291,7 @@ class OnSSTOVE(DataProcessor):
         return summary
 
     def plot_split(self, cmap=None, labels=None, save=False, height=1.5, width=2.5):
-        df = self.summary(total=False, pretty=False)
-        self.re_name(df, labels, 'max_benefit_tech')
+        df = self.summary(total=False, pretty=False, labels=labels)
 
         tech_list = df.sort_values('Calibrated_pop')['max_benefit_tech'].tolist()
         ccolor = 'black'
@@ -1275,8 +1317,7 @@ class OnSSTOVE(DataProcessor):
             return p
 
     def plot_costs_benefits(self, cmap=None, labels=None, save=False, height=1.5, width=2.5):
-        df = self.summary(total=False, pretty=False)
-        self.re_name(df, labels, 'max_benefit_tech')
+        df = self.summary(total=False, pretty=False, labels=labels)
         df['investment_costs'] -= df['salvage_value']
         df['fuel_costs'] *= -1
         df['investment_costs'] *= -1
