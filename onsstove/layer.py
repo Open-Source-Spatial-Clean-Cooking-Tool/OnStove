@@ -493,12 +493,15 @@ class RasterLayer(Layer):
     def get_quantiles(self, quantiles):
         x = self.layer.flat
         x = x[~np.isnan(x)].copy()
-        return np.quantile(x, quantiles).astype('float32')
+        return np.quantile(x, quantiles)
 
     def quantiles(self, quantiles):
         qs = self.get_quantiles(quantiles)
         layer = self.layer.copy()
         i = 0
+        min_val = np.nanmin(layer)
+        layer = layer - min_val
+        qs = qs - min_val
         while i < (len(qs)):
             if i == 0:
                 layer[(layer >= 0) & (layer <= qs[i])] = quantiles[i] * 100
@@ -537,7 +540,7 @@ class RasterLayer(Layer):
         else:
             layer = self.layer
 
-        layer = layer.astype('float32')
+        #layer = layer.astype('float32')
 
         layer[layer == self.meta['nodata']] = np.nan
 

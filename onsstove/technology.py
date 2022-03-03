@@ -848,6 +848,29 @@ class Biomass(Technology):
 
 
 class Charcoal(Technology):
+    def __init__(self,
+                 name=None,
+                 carbon_intensity=None,
+                 co2_intensity=112,
+                 ch4_intensity=0.864,
+                 n2o_intensity=0.0039,
+                 co_intensity=0,
+                 bc_intensity=0.1075,
+                 oc_intensity=0.308,
+                 energy_content=0,
+                 tech_life=0,  # in years
+                 inv_cost=0,  # in USD
+                 fuel_cost=0,
+                 time_of_cooking=0,
+                 om_cost=0,  # percentage of investement cost
+                 efficiency=0,  # ratio
+                 pm25=844):
+        super().__init__(name, carbon_intensity, co2_intensity, ch4_intensity,
+                         n2o_intensity, co_intensity, bc_intensity, oc_intensity,
+                         energy_content, tech_life,
+                         inv_cost, fuel_cost, time_of_cooking,
+                         om_cost, efficiency, pm25, is_clean=False)
+
     def get_carbon_intensity(self, model):
         intensity = self['co2_intensity']
         self['co2_intensity'] *= model.specs['fnrb']
