@@ -1174,7 +1174,8 @@ class OnSSTOVE(DataProcessor):
     def plot(self, variable, cmap='viridis', cumulative_count=None, quantiles=None,
              legend_position=(1.05, 1), dpi=150,
              admin_layer=None, title=None, labels=None, legend=True, legend_title='', legend_cols=1, rasterized=True,
-             stats=False, stats_position=(1.05, 0.5), stats_fontsize=12, metric='mean'):
+             stats=False, stats_position=(1.05, 0.5), stats_fontsize=12, metric='mean',
+             save_style=False, classes=5):
         raster, codes, cmap = self.create_layer(variable, labels=labels, cmap=cmap, metric=metric)
         if isinstance(admin_layer, gpd.GeoDataFrame):
             admin_layer = admin_layer
@@ -1192,6 +1193,16 @@ class OnSSTOVE(DataProcessor):
                     admin_layer=admin_layer, title=title, legend=legend,
                     legend_title=legend_title, legend_cols=legend_cols, rasterized=rasterized,
                     ax=ax)
+
+        if save_style:
+            if codes:
+                categories = {v: f"{v} = {k}" for k, v in codes.items()}
+                quantiles = None
+            else:
+                categories = False
+            raster.save_style(os.path.join(self.output_directory, 'Output'),
+                              cmap=cmap, quantiles=quantiles, categories=categories,
+                              classes=classes)
 
     def add_statistics(self, ax, stats_position, fontsize=12):
         summary = self.summary(total=True, pretty=False)

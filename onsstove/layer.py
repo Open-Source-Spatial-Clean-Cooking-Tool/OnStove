@@ -540,7 +540,7 @@ class RasterLayer(Layer):
         else:
             layer = self.layer
 
-        #layer = layer.astype('float32')
+        layer = layer.astype('float64')
 
         layer[layer == self.meta['nodata']] = np.nan
 
@@ -594,12 +594,26 @@ class RasterLayer(Layer):
         plt.savefig(output_file, dpi=dpi, bbox_inches='tight', transparent=True)
         plt.close()
 
-    def save_style(self, output_path, cmap='magma', quantiles=False):
-        if quantiles:
-            qs = self.get_quantiles((0, 0.25, 0.5, 0.75, 1))
+    def save_style(self, output_path, cmap='magma', quantiles=None,
+                   categories=None, classes=5):
+        if categories is not None:
+            colors = cmap
         else:
-            qs = np.linspace(np.nanmin(self.layer), np.nanmax(self.layer), num=5)
-        colors = plt.get_cmap(cmap, 5).colors
+            colors = plt.get_cmap(cmap, classes).colors
+
+        if quantiles:
+            qs = self.get_quantiles(quantiles)
+            colors = plt.get_cmap(cmap, len(qs)).colors
+        else:
+            qs = np.linspace(np.nanmin(self.layer), np.nanmax(self.layer), num=len(colors))
+
+        if categories is None:
+            categories = {i: round(i, 2) for i in qs}
+
+        values = """"""
+        for i, value in enumerate(qs):
+            values += f"""\n{" " * 14}<sld:ColorMapEntry label="{categories[value]}" color="{to_hex(colors[i])}" quantity="{value}"/>"""
+
         string = f"""<?xml version="1.0" encoding="UTF-8"?>
 <StyledLayerDescriptor xmlns="http://www.opengis.net/sld" version="1.0.0" xmlns:ogc="http://www.opengis.net/ogc" xmlns:sld="http://www.opengis.net/sld" xmlns:gml="http://www.opengis.net/gml">
   <UserLayer>
@@ -616,12 +630,7 @@ class RasterLayer(Layer):
                 <sld:SourceChannelName>1</sld:SourceChannelName>
               </sld:GrayChannel>
             </sld:ChannelSelection>
-            <sld:ColorMap type="ramp">
-              <sld:ColorMapEntry label="{int(qs[0])}" color="{to_hex(colors[0])}" quantity="{qs[0]}"/>
-              <sld:ColorMapEntry label="{int(qs[1])}" color="{to_hex(colors[1])}" quantity="{qs[1]}"/>
-              <sld:ColorMapEntry label="{int(qs[2])}" color="{to_hex(colors[2])}" quantity="{qs[2]}"/>
-              <sld:ColorMapEntry label="{int(qs[3])}" color="{to_hex(colors[3])}" quantity="{qs[3]}"/>
-              <sld:ColorMapEntry label="{int(qs[4])}" color="{to_hex(colors[4])}" quantity="{qs[4]}"/>
+            <sld:ColorMap type="ramp">{values}
             </sld:ColorMap>
           </sld:RasterSymbolizer>
         </sld:Rule>
@@ -631,4 +640,4 @@ class RasterLayer(Layer):
 </StyledLayerDescriptor>
 """
         with open(os.path.join(output_path, f'{self.name}.sld'), 'w') as f:
-            f.write(string)
+             f.write(string)
