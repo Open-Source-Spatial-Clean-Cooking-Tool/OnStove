@@ -1101,7 +1101,7 @@ class OnSSTOVE(DataProcessor):
                     compress='DEFLATE')
         return rasterized, meta, total_bounds
 
-    def create_layer(self, variable, labels=None, cmap=None, metric='mean'):
+    def create_layer(self, variable, name=None, labels=None, cmap=None, metric='mean'):
         codes = None
         if self.base_layer is not None:
             layer = np.empty(self.base_layer.layer.shape)
@@ -1151,6 +1151,8 @@ class OnSSTOVE(DataProcessor):
                 layer, meta, bounds = self.points_to_raster(dff, variable, dtype='float32',
                                                             nodata=np.nan)
             variable = variable + '_' + metric
+        if name is not None:
+            variable = name
         raster = RasterLayer('Output', variable)
         raster.layer = layer
         raster.meta = meta
@@ -1218,10 +1220,10 @@ class OnSSTOVE(DataProcessor):
         reduced_emissions = summary.loc['total', 'reduced_emissions'] / 1000
         time_saved = summary.loc['total', 'time_saved']
 
-        deaths = TextArea(f"{deaths_avoided:.0f} pp/yr", textprops=dict(fontsize=fontsize, color='black'))
-        health = TextArea(f"{health_costs_avoided:.2f} BUSD", textprops=dict(fontsize=fontsize, color='black'))
-        emissions = TextArea(f"{reduced_emissions:.2f} Bton", textprops=dict(fontsize=fontsize, color='black'))
-        time = TextArea(f"{time_saved:.2f} h/pp.day", textprops=dict(fontsize=fontsize, color='black'))
+        deaths = TextArea(f"{deaths_avoided:,.0f} pp/yr", textprops=dict(fontsize=fontsize, color='black'))
+        health = TextArea(f"{health_costs_avoided:,.2f} BUSD", textprops=dict(fontsize=fontsize, color='black'))
+        emissions = TextArea(f"{reduced_emissions:,.2f} Bton", textprops=dict(fontsize=fontsize, color='black'))
+        time = TextArea(f"{time_saved:,.2f} h/pp.day", textprops=dict(fontsize=fontsize, color='black'))
 
         values_vbox = VPacker(children=[deaths, health, emissions, time], pad=0, sep=6, align='right')
 
@@ -1237,10 +1239,11 @@ class OnSSTOVE(DataProcessor):
 
         ax.add_artist(ab)
 
-    def to_image(self, variable, type='png', cmap='viridis', cumulative_count=None, legend_position=(1.05, 1),
-                 admin_layer=None, title=None, dpi=300, labels=None, legend=True, legend_title='', legend_cols=1,
-                 rasterized=True, stats=False, stats_position=(1.05, 0.5), stats_fontsize=12, metric='mean'):
-        raster, codes, cmap = self.create_layer(variable, labels=labels, cmap=cmap, metric=metric)
+    def to_image(self, variable, name=None, type='png', cmap='viridis', cumulative_count=None,
+                 legend_position=(1.05, 1), admin_layer=None, title=None, dpi=300, labels=None, legend=True,
+                 legend_title='', legend_cols=1, rasterized=True, stats=False, stats_position=(1.05, 0.5),
+                 stats_fontsize=12, metric='mean'):
+        raster, codes, cmap = self.create_layer(variable, name=name, labels=labels, cmap=cmap, metric=metric)
         if isinstance(admin_layer, gpd.GeoDataFrame):
             admin_layer = admin_layer
         elif not admin_layer:

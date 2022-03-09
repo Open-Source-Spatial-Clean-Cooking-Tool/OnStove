@@ -10,6 +10,7 @@ dependencies:
   - json
   - jupyterlab
   - matplotlib
+  - pandas>=1.4.1
   - plotnine
   - psycopg2
   - psutil

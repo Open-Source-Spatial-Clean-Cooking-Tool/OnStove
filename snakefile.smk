@@ -1,12 +1,11 @@
 import os
 cwd = os.getcwd()
 
-SCENARIOS = ['LPG International price - Rural-Urban']
-#SENSITIVITY = ['all_benefits']
-SENSITIVITY, = glob_wildcards("../Clean cooking Africa paper/04. OnSSTOVE inputs/LPG International price - Rural-Urban/Sensitivity_files/{sensitivity}/BDI_scenario_file.csv")
+# SCENARIOS = ['All_benefits']
+SCENARIOS, = glob_wildcards("../Clean cooking Africa paper/04. OnSSTOVE inputs/LPG International price - Rural-Urban/Scenario_files/{scenario}/BDI_scenario_file.csv")
 
 
-# COUNTRIES = ['SOM']
+# COUNTRIES = ['BDI']
 
 COUNTRIES = ['Africa']
 
@@ -19,15 +18,13 @@ COUNTRIES = ['Africa']
 
 # rule all:
 #     input:
-#         expand("../Clean cooking Africa paper/06. Results/{scenario}/{country}/{sensitivity}/results.pkl",
+#         expand("../Clean cooking Africa paper/06. Results/LPG International price - Rural-Urban/{country}/{scenario}/results.pkl",
 #                country=COUNTRIES,
-#                sensitivity=SENSITIVITY,
 #                scenario=SCENARIOS)
 
 rule all:
     input:
-         expand("../Clean cooking Africa paper/06. Results/{scenario}/Africa/{sensitivity}/results.pkl",
-               sensitivity=SENSITIVITY,
+         expand("../Clean cooking Africa paper/06. Results/LPG International price - Rural-Urban/Africa/{scenario}/results.pkl",
                scenario=SCENARIOS)
 
 rule extract_forest:
@@ -86,8 +83,8 @@ rule process_data:
 
 rule prepare_model:
     input:
-         prep_file = r"..\Clean cooking Africa paper\04. OnSSTOVE inputs\{scenario}\Prep_files/{country}_prep_file.csv",
-         techs_file = r"..\Clean cooking Africa paper\04. OnSSTOVE inputs\{scenario}\Technical_specs\{country}_file_tech_specs.csv",
+         prep_file = "../Clean cooking Africa paper/04. OnSSTOVE inputs/LPG International price - Rural-Urban/Prep_files/{country}_prep_file.csv",
+         techs_file = r"..\Clean cooking Africa paper\04. OnSSTOVE inputs\LPG International price - Rural-Urban\Technical_specs\{country}_file_tech_specs.csv",
          mask_layer = rules.process_data.output.mask_layer,
          population = rules.process_data.output.population,
          ghs = rules.process_data.output.ghs,
@@ -98,7 +95,6 @@ rule prepare_model:
          traveltime_cities = rules.process_data.output.traveltime_cities,
          temperature = rules.process_data.output.temperature,
          water = rules.process_data.output.water,
-         tiers = r"..\Clean cooking Africa paper\01. Data\GIS-data\Electricity tiers\tiersofaccess_SSA_2018.tif",
          buffaloes = rules.process_data.output.buffaloes,
          cattles = rules.process_data.output.buffaloes,
          poultry = rules.process_data.output.poultry,
@@ -107,35 +103,35 @@ rule prepare_model:
          sheeps = rules.process_data.output.sheeps
     params:
           wealth_index = r"..\Clean cooking Africa paper\01. Data\GIS-data\Poverty\{country}_relative_wealth_index",
-          output_directory = "../Clean cooking Africa paper/06. Results/{scenario}/{country}",
+          output_directory = "../Clean cooking Africa paper/06. Results/LPG International price - Rural-Urban/{country}",
           country = "{country}"
     output:
-          model = "../Clean cooking Africa paper/06. Results/{scenario}/{country}/model.pkl"
+          model = "../Clean cooking Africa paper/06. Results/LPG International price - Rural-Urban/{country}/model.pkl"
     script:
           "scripts/model_preparation.py"
 
 rule run_model:
     input:
          model = rules.prepare_model.output.model,
-         scenario_file = r"..\Clean cooking Africa paper\04. OnSSTOVE inputs\{scenario}\Sensitivity_files\{sensitivity}\{country}_scenario_file.csv"
+         scenario_file = r"..\Clean cooking Africa paper\04. OnSSTOVE inputs\LPG International price - Rural-Urban\Scenario_files\{scenario}\{country}_scenario_file.csv"
     params:
-          output_directory = "../Clean cooking Africa paper/06. Results/{scenario}/{country}/{sensitivity}",
+          output_directory = "../Clean cooking Africa paper/06. Results/LPG International price - Rural-Urban/{country}/{scenario}",
           country = "{country}"
     output:
-          results = "../Clean cooking Africa paper/06. Results/{scenario}/{country}/{sensitivity}/results.pkl",
+          results = "../Clean cooking Africa paper/06. Results/LPG International price - Rural-Urban/{country}/{scenario}/results.pkl",
     script:
           "scripts/model_run.py"
 
 rule main_plot:
     input:
-         tech_split = "../Clean cooking Africa paper/06. Results/{scenario}/{country}/{sensitivity}/tech_split.pdf",
-         max_benefits = "../Clean cooking Africa paper/06. Results/{scenario}/{country}/{sensitivity}/max_benefits_box.pdf",
-         benefits_costs = "../Clean cooking Africa paper/06. Results/{scenario}/{country}/{sensitivity}/benefits_costs.pdf",
-         max_benefit_tech = "../Clean cooking Africa paper/06. Results/{scenario}/{country}/{sensitivity}/max_benefit_tech.pdf"
+         tech_split = "../Clean cooking Africa paper/06. Results/LPG International price - Rural-Urban/{country}/{scenario}/tech_split.pdf",
+         max_benefits = "../Clean cooking Africa paper/06. Results/LPG International price - Rural-Urban/{country}/{scenario}/max_benefits_box.pdf",
+         benefits_costs = "../Clean cooking Africa paper/06. Results/LPG International price - Rural-Urban/{country}/{scenario}/benefits_costs.pdf",
+         max_benefit_tech = "../Clean cooking Africa paper/06. Results/LPG International price - Rural-Urban/{country}/{scenario}/max_benefit_tech.pdf"
     params:
-          path = "../Clean cooking Africa paper/06. Results/{scenario}/{country}/{sensitivity}/",
+          path = "../Clean cooking Africa paper/06. Results/LPG International price - Rural-Urban/{country}/{scenario}/",
     output:
-          main_plot = "../Clean cooking Africa paper/06. Results/{scenario}/{country}/{sensitivity}/main_plot.pdf"
+          main_plot = "../Clean cooking Africa paper/06. Results/LPG International price - Rural-Urban/{country}/{scenario}/main_plot.pdf"
     shell:
          """
          pdflatex "\\newcommand\path{{"{params.path}"}}\input{{scripts/main_plot.tex}}" -output-directory "{params.path}"
@@ -143,21 +139,20 @@ rule main_plot:
 
 rule get_main_plot:
     input:
-         expand("../Clean cooking Africa paper/06. Results/{scenario}/{country}/{sensitivity}/main_plot.pdf",
+         expand("../Clean cooking Africa paper/06. Results/LPG International price - Rural-Urban/{country}/{scenario}/main_plot.pdf",
                 country=COUNTRIES,
-                sensitivity=SENSITIVITY,
                 scenario=SCENARIOS)
 
 
 rule merge_results:
     input:
-         results = expand("../Clean cooking Africa paper/06. Results/{{scenario}}/{country}/{{sensitivity}}/results.pkl",
+         results = expand("../Clean cooking Africa paper/06. Results/LPG International price - Rural-Urban/{country}/{{scenario}}/results.pkl",
                            country=COUNTRIES),
          boundaries = rules.process_data.input.mask_layer
     params:
-          output_directory = "../Clean cooking Africa paper/06. Results/{scenario}/Africa/{sensitivity}",
+          output_directory = "../Clean cooking Africa paper/06. Results/LPG International price - Rural-Urban/Africa/{scenario}",
           countries = COUNTRIES
     output:
-          results = "../Clean cooking Africa paper/06. Results/{scenario}/Africa/{sensitivity}/results.pkl"
+          results = "../Clean cooking Africa paper/06. Results/LPG International price - Rural-Urban/Africa/{scenario}/results.pkl"
     script:
           "scripts/merge_results.py"

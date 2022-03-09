@@ -381,7 +381,7 @@ class Technology:
         mortality_r = np.sum(mort_vector_r)
 
         #  Distributed mortality per household
-        distributed_mortality = pd.Series(index=model.gdf.index)
+        distributed_mortality = pd.Series(index=model.gdf.index, dtype='float64')
 
         distributed_mortality[model.gdf["IsUrban"] > 20] = model.gdf.loc[
                                                                model.gdf["IsUrban"] > 20, "Calibrated_pop"] / (
@@ -400,7 +400,7 @@ class Technology:
         self.distributed_mortality = distributed_mortality
         #  Total deaths avoided
 
-        deaths_avoided = pd.Series(index=model.gdf.index)
+        deaths_avoided = pd.Series(index=model.gdf.index, dtype='float64')
         deaths_avoided[model.gdf["IsUrban"] > 20] = (
                                                             mort_alri_u + mort_copd_u + mort_lc_u + mort_ihd_u + mort_stroke_u) * (
                                                             model.gdf.loc[
@@ -505,7 +505,7 @@ class Technology:
         morbidity_u = np.sum(morb_vector_u)
         morbidity_r = np.sum(morb_vector_r)
 
-        distributed_morbidity = pd.Series(index=model.gdf.index)
+        distributed_morbidity = pd.Series(index=model.gdf.index, dtype='float64')
 
         distributed_morbidity[model.gdf["IsUrban"] > 20] = model.gdf.loc[
                                                                model.gdf["IsUrban"] > 20, "Calibrated_pop"] / (
@@ -523,7 +523,7 @@ class Technology:
 
         self.distributed_morbidity = distributed_morbidity
 
-        cases_avoided = pd.Series(index=model.gdf.index)
+        cases_avoided = pd.Series(index=model.gdf.index, dtype='float64')
         cases_avoided[model.gdf["IsUrban"] > 20] = (
                                                            morb_alri_u + morb_copd_u + morb_lc_u + morb_ihd_u + morb_stroke_u) * (
                                                            model.gdf.loc[

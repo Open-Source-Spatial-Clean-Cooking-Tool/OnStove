@@ -78,8 +78,8 @@ path = snakemake.input.techs_file
 model.read_tech_data(path, delimiter=',')
 
 # Adding tiers data to Electricity
-print(f'[{country}] Electricity tiers data')
-model.techs['Electricity'].tiers_path = snakemake.input.tiers
+# print(f'[{country}] Electricity tiers data')
+# model.techs['Electricity'].tiers_path = snakemake.input.tiers
 
 # 12. Reading GIS data for LPG supply
 print(f'[{country}] LPG data')
