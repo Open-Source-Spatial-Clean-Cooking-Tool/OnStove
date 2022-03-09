@@ -381,7 +381,7 @@ class Technology:
         mortality_r = np.sum(mort_vector_r)
 
         #  Distributed mortality per household
-        distributed_mortality = pd.Series(index=model.gdf.index)
+        distributed_mortality = pd.Series(index=model.gdf.index, dtype='float64')
 
         distributed_mortality[model.gdf["IsUrban"] > 20] = model.gdf.loc[
                                                                model.gdf["IsUrban"] > 20, "Calibrated_pop"] / (
@@ -400,7 +400,7 @@ class Technology:
         self.distributed_mortality = distributed_mortality
         #  Total deaths avoided
 
-        deaths_avoided = pd.Series(index=model.gdf.index)
+        deaths_avoided = pd.Series(index=model.gdf.index, dtype='float64')
         deaths_avoided[model.gdf["IsUrban"] > 20] = (
                                                             mort_alri_u + mort_copd_u + mort_lc_u + mort_ihd_u + mort_stroke_u) * (
                                                             model.gdf.loc[
@@ -505,7 +505,7 @@ class Technology:
         morbidity_u = np.sum(morb_vector_u)
         morbidity_r = np.sum(morb_vector_r)
 
-        distributed_morbidity = pd.Series(index=model.gdf.index)
+        distributed_morbidity = pd.Series(index=model.gdf.index, dtype='float64')
 
         distributed_morbidity[model.gdf["IsUrban"] > 20] = model.gdf.loc[
                                                                model.gdf["IsUrban"] > 20, "Calibrated_pop"] / (
@@ -523,7 +523,7 @@ class Technology:
 
         self.distributed_morbidity = distributed_morbidity
 
-        cases_avoided = pd.Series(index=model.gdf.index)
+        cases_avoided = pd.Series(index=model.gdf.index, dtype='float64')
         cases_avoided[model.gdf["IsUrban"] > 20] = (
                                                            morb_alri_u + morb_copd_u + morb_lc_u + morb_ihd_u + morb_stroke_u) * (
                                                            model.gdf.loc[
@@ -848,6 +848,29 @@ class Biomass(Technology):
 
 
 class Charcoal(Technology):
+    def __init__(self,
+                 name=None,
+                 carbon_intensity=None,
+                 co2_intensity=112,
+                 ch4_intensity=0.864,
+                 n2o_intensity=0.0039,
+                 co_intensity=0,
+                 bc_intensity=0.1075,
+                 oc_intensity=0.308,
+                 energy_content=0,
+                 tech_life=0,  # in years
+                 inv_cost=0,  # in USD
+                 fuel_cost=0,
+                 time_of_cooking=0,
+                 om_cost=0,  # percentage of investement cost
+                 efficiency=0,  # ratio
+                 pm25=844):
+        super().__init__(name, carbon_intensity, co2_intensity, ch4_intensity,
+                         n2o_intensity, co_intensity, bc_intensity, oc_intensity,
+                         energy_content, tech_life,
+                         inv_cost, fuel_cost, time_of_cooking,
+                         om_cost, efficiency, pm25, is_clean=False)
+
     def get_carbon_intensity(self, model):
         intensity = self['co2_intensity']
         self['co2_intensity'] *= model.specs['fnrb']
