@@ -464,13 +464,14 @@ class OnSSTOVE(DataProcessor):
             self.base_fuel.carb(self)
             self.base_fuel.total_time(self)
             self.base_fuel.required_energy(self)
+            self.base_fuel.adjusted_pm25()
             self.base_fuel.health_parameters(self)
             if isinstance(tech, LPG):
                 self.base_fuel.transportation_cost(self)
             self.base_fuel.inv_cost = pd.Series([self.base_fuel.inv_cost] * self.gdf.shape[0],
                                                 index=self.gdf.index)
             self.base_fuel.om_cost = pd.Series([self.base_fuel.om_cost] * self.gdf.shape[0],
-                                                index=self.gdf.index)
+                                               index=self.gdf.index)
         else:
             if len(base_fuels) == 0:
                 base_fuels = techs
@@ -483,7 +484,6 @@ class OnSSTOVE(DataProcessor):
                 current_share = (self.gdf['IsUrban'] > 20) * tech.current_share_urban
                 current_share[self.gdf['IsUrban'] < 20] = tech.current_share_rural
 
-
                 tech.carb(self)
                 tech.total_time(self)
                 tech.required_energy(self)
@@ -493,6 +493,7 @@ class OnSSTOVE(DataProcessor):
 
                 base_fuel.tech_life += tech.tech_life * current_share
 
+                tech.adjusted_pm25()
                 tech.health_parameters(self)
 
                 base_fuel.carbon += tech.carbon * current_share
@@ -814,6 +815,7 @@ class OnSSTOVE(DataProcessor):
         # Loop through each technology and calculate all benefits and costs
         for tech in techs:
             print(f'Calculating health benefits for {tech.name}...')
+            tech.adjusted_pm25()
             tech.morbidity(self)
             tech.mortality(self)
             print(f'Calculating carbon emissions benefits for {tech.name}...')
@@ -827,17 +829,8 @@ class OnSSTOVE(DataProcessor):
             tech.discount_fuel_cost(self)
             tech.salvage(self)
             print(f'Calculating net benefit for {tech.name}...\n')
-            if 'w_costs' not in self.specs.keys():
-                w_health = 1
-                w_environment = 1
-                w_social = 1
-                w_costs = 1
-            else:
-                w_health = self.specs['w_health']
-                w_environment = self.specs['w_environment']
-                w_social = self.specs['w_social']
-                w_costs = self.specs['w_costs']
-            tech.net_benefit(self, w_health, w_environment, w_social, w_costs)
+            tech.net_benefit(self, self.specs['w_health'], self.specs['w_spillovers'],
+                             self.specs['w_environment'], self.specs['w_time'], self.specs['w_costs'])
 
         print('Getting maximum net benefit technologies...')
         self.maximum_net_benefit(techs)
@@ -905,7 +898,8 @@ class OnSSTOVE(DataProcessor):
                 second_best = second_best.str.replace("_temp", "")
                 second_best.replace('NaN', np.nan, inplace=True)
 
-                second_tech_net_benefit = dff.loc[current, second_benefit_cols].max(axis=1) * (1 - tech.factor.loc[current])
+                second_tech_net_benefit = dff.loc[current, second_benefit_cols].max(axis=1) * (
+                            1 - tech.factor.loc[current])
 
                 elec_factor = dff['Elec_pop_calib'] / dff['Calibrated_pop']
                 dff['max_benefit_tech'] = second_best
@@ -953,27 +947,33 @@ class OnSSTOVE(DataProcessor):
 
     def extract_lives_saved(self):
         self.gdf["deaths_avoided"] = self.gdf.apply(
-            lambda row: self.techs[row['max_benefit_tech']].deaths_avoided[row.name], axis=1) #* self.gdf["Households"]
+            lambda row: self.techs[row['max_benefit_tech']].deaths_avoided[row.name],
+            axis=1)  # * self.gdf["Households"]
 
     def extract_health_costs_saved(self):
 
         self.gdf["health_costs_avoided"] = self.gdf.apply(
             lambda row: self.techs[row['max_benefit_tech']].distributed_morbidity[row.name] +
-                        self.techs[row['max_benefit_tech']].distributed_mortality[row.name], axis=1) #* self.gdf["Households"]
+                        self.techs[row['max_benefit_tech']].distributed_mortality[row.name] +
+                        self.techs[row['max_benefit_tech']].distributed_spillovers_morb[row.name] +
+                        self.techs[row['max_benefit_tech']].distributed_spillovers_mort[row.name],
+            axis=1)  # * self.gdf["Households"]
 
     def extract_time_saved(self):
         self.gdf["time_saved"] = self.gdf.apply(
-            lambda row: self.techs[row['max_benefit_tech']].total_time_saved[row.name], axis=1) #* self.gdf["Households"]
+            lambda row: self.techs[row['max_benefit_tech']].total_time_saved[row.name],
+            axis=1)  # * self.gdf["Households"]
 
     def extract_opportunity_cost(self):
         self.gdf["opportunity_cost_gained"] = self.gdf.apply(
-            lambda row: self.techs[row['max_benefit_tech']].time_value[row.name], axis=1) #* self.gdf["Households"]
+            lambda row: self.techs[row['max_benefit_tech']].time_value[row.name], axis=1)  # * self.gdf["Households"]
 
     def extract_reduced_emissions(self):
         # TODO: Fix this
 
         self.gdf["reduced_emissions"] = self.gdf.apply(
-                lambda row: self.techs[row['max_benefit_tech']].decreased_carbon_emissions[row.name], axis=1) #* self.gdf["Households"]
+            lambda row: self.techs[row['max_benefit_tech']].decreased_carbon_emissions[row.name],
+            axis=1)  # * self.gdf["Households"]
         # except:
         #     self.gdf["reduced_emissions"] = self.gdf.apply(
         #         lambda row: self.techs[row['max_benefit_tech']].decreased_carbon_emissions, axis=1) * self.gdf["Households"]
@@ -981,32 +981,36 @@ class OnSSTOVE(DataProcessor):
     def extract_investment_costs(self):
 
         self.gdf["investment_costs"] = self.gdf.apply(
-            lambda row: self.techs[row['max_benefit_tech']].discounted_investments[row.name], axis=1) #* self.gdf["Households"]
+            lambda row: self.techs[row['max_benefit_tech']].discounted_investments[row.name],
+            axis=1)  # * self.gdf["Households"]
 
     def extract_om_costs(self):
 
         self.gdf["om_costs"] = self.gdf.apply(
-            lambda row: self.techs[row['max_benefit_tech']].discounted_om_costs[row.name], axis=1) #* self.gdf["Households"]
+            lambda row: self.techs[row['max_benefit_tech']].discounted_om_costs[row.name],
+            axis=1)  # * self.gdf["Households"]
 
     def extract_fuel_costs(self):
 
         self.gdf["fuel_costs"] = self.gdf.apply(
-            lambda row: self.techs[row['max_benefit_tech']].discounted_fuel_cost[row.name], axis=1) #* self.gdf["Households"]
+            lambda row: self.techs[row['max_benefit_tech']].discounted_fuel_cost[row.name],
+            axis=1)  # * self.gdf["Households"]
 
     def extract_salvage(self):
 
         self.gdf["salvage_value"] = self.gdf.apply(
-            lambda row: self.techs[row['max_benefit_tech']].discounted_salvage_cost[row.name], axis=1) #* self.gdf["Households"]
+            lambda row: self.techs[row['max_benefit_tech']].discounted_salvage_cost[row.name],
+            axis=1)  # * self.gdf["Households"]
 
     def extract_emissions_costs_saved(self):
         # TODO: Fix this
 
         self.gdf["emissions_costs_saved"] = self.gdf.apply(
-                lambda row: self.techs[row['max_benefit_tech']].decreased_carbon_costs[row.name], axis=1) #* self.gdf["Households"]
+            lambda row: self.techs[row['max_benefit_tech']].decreased_carbon_costs[row.name],
+            axis=1)  # * self.gdf["Households"]
         # except:
         #     self.gdf["emissions_costs_saved"] = self.gdf.apply(
         #         lambda row: self.techs[row['max_benefit_tech']].decreased_carbon_costs, axis=1) * self.gdf["Households"]
-
 
     def gdf_to_csv(self, scenario_name):
 
@@ -1060,7 +1064,7 @@ class OnSSTOVE(DataProcessor):
             gdf = gpd.read_file(wealth_index)
             gdf.to_crs(self.gdf.crs, inplace=True)
 
-            gdf.rename(columns={wealth_column: "relative_wealth"}, inplace = True)
+            gdf.rename(columns={wealth_column: "relative_wealth"}, inplace=True)
 
             self.gdf = gpd.sjoin(self.gdf, gdf[["relative_wealth", "geometry"]], how="left")
         elif file_type == "raster":
@@ -1279,7 +1283,8 @@ class OnSSTOVE(DataProcessor):
                                                          'deaths_avoided': 'sum',
                                                          'health_costs_avoided': lambda row: np.nansum(row) / 1000000,
                                                          'time_saved': 'sum',
-                                                         'opportunity_cost_gained': lambda row: np.nansum(row) / 1000000,
+                                                         'opportunity_cost_gained': lambda row: np.nansum(
+                                                             row) / 1000000,
                                                          'reduced_emissions': lambda row: np.nansum(row) / 1000000000,
                                                          'emissions_costs_saved': lambda row: np.nansum(row) / 1000000,
                                                          'investment_costs': lambda row: np.nansum(row) / 1000000,
@@ -1343,12 +1348,10 @@ class OnSSTOVE(DataProcessor):
         df['investment_costs'] *= -1
         df['om_costs'] *= -1
 
-        dff = df.melt(id_vars=['max_benefit_tech'], value_vars=['health_costs_avoided',
-                                                                'investment_costs',
-                                                                'fuel_costs',
-                                                                'emissions_costs_saved',
-                                                                'om_costs',
-                                                                'opportunity_cost_gained'])
+        value_vars = ['investment_costs', 'fuel_costs', 'om_costs',
+                      'health_costs_avoided', 'emissions_costs_saved', 'opportunity_cost_gained']
+
+        dff = df.melt(id_vars=['max_benefit_tech'], value_vars=value_vars)
 
         dff['variable'] = dff['variable'].str.replace('_', ' ').str.capitalize()
 
@@ -1382,7 +1385,8 @@ class OnSSTOVE(DataProcessor):
         else:
             return p
 
-    def plot_benefit_distribution(self, type='box', groupby='None', cmap=None, labels=None, save=False, height=1.5, width=2.5):
+    def plot_benefit_distribution(self, type='box', groupby='None', cmap=None, labels=None, save=False, height=1.5,
+                                  width=2.5):
         if type.lower() == 'box':
             if groupby.lower() == 'isurban':
                 df = self.gdf.groupby(['IsUrban', 'max_benefit_tech'])[['health_costs_avoided',
@@ -1447,10 +1451,10 @@ class OnSSTOVE(DataProcessor):
             p = (ggplot(df)
                  + geom_density(aes(
                         x='(health_costs_avoided + opportunity_cost_gained + emissions_costs_saved' +
-                                      ' + salvage_value - investment_costs - fuel_costs - om_costs)',
+                          ' + salvage_value - investment_costs - fuel_costs - om_costs)',
                         y=after_stat('count'),
                         fill='max_benefit_tech', color='max_benefit_tech'),
-                                alpha=0.1)
+                        alpha=0.1)
                  + scale_fill_manual(cmap, guide=False)
                  + scale_color_manual(cmap)
                  + theme_minimal()
