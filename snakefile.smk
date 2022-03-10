@@ -1,13 +1,13 @@
 import os
 cwd = os.getcwd()
 
-# SCENARIOS = ['All_benefits']
-SCENARIOS, = glob_wildcards("../Clean cooking Africa paper/04. OnSSTOVE inputs/LPG International price - Rural-Urban/Scenario_files/{scenario}/BDI_scenario_file.csv")
+SCENARIOS = ['All_benefits']
+# SCENARIOS, = glob_wildcards("../Clean cooking Africa paper/04. OnSSTOVE inputs/LPG International price - Rural-Urban/Scenario_files/{scenario}/BDI_scenario_file.csv")
 
 
-# COUNTRIES = ['BDI']
+COUNTRIES = ['BDI']
 
-COUNTRIES = ['Africa']
+# COUNTRIES = ['Africa']
 
 # COUNTRIES = ['AGO', 'BDI', 'BEN', 'BFA', 'BWA', 'CAF', 'CIV', 'CMR',
 #              'COD', 'COG', 'DJI', 'ERI', 'ETH', 'GAB', 'GHA', 'GIN',
@@ -16,16 +16,16 @@ COUNTRIES = ['Africa']
 #              'SEN', 'SLE', 'SOM', 'SSD', 'SWZ', 'TCD', 'TGO', 'TZA',
 #              'UGA', 'ZAF', 'ZMB', 'ZWE']
 
-# rule all:
-#     input:
-#         expand("../Clean cooking Africa paper/06. Results/LPG International price - Rural-Urban/{country}/{scenario}/results.pkl",
-#                country=COUNTRIES,
-#                scenario=SCENARIOS)
-
 rule all:
     input:
-         expand("../Clean cooking Africa paper/06. Results/LPG International price - Rural-Urban/Africa/{scenario}/results.pkl",
+        expand("../Clean cooking Africa paper/06. Results/LPG International price - Rural-Urban/{country}/{scenario}/results.pkl",
+               country=COUNTRIES,
                scenario=SCENARIOS)
+
+# rule all:
+#     input:
+#          expand("../Clean cooking Africa paper/06. Results/LPG International price - Rural-Urban/Africa/{scenario}/results.pkl",
+#                scenario=SCENARIOS)
 
 rule extract_forest:
     input:
