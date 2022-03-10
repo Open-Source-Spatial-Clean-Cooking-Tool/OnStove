@@ -464,6 +464,7 @@ class OnSSTOVE(DataProcessor):
             self.base_fuel.carb(self)
             self.base_fuel.total_time(self)
             self.base_fuel.required_energy(self)
+            self.base_fuel.adjusted_pm25()
             self.base_fuel.health_parameters(self)
             if isinstance(tech, LPG):
                 self.base_fuel.transportation_cost(self)
@@ -492,6 +493,7 @@ class OnSSTOVE(DataProcessor):
 
                 base_fuel.tech_life += tech.tech_life * current_share
 
+                tech.adjusted_pm25()
                 tech.health_parameters(self)
 
                 base_fuel.carbon += tech.carbon * current_share
@@ -813,6 +815,7 @@ class OnSSTOVE(DataProcessor):
         # Loop through each technology and calculate all benefits and costs
         for tech in techs:
             print(f'Calculating health benefits for {tech.name}...')
+            tech.adjusted_pm25()
             tech.morbidity(self)
             tech.mortality(self)
             print(f'Calculating carbon emissions benefits for {tech.name}...')
@@ -826,17 +829,8 @@ class OnSSTOVE(DataProcessor):
             tech.discount_fuel_cost(self)
             tech.salvage(self)
             print(f'Calculating net benefit for {tech.name}...\n')
-            if 'w_costs' not in self.specs.keys():
-                w_health = 1
-                w_environment = 1
-                w_social = 1
-                w_costs = 1
-            else:
-                w_health = self.specs['w_health']
-                w_environment = self.specs['w_environment']
-                w_social = self.specs['w_social']
-                w_costs = self.specs['w_costs']
-            tech.net_benefit(self, w_health, w_environment, w_social, w_costs)
+            tech.net_benefit(self, self.specs['w_health'], self.specs['w_spillovers'],
+                             self.specs['w_environment'], self.specs['w_time'], self.specs['w_costs'])
 
         print('Getting maximum net benefit technologies...')
         self.maximum_net_benefit(techs)
@@ -960,7 +954,9 @@ class OnSSTOVE(DataProcessor):
 
         self.gdf["health_costs_avoided"] = self.gdf.apply(
             lambda row: self.techs[row['max_benefit_tech']].distributed_morbidity[row.name] +
-                        self.techs[row['max_benefit_tech']].distributed_mortality[row.name],
+                        self.techs[row['max_benefit_tech']].distributed_mortality[row.name] +
+                        self.techs[row['max_benefit_tech']].distributed_spillovers_morb[row.name] +
+                        self.techs[row['max_benefit_tech']].distributed_spillovers_mort[row.name],
             axis=1)  # * self.gdf["Households"]
 
     def extract_time_saved(self):
@@ -1352,14 +1348,8 @@ class OnSSTOVE(DataProcessor):
         df['investment_costs'] *= -1
         df['om_costs'] *= -1
 
-        value_vars = ['investment_costs', 'fuel_costs', 'om_costs']
-
-        if self.specs['w_health'] > 0:
-            value_vars.append('health_costs_avoided')
-        if self.specs['w_environment'] > 0:
-            value_vars.append('emissions_costs_saved')
-        if self.specs['w_time'] > 0:
-            value_vars.append('opportunity_cost_gained')
+        value_vars = ['investment_costs', 'fuel_costs', 'om_costs',
+                      'health_costs_avoided', 'emissions_costs_saved', 'opportunity_cost_gained']
 
         dff = df.melt(id_vars=['max_benefit_tech'], value_vars=value_vars)
 

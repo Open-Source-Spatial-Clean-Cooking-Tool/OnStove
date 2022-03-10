@@ -49,18 +49,18 @@ print(f'[{country}] Saving the rasters')
 # model.gdf['max_benefit_tech'] = model.gdf['max_benefit_tech'].str.replace('_', ' ')
 # model.gdf['max_benefit_tech'] = model.gdf['max_benefit_tech'].str.replace('Collected Traditional Biomass', 'Traditional Biomass')
 # model.gdf['max_benefit_tech'] = model.gdf['max_benefit_tech'].str.replace('Collected Improved Biomass', 'Biomass ICS')
-model.to_raster('max_benefit_tech', labels=labels, cmap=cmap)
-model.to_raster('net_benefit_Electricity')
-model.to_raster('net_benefit_LPG')
-#model.to_raster('net_benefit_Collected_Traditional_Biomass')
-#model.to_raster('net_benefit_Collected_Improved_Biomass')
-model.to_raster('maximum_net_benefit')
-model.to_raster('investment_costs')
+# model.to_raster('max_benefit_tech', labels=labels, cmap=cmap)
+# model.to_raster('net_benefit_Electricity')
+# model.to_raster('net_benefit_LPG')
+# #model.to_raster('net_benefit_Collected_Traditional_Biomass')
+# #model.to_raster('net_benefit_Collected_Improved_Biomass')
+# model.to_raster('maximum_net_benefit')
+# model.to_raster('investment_costs')
 
 print(f'[{country}] Saving the graphs')
 model.to_image('maximum_net_benefit', cmap='Spectral', cumulative_count=[0.01, 0.99],
                title=f'Maximum net benefit | {country}', dpi=300,
-               rasterized=True)
+               rasterized=True, type='pdf')
 model.to_image('max_benefit_tech', cmap=cmap, legend_position=(1, 0.75),
                type='pdf', dpi=300, stats=True, stats_position=(1, 0.8),
                labels=labels, legend=True, legend_title='Maximum benefit\ncooking technology', rasterized=True)
@@ -68,7 +68,6 @@ model.to_image('max_benefit_tech', cmap=cmap, legend_position=(1, 0.75),
 model.plot_split(cmap=cmap, labels=labels, save=True, height=1.5, width=3.5)
 model.plot_costs_benefits(labels=labels, save=True, height=1.5, width=2)
 model.plot_benefit_distribution(type='box', groupby='None', cmap=cmap, labels=labels, save=True, height=1.5, width=3.5)
-model.plot_benefit_distribution(type='box', groupby='IsUrban', cmap=cmap, labels=labels, save=True, height=1.5, width=3.5)
 model.plot_benefit_distribution(type='box', groupby='UrbanRural', cmap=cmap, labels=labels, save=True, height=2.5, width=3.5)
 model.plot_benefit_distribution(type='density', cmap=cmap, labels=labels, save=True, height=1.5, width=3.5)
 

@@ -38,7 +38,8 @@ class Technology:
                  transport_cost=0,
                  is_clean=False,
                  current_share_urban=0,
-                 current_share_rural=0):  # 24-h PM2.5 concentration
+                 current_share_rural=0,
+                 epsilon=0.71):  # 24-h PM2.5 concentration
 
         self.name = name
         self.carbon_intensity = carbon_intensity
@@ -66,6 +67,7 @@ class Technology:
         self.current_share_urban = current_share_urban
         self.current_share_rural = current_share_rural
         self.energy = 0
+        self.epsilon = epsilon
         for paf in ['paf_alri_', 'paf_copd_', 'paf_ihd_', 'paf_lc_', 'paf_stroke_']:
             for s in ['u', 'r']:
                 self[paf + s] = 0
@@ -138,6 +140,8 @@ class Technology:
             self.paf_lc_u = value
         elif idx == 'paf_stroke_u':
             self.paf_stroke_u = value
+        elif idx == 'epsilon':
+            self.epsilon = value
         else:
             raise KeyError(idx)
 
@@ -208,8 +212,13 @@ class Technology:
             return self.paf_lc_u
         elif idx == 'paf_stroke_u':
             return self.paf_stroke_u
+        elif idx == 'epsilon':
+            return self.epsilon
         else:
             raise KeyError(idx)
+
+    def adjusted_pm25(self):
+        self.pm25 *= self.epsilon
 
     def relative_risk(self):
         if self.pm25 < 7.298:
@@ -258,7 +267,7 @@ class Technology:
 
         year = np.arange(proj_life) + 1
 
-        discount_factor = (1 + specs["Discount_rate_private"]) ** year
+        discount_factor = (1 + specs["Discount_rate"]) ** year
 
         return discount_factor, proj_life
 
@@ -283,7 +292,7 @@ class Technology:
         self.carb(model)
         proj_life = model.specs['End_year'] - model.specs['Start_year']
         carbon = model.specs["Cost of carbon emissions"] * (model.base_fuel.carbon - self.carbon) / 1000 / (
-                1 + model.specs["Discount_rate_social"]) ** (proj_life)
+                1 + model.specs["Discount_rate"]) ** (proj_life)
 
         self.decreased_carbon_emissions = model.base_fuel.carbon - self.carbon
         self.decreased_carbon_costs = carbon
@@ -302,7 +311,7 @@ class Technology:
         self.paf_lc_u = self.paf(rr_lc, 1 - model.clean_cooking_access_u)
         self.paf_stroke_u = self.paf(rr_stroke, 1 - model.clean_cooking_access_u)
 
-    def mort_morb(self, model, parameter='Mort', dr='Discount_rate_private'):
+    def mort_morb(self, model, parameter='Mort', dr='Discount_rate'):
         """
         Calculates mortality or morbidity rate per fuel
 
@@ -371,13 +380,15 @@ class Technology:
         ----------
         Monetary mortality for each stove in urban and rural settings
         """
-        distributed_mortality, deaths_avoided = self.mort_morb(model, parameter='Mort', dr='Discount_rate_private')
+        distributed_mortality, deaths_avoided = self.mort_morb(model, parameter='Mort', dr='Discount_rate')
         self.distributed_mortality = distributed_mortality
         self.deaths_avoided = deaths_avoided
 
-        if model.specs['Health_spillovers_parameter'] is not None:
-            distributed_mortality, deaths_avoided = self.mort_morb(model, parameter='Mort', dr='Discount_rate_social')
+        if model.specs['w_spillovers'] > 0:
+            distributed_mortality, deaths_avoided = self.mort_morb(model, parameter='Mort', dr='Discount_rate')
             self.distributed_spillovers_mort = distributed_mortality * model.specs['Health_spillovers_parameter']
+        else:
+            self.distributed_spillovers_mort = pd.Series(0, index=model.gdf.index, dtype='float64')
 
     def morbidity(self, model):
         """
@@ -387,13 +398,15 @@ class Technology:
         ----------
         Monetary morbidity for each stove in urban and rural settings
         """
-        distributed_morbidity, cases_avoided = self.mort_morb(model, parameter='Morb', dr='Discount_rate_private')
+        distributed_morbidity, cases_avoided = self.mort_morb(model, parameter='Morb', dr='Discount_rate')
         self.distributed_morbidity = distributed_morbidity
         self.cases_avoided = cases_avoided
 
-        if model.specs['Health_spillovers_parameter'] is not None:
-            distributed_morbidity, cases_avoided = self.mort_morb(model, parameter='Morb', dr='Discount_rate_social')
+        if model.specs['w_spillovers'] > 0:
+            distributed_morbidity, cases_avoided = self.mort_morb(model, parameter='Morb', dr='Discount_rate')
             self.distributed_spillovers_morb = distributed_morbidity * model.specs['Health_spillovers_parameter']
+        else:
+            self.distributed_spillovers_morb = pd.Series(0, index=model.gdf.index, dtype='float64')
 
     def salvage(self, model):
         """
@@ -511,7 +524,7 @@ class Technology:
         self.total_time_saved = model.base_fuel.total_time_yr - self.total_time_yr
         # time value of time saved per sq km
         self.time_value = self.total_time_saved * model.gdf["value_of_time"] / (
-                1 + model.specs["Discount_rate_private"]) ** (proj_life)
+                1 + model.specs["Discount_rate"]) ** (proj_life)
 
     def total_costs(self):
         self.costs = (self.discounted_fuel_cost + self.discounted_investments +  # - self.time_value +
@@ -860,8 +873,8 @@ class Electricity(Technology):
         super().total_costs()
         self.costs += self.capacity_cost
 
-    def net_benefit(self, model, w_health=1, w_environment=1, w_time=1, w_costs=1):
-        super().net_benefit(model, w_health, w_environment, w_time, w_costs)
+    def net_benefit(self, model, w_health=1, w_spillovers=1, w_environment=1, w_time=1, w_costs=1):
+        super().net_benefit(model, w_health, w_spillovers, w_environment, w_time, w_costs)
         model.gdf.loc[model.gdf['Current_elec'] == 0, "net_benefit_{}".format(self.name)] = np.nan
         # model.gdf.loc[model.gdf['Current_elec'] == 0, "costs_{}".format(self.name)] = np.nan
         # model.gdf.loc[model.gdf['Current_elec'] == 0, "benefits_{}".format(self.name)] = np.nan
@@ -984,8 +997,8 @@ class Biogas(Technology):
         self.get_collection_time(model)
         super().total_time(model)
 
-    def net_benefit(self, model, w_health=1, w_environment=1, w_time=1, w_costs=1):
-        super().net_benefit(model, w_health, w_environment, w_time, w_costs)
+    def net_benefit(self, model, w_health=1, w_spillovers=1, w_environment=1, w_time=1, w_costs=1):
+        super().net_benefit(model, w_health, w_spillovers, w_environment, w_time, w_costs)
         # model.gdf.loc[(model.gdf['biogas_energy_hh'] == 0), "benefits_{}".format(self.name)] = np.nan
         required_energy_hh = self.required_energy_hh(model)
         model.gdf.loc[(model.gdf['biogas_energy'] < required_energy_hh), "benefits_{}".format(self.name)] = np.nan
