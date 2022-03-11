@@ -933,7 +933,6 @@ class Biogas(Technology):
         time_of_collection[time_of_collection > 10] = 10
         self.time_of_collection = time_of_collection
 
-
     def available_biogas(self, model):
         # Biogas production potential in liters per day
         from_cattle = model.gdf["Cattles"] * 12 * 0.15 * 0.8 * 305

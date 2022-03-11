@@ -459,7 +459,6 @@ class OnSSTOVE(DataProcessor):
         else:
             self.specs.update(config)
 
-    @timeit
     def set_base_fuel(self, techs: list = None):
         """
         Defines the base fuel properties according to the technologies
@@ -472,7 +471,9 @@ class OnSSTOVE(DataProcessor):
             techs = self.techs.values()
         base_fuels = []
         for tech in techs:
-            if tech.is_base:
+            share = tech.current_share_rural + tech.current_share_urban
+            if (share > 0) or tech.is_base:
+                tech.is_base = True
                 base_fuels.append(tech)
         if len(base_fuels) == 1:
             self.base_fuel = copy(base_fuels[0])
@@ -495,7 +496,6 @@ class OnSSTOVE(DataProcessor):
             base_fuel.total_time_yr = 0
 
             for tech in base_fuels:
-
                 current_share = (self.gdf['IsUrban'] > 20) * tech.current_share_urban
                 current_share[self.gdf['IsUrban'] < 20] = tech.current_share_rural
 
@@ -831,7 +831,8 @@ class OnSSTOVE(DataProcessor):
         # Loop through each technology and calculate all benefits and costs
         for tech in techs:
             print(f'Calculating health benefits for {tech.name}...')
-            tech.adjusted_pm25()
+            if not tech.is_base:
+                tech.adjusted_pm25()
             tech.morbidity(self)
             tech.mortality(self)
             print(f'Calculating carbon emissions benefits for {tech.name}...')
@@ -880,7 +881,6 @@ class OnSSTOVE(DataProcessor):
         columns_dict['max_benefit_tech'] = 'first'
         return columns_dict
 
-    @timeit
     def maximum_net_benefit(self, techs):
         net_benefit_cols = [col for col in self.gdf if 'net_benefit_' in col]
         benefits_cols = [col for col in self.gdf if 'benefits_' in col]
