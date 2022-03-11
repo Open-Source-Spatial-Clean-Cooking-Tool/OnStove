@@ -1,3 +1,4 @@
+from time import time
 from copy import copy
 
 import dill
@@ -34,6 +35,19 @@ from plotnine import (
 from onsstove.technology import Technology, LPG, Biomass, Electricity, Biogas, Charcoal
 from .raster import *
 from .layer import VectorLayer, RasterLayer
+
+
+def timeit(func):
+    # This function shows the execution time of
+    # the function object passed
+    def wrap_func(*args, **kwargs):
+        t1 = time()
+        result = func(*args, **kwargs)
+        t2 = time()
+        print(f'Function {func.__name__!r} executed in {(t2 - t1):.4f}s')
+        return result
+
+    return wrap_func
 
 
 class DataProcessor:
@@ -457,7 +471,9 @@ class OnSSTOVE(DataProcessor):
             techs = self.techs.values()
         base_fuels = []
         for tech in techs:
-            if tech.is_base:
+            share = tech.current_share_rural + tech.current_share_urban
+            if (share > 0) or tech.is_base:
+                tech.is_base = True
                 base_fuels.append(tech)
         if len(base_fuels) == 1:
             self.base_fuel = copy(base_fuels[0])
@@ -480,7 +496,6 @@ class OnSSTOVE(DataProcessor):
             base_fuel.total_time_yr = 0
 
             for tech in base_fuels:
-
                 current_share = (self.gdf['IsUrban'] > 20) * tech.current_share_urban
                 current_share[self.gdf['IsUrban'] < 20] = tech.current_share_rural
 
@@ -801,6 +816,7 @@ class OnSSTOVE(DataProcessor):
         self.get_clean_cooking_access()
         if self.base_fuel is None:
             print(f'[{self.specs["Country_name"]}] Calculating base fuel properties')
+
             self.set_base_fuel(self.techs.values())
         if technologies == 'all':
             techs = [tech for tech in self.techs.values()]
@@ -815,7 +831,8 @@ class OnSSTOVE(DataProcessor):
         # Loop through each technology and calculate all benefits and costs
         for tech in techs:
             print(f'Calculating health benefits for {tech.name}...')
-            tech.adjusted_pm25()
+            if not tech.is_base:
+                tech.adjusted_pm25()
             tech.morbidity(self)
             tech.mortality(self)
             print(f'Calculating carbon emissions benefits for {tech.name}...')
@@ -873,13 +890,14 @@ class OnSSTOVE(DataProcessor):
             self.gdf.loc[self.gdf[benefit] < 0, net + '_temp'] = np.nan
 
         temps = [col for col in self.gdf if '_temp' in col]
-        self.gdf["max_benefit_tech"] = self.gdf[temps].idxmax(axis=1)
+        self.gdf["max_benefit_tech"] = self.gdf[temps].idxmax(axis=1).astype('string')
 
         self.gdf['max_benefit_tech'] = self.gdf['max_benefit_tech'].str.replace("net_benefit_", "")
         self.gdf['max_benefit_tech'] = self.gdf['max_benefit_tech'].str.replace("_temp", "")
         self.gdf["maximum_net_benefit"] = self.gdf[temps].max(axis=1)
 
         gdf = gpd.GeoDataFrame()
+        # gdf = gdf.astype(dtype=gdf.dtypes.to_dict())
         gdf_copy = self.gdf.copy()
         for tech in techs:
             current = (tech.households < gdf_copy['Households']) & \
@@ -899,7 +917,7 @@ class OnSSTOVE(DataProcessor):
                 second_best.replace('NaN', np.nan, inplace=True)
 
                 second_tech_net_benefit = dff.loc[current, second_benefit_cols].max(axis=1) * (
-                            1 - tech.factor.loc[current])
+                        1 - tech.factor.loc[current])
 
                 elec_factor = dff['Elec_pop_calib'] / dff['Calibrated_pop']
                 dff['max_benefit_tech'] = second_best
@@ -915,9 +933,9 @@ class OnSSTOVE(DataProcessor):
                 else:
                     self.gdf.loc[current, 'Elec_pop_calib'] = self.gdf.loc[current, 'Calibrated_pop'] * elec_factor
                     dff['Elec_pop_calib'] = dff['Calibrated_pop'] * elec_factor
-                gdf = gdf.append(dff)
+                gdf = pd.concat([gdf, dff])
 
-        self.gdf = self.gdf.append(gdf)
+        self.gdf = pd.concat([self.gdf, gdf])
 
         for net in net_benefit_cols:
             self.gdf[net + '_temp'] = self.gdf[net]
@@ -946,71 +964,67 @@ class OnSSTOVE(DataProcessor):
         self.gdf.sort_index(inplace=True)
 
     def extract_lives_saved(self):
-        self.gdf["deaths_avoided"] = self.gdf.apply(
-            lambda row: self.techs[row['max_benefit_tech']].deaths_avoided[row.name],
-            axis=1)  # * self.gdf["Households"]
+        for tech in self.gdf['max_benefit_tech'].unique():
+            is_tech = self.gdf['max_benefit_tech'] == tech
+            index = self.gdf.loc[is_tech].index
+            self.gdf.loc[is_tech, "deaths_avoided"] = self.techs[tech].deaths_avoided[index]
 
     def extract_health_costs_saved(self):
-
-        self.gdf["health_costs_avoided"] = self.gdf.apply(
-            lambda row: self.techs[row['max_benefit_tech']].distributed_morbidity[row.name] +
-                        self.techs[row['max_benefit_tech']].distributed_mortality[row.name] +
-                        self.techs[row['max_benefit_tech']].distributed_spillovers_morb[row.name] +
-                        self.techs[row['max_benefit_tech']].distributed_spillovers_mort[row.name],
-            axis=1)  # * self.gdf["Households"]
+        for tech in self.gdf['max_benefit_tech'].unique():
+            is_tech = self.gdf['max_benefit_tech'] == tech
+            index = self.gdf.loc[is_tech].index
+            self.gdf.loc[is_tech, "health_costs_avoided"] = self.techs[tech].distributed_morbidity[index] + \
+                                                            self.techs[tech].distributed_mortality[index] + \
+                                                            self.techs[tech].distributed_spillovers_morb[index] + \
+                                                            self.techs[tech].distributed_spillovers_mort[index]
 
     def extract_time_saved(self):
-        self.gdf["time_saved"] = self.gdf.apply(
-            lambda row: self.techs[row['max_benefit_tech']].total_time_saved[row.name],
-            axis=1)  # * self.gdf["Households"]
+        for tech in self.gdf['max_benefit_tech'].unique():
+            is_tech = self.gdf['max_benefit_tech'] == tech
+            index = self.gdf.loc[is_tech].index
+            self.gdf.loc[is_tech, "time_saved"] = self.techs[tech].total_time_saved[index]
 
     def extract_opportunity_cost(self):
-        self.gdf["opportunity_cost_gained"] = self.gdf.apply(
-            lambda row: self.techs[row['max_benefit_tech']].time_value[row.name], axis=1)  # * self.gdf["Households"]
+        for tech in self.gdf['max_benefit_tech'].unique():
+            is_tech = self.gdf['max_benefit_tech'] == tech
+            index = self.gdf.loc[is_tech].index
+            self.gdf.loc[is_tech, "opportunity_cost_gained"] = self.techs[tech].time_value[index]
 
     def extract_reduced_emissions(self):
-        # TODO: Fix this
-
-        self.gdf["reduced_emissions"] = self.gdf.apply(
-            lambda row: self.techs[row['max_benefit_tech']].decreased_carbon_emissions[row.name],
-            axis=1)  # * self.gdf["Households"]
-        # except:
-        #     self.gdf["reduced_emissions"] = self.gdf.apply(
-        #         lambda row: self.techs[row['max_benefit_tech']].decreased_carbon_emissions, axis=1) * self.gdf["Households"]
+        for tech in self.gdf['max_benefit_tech'].unique():
+            is_tech = self.gdf['max_benefit_tech'] == tech
+            index = self.gdf.loc[is_tech].index
+            self.gdf.loc[is_tech, "reduced_emissions"] = self.techs[tech].decreased_carbon_emissions[index]
 
     def extract_investment_costs(self):
-
-        self.gdf["investment_costs"] = self.gdf.apply(
-            lambda row: self.techs[row['max_benefit_tech']].discounted_investments[row.name],
-            axis=1)  # * self.gdf["Households"]
+        for tech in self.gdf['max_benefit_tech'].unique():
+            is_tech = self.gdf['max_benefit_tech'] == tech
+            index = self.gdf.loc[is_tech].index
+            self.gdf.loc[is_tech, "investment_costs"] = self.techs[tech].discounted_investments[index]
 
     def extract_om_costs(self):
-
-        self.gdf["om_costs"] = self.gdf.apply(
-            lambda row: self.techs[row['max_benefit_tech']].discounted_om_costs[row.name],
-            axis=1)  # * self.gdf["Households"]
+        for tech in self.gdf['max_benefit_tech'].unique():
+            is_tech = self.gdf['max_benefit_tech'] == tech
+            index = self.gdf.loc[is_tech].index
+            self.gdf.loc[is_tech, "om_costs"] = self.techs[tech].discounted_om_costs[index]
 
     def extract_fuel_costs(self):
-
-        self.gdf["fuel_costs"] = self.gdf.apply(
-            lambda row: self.techs[row['max_benefit_tech']].discounted_fuel_cost[row.name],
-            axis=1)  # * self.gdf["Households"]
+        for tech in self.gdf['max_benefit_tech'].unique():
+            is_tech = self.gdf['max_benefit_tech'] == tech
+            index = self.gdf.loc[is_tech].index
+            self.gdf.loc[is_tech, "fuel_costs"] = self.techs[tech].discounted_fuel_cost[index]
 
     def extract_salvage(self):
-
-        self.gdf["salvage_value"] = self.gdf.apply(
-            lambda row: self.techs[row['max_benefit_tech']].discounted_salvage_cost[row.name],
-            axis=1)  # * self.gdf["Households"]
+        for tech in self.gdf['max_benefit_tech'].unique():
+            is_tech = self.gdf['max_benefit_tech'] == tech
+            index = self.gdf.loc[is_tech].index
+            self.gdf.loc[is_tech, "salvage_value"] = self.techs[tech].discounted_salvage_cost[index]
 
     def extract_emissions_costs_saved(self):
-        # TODO: Fix this
-
-        self.gdf["emissions_costs_saved"] = self.gdf.apply(
-            lambda row: self.techs[row['max_benefit_tech']].decreased_carbon_costs[row.name],
-            axis=1)  # * self.gdf["Households"]
-        # except:
-        #     self.gdf["emissions_costs_saved"] = self.gdf.apply(
-        #         lambda row: self.techs[row['max_benefit_tech']].decreased_carbon_costs, axis=1) * self.gdf["Households"]
+        for tech in self.gdf['max_benefit_tech'].unique():
+            is_tech = self.gdf['max_benefit_tech'] == tech
+            index = self.gdf.loc[is_tech].index
+            self.gdf.loc[is_tech, "emissions_costs_saved"] = self.techs[tech].decreased_carbon_costs[index]
 
     def gdf_to_csv(self, scenario_name):
 
@@ -1293,9 +1307,9 @@ class OnSSTOVE(DataProcessor):
                                                          'salvage_value': lambda row: np.nansum(row) / 1000000,
                                                          }).reset_index()
         if total:
-            total = summary.sum().rename('total')
+            total = summary[summary.columns[1:]].sum().rename('total')
             total['max_benefit_tech'] = 'total'
-            summary = summary.append(total)
+            summary = pd.concat([summary, total.to_frame().T])
 
         summary['time_saved'] /= (summary['Calibrated_pop'] * 1000000 * 365)
         if pretty:

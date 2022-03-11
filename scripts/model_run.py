@@ -3,8 +3,6 @@ from decouple import config
 import os
 sys.path.append(config('ONSSTOVE'))
 
-import numpy as np
-
 from onsstove.onsstove import OnSSTOVE
 
 # 1. Read the OnSSTOVE model
