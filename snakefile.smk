@@ -5,22 +5,22 @@ SCENARIOS = ['Social_benefits', 'Private_benefits', 'Social_private_benefits']
 # SCENARIOS, = glob_wildcards("../Clean cooking Africa paper/04. OnSSTOVE inputs/LPG International price - Rural-Urban/Scenario_files/{scenario}/BDI_scenario_file.csv")
 
 
-# COUNTRIES = ['COD']
+# COUNTRIES = ['GMB']
 
-# COUNTRIES = ['Africa']
+COUNTRIES = ['Africa']
 
-COUNTRIES = ['AGO', 'BDI', 'BEN', 'BFA', 'BWA', 'CAF', 'CIV', 'CMR',
-             'COD', 'COG', 'DJI', 'ERI', 'ETH', 'GAB', 'GHA', 'GIN',
-             'GMB', 'GNB', 'GNQ', 'KEN', 'LBR', 'LSO', 'MDG', 'MLI',
-             'MOZ', 'MRT', 'MWI', 'NAM', 'NER', 'NGA', 'RWA', 'SDN',
-             'SEN', 'SLE', 'SOM', 'SSD', 'SWZ', 'TCD', 'TGO', 'TZA',
-             'UGA', 'ZAF', 'ZMB', 'ZWE']
+# COUNTRIES = ['AGO', 'BDI', 'BEN', 'BFA', 'BWA', 'CAF', 'CIV', 'CMR',
+             # 'COD', 'COG', 'DJI', 'ERI', 'ETH', 'GAB', 'GHA', 'GIN',
+             # 'GMB', 'GNB', 'GNQ', 'KEN', 'LBR', 'LSO', 'MDG', 'MLI',
+             # 'MOZ', 'MRT', 'MWI', 'NAM', 'NER', 'NGA', 'RWA', 'SDN',
+             # 'SEN', 'SLE', 'SOM', 'SSD', 'SWZ', 'TCD', 'TGO', 'TZA',
+             # 'UGA', 'ZAF', 'ZMB', 'ZWE']
 
 # rule all:
-#     input:
-#         expand("../Clean cooking Africa paper/06. Results/LPG International price - Rural-Urban/{country}/{scenario}/results.pkl",
-#                country=COUNTRIES,
-#                scenario=SCENARIOS)
+    # input:
+        # expand("../Clean cooking Africa paper/06. Results/LPG International price - Rural-Urban/{country}/{scenario}/results.pkl",
+               # country=COUNTRIES,
+               # scenario=SCENARIOS)
 
 rule all:
     input:

@@ -437,16 +437,7 @@ class Technology:
         discountedOM costs for each stove during the project lifetime
         """
         discount_rate, proj_life = self.discount_factor(model.specs)
-        operation_and_maintenance = self.om_cost * np.ones(proj_life) #* self.inv_cost
-        # operation_and_maintenance[0] = 0
-
-        # i = self.tech_life
-        # while i < proj_life:
-        #     operation_and_maintenance[i] = 0
-        #     i = i + self.tech_life
-        # TODO: this needs to be changed to use a series for each om value adn relative to the base fuel
-
-        # self.discounted_om_costs = discounted_om_cost
+        operation_and_maintenance = self.om_cost * np.ones(proj_life)
 
         discounted_om = np.array([sum((operation_and_maintenance - x) / discount_rate) for
                                   x in model.base_fuel.om_cost])
