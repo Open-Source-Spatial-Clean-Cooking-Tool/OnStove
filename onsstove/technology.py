@@ -483,12 +483,7 @@ class Technology:
         self.required_energy(model)
         discount_rate, proj_life = self.discount_factor(model.specs)
 
-        # base_cost = (
-        #                     model.base_fuel.energy * model.base_fuel.fuel_cost / model.base_fuel.energy_content + model.base_fuel.transport_cost) * np.ones(
-        #     model.gdf.shape[0])
-
-        cost = (self.energy * self.fuel_cost / self.energy_content + self.transport_cost) * np.ones(
-            model.gdf.shape[0]) #- base_cost
+        cost = (self.energy * self.fuel_cost / self.energy_content + self.transport_cost) * np.ones(model.gdf.shape[0])
 
         fuel_cost = [np.ones(proj_life) * x for x in cost]
 
@@ -625,10 +620,16 @@ class LPG(Technology):
         # Diesel consumption per h is assumed to be 14 l/h (14 l/100km)
         # Carbon intensity from https://www.eia.gov/environment/emissions/co2_vol_mass.php
         # is 10.19 kg/gallon, converted to liters is 2.69 kg/liter
-        kg_yr = (model.specs["Meals_per_day"] * 365 * model.energy_per_meal) / (
-                self.efficiency * self.energy_content)
-        diesel_consumption = self.travel_time * 14
-        hh_emissions = 2.69 * diesel_consumption / self.truck_capacity * kg_yr  # kgCO2/l * l/trip * trip/kgLPG * kgLPG/yr
+        diesel_density = 840  # kg/m3
+        bc_fraction = 0.55
+        oc_fraction = 0.70
+        pm_diesel = 1.52  # g/kg diesel
+        diesel_ef = {'co2': 3.169, 'co': 7.40, 'n2o': 0.056,
+                     'bc': bc_fraction * pm_diesel, 'oc': oc_fraction * bc_fraction * pm_diesel}  # g/kg
+        kg_yr = self.energy / self.energy_content
+        diesel_consumption = self.travel_time * 14 * diesel_density / 1000  # kg
+        hh_emissions = sum([ef * model.gwp[pollutant] * diesel_consumption / self.truck_capacity * kg_yr for
+                            pollutant, ef in diesel_ef.items()])
         return model.raster_to_dataframe(hh_emissions, nodata=np.nan,
                                          fill_nodata='interpolate', method='read')
 
