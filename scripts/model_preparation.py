@@ -1,6 +1,8 @@
-import sys
+import sys, os
 from decouple import config
-sys.path.append(config('ONSSTOVE'))
+
+onstove_path = config('ONSSTOVE').format(os.getlogin())
+sys.path.append(onstove_path)
 
 from onsstove.layer import VectorLayer, RasterLayer
 from onsstove.onsstove import OnSSTOVE
@@ -84,7 +86,9 @@ model.read_tech_data(path, delimiter=',')
 # 12. Reading GIS data for LPG supply
 print(f'[{country}] LPG data')
 travel_time = RasterLayer('LPG', 'Traveltime', snakemake.input.traveltime_cities)
-model.techs['LPG'].travel_time = travel_time.layer * 2 / 60
+model.techs['LPG'].travel_time = model.raster_to_dataframe(travel_time.layer,
+                                                           nodata=travel_time.meta['nodata'],
+                                                           fill_nodata='interpolate', method='read') * 2 / 60
 
 # 13. Adding GIS data for Traditional Biomass
 print(f'[{country}] Improved Biomass collected data')

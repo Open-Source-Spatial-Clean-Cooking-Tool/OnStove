@@ -1,7 +1,9 @@
 import sys
 from decouple import config
 import os
-sys.path.append(config('ONSSTOVE'))
+
+onstove_path = config('ONSSTOVE').format(os.getlogin())
+sys.path.append(onstove_path)
 
 from onsstove.onsstove import OnSSTOVE
 
@@ -16,7 +18,6 @@ def run_model(country, model_file, sensitivity_file, output_directory, file_name
 	print(path)
 	model.read_scenario_data(path, delimiter=',')
 	model.output_directory = output_directory
-	model.techs['Electricity'].tiers_path = None
 	model.techs['Electricity'].get_capacity_cost(model)
 
 	# 3. Calculating benefits and costs of each technology and getting the max benefit technology for each cell
@@ -26,9 +27,9 @@ def run_model(country, model_file, sensitivity_file, output_directory, file_name
 							])
 
 	# 4.Saving results
-	print(f'[{country}] Saving the results')
-	os.makedirs(output_directory, exist_ok=True)
-	model.summary().to_csv(os.path.join(output_directory,
-										f'{file_name}.csv'), index=False)
+	# print(f'[{country}] Saving the results')
+	# os.makedirs(output_directory, exist_ok=True)
+	# model.summary().to_csv(os.path.join(output_directory,
+	# 									f'{file_name}.csv'), index=False)
 										
 	return model

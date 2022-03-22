@@ -1,7 +1,8 @@
 import sys
 from decouple import config
 import os
-sys.path.append(config('ONSSTOVE'))
+onstove_path = config('ONSSTOVE').format(os.getlogin())
+sys.path.append(onstove_path)
 
 from onsstove.onsstove import OnSSTOVE
 
@@ -21,7 +22,8 @@ model.techs['Electricity'].get_capacity_cost(model)
 model.run(technologies=['Electricity', 'LPG', 'Biogas',
                         'Collected_Improved_Biomass', 'Collected_Traditional_Biomass', 'Charcoal ICS',
                         'Traditional_Charcoal'
-                        ])
+                        ],
+          restriction=snakemake.params.restriction)
 
 # 5. Saving data to raster files
 cmap = {"Biomass ICS": '#6F4070', "LPG": '#66C5CC', "Biomass": '#FFB6C1',

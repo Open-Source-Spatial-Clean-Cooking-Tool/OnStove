@@ -1,7 +1,8 @@
 import sys
 from decouple import config
 import os
-sys.path.append(config('ONSSTOVE'))
+onstove_path = config('ONSSTOVE').format(os.getlogin())
+sys.path.append(onstove_path)
 import numpy as np
 
 sys.path.append(r"C:\Users\khavari\Box\OnSSTOVE")
