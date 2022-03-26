@@ -1,31 +1,33 @@
 import os
 cwd = os.getcwd()
 
-SCENARIOS = ['Social_benefits', 'Private_benefits', 'Social_private_benefits']
+SCENARIOS = ['Private_benefits', 'Social_private_benefits', 'Time_benefits']
 # SCENARIOS, = glob_wildcards("../Clean cooking Africa paper/04. OnSSTOVE inputs/LPG International price - Rural-Urban/Scenario_files/{scenario}/BDI_scenario_file.csv")
+RESTRICTION = ['Positive_Benefits', 'Unrestricted']
 
-
-COUNTRIES = ['ZAF']
+# COUNTRIES = ['BEN']
 
 # COUNTRIES = ['Africa']
 
-# COUNTRIES = ['AGO', 'BDI', 'BEN', 'BFA', 'BWA', 'CAF', 'CIV', 'CMR',
-             # 'COD', 'COG', 'DJI', 'ERI', 'ETH', 'GAB', 'GHA', 'GIN',
-             # 'GMB', 'GNB', 'GNQ', 'KEN', 'LBR', 'LSO', 'MDG', 'MLI',
-             # 'MOZ', 'MRT', 'MWI', 'NAM', 'NER', 'NGA', 'RWA', 'SDN',
-             # 'SEN', 'SLE', 'SOM', 'SSD', 'SWZ', 'TCD', 'TGO', 'TZA',
-             # 'UGA', 'ZAF', 'ZMB', 'ZWE']
+COUNTRIES = ['AGO', 'BDI', 'BEN', 'BFA', 'BWA', 'CAF', 'CIV', 'CMR',
+           'COD', 'COG', 'DJI', 'ERI', 'ETH', 'GAB', 'GHA', 'GIN',
+           'GMB', 'GNB', 'GNQ', 'KEN', 'LBR', 'LSO', 'MDG', 'MLI',
+           'MOZ', 'MRT', 'MWI', 'NAM', 'NER', 'NGA', 'RWA', 'SDN',
+           'SEN', 'SLE', 'SOM', 'SSD', 'SWZ', 'TCD', 'TGO', 'TZA',
+           'UGA', 'ZAF', 'ZMB', 'ZWE']
 
 rule all:
-    input:
-        expand("../Clean cooking Africa paper/06. Results/LPG International price - Rural-Urban/{country}/{scenario}/results.pkl",
-               country=COUNTRIES,
-               scenario=SCENARIOS)
+	input:
+		expand("../Clean cooking Africa paper/06. Results/LPG International price - Rural-Urban/{country}/{scenario}/{restriction}/results.pkl",
+                	country=COUNTRIES,
+                 	scenario=SCENARIOS,
+                 	restriction=RESTRICTION)
 
-# rule all:
-#     input:
-#          expand("../Clean cooking Africa paper/06. Results/LPG International price - Rural-Urban/Africa/{scenario}/results.pkl",
-#                scenario=SCENARIOS)
+#rule all:
+#   input:
+#        expand("../Clean cooking Africa paper/06. Results/LPG International price - Rural-Urban/Africa/{scenario}/{restriction}/results.pkl",
+#              scenario=SCENARIOS,
+#              restriction=RESTRICTION)
 
 rule extract_forest:
     input:
@@ -115,44 +117,46 @@ rule run_model:
          model = rules.prepare_model.output.model,
          scenario_file = r"..\Clean cooking Africa paper\04. OnSSTOVE inputs\LPG International price - Rural-Urban\Scenario_files\{scenario}\{country}_scenario_file.csv"
     params:
-          output_directory = "../Clean cooking Africa paper/06. Results/LPG International price - Rural-Urban/{country}/{scenario}",
-          country = "{country}"
+          output_directory = "../Clean cooking Africa paper/06. Results/LPG International price - Rural-Urban/{country}/{scenario}/{restriction}",
+          country = "{country}",
+          restriction = "{restriction}"
     output:
-          results = "../Clean cooking Africa paper/06. Results/LPG International price - Rural-Urban/{country}/{scenario}/results.pkl",
+          results = "../Clean cooking Africa paper/06. Results/LPG International price - Rural-Urban/{country}/{scenario}/{restriction}/results.pkl",
     script:
           "scripts/model_run.py"
 
 rule main_plot:
     input:
-         tech_split = "../Clean cooking Africa paper/06. Results/LPG International price - Rural-Urban/{country}/{scenario}/tech_split.pdf",
-         max_benefits = "../Clean cooking Africa paper/06. Results/LPG International price - Rural-Urban/{country}/{scenario}/max_benefits_box.pdf",
-         benefits_costs = "../Clean cooking Africa paper/06. Results/LPG International price - Rural-Urban/{country}/{scenario}/benefits_costs.pdf",
-         max_benefit_tech = "../Clean cooking Africa paper/06. Results/LPG International price - Rural-Urban/{country}/{scenario}/max_benefit_tech.pdf"
+         tech_split = "../Clean cooking Africa paper/06. Results/LPG International price - Rural-Urban/{country}/{scenario}/{restriction}/tech_split.pdf",
+         max_benefits = "../Clean cooking Africa paper/06. Results/LPG International price - Rural-Urban/{country}/{scenario}/{restriction}/max_benefits_box.pdf",
+         benefits_costs = "../Clean cooking Africa paper/06. Results/LPG International price - Rural-Urban/{country}/{scenario}/{restriction}/benefits_costs.pdf",
+         max_benefit_tech = "../Clean cooking Africa paper/06. Results/LPG International price - Rural-Urban/{country}/{scenario}/{restriction}/max_benefit_tech.pdf"
     params:
-          path = "../Clean cooking Africa paper/06. Results/LPG International price - Rural-Urban/{country}/{scenario}/",
+          path = "../Clean cooking Africa paper/06. Results/LPG International price - Rural-Urban/{country}/{scenario}/{restriction}/",
     output:
-          main_plot = "../Clean cooking Africa paper/06. Results/LPG International price - Rural-Urban/{country}/{scenario}/main_plot.pdf"
+          main_plot = "../Clean cooking Africa paper/06. Results/LPG International price - Rural-Urban/{country}/{scenario}/{restriction}/main_plot.pdf"
     shell:
          """
          pdflatex "\\newcommand\path{{"{params.path}"}}\input{{scripts/main_plot.tex}}" -output-directory "{params.path}"
          """
 
 rule get_main_plot:
-    input:
-         expand("../Clean cooking Africa paper/06. Results/LPG International price - Rural-Urban/{country}/{scenario}/main_plot.pdf",
-                country=COUNTRIES,
-                scenario=SCENARIOS)
+   input:
+        expand("../Clean cooking Africa paper/06. Results/LPG International price - Rural-Urban/{country}/{scenario}/{restriction}/main_plot.pdf",
+               country=COUNTRIES,
+               scenario=SCENARIOS,
+               restriction=RESTRICTION)
 
 
 rule merge_results:
-    input:
-         results = expand("../Clean cooking Africa paper/06. Results/LPG International price - Rural-Urban/{country}/{{scenario}}/results.pkl",
-                           country=COUNTRIES),
-         boundaries = rules.process_data.input.mask_layer
-    params:
-          output_directory = "../Clean cooking Africa paper/06. Results/LPG International price - Rural-Urban/Africa/{scenario}",
-          countries = COUNTRIES
-    output:
-          results = "../Clean cooking Africa paper/06. Results/LPG International price - Rural-Urban/Africa/{scenario}/results.pkl"
-    script:
-          "scripts/merge_results.py"
+   input:
+        results = expand("../Clean cooking Africa paper/06. Results/LPG International price - Rural-Urban/{country}/{{scenario}}/{{restriction}}/results.pkl",
+                         country=COUNTRIES),
+        boundaries = rules.process_data.input.mask_layer
+   params:
+         output_directory = "../Clean cooking Africa paper/06. Results/LPG International price - Rural-Urban/Africa/{scenario}/{restriction}",
+         countries = COUNTRIES
+   output:
+         results = "../Clean cooking Africa paper/06. Results/LPG International price - Rural-Urban/Africa/{scenario}/{restriction}/results.pkl"
+   script:
+         "scripts/merge_results.py"

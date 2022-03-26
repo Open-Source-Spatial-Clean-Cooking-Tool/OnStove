@@ -3,7 +3,8 @@ import geopandas as gpd
 import pandas as pd
 from decouple import config
 
-sys.path.append(config('ONSSTOVE'))
+onstove_path = config('ONSSTOVE').format(os.getlogin())
+sys.path.append(onstove_path)
 
 from onsstove.layer import VectorLayer
 from onsstove.onsstove import OnSSTOVE

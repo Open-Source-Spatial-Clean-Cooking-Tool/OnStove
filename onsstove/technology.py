@@ -1,3 +1,5 @@
+from time import time
+
 import numpy as np
 import pandas as pd
 import os
@@ -9,6 +11,18 @@ from rasterio.fill import fillnodata
 
 from .layer import VectorLayer, RasterLayer
 from .raster import interpolate
+
+def timeit(func):
+    # This function shows the execution time of
+    # the function object passed
+    def wrap_func(*args, **kwargs):
+        t1 = time()
+        result = func(*args, **kwargs)
+        t2 = time()
+        print(f'Function {func.__name__!r} executed in {(t2 - t1):.4f}s')
+        return result
+
+    return wrap_func
 
 
 class Technology:
@@ -72,6 +86,7 @@ class Technology:
             for s in ['u', 'r']:
                 self[paf + s] = 0
         self.discounted_fuel_cost = 0
+        self.discounted_investments = 0
 
     def __setitem__(self, idx, value):
         if idx == 'name':
@@ -231,27 +246,25 @@ class Technology:
         else:
             rr_copd = 1 + 22.485 * (1 - exp(-0.001 * (self.pm25 - 7.337) ** 0.694))
 
-        if self.pm25 < 7.505:
+        if self.pm25 < 7.449:
             rr_ihd = 1
         else:
-            rr_ihd = 1 + 2.538 * (1 - exp(-0.081 * (self.pm25 - 7.505) ** 0.466))
+            rr_ihd = 1 + 1.647 * (1 - exp(-0.048 * (self.pm25 - 7.449) ** 0.467))
 
         if self.pm25 < 7.345:
             rr_lc = 1
         else:
             rr_lc = 1 + 152.496 * (1 - exp(-0.000167 * (self.pm25 - 7.345) ** 0.76))
 
-        if self.pm25 < 7.359:
+        if self.pm25 < 7.358:
             rr_stroke = 1
         else:
-            rr_stroke = 1 + 1.312 * (1 - exp(-0.012 * (self.pm25 - 7.359) ** 1.273))
+            rr_stroke = 1 + 1.314 * (1 - exp(-0.012 * (self.pm25 - 7.358) ** 1.275))
 
         return rr_alri, rr_copd, rr_ihd, rr_lc, rr_stroke
 
     def paf(self, rr, sfu):
-
         paf = (sfu * (rr - 1)) / (sfu * (rr - 1) + 1)
-
         return paf
 
     @staticmethod
@@ -320,7 +333,7 @@ class Technology:
         Monetary mortality for each stove in urban and rural settings
         """
         self.health_parameters(model)
-        
+
         mor_u = {}
         mor_r = {}
         diseases = ['ALRI', 'COPD', 'IHD', 'LC', 'STROKE']
@@ -330,10 +343,12 @@ class Technology:
             rate = model.specs[f'{parameter}_{disease}']
 
             paf = f'paf_{disease.lower()}_u'
-            mor_u[disease] = model.gdf.loc[is_urban, "Calibrated_pop"].sum() * (model.base_fuel[paf] - self[paf]) * (rate / 100000)
+            mor_u[disease] = model.gdf.loc[is_urban, "Calibrated_pop"].sum() * (model.base_fuel[paf] - self[paf]) * (
+                        rate / 100000)
 
             paf = f'paf_{disease.lower()}_r'
-            mor_r[disease] = model.gdf.loc[is_rural, "Calibrated_pop"].sum() * (model.base_fuel[paf] - self[paf]) * (rate / 100000)
+            mor_r[disease] = model.gdf.loc[is_rural, "Calibrated_pop"].sum() * (model.base_fuel[paf] - self[paf]) * (
+                        rate / 100000)
 
         cl_diseases = {'ALRI': {1: 0.7, 2: 0.1, 3: 0.07, 4: 0.07, 5: 0.06},
                        'COPD': {1: 0.3, 2: 0.2, 3: 0.17, 4: 0.17, 5: 0.16},
@@ -384,9 +399,9 @@ class Technology:
         self.distributed_mortality = distributed_mortality
         self.deaths_avoided = deaths_avoided
 
-        if model.specs['w_spillovers'] > 0:
-            distributed_mortality, deaths_avoided = self.mort_morb(model, parameter='Mort', dr='Discount_rate')
+        if model.specs['Health_spillovers_parameter'] > 0:
             self.distributed_spillovers_mort = distributed_mortality * model.specs['Health_spillovers_parameter']
+            self.deaths_avoided += deaths_avoided * model.specs['Health_spillovers_parameter']
         else:
             self.distributed_spillovers_mort = pd.Series(0, index=model.gdf.index, dtype='float64')
 
@@ -402,9 +417,9 @@ class Technology:
         self.distributed_morbidity = distributed_morbidity
         self.cases_avoided = cases_avoided
 
-        if model.specs['w_spillovers'] > 0:
-            distributed_morbidity, cases_avoided = self.mort_morb(model, parameter='Morb', dr='Discount_rate')
+        if model.specs['Health_spillovers_parameter'] > 0:
             self.distributed_spillovers_morb = distributed_morbidity * model.specs['Health_spillovers_parameter']
+            self.cases_avoided += cases_avoided * model.specs['Health_spillovers_parameter']
         else:
             self.distributed_spillovers_morb = pd.Series(0, index=model.gdf.index, dtype='float64')
 
@@ -443,7 +458,7 @@ class Technology:
                                   x in model.base_fuel.om_cost])
         self.discounted_om_costs = pd.Series(discounted_om, index=model.gdf.index)
 
-    def discounted_inv(self, model):
+    def discounted_inv(self, model, relative=True):
         """
         Calls discount_factor function and creates discounted investment cost. Uses proj_life and tech_life to determine
         number of necessary re-investments
@@ -454,30 +469,27 @@ class Technology:
         """
         discount_rate, proj_life = self.discount_factor(model.specs)
 
-        investments = np.zeros(proj_life)
-        # investments[0] = self.inv_cost
+        inv = self.inv_cost * np.ones(model.gdf.shape[0])
+        tech_life = self.tech_life * np.ones(model.gdf.shape[0])
 
-        i = self.tech_life
-        while i < proj_life:
-            investments[i] = self.inv_cost
-            i = i + self.tech_life
+        proj_years = np.matmul(np.expand_dims(np.ones(model.gdf.shape[0]), axis=1),
+                               np.expand_dims(np.zeros(proj_life), axis=0))
 
-        base_investments = np.zeros(model.base_fuel.inv_cost.shape[0])
-        j = 0
-        # TODO: make sure the shapes of the base_fuel and the tech are consistent
-        for cost, life in zip(model.base_fuel.inv_cost, model.base_fuel.tech_life):
-            _base_investments = np.zeros(proj_life)
-            i = ceil(life)
-            while i < proj_life:
-                _base_investments[i] = cost
-                base_investments[j] = _base_investments
-                i = i + ceil(life)
-                j += 1
+        for i in np.unique(tech_life):
+            where = np.where(tech_life == i)
+            for j in range(int(i) - 1, proj_life, int(i)):
+                proj_years[where, j] = 1
 
-        # discounted_investments = (model.base_fuel.inv_cost - investments) / discount_rate
-        investments_discounted = np.array([sum((investments - x) / discount_rate) for x in base_investments])
-        self.discounted_investments = pd.Series(investments_discounted, index=model.gdf.index) + (
-                self.inv_cost - model.base_fuel.inv_cost)
+        investments = proj_years * inv[:, None]
+
+        if relative:
+            discounted_base_investments = model.base_fuel.discounted_investments
+        else:
+            discounted_base_investments = 0
+
+        investments_discounted = np.array([sum(x / discount_rate) for x in investments])
+        self.discounted_investments = pd.Series(investments_discounted, index=model.gdf.index) + self.inv_cost - \
+                                      discounted_base_investments
 
     def discount_fuel_cost(self, model, relative=True):
         self.required_energy(model)
@@ -556,7 +568,9 @@ class LPG(Technology):
                  diesel_cost=0.88,
                  diesel_per_hour=14,
                  lpg_path=None,
-                 friction_path=None):
+                 friction_path=None,
+                 cylinder_cost=2.78,  # USD/kg,
+                 cylinder_life=15):
         super().__init__(name, carbon_intensity, co2_intensity, ch4_intensity,
                          n2o_intensity, co_intensity, bc_intensity, oc_intensity,
                          energy_content, tech_life, inv_cost, fuel_cost, time_of_cooking,
@@ -568,6 +582,8 @@ class LPG(Technology):
         self.transport_cost = None
         self.lpg_path = lpg_path
         self.friction_path = friction_path
+        self.cylinder_cost = cylinder_cost
+        self.cylinder_life = cylinder_life
 
     def add_travel_time(self, model, align=False):
         lpg = VectorLayer(self.name, 'Suppliers', layer_path=self.lpg_path)
@@ -580,8 +596,9 @@ class LPG(Technology):
 
         lpg.add_friction_raster(friction)
         lpg.travel_time(os.path.join(model.output_directory, self.name))
-        interpolate(lpg.distance_raster.path)
-        self.travel_time = 2 * lpg.distance_raster.layer
+        self.travel_time = 2 * model.raster_to_dataframe(lpg.distance_raster.layer,
+                                                         nodata=lpg.distance_raster.meta['nodata'],
+                                                         fill_nodata='interpolate', method='read')
 
     def transportation_cost(self, model):
         """The cost of transporting LPG. See https://iopscience.iop.org/article/10.1088/1748-9326/6/3/034002/pdf for the formula
@@ -609,8 +626,9 @@ class LPG(Technology):
                 self.efficiency * self.energy_content)  # energy content in MJ/kg
         transport_cost = transport_cost * kg_yr
         transport_cost[transport_cost < 0] = np.nan
-        self.transport_cost = model.raster_to_dataframe(transport_cost, nodata=np.nan,
-                                                        fill_nodata='interpolate', method='read')
+        self.transport_cost = transport_cost
+        # self.transport_cost = model.raster_to_dataframe(transport_cost, nodata=np.nan,
+        #                                                 fill_nodata='interpolate', method='read')
 
     def discount_fuel_cost(self, model, relative=True):
         self.transportation_cost(model)
@@ -630,12 +648,30 @@ class LPG(Technology):
         diesel_consumption = self.travel_time * 14 * diesel_density / 1000  # kg
         hh_emissions = sum([ef * model.gwp[pollutant] * diesel_consumption / self.truck_capacity * kg_yr for
                             pollutant, ef in diesel_ef.items()])
-        return model.raster_to_dataframe(hh_emissions, nodata=np.nan,
-                                         fill_nodata='interpolate', method='read')
+        return hh_emissions / 1000
 
     def carb(self, model):
         super().carb(model)
         self.carbon += self.transport_emissions(model)
+
+    def infrastructure_cost(self, model):
+        cost = self.cylinder_cost * 12.5
+        salvage = self.infrastructure_salvage(model, cost, self.cylinder_life)
+        self.discounted_infra_cost = (cost - salvage)
+
+    def infrastructure_salvage(self, model, cost, life):
+        discount_rate, proj_life = self.discount_factor(model.specs)
+        used_life = proj_life % life
+        salvage = cost * (1 - used_life / life)
+        return salvage / discount_rate[0]
+
+    def discounted_inv(self, model, relative=True):
+        super().discounted_inv(model, relative=relative)
+        self.infrastructure_cost(model)
+        if relative:
+            share = (model.gdf['IsUrban'] > 20) * self.current_share_urban
+            share[model.gdf['IsUrban'] < 20] *= self.current_share_rural
+            self.discounted_investments += (self.discounted_infra_cost * (1 - share))
 
 
 class Biomass(Technology):
@@ -734,6 +770,17 @@ class Charcoal(Technology):
         super().get_carbon_intensity(model)
         self['co2_intensity'] = intensity
 
+    def production_emissions(self, model):
+        emission_factors = {'co2': 1626, 'co': 255, 'ch4': 39.6, 'bc': 0.02, 'oc': 0.74}  # g/kg Charcoal
+        kg_yr = self.energy / self.energy_content
+        hh_emissions = sum([ef * model.gwp[pollutant] * kg_yr for pollutant, ef in emission_factors.items()])
+        return hh_emissions / 1000
+
+    def carb(self, model):
+        super().carb(model)
+        self.carbon += self.production_emissions(model)
+
+
 class Electricity(Technology):
     """
     LPG technology class. Inherits all functionality from the standard
@@ -760,7 +807,7 @@ class Electricity(Technology):
         # Carbon intensity of fossil fuel plants in kg/GWh
         self.generation = {}
 
-        self.capacity = {}
+        self.capacities = {}
         self.grid_capacity_cost = grid_capacity_cost
 
         self.tiers_path = None
@@ -779,7 +826,7 @@ class Electricity(Technology):
                                     'nuclear': 4000, 'hydro': 2100, 'coal': 1600, 'wind': 1925,
                                     'solar': 1400, 'geothermal': 2917}
 
-        self.grid_techs_life = {'oil': 35, 'natural_gas': 30,
+        self.grid_techs_life = {'oil': 40, 'natural_gas': 30,
                                 'biofuels_and_waste': 25,
                                 'nuclear': 50, 'hydro': 60, 'coal': 40, 'wind': 22,
                                 'solar': 25, 'geothermal': 30}
@@ -790,7 +837,7 @@ class Electricity(Technology):
         elif 'grid_capacity_cost' in idx:
             self.grid_capacity_cost = value
         elif 'capacity' in idx:
-            self.capacity[idx.lower().replace('capacity_', '')] = value
+            self.capacities[idx.lower().replace('capacity_', '')] = value
         elif 'carbon_intensity' == idx:
             self.carbon_intensity = value
         elif 'carbon_intensity' in idx:
@@ -832,8 +879,8 @@ class Electricity(Technology):
 
     def get_grid_capacity_cost(self):
         self.grid_capacity_cost = sum(
-            [self.grid_capacity_costs[fuel] * (cap / sum(self.capacity.values())) for fuel, cap in
-             self.capacity.items()])
+            [self.grid_capacity_costs[fuel] * (cap / sum(self.capacities.values())) for fuel, cap in
+             self.capacities.items()])
 
     def grid_salvage(self, model, single=False):
         discount_rate, proj_life = self.discount_factor(model.specs)
@@ -843,10 +890,10 @@ class Electricity(Technology):
         else:
             salvage_values = []
 
-            for tech, cap in self.capacity.items():
+            for tech, cap in self.capacities.items():
                 used_life = proj_life % self.grid_techs_life[tech]
                 salvage = self.grid_capacity_costs[tech] * (1 - used_life / self.grid_techs_life[tech])
-                salvage_values.append(salvage * cap / sum(self.capacity.values()))
+                salvage_values.append(salvage * cap / sum(self.capacities.values()))
 
             salvage = sum(salvage_values)
 
@@ -857,13 +904,16 @@ class Electricity(Technology):
             self.get_carbon_intensity(model)
         super().carb(model)
 
-    def discounted_inv(self, model):
-        super().discounted_inv(model)
-        self.discounted_investments += self.connection_cost
+    def discounted_inv(self, model, relative=True):
+        super().discounted_inv(model, relative=relative)
+        if relative:
+            share = (model.gdf['IsUrban'] > 20) * self.current_share_urban
+            share[model.gdf['IsUrban'] < 20] *= self.current_share_rural
+            self.discounted_investments += (self.connection_cost + self.capacity_cost * (1 - share))
 
     def total_costs(self):
         super().total_costs()
-        self.costs += self.capacity_cost
+        # self.costs += self.capacity_cost
 
     def net_benefit(self, model, w_health=1, w_spillovers=1, w_environment=1, w_time=1, w_costs=1):
         super().net_benefit(model, w_health, w_spillovers, w_environment, w_time, w_costs)

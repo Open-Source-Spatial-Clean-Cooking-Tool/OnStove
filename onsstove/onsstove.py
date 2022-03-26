@@ -29,7 +29,8 @@ from plotnine import (
     geom_boxplot,
     geom_density,
     after_stat,
-    scale_y_log10
+    geom_point,
+    facet_wrap
 )
 
 from onsstove.technology import Technology, LPG, Biomass, Electricity, Biogas, Charcoal
@@ -411,7 +412,7 @@ class OnSSTOVE(DataProcessor):
         self.techs = None
         self.base_fuel = None
         self.i = {}
-        self.energy_per_meal = 3.64
+        self.energy_per_meal = 3.64  # MJ
         # TODO: remove from here and make it an input in the specs file
         self.gwp = {'co2': 1, 'ch4': 25, 'n2o': 298, 'co': 2, 'bc': 900, 'oc': -46}
 
@@ -506,7 +507,9 @@ class OnSSTOVE(DataProcessor):
                 if isinstance(tech, LPG):
                     tech.transportation_cost(self)
 
+                tech.discounted_inv(self, relative=False)
                 base_fuel.tech_life += tech.tech_life * current_share
+                base_fuel.discounted_investments += tech.discounted_investments * current_share
 
                 tech.adjusted_pm25()
                 tech.health_parameters(self)
@@ -811,7 +814,7 @@ class OnSSTOVE(DataProcessor):
         self.gdf['value_of_time'] = norm_layer * self.specs[
             'Minimum_wage'] / 30 / 8  # convert $/months to $/h (8 working hours per day)
 
-    def run(self, technologies='all'):
+    def run(self, technologies='all', restriction=True):
         print(f'[{self.specs["Country_name"]}] Calculating clean cooking access')
         self.get_clean_cooking_access()
         if self.base_fuel is None:
@@ -850,7 +853,7 @@ class OnSSTOVE(DataProcessor):
                              self.specs['w_environment'], self.specs['w_time'], self.specs['w_costs'])
 
         print('Getting maximum net benefit technologies...')
-        self.maximum_net_benefit(techs)
+        self.maximum_net_benefit(techs, restriction=restriction)
         print('Extracting indicators...')
         print('    - Lives saved')
         self.extract_lives_saved()
@@ -881,13 +884,14 @@ class OnSSTOVE(DataProcessor):
         columns_dict['max_benefit_tech'] = 'first'
         return columns_dict
 
-    def maximum_net_benefit(self, techs):
+    def maximum_net_benefit(self, techs, restriction=True):
         net_benefit_cols = [col for col in self.gdf if 'net_benefit_' in col]
         benefits_cols = [col for col in self.gdf if 'benefits_' in col]
 
         for benefit, net in zip(benefits_cols, net_benefit_cols):
             self.gdf[net + '_temp'] = self.gdf[net]
-            self.gdf.loc[self.gdf[benefit] < 0, net + '_temp'] = np.nan
+            if restriction in [True, 'yes', 'y','Y', 'Yes', 'PositiveBenefits', 'Positive_Benefits']:
+                self.gdf.loc[self.gdf[benefit] < 0, net + '_temp'] = np.nan
 
         temps = [col for col in self.gdf if '_temp' in col]
         self.gdf["max_benefit_tech"] = self.gdf[temps].idxmax(axis=1).astype('string')
@@ -1391,6 +1395,91 @@ class OnSSTOVE(DataProcessor):
              + coord_flip()
              + theme_minimal()
              + labs(x='', y='Billion USD', fill='Cost / Benefit')
+             )
+
+        if save:
+            file = os.path.join(self.output_directory, 'benefits_costs.pdf')
+            p.save(file, height=height, width=width)
+        else:
+            return p
+
+    def plot_costs_benefits_unit(self, technologies, area='urban', cmap=None, save=False, height=1.5, width=2.5):
+        df = pd.DataFrame({'Settlement': [], 'Technology': [], 'investment_costs': [], 'fuel_costs': [],
+                           'om_costs': [], 'health_costs_avoided': [],
+                           'emissions_costs_saved': [], 'opportunity_cost_gained': []})
+
+        if area.lower() == 'urban':
+            settlement = self.gdf.reset_index().groupby('index').agg({'IsUrban': 'first'})['IsUrban'] > 20
+            set_type = 'Urban'
+        elif area.lower() == 'rural':
+            settlement = self.gdf.reset_index().groupby('index').agg({'IsUrban': 'first'})['IsUrban'] < 20
+            set_type = 'Rural'
+
+        for name in technologies:
+            tech = self.techs[name]
+            total_hh = tech.households[settlement].sum()
+            inv = np.nansum((tech.discounted_investments[settlement] -
+                       tech.discounted_salvage_cost[settlement]) * tech.households[settlement]) / total_hh
+            fuel = np.nansum(tech.discounted_fuel_cost[settlement] * tech.households[settlement]) / total_hh
+            om = np.nansum(tech.discounted_om_costs[settlement] * tech.households[settlement]) / total_hh
+            health = np.nansum((tech.distributed_morbidity[settlement] +
+                                tech.distributed_mortality[settlement] +
+                                tech.distributed_spillovers_morb[settlement] +
+                                tech.distributed_spillovers_mort[settlement]) * tech.households[settlement]) / total_hh
+            ghg = np.nansum(tech.decreased_carbon_costs[settlement] * tech.households[settlement]) / total_hh
+            time = np.nansum(tech.time_value[settlement] * tech.households[settlement]) / total_hh
+
+            df = pd.concat([df, pd.DataFrame({'Settlement': [set_type],
+                                              'Technology': [name],
+                                              'Investment costs': [inv],
+                                              'Fuel costs': [fuel],
+                                              'O&M costs': [om],
+                                              'Health costs avoided': [health],
+                                              'Emissions costs saved': [ghg],
+                                              'Opportunity cost gained': [time]})])
+
+        df['Fuel costs'] *= -1
+        df['Investment costs'] *= -1
+        df['O&M costs'] *= -1
+
+        if cmap is None:
+            cmap = {'Health costs avoided': '#542788', 'Investment costs': '#b35806',
+                    'Fuel costs': '#f1a340', 'Emissions costs saved': '#998ec3',
+                    'O&M costs': '#fee0b6', 'Opportunity cost gained': '#d8daeb'}
+
+        value_vars = ['Health costs avoided',
+                      'Emissions costs saved',
+                      'Opportunity cost gained',
+                      'Investment costs',
+                      'Fuel costs',
+                      'O&M costs']
+
+        df['net_benefit'] = df['Health costs avoided'] + df['Emissions costs saved'] + df['Opportunity cost gained'] + \
+                            df['Investment costs'] + df['Fuel costs'] + df['O&M costs']
+        dff = df.melt(id_vars=['Technology', 'Settlement', 'net_benefit'], value_vars=value_vars)
+
+        tech_list = list(dict.fromkeys(dff.sort_values(['Settlement', 'net_benefit'])['Technology'].tolist()))
+        dff['Technology_cat'] = pd.Categorical(dff['Technology'], categories=tech_list)
+        cat_order = ['Health costs avoided',
+                     'Emissions costs saved',
+                     'Opportunity cost gained',
+                     'Investment costs',
+                     'Fuel costs',
+                     'O&M costs']
+
+        dff['variable'] = pd.Categorical(dff['variable'], categories=cat_order, ordered=True)
+
+        p = (ggplot(dff)
+             + geom_col(aes(x='Technology_cat', y='value', fill='variable'))
+             + geom_point(aes(x='Technology_cat', y='net_benefit'), fill='white', color='grey', shape='D')
+             + scale_fill_manual(cmap)
+             + coord_flip()
+             + theme_minimal()
+             + labs(x='', y='USD', fill='Cost / Benefit')
+             + facet_wrap('Settlement',
+                          nrow=2,
+                          #scales='free'
+                          )
              )
 
         if save:
