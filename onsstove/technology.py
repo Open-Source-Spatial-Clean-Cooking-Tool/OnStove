@@ -635,20 +635,25 @@ class LPG(Technology):
         super().discount_fuel_cost(model, relative)
 
     def transport_emissions(self, model):
-        # Diesel consumption per h is assumed to be 14 l/h (14 l/100km)
-        # Carbon intensity from https://www.eia.gov/environment/emissions/co2_vol_mass.php
-        # is 10.19 kg/gallon, converted to liters is 2.69 kg/liter
+        """
+        Diesel consumption per h is assumed to be 14 l/h (14 l/100km)
+        Emissions intensities and diesel density are taken from:
+            Ntziachristos, L. and Z. Samaras (2018), “1.A.3.b.i, 1.A.3.b.ii, 1.A.3.b.iii, 1.A.3.b.iv Passenger cars,
+            light commercial trucks, heavy-duty vehicles including buses and motor cycles”, in EMEP/EEA air pollutant
+            emission inventory guidebook 2016 – Update Jul. 2018
+        Each truck is assumed to transport 2,000 kg LPG
+        """
         diesel_density = 840  # kg/m3
-        bc_fraction = 0.55
-        oc_fraction = 0.70
-        pm_diesel = 1.52  # g/kg diesel
+        bc_fraction = 0.55  # BC fraction of pm2.5
+        oc_fraction = 0.70  # OC fraction of BC
+        pm_diesel = 1.52  # g/kg_diesel
         diesel_ef = {'co2': 3.169, 'co': 7.40, 'n2o': 0.056,
-                     'bc': bc_fraction * pm_diesel, 'oc': oc_fraction * bc_fraction * pm_diesel}  # g/kg
-        kg_yr = self.energy / self.energy_content
-        diesel_consumption = self.travel_time * 14 * diesel_density / 1000  # kg
+                     'bc': bc_fraction * pm_diesel, 'oc': oc_fraction * bc_fraction * pm_diesel}  # g/kg_Diesel
+        kg_yr = self.energy / self.energy_content  # LPG use (kg/yr). Energy required (MJ/yr)/LPG energy content (MJ/kg)
+        diesel_consumption = self.travel_time * (14 / 1000) * diesel_density  # kg of diesel per trip
         hh_emissions = sum([ef * model.gwp[pollutant] * diesel_consumption / self.truck_capacity * kg_yr for
-                            pollutant, ef in diesel_ef.items()])
-        return hh_emissions / 1000
+                            pollutant, ef in diesel_ef.items()])  # in gCO2eq per yr
+        return hh_emissions / 1000  # in kgCO2eq per yr
 
     def carb(self, model):
         super().carb(model)
@@ -771,10 +776,20 @@ class Charcoal(Technology):
         self['co2_intensity'] = intensity
 
     def production_emissions(self, model):
-        emission_factors = {'co2': 1626, 'co': 255, 'ch4': 39.6, 'bc': 0.02, 'oc': 0.74}  # g/kg Charcoal
+        """
+        Charcoal production emissioons calculations.
+        Emissions factors are taken from:
+            Akagi, S. K., Yokelson, R. J., Wiedinmyer, C., Alvarado, M. J., Reid, J. S., Karl, T., Crounse, J. D.,
+            & Wennberg, P. O. (2010). Emission factors for open and domestic biomass burning for use in atmospheric
+            models. Atmospheric Chemistry and Physics Discussions. 10: 27523–27602., 27523–27602.
+            https://www.fs.usda.gov/treesearch/pubs/39297
+        """
+        emission_factors = {'co2': 1626, 'co': 255, 'ch4': 39.6, 'bc': 0.02, 'oc': 0.74}  # g/kg_Charcoal
+        # Charcoal produced (kg/yr). Energy required (MJ/yr)/Charcoal energy content (MJ/kg)
         kg_yr = self.energy / self.energy_content
-        hh_emissions = sum([ef * model.gwp[pollutant] * kg_yr for pollutant, ef in emission_factors.items()])
-        return hh_emissions / 1000
+        hh_emissions = sum([ef * model.gwp[pollutant] * kg_yr for pollutant, ef in
+                            emission_factors.items()])  # gCO2eq/yr
+        return hh_emissions / 1000  # kgCO2/yr
 
     def carb(self, model):
         super().carb(model)
