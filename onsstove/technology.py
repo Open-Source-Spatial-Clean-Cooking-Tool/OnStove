@@ -246,20 +246,20 @@ class Technology:
         else:
             rr_copd = 1 + 22.485 * (1 - exp(-0.001 * (self.pm25 - 7.337) ** 0.694))
 
-        if self.pm25 < 7.505:
+        if self.pm25 < 7.449:
             rr_ihd = 1
         else:
-            rr_ihd = 1 + 2.538 * (1 - exp(-0.081 * (self.pm25 - 7.505) ** 0.466))
+            rr_ihd = 1 + 1.647 * (1 - exp(-0.048 * (self.pm25 - 7.449) ** 0.467))
 
         if self.pm25 < 7.345:
             rr_lc = 1
         else:
             rr_lc = 1 + 152.496 * (1 - exp(-0.000167 * (self.pm25 - 7.345) ** 0.76))
 
-        if self.pm25 < 7.359:
+        if self.pm25 < 7.358:
             rr_stroke = 1
         else:
-            rr_stroke = 1 + 1.312 * (1 - exp(-0.012 * (self.pm25 - 7.359) ** 1.273))
+            rr_stroke = 1 + 1.314 * (1 - exp(-0.012 * (self.pm25 - 7.358) ** 1.275))
 
         return rr_alri, rr_copd, rr_ihd, rr_lc, rr_stroke
 
@@ -399,9 +399,9 @@ class Technology:
         self.distributed_mortality = distributed_mortality
         self.deaths_avoided = deaths_avoided
 
-        if model.specs['w_spillovers'] > 0:
-            distributed_mortality, deaths_avoided = self.mort_morb(model, parameter='Mort', dr='Discount_rate')
+        if model.specs['Health_spillovers_parameter'] > 0:
             self.distributed_spillovers_mort = distributed_mortality * model.specs['Health_spillovers_parameter']
+            self.deaths_avoided += deaths_avoided * model.specs['Health_spillovers_parameter']
         else:
             self.distributed_spillovers_mort = pd.Series(0, index=model.gdf.index, dtype='float64')
 
@@ -417,9 +417,9 @@ class Technology:
         self.distributed_morbidity = distributed_morbidity
         self.cases_avoided = cases_avoided
 
-        if model.specs['w_spillovers'] > 0:
-            distributed_morbidity, cases_avoided = self.mort_morb(model, parameter='Morb', dr='Discount_rate')
+        if model.specs['Health_spillovers_parameter'] > 0:
             self.distributed_spillovers_morb = distributed_morbidity * model.specs['Health_spillovers_parameter']
+            self.cases_avoided += cases_avoided * model.specs['Health_spillovers_parameter']
         else:
             self.distributed_spillovers_morb = pd.Series(0, index=model.gdf.index, dtype='float64')
 
@@ -568,7 +568,9 @@ class LPG(Technology):
                  diesel_cost=0.88,
                  diesel_per_hour=14,
                  lpg_path=None,
-                 friction_path=None):
+                 friction_path=None,
+                 cylinder_cost=2.78,  # USD/kg,
+                 cylinder_life=15):
         super().__init__(name, carbon_intensity, co2_intensity, ch4_intensity,
                          n2o_intensity, co_intensity, bc_intensity, oc_intensity,
                          energy_content, tech_life, inv_cost, fuel_cost, time_of_cooking,
@@ -580,6 +582,8 @@ class LPG(Technology):
         self.transport_cost = None
         self.lpg_path = lpg_path
         self.friction_path = friction_path
+        self.cylinder_cost = cylinder_cost
+        self.cylinder_life = cylinder_life
 
     def add_travel_time(self, model, align=False):
         lpg = VectorLayer(self.name, 'Suppliers', layer_path=self.lpg_path)
@@ -644,11 +648,30 @@ class LPG(Technology):
         diesel_consumption = self.travel_time * 14 * diesel_density / 1000  # kg
         hh_emissions = sum([ef * model.gwp[pollutant] * diesel_consumption / self.truck_capacity * kg_yr for
                             pollutant, ef in diesel_ef.items()])
-        return hh_emissions
+        return hh_emissions / 1000
 
     def carb(self, model):
         super().carb(model)
         self.carbon += self.transport_emissions(model)
+
+    def infrastructure_cost(self, model):
+        cost = self.cylinder_cost * 12.5
+        salvage = self.infrastructure_salvage(model, cost, self.cylinder_life)
+        self.discounted_infra_cost = (cost - salvage)
+
+    def infrastructure_salvage(self, model, cost, life):
+        discount_rate, proj_life = self.discount_factor(model.specs)
+        used_life = proj_life % life
+        salvage = cost * (1 - used_life / life)
+        return salvage / discount_rate[0]
+
+    def discounted_inv(self, model, relative=True):
+        super().discounted_inv(model, relative=relative)
+        self.infrastructure_cost(model)
+        if relative:
+            share = (model.gdf['IsUrban'] > 20) * self.current_share_urban
+            share[model.gdf['IsUrban'] < 20] *= self.current_share_rural
+            self.discounted_investments += (self.discounted_infra_cost * (1 - share))
 
 
 class Biomass(Technology):
@@ -746,6 +769,16 @@ class Charcoal(Technology):
         self['co2_intensity'] *= model.specs['fnrb']
         super().get_carbon_intensity(model)
         self['co2_intensity'] = intensity
+
+    def production_emissions(self, model):
+        emission_factors = {'co2': 1626, 'co': 255, 'ch4': 39.6, 'bc': 0.02, 'oc': 0.74}  # g/kg Charcoal
+        kg_yr = self.energy / self.energy_content
+        hh_emissions = sum([ef * model.gwp[pollutant] * kg_yr for pollutant, ef in emission_factors.items()])
+        return hh_emissions / 1000
+
+    def carb(self, model):
+        super().carb(model)
+        self.carbon += self.production_emissions(model)
 
 
 class Electricity(Technology):
