@@ -91,16 +91,16 @@ model.techs['LPG'].travel_time = model.raster_to_dataframe(travel_time.layer,
                                                            fill_nodata='interpolate', method='read') * 2 / 60
 
 # 13. Adding GIS data for Traditional Biomass
-print(f'[{country}] Improved Biomass collected data')
+print(f'[{country}] Traditional Biomass collected data')
 model.techs['Collected_Traditional_Biomass'].friction_path = snakemake.input.biomass_friction
 model.techs['Collected_Traditional_Biomass'].forest_path = snakemake.input.forest
-model.techs['Collected_Traditional_Biomass'].forest_condition = lambda x: x > 30
+model.techs['Collected_Traditional_Biomass'].forest_condition = lambda x: x > 0
 
 # 14. Adding GIS data for Improved Biomass (ICS biomass)
 print(f'[{country}] Improved Biomass collected data')
 model.techs['Collected_Improved_Biomass'].friction_path = snakemake.input.biomass_friction
 model.techs['Collected_Improved_Biomass'].forest_path = snakemake.input.forest
-model.techs['Collected_Improved_Biomass'].forest_condition = lambda x: x > 30
+model.techs['Collected_Improved_Biomass'].forest_condition = lambda x: x > 0
 
 # 15. Adding GIS data for Improved Biomass collected (ICS biomass)
 if 'Biogas' in model.techs.keys():

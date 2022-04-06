@@ -16,6 +16,9 @@ print(f'[{country}] Scenario data')
 path = snakemake.input.scenario_file
 model.read_scenario_data(path, delimiter=',')
 model.output_directory = snakemake.params.output_directory
+# if snakemake.wildcards.scenario in ['Private_benefits', 'Time_benefits']:
+	# model.techs['Electricity'].grid_capacity_cost = 0
+	# model.techs['Electricity'].grid_cap_life = 1
 model.techs['Electricity'].get_capacity_cost(model)
 
 # 3. Calculating benefits and costs of each technology and getting the max benefit technology for each cell

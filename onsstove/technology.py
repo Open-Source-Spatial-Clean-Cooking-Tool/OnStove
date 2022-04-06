@@ -3,14 +3,11 @@ from time import time
 import numpy as np
 import pandas as pd
 import os
-import rasterio
 
-from math import exp, ceil
-
-from rasterio.fill import fillnodata
+from math import exp
 
 from .layer import VectorLayer, RasterLayer
-from .raster import interpolate
+
 
 def timeit(func):
     # This function shows the execution time of
@@ -29,8 +26,6 @@ class Technology:
     """
     Standard technology class.
     """
-
-    # TODO: check if is_clean is needed
     def __init__(self,
                  name=None,
                  carbon_intensity=None,
@@ -286,9 +281,6 @@ class Technology:
 
     def required_energy(self, model):
         self.energy = model.specs["Meals_per_day"] * 365 * model.energy_per_meal / self.efficiency
-        # discount_rate, proj_life = self.discount_factor(specs_file)
-        # energy_needed = self.energy * np.ones(proj_life)
-        # self.discounted_energy = (energy_needed / discount_rate)
 
     def get_carbon_intensity(self, model):
         pollutants = ['co2', 'ch4', 'n2o', 'co', 'bc', 'oc']
@@ -344,11 +336,11 @@ class Technology:
 
             paf = f'paf_{disease.lower()}_u'
             mor_u[disease] = model.gdf.loc[is_urban, "Calibrated_pop"].sum() * (model.base_fuel[paf] - self[paf]) * (
-                        rate / 100000)
+                    rate / 100000)
 
             paf = f'paf_{disease.lower()}_r'
             mor_r[disease] = model.gdf.loc[is_rural, "Calibrated_pop"].sum() * (model.base_fuel[paf] - self[paf]) * (
-                        rate / 100000)
+                    rate / 100000)
 
         cl_diseases = {'ALRI': {1: 0.7, 2: 0.1, 3: 0.07, 4: 0.07, 5: 0.06},
                        'COPD': {1: 0.3, 2: 0.2, 3: 0.17, 4: 0.17, 5: 0.16},
@@ -512,13 +504,8 @@ class Technology:
         self.total_time_yr = (self.time_of_cooking + self.time_of_collection) * 365
 
     def time_saved(self, model):
-        # if self.is_base:
-        #     self.total_time_saved = np.zeros(model.gdf.shape[0])
-        #     self.time_value = np.zeros(model.gdf.shape[0])
-        # else:
         proj_life = model.specs['End_year'] - model.specs['Start_year']
         self.total_time(model)
-        # self.total_time_saved = model.base_fuel.total_time_yr - self.total_time_yr  # time saved per household
         self.total_time_saved = model.base_fuel.total_time_yr - self.total_time_yr
         # time value of time saved per sq km
         self.time_value = self.total_time_saved * model.gdf["value_of_time"] / (
@@ -545,7 +532,6 @@ class LPG(Technology):
     LPG technology class. Inherits all functionality from the standard
     Technology class
     """
-
     def __init__(self,
                  name=None,
                  carbon_intensity=None,  # Kg/GJ
@@ -627,8 +613,6 @@ class LPG(Technology):
         transport_cost = transport_cost * kg_yr
         transport_cost[transport_cost < 0] = np.nan
         self.transport_cost = transport_cost
-        # self.transport_cost = model.raster_to_dataframe(transport_cost, nodata=np.nan,
-        #                                                 fill_nodata='interpolate', method='read')
 
     def discount_fuel_cost(self, model, relative=True):
         self.transportation_cost(model)
@@ -684,7 +668,6 @@ class Biomass(Technology):
     LPG technology class. Inherits all functionality from the standard
     Technology class
     """
-
     def __init__(self,
                  name=None,
                  carbon_intensity=None,
@@ -728,15 +711,18 @@ class Biomass(Technology):
         forest.add_friction_raster(friction)
         forest.travel_time(condition=self.forest_condition)
 
-        self.travel_time = 2 * model.raster_to_dataframe(forest.distance_raster.layer,
+        travel_time = 2 * model.raster_to_dataframe(forest.distance_raster.layer,
                                                          nodata=forest.distance_raster.meta['nodata'],
                                                          fill_nodata='interpolate', method='read')
+        if self.is_base:
+            travel_time[travel_time > 7] = 7  # cap to max travel time based on literature
+        self.travel_time = travel_time
 
     def total_time(self, model):
         self.transportation_time(self.friction_path, self.forest_path, model)
-        trips_per_yr = self.energy / (self.collection_capacity * self.energy_content)
-        self.total_time_yr = self.time_of_cooking * model.specs['Meals_per_day'] * 365 + (
-                self.travel_time + self.time_of_collection) * trips_per_yr
+        self.trips_per_yr = self.energy / (self.collection_capacity * self.energy_content)
+        self.total_time_yr = self.time_of_cooking * 365 + \
+                             (self.travel_time + self.time_of_collection) * self.trips_per_yr
 
     def get_carbon_intensity(self, model):
         intensity = self['co2_intensity']
@@ -865,7 +851,6 @@ class Electricity(Technology):
             super().__setitem__(idx, value)
 
     def get_capacity_cost(self, model):
-        # TODO: this line assumes if no tiers data is added, that all population settlements will need added capacity
         self.required_energy(model)
         if self.tiers_path is None:
             add_capacity = 1
@@ -887,10 +872,6 @@ class Electricity(Technology):
         grid_emissions = sum([gen * self.carbon_intensities[fuel] for fuel, gen in self.generation.items()])
         grid_generation = sum(self.generation.values())
         self.carbon_intensity = grid_emissions / grid_generation * 1000  # to convert from Mton/PJ to kg/GJ
-
-    # def carb(self, model):
-    #     self.get_carbon_intensity()
-    #     super().carb(model)
 
     def get_grid_capacity_cost(self):
         self.grid_capacity_cost = sum(
@@ -928,13 +909,10 @@ class Electricity(Technology):
 
     def total_costs(self):
         super().total_costs()
-        # self.costs += self.capacity_cost
 
     def net_benefit(self, model, w_health=1, w_spillovers=1, w_environment=1, w_time=1, w_costs=1):
         super().net_benefit(model, w_health, w_spillovers, w_environment, w_time, w_costs)
         model.gdf.loc[model.gdf['Current_elec'] == 0, "net_benefit_{}".format(self.name)] = np.nan
-        # model.gdf.loc[model.gdf['Current_elec'] == 0, "costs_{}".format(self.name)] = np.nan
-        # model.gdf.loc[model.gdf['Current_elec'] == 0, "benefits_{}".format(self.name)] = np.nan
         factor = model.gdf['Elec_pop_calib'] / model.gdf['Calibrated_pop']
         factor[factor > 1] = 1
         self.factor = factor
@@ -946,7 +924,6 @@ class Biogas(Technology):
     LPG technology class. Inherits all functionality from the standard
     Technology class
     """
-
     def __init__(self,
                  name=None,
                  carbon_intensity=None,
@@ -994,9 +971,8 @@ class Biogas(Technology):
         required_energy_hh = self.required_energy_hh(model)
 
         friction = self.read_friction(model, self.friction_path)
-        time_of_collection = required_energy_hh / (model.gdf["biogas_energy"] / (1000000 * 0.2))
-        time_of_collection *= friction
-        time_of_collection[time_of_collection > 10] = 10
+        time_of_collection = required_energy_hh * friction / (model.gdf["biogas_energy"] / 1000000) / 365
+        #time_of_collection[time_of_collection > 7] = float('inf')
         self.time_of_collection = time_of_collection
 
     def available_biogas(self, model):
@@ -1008,13 +984,8 @@ class Biogas(Technology):
         from_pig = model.gdf["Pigs"] * 5 * 0.75 * 0.14 * 470
         from_poultry = model.gdf["Poultry"] * 0.12 * 0.25 * 0.75 * 450
 
-        # fraction = self.read_friction(model, self.friction_path) / (1000000 * 0.2)
-        # self.fraction = fraction
-
-        model.gdf["available_biogas"] = ((from_cattle + from_buffalo + from_goat + from_pig + from_poultry + \
+        model.gdf["available_biogas"] = ((from_cattle + from_buffalo + from_goat + from_pig + from_poultry +
                                           from_sheep) * self.digestor_eff / 1000) * 365
-
-        # model.gdf["m3_biogas_hh"] = fraction * model.gdf["available_biogas"]
 
         if self.temperature is not None:
             if isinstance(self.temperature, str):
@@ -1055,7 +1026,6 @@ class Biogas(Technology):
 
     def net_benefit(self, model, w_health=1, w_spillovers=1, w_environment=1, w_time=1, w_costs=1):
         super().net_benefit(model, w_health, w_spillovers, w_environment, w_time, w_costs)
-        # model.gdf.loc[(model.gdf['biogas_energy_hh'] == 0), "benefits_{}".format(self.name)] = np.nan
         required_energy_hh = self.required_energy_hh(model)
         model.gdf.loc[(model.gdf['biogas_energy'] < required_energy_hh), "benefits_{}".format(self.name)] = np.nan
         model.gdf.loc[(model.gdf['biogas_energy'] < required_energy_hh), "net_benefit_{}".format(self.name)] = np.nan
