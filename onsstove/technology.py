@@ -714,7 +714,8 @@ class Biomass(Technology):
         travel_time = 2 * model.raster_to_dataframe(forest.distance_raster.layer,
                                                          nodata=forest.distance_raster.meta['nodata'],
                                                          fill_nodata='interpolate', method='read')
-        travel_time[travel_time > 7] = 7  # cap to max travel time based on literature
+        if self.is_base:
+            travel_time[travel_time > 7] = 7  # cap to max travel time based on literature
         self.travel_time = travel_time
 
     def total_time(self, model):
