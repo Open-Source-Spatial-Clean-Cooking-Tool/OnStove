@@ -1245,7 +1245,7 @@ class OnSSTOVE(DataProcessor):
         deaths = TextArea(f"{deaths_avoided:,.0f} pp/yr", textprops=dict(fontsize=fontsize, color='black'))
         health = TextArea(f"{health_costs_avoided:,.2f} BUSD", textprops=dict(fontsize=fontsize, color='black'))
         emissions = TextArea(f"{reduced_emissions:,.2f} Bton", textprops=dict(fontsize=fontsize, color='black'))
-        time = TextArea(f"{time_saved:,.2f} h/pp.day", textprops=dict(fontsize=fontsize, color='black'))
+        time = TextArea(f"{time_saved:,.2f} h/hh.day", textprops=dict(fontsize=fontsize, color='black'))
 
         values_vbox = VPacker(children=[deaths, health, emissions, time], pad=0, sep=6, align='right')
 
@@ -1261,7 +1261,7 @@ class OnSSTOVE(DataProcessor):
 
         ax.add_artist(ab)
 
-    def to_image(self, variable, name=None, type='png', cmap='viridis', cumulative_count=None,
+    def to_image(self, variable, name=None, type='png', cmap='viridis', cumulative_count=None, quantiles=None,
                  legend_position=(1.05, 1), admin_layer=None, title=None, dpi=300, labels=None, legend=True,
                  legend_title='', legend_cols=1, rasterized=True, stats=False, stats_position=(1.05, 0.5),
                  stats_fontsize=12, metric='mean'):
@@ -1278,7 +1278,7 @@ class OnSSTOVE(DataProcessor):
             ax = None
 
         raster.save_image(self.output_directory, type=type, cmap=cmap, cumulative_count=cumulative_count,
-                          categories=codes, legend_position=legend_position,
+                          quantiles=quantiles, categories=codes, legend_position=legend_position,
                           admin_layer=admin_layer, title=title, ax=ax, dpi=dpi,
                           legend=legend, legend_title=legend_title, legend_cols=legend_cols, rasterized=rasterized)
 
@@ -1297,6 +1297,7 @@ class OnSSTOVE(DataProcessor):
                           'investment_costs', 'fuel_costs', 'om_costs', 'salvage_value']:
             dff[attribute] *= dff['Households']
         summary = dff.groupby(['max_benefit_tech']).agg({'Calibrated_pop': lambda row: np.nansum(row) / 1000000,
+                                                         'Households': 'sum',
                                                          'maximum_net_benefit': lambda row: np.nansum(row) / 1000000,
                                                          'deaths_avoided': 'sum',
                                                          'health_costs_avoided': lambda row: np.nansum(row) / 1000000,
@@ -1315,14 +1316,14 @@ class OnSSTOVE(DataProcessor):
             total['max_benefit_tech'] = 'total'
             summary = pd.concat([summary, total.to_frame().T])
 
-        summary['time_saved'] /= (summary['Calibrated_pop'] * 1000000 * 365)
+        summary['time_saved'] /= (summary['Households'] * 365)
         if pretty:
             summary.rename(columns={'max_benefit_tech': 'Max benefit technology',
                                     'Calibrated_pop': 'Population (Million)',
                                     'maximum_net_benefit': 'Total net benefit (MUSD)',
                                     'deaths_avoided': 'Total deaths avoided (pp/yr)',
                                     'health_costs_avoided': 'Health costs avoided (MUSD)',
-                                    'time_saved': 'hours/pp.day',
+                                    'time_saved': 'hours/hh.day',
                                     'opportunity_cost_gained': 'Opportunity cost avoided (MUSD)',
                                     'reduced_emissions': 'Reduced emissions (Mton CO2eq)',
                                     'emissions_costs_saved': 'Emissions costs saved (MUSD)',

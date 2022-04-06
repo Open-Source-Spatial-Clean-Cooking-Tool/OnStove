@@ -1,33 +1,34 @@
 import os
 cwd = os.getcwd()
 
-SCENARIOS = ['Private_benefits', 'Social_private_benefits', 'Time_benefits']
+#SCENARIOS = ['Social_private_benefits', 'Private_benefits']
+SCENARIOS = ['Private_benefits']
 # SCENARIOS, = glob_wildcards("../Clean cooking Africa paper/04. OnSSTOVE inputs/LPG International price - Rural-Urban/Scenario_files/{scenario}/BDI_scenario_file.csv")
-RESTRICTION = ['Positive_Benefits', 'Unrestricted']
+RESTRICTION = ['Positive_Benefits']
 
-# COUNTRIES = ['BEN']
+# COUNTRIES = ['AGO']
 
-# COUNTRIES = ['Africa']
+COUNTRIES = ['Africa']
 
-COUNTRIES = ['AGO', 'BDI', 'BEN', 'BFA', 'BWA', 'CAF', 'CIV', 'CMR',
-           'COD', 'COG', 'DJI', 'ERI', 'ETH', 'GAB', 'GHA', 'GIN',
-           'GMB', 'GNB', 'GNQ', 'KEN', 'LBR', 'LSO', 'MDG', 'MLI',
-           'MOZ', 'MRT', 'MWI', 'NAM', 'NER', 'NGA', 'RWA', 'SDN',
-           'SEN', 'SLE', 'SOM', 'SSD', 'SWZ', 'TCD', 'TGO', 'TZA',
-           'UGA', 'ZAF', 'ZMB', 'ZWE']
+# COUNTRIES = ['AGO', 'BDI', 'BEN', 'BFA', 'BWA', 'CAF', 'CIV', 'CMR',
+             # 'COD', 'COG', 'DJI', 'ERI', 'ETH', 'GAB', 'GHA', 'GIN',
+             # 'GMB', 'GNB', 'GNQ', 'KEN', 'LBR', 'LSO', 'MDG', 'MLI',
+             # 'MOZ', 'MRT', 'MWI', 'NAM', 'NER', 'NGA', 'RWA', 'SDN',
+             # 'SEN', 'SLE', 'SOM', 'SSD', 'SWZ', 'TCD', 'TGO', 'TZA',
+             # 'UGA', 'ZAF', 'ZMB', 'ZWE']
 
 rule all:
 	input:
 		expand("../Clean cooking Africa paper/06. Results/LPG International price - Rural-Urban/{country}/{scenario}/{restriction}/results.pkl",
-                	country=COUNTRIES,
-                 	scenario=SCENARIOS,
-                 	restriction=RESTRICTION)
+              	country=COUNTRIES,
+                	scenario=SCENARIOS,
+                	restriction=RESTRICTION)
 
-#rule all:
-#   input:
-#        expand("../Clean cooking Africa paper/06. Results/LPG International price - Rural-Urban/Africa/{scenario}/{restriction}/results.pkl",
-#              scenario=SCENARIOS,
-#              restriction=RESTRICTION)
+# rule all:
+       # input:
+                # expand("../Clean cooking Africa paper/06. Results/LPG International price - Rural-Urban/Africa/{scenario}/{restriction}/results.pkl",
+                        # scenario=SCENARIOS,
+                        # restriction=RESTRICTION)
 
 rule extract_forest:
     input:
@@ -84,46 +85,46 @@ rule process_data:
           "scripts/data_processing.py"
 
 rule prepare_model:
-    input:
-         prep_file = "../Clean cooking Africa paper/04. OnSSTOVE inputs/LPG International price - Rural-Urban/Prep_files/{country}_prep_file.csv",
-         techs_file = r"..\Clean cooking Africa paper\04. OnSSTOVE inputs\LPG International price - Rural-Urban\Technical_specs\{country}_file_tech_specs.csv",
-         mask_layer = rules.process_data.output.mask_layer,
-         population = rules.process_data.output.population,
-         ghs = rules.process_data.output.ghs,
-         forest = rules.process_data.output.forest,
-         biomass_friction = rules.process_data.output.biomass_friction,
-         mv_lines = rules.process_data.output.mv_lines,
-         ntl = rules.process_data.output.ntl,
-         traveltime_cities = rules.process_data.output.traveltime_cities,
-         temperature = rules.process_data.output.temperature,
-         water = rules.process_data.output.water,
-         buffaloes = rules.process_data.output.buffaloes,
-         cattles = rules.process_data.output.buffaloes,
-         poultry = rules.process_data.output.poultry,
-         goats = rules.process_data.output.goats,
-         pigs = rules.process_data.output.pigs,
-         sheeps = rules.process_data.output.sheeps
-    params:
-          wealth_index = r"..\Clean cooking Africa paper\01. Data\GIS-data\Poverty\{country}_relative_wealth_index",
-          output_directory = "../Clean cooking Africa paper/06. Results/LPG International price - Rural-Urban/{country}",
-          country = "{country}"
-    output:
-          model = "../Clean cooking Africa paper/06. Results/LPG International price - Rural-Urban/{country}/model.pkl"
-    script:
-          "scripts/model_preparation.py"
+   input:
+        prep_file = "../Clean cooking Africa paper/04. OnSSTOVE inputs/LPG International price - Rural-Urban/Prep_files/{country}_prep_file.csv",
+        techs_file = r"..\Clean cooking Africa paper\04. OnSSTOVE inputs\LPG International price - Rural-Urban\Technical_specs\{country}_file_tech_specs.csv",
+        mask_layer = rules.process_data.output.mask_layer,
+        population = rules.process_data.output.population,
+        ghs = rules.process_data.output.ghs,
+        forest = rules.process_data.output.forest,
+        biomass_friction = rules.process_data.output.biomass_friction,
+        mv_lines = rules.process_data.output.mv_lines,
+        ntl = rules.process_data.output.ntl,
+        traveltime_cities = rules.process_data.output.traveltime_cities,
+        temperature = rules.process_data.output.temperature,
+        water = rules.process_data.output.water,
+        buffaloes = rules.process_data.output.buffaloes,
+        cattles = rules.process_data.output.buffaloes,
+        poultry = rules.process_data.output.poultry,
+        goats = rules.process_data.output.goats,
+        pigs = rules.process_data.output.pigs,
+        sheeps = rules.process_data.output.sheeps
+   params:
+         wealth_index = r"..\Clean cooking Africa paper\01. Data\GIS-data\Poverty\{country}_relative_wealth_index",
+         output_directory = "../Clean cooking Africa paper/06. Results/LPG International price - Rural-Urban/{country}",
+         country = "{country}"
+   output:
+         model = "../Clean cooking Africa paper/06. Results/LPG International price - Rural-Urban/{country}/model.pkl"
+   script:
+         "scripts/model_preparation.py"
 
 rule run_model:
-    input:
-         model = rules.prepare_model.output.model,
-         scenario_file = r"..\Clean cooking Africa paper\04. OnSSTOVE inputs\LPG International price - Rural-Urban\Scenario_files\{scenario}\{country}_scenario_file.csv"
-    params:
-          output_directory = "../Clean cooking Africa paper/06. Results/LPG International price - Rural-Urban/{country}/{scenario}/{restriction}",
-          country = "{country}",
-          restriction = "{restriction}"
-    output:
-          results = "../Clean cooking Africa paper/06. Results/LPG International price - Rural-Urban/{country}/{scenario}/{restriction}/results.pkl",
-    script:
-          "scripts/model_run.py"
+   input:
+        model = rules.prepare_model.output.model,
+        scenario_file = r"..\Clean cooking Africa paper\04. OnSSTOVE inputs\LPG International price - Rural-Urban\Scenario_files\{scenario}\{country}_scenario_file.csv"
+   params:
+         output_directory = "../Clean cooking Africa paper/06. Results/LPG International price - Rural-Urban/{country}/{scenario}/{restriction}",
+         country = "{country}",
+         restriction = "{restriction}"
+   output:
+         results = "../Clean cooking Africa paper/06. Results/LPG International price - Rural-Urban/{country}/{scenario}/{restriction}/results.pkl",
+   script:
+        "scripts/model_run.py"
 
 rule main_plot:
     input:
