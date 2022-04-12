@@ -12,7 +12,22 @@ Through the environment.yml using [Anaconda](https://www.anaconda.com/distributi
 
 ```
 > conda install git
-> git clone https://github.com/Open-Source-Spatial-Clean-Cooking-Tool/OnSSTOVE.git
-> cd ..\OnSSTOVE
+> git clone https://github.com/Open-Source-Spatial-Clean-Cooking-Tool/OnStove.git
+> cd ..\OnStove
 > conda env create --name onstove --file environment.yml
+> conda activate onstove
 ```
+
+## Changelog
+**X-April-2022**: Original code base (V 1.0) published
+
+## Resources
+
+### Add journal articles as they appear
+
+## Credits
+
+**Conceptualization:** [Babak Khavari](https://github.com/babakkhavari), [Camilo Ramirez](https://github.com/orgs/Open-Source-Spatial-Clean-Cooking-Tool/people/camiloramirezgo), Marc Jeuland & [Francesco Fuso-Nerini](https://github.com/FFusoNerini) <br />
+**Methodology:** [Babak Khavari](https://github.com/babakkhavari), [Camilo Ramirez](https://github.com/orgs/Open-Source-Spatial-Clean-Cooking-Tool/people/camiloramirezgo), Marc Jeuland & [Francesco Fuso-Nerini](https://github.com/FFusoNerini) <br />
+**Software:** [Babak Khavari](https://github.com/babakkhavari), [Camilo Ramirez](https://github.com/orgs/Open-Source-Spatial-Clean-Cooking-Tool/people/camiloramirezgo)
+**Supervision and Advisory support:** Marc Jeuland & [Francesco Fuso-Nerini](https://github.com/FFusoNerini)<br />
