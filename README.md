@@ -29,5 +29,5 @@ Through the environment.yml using [Anaconda](https://www.anaconda.com/distributi
 
 **Conceptualization:** [Babak Khavari](https://github.com/babakkhavari), [Camilo Ramirez](https://github.com/orgs/Open-Source-Spatial-Clean-Cooking-Tool/people/camiloramirezgo), Marc Jeuland & [Francesco Fuso-Nerini](https://github.com/FFusoNerini) <br />
 **Methodology:** [Babak Khavari](https://github.com/babakkhavari), [Camilo Ramirez](https://github.com/orgs/Open-Source-Spatial-Clean-Cooking-Tool/people/camiloramirezgo), Marc Jeuland & [Francesco Fuso-Nerini](https://github.com/FFusoNerini) <br />
-**Software:** [Babak Khavari](https://github.com/babakkhavari), [Camilo Ramirez](https://github.com/orgs/Open-Source-Spatial-Clean-Cooking-Tool/people/camiloramirezgo)
+**Software:** [Babak Khavari](https://github.com/babakkhavari) & [Camilo Ramirez](https://github.com/orgs/Open-Source-Spatial-Clean-Cooking-Tool/people/camiloramirezgo) <br />
 **Supervision and Advisory support:** Marc Jeuland & [Francesco Fuso-Nerini](https://github.com/FFusoNerini)<br />
