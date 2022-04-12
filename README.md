@@ -32,7 +32,7 @@ Through the environment.yml using [Anaconda](https://www.anaconda.com/distributi
 **Software:** [Babak Khavari](https://github.com/babakkhavari) & [Camilo Ramirez](https://github.com/orgs/Open-Source-Spatial-Clean-Cooking-Tool/people/camiloramirezgo) <br />
 **Supervision and Advisory support:** [Marc Jeuland](https://globalhealth.duke.edu/people/jeuland-marc) & [Francesco Fuso-Nerini](https://www.kth.se/profile/ffn)<br />
 
-**Acknowledgements**
+**Acknowledgements** <br />
 The work done at KTH with regards to this research was funded with support from the CCA. Furthermore, the authors would like to acknowledge Alicia Oberholzer (CCA), Anobha Gurung (CCA), Dimitrios Mentis (WRI) and Santiago Sinclair-Lecaros (WRI) for their valuable inputs and discussions. Note that none of these individuals, nor the CCA, should be held responsible for any erroneous facts or interpretations presented in this paper. These are solely the responsibility of the authors. 
 Author contributions
 
