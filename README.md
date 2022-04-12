@@ -27,7 +27,7 @@ Through the environment.yml using [Anaconda](https://www.anaconda.com/distributi
 
 ## Credits
 
-**Conceptualization:** [Babak Khavari](https://github.com/babakkhavari), [Camilo Ramirez](https://github.com/orgs/Open-Source-Spatial-Clean-Cooking-Tool/people/camiloramirezgo), Marc Jeuland & [Francesco Fuso-Nerini](https://github.com/FFusoNerini) <br />
-**Methodology:** [Babak Khavari](https://github.com/babakkhavari), [Camilo Ramirez](https://github.com/orgs/Open-Source-Spatial-Clean-Cooking-Tool/people/camiloramirezgo), Marc Jeuland & [Francesco Fuso-Nerini](https://github.com/FFusoNerini) <br />
+**Conceptualization:** [Babak Khavari](https://github.com/babakkhavari), [Camilo Ramirez](https://github.com/orgs/Open-Source-Spatial-Clean-Cooking-Tool/people/camiloramirezgo), [Marc Jeuland](https://globalhealth.duke.edu/people/jeuland-marc) & [Francesco Fuso-Nerini](https://www.kth.se/profile/ffn) <br />
+**Methodology:** [Babak Khavari](https://github.com/babakkhavari), [Camilo Ramirez](https://github.com/orgs/Open-Source-Spatial-Clean-Cooking-Tool/people/camiloramirezgo), [Marc Jeuland](https://globalhealth.duke.edu/people/jeuland-marc) & [Francesco Fuso-Nerini](https://www.kth.se/profile/ffn) <br />
 **Software:** [Babak Khavari](https://github.com/babakkhavari) & [Camilo Ramirez](https://github.com/orgs/Open-Source-Spatial-Clean-Cooking-Tool/people/camiloramirezgo) <br />
-**Supervision and Advisory support:** Marc Jeuland & [Francesco Fuso-Nerini](https://github.com/FFusoNerini)<br />
+**Supervision and Advisory support:** [Marc Jeuland](https://globalhealth.duke.edu/people/jeuland-marc) & [Francesco Fuso-Nerini](https://www.kth.se/profile/ffn)<br />
