@@ -25,6 +25,10 @@ Through the environment.yml using [Anaconda](https://www.anaconda.com/distributi
 
 ### Add journal articles as they appear
 
+## How to cite
+
+### Add when publication is out
+
 ## Credits
 
 **Conceptualization:** [Babak Khavari](https://github.com/babakkhavari), [Camilo Ramirez](https://github.com/orgs/Open-Source-Spatial-Clean-Cooking-Tool/people/camiloramirezgo), [Marc Jeuland](https://globalhealth.duke.edu/people/jeuland-marc) & [Francesco Fuso-Nerini](https://www.kth.se/profile/ffn) <br />
