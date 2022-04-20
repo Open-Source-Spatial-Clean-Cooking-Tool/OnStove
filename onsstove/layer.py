@@ -510,7 +510,8 @@ class RasterLayer(Layer):
             i += 1
         return layer
 
-    def category_legend(self, im, categories, legend_position=(1.05, 1), title='', legend_cols=1):
+    @staticmethod
+    def category_legend(im, categories, legend_position=(1.05, 1), title='', legend_cols=1):
         values = list(categories.values())
         titles = list(categories.keys())
 

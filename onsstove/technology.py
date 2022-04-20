@@ -280,6 +280,7 @@ class Technology:
         return discount_factor, proj_life
 
     def required_energy(self, model):
+        # Annual energy needed for cooking, affected by stove efficiency (MJ/yr)
         self.energy = model.specs["Meals_per_day"] * 365 * model.energy_per_meal / self.efficiency
 
     def get_carbon_intensity(self, model):
@@ -714,8 +715,7 @@ class Biomass(Technology):
         travel_time = 2 * model.raster_to_dataframe(forest.distance_raster.layer,
                                                          nodata=forest.distance_raster.meta['nodata'],
                                                          fill_nodata='interpolate', method='read')
-        if self.is_base:
-            travel_time[travel_time > 7] = 7  # cap to max travel time based on literature
+        travel_time[travel_time > 7] = 7  # cap to max travel time based on literature
         self.travel_time = travel_time
 
     def total_time(self, model):
@@ -957,12 +957,17 @@ class Biogas(Technology):
         self.temperature = None
 
     def read_friction(self, model, friction_path):
+        """
+        Read a friction layer in min/meter (walking time per meter) and returns a pandas series with the values
+        for each populated grid cell in hours/meter
+        """
         friction = RasterLayer(self.name, 'Friction', layer_path=friction_path, resample='average')
         data = model.raster_to_dataframe(friction.layer, nodata=friction.meta['nodata'],
                                          fill_nodata='interpolate', method='read')
         return data / 60
 
     def required_energy_hh(self, model):
+        # Gets required annual energy for cooking (already affected by stove efficiency) in MJ/yr
         self.required_energy(model)
         return self.energy / self.digestor_eff
 
@@ -970,9 +975,12 @@ class Biogas(Technology):
         self.available_biogas(model)
         required_energy_hh = self.required_energy_hh(model)
 
+        # Read friction in h/meter
         friction = self.read_friction(model, self.friction_path)
+
+        # Caluclates the daily time of collection based on friction (hour/meter), the available biogas energy from
+        # each cell (MJ/yr/meter, 1000000 represents meters per km2) and the required energy per household (MJ/yr)
         time_of_collection = required_energy_hh * friction / (model.gdf["biogas_energy"] / 1000000) / 365
-        #time_of_collection[time_of_collection > 7] = float('inf')
         self.time_of_collection = time_of_collection
 
     def available_biogas(self, model):
@@ -984,9 +992,11 @@ class Biogas(Technology):
         from_pig = model.gdf["Pigs"] * 5 * 0.75 * 0.14 * 470
         from_poultry = model.gdf["Poultry"] * 0.12 * 0.25 * 0.75 * 450
 
+        # Available produced biogas per year in m3
         model.gdf["available_biogas"] = ((from_cattle + from_buffalo + from_goat + from_pig + from_poultry +
                                           from_sheep) * self.digestor_eff / 1000) * 365
 
+        # Temperature restriction
         if self.temperature is not None:
             if isinstance(self.temperature, str):
                 self.temperature = RasterLayer('Biogas', 'Temperature', self.temperature)
@@ -996,6 +1006,7 @@ class Biogas(Technology):
             model.gdf.loc[model.gdf["Temperature"] < 10, "available_biogas"] = 0
             model.gdf.loc[(model.gdf["IsUrban"] > 20), "available_biogas"] = 0
 
+        # Water availability restriction
         if self.water is not None:
             if isinstance(self.water, str):
                 self.water = VectorLayer('Biogas', 'Water scarcity', self.water, bbox=model.mask_layer.layer)
@@ -1003,6 +1014,7 @@ class Biogas(Technology):
                                       fill_nodata='interpolate', method='read')
             model.gdf.loc[model.gdf["Water"] == 0, "available_biogas"] = 0
 
+        # Available biogas energy per year in MJ (energy content in MJ/m3)
         model.gdf["biogas_energy"] = model.gdf["available_biogas"] * self.energy_content
 
     def recalibrate_livestock(self, model, buffaloes, cattles, poultry, goats, pigs, sheeps):
