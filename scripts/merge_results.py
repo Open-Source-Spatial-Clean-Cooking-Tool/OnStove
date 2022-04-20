@@ -12,16 +12,15 @@ from onsstove.onsstove import OnSSTOVE
 cmap = {"Biomass ICS": '#6F4070', "LPG": '#66C5CC', "Biomass": '#FFB6C1',
         "Charcoal": '#364135', "Charcoal ICS": '#d4bdc5',
         "Biogas": '#73AF48', "Biogas and Biomass ICS": "#F6029E",
-        "Biogas and LPG": "#f97b72",  "Biogas and Biomass": "#266AA6",
+        "Biogas and LPG": "#0F8554",  "Biogas and Biomass": "#266AA6",
         "Biogas and Charcoal": "#3B05DF",
         "Biogas and Charcoal ICS": "#3B59DF",
         "Biogas and Electricity": "#484673",
         "Electricity": '#CC503E', "Electricity and Biomass ICS": "#B497E7",
         "Electricity and LPG": "#E17C05", "Electricity and Biomass": "#FFC107",
         "Electricity and Charcoal ICS": "#660000",
-        "Electricity and Biogas": "#0F8554",
+        "Electricity and Biogas": "#f97b72",
         "Electricity and Charcoal": "#FF0000"}
-
 
 labels = {"Biogas and Electricity": "Electricity and Biogas",
           'Collected Traditional Biomass': 'Biomass',

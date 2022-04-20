@@ -2,7 +2,7 @@ import os
 cwd = os.getcwd()
 
 #SCENARIOS = ['Social_private_benefits', 'Private_benefits']
-SCENARIOS = ['Private_benefits']
+SCENARIOS = ['Social_private_benefits', 'Private_benefits']
 # SCENARIOS, = glob_wildcards("../Clean cooking Africa paper/04. OnSSTOVE inputs/LPG International price - Rural-Urban/Scenario_files/{scenario}/BDI_scenario_file.csv")
 RESTRICTION = ['Positive_Benefits']
 
@@ -17,18 +17,18 @@ COUNTRIES = ['Africa']
              # 'SEN', 'SLE', 'SOM', 'SSD', 'SWZ', 'TCD', 'TGO', 'TZA',
              # 'UGA', 'ZAF', 'ZMB', 'ZWE']
 
-rule all:
-	input:
-		expand("../Clean cooking Africa paper/06. Results/LPG International price - Rural-Urban/{country}/{scenario}/{restriction}/results.pkl",
-              	country=COUNTRIES,
-                	scenario=SCENARIOS,
-                	restriction=RESTRICTION)
-
 # rule all:
-       # input:
-                # expand("../Clean cooking Africa paper/06. Results/LPG International price - Rural-Urban/Africa/{scenario}/{restriction}/results.pkl",
-                        # scenario=SCENARIOS,
-                        # restriction=RESTRICTION)
+	# input:
+		# expand("../Clean cooking Africa paper/06. Results/LPG International price - Rural-Urban/{country}/{scenario}/{restriction}/results.pkl",
+              	# country=COUNTRIES,
+                	# scenario=SCENARIOS,
+                	# restriction=RESTRICTION)
+
+rule all:
+       input:
+                expand("../Clean cooking Africa paper/06. Results/LPG International price - Rural-Urban/Africa/{scenario}/{restriction}/results.pkl",
+                        scenario=SCENARIOS,
+                        restriction=RESTRICTION)
 
 rule extract_forest:
     input:

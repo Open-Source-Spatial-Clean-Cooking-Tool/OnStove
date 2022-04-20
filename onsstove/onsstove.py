@@ -1448,6 +1448,8 @@ class OnSSTOVE(DataProcessor):
                     'Fuel costs': '#f1a340', 'Emissions costs saved': '#998ec3',
                     'O&M costs': '#fee0b6', 'Opportunity cost gained': '#d8daeb'}
 
+
+
         value_vars = ['Health costs avoided',
                       'Emissions costs saved',
                       'Opportunity cost gained',
