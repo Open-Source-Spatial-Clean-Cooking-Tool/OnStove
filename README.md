@@ -38,5 +38,5 @@ Through the environment.yml using [Anaconda](https://www.anaconda.com/distributi
 
 **Acknowledgements** <br />
 The work done at KTH with regards to this research was funded with support from the CCA. Furthermore, the authors would like to acknowledge Alicia Oberholzer (CCA), Anobha Gurung (CCA), Dimitrios Mentis (WRI) and Santiago Sinclair-Lecaros (WRI) for their valuable inputs and discussions. Note that none of these individuals, nor the CCA, should be held responsible for any erroneous facts or interpretations presented in this paper. These are solely the responsibility of the authors. 
-Author contributions
+
 
