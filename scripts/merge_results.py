@@ -3,11 +3,11 @@ import geopandas as gpd
 import pandas as pd
 from decouple import config
 
-onstove_path = config('ONSSTOVE').format(os.getlogin())
+onstove_path = config('ONSTOVE').format(os.getlogin())
 sys.path.append(onstove_path)
 
-from onsstove.layer import VectorLayer
-from onsstove.onsstove import OnSSTOVE
+from onstove.layer import VectorLayer
+from onstove.onstove import OnStove
 
 cmap = {"Biomass ICS": '#6F4070', "LPG": '#66C5CC', "Biomass": '#FFB6C1',
         "Charcoal": '#364135', "Charcoal ICS": '#d4bdc5',
@@ -35,7 +35,7 @@ df = pd.DataFrame({'country': [], 'Households': [], 'max_benefit_tech': [], 'Cal
 				   'IsUrban': [], 'Current_elec': [], 'geometry': []})
 
 print('Creating Africa model...')
-africa = OnSSTOVE()
+africa = OnStove()
 africa.output_directory = snakemake.params.output_directory
 
 mask_layer = VectorLayer('admin', 'adm_1', layer_path=snakemake.input.boundaries)
@@ -46,7 +46,7 @@ africa.gdf = gpd.GeoDataFrame(df, crs='epsg:3857')
 print('Reading country results')
 for file, country in zip(snakemake.input.results, snakemake.params.countries):
     print(f'    - {country}')
-    model = OnSSTOVE.read_model(file)
+    model = OnStove.read_model(file)
 
     model.gdf['country'] = country
     africa.gdf = africa.gdf.append(model.gdf[df.columns], ignore_index=True)

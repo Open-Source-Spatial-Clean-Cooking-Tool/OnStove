@@ -3,11 +3,11 @@ import geopandas as gpd
 import pandas as pd
 from decouple import config
 
-onstove_path = config('ONSSTOVE').format(os.getlogin())
+onstove_path = config('ONSTOVE').format(os.getlogin())
 sys.path.append(onstove_path)
 
-from onsstove.layer import VectorLayer
-from onsstove.onsstove import OnSSTOVE
+from onstove.layer import VectorLayer
+from onstove.onstove import OnStove
 from sensitivity import run_model
 
 df = pd.DataFrame({'Households': [], 'max_benefit_tech': [], 'Calibrated_pop': [],
@@ -17,7 +17,7 @@ df = pd.DataFrame({'Households': [], 'max_benefit_tech': [], 'Calibrated_pop': [
                    'opportunity_cost_gained': [], 'salvage_value': []})
 
 print('Creating Africa model...')
-africa = OnSSTOVE()
+africa = OnStove()
 output_directory = os.path.join(snakemake.params.output_directory, 'Africa')
 africa.output_directory = output_directory
 

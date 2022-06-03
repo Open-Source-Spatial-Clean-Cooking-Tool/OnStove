@@ -1,13 +1,12 @@
 import sys
 from decouple import config
 import os
-onstove_path = config('ONSSTOVE').format(os.getlogin())
+onstove_path = config('ONSTOVE').format(os.getlogin())
 sys.path.append(onstove_path)
 import numpy as np
 
-sys.path.append(r"C:\Users\khavari\Box\OnSSTOVE")
-from onsstove.onsstove import DataProcessor
-from onsstove.layer import VectorLayer
+from onstove.onstove import DataProcessor
+from onstove.layer import VectorLayer
 
 # 1. Create a data processor
 output_directory = snakemake.params.output_directory

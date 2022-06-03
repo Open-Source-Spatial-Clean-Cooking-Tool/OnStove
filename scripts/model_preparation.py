@@ -1,16 +1,16 @@
 import sys, os
 from decouple import config
 
-onstove_path = config('ONSSTOVE').format(os.getlogin())
+onstove_path = config('ONSTOVE').format(os.getlogin())
 sys.path.append(onstove_path)
 
-from onsstove.layer import VectorLayer, RasterLayer
-from onsstove.onsstove import OnSSTOVE
+from onstove.layer import VectorLayer, RasterLayer
+from onstove.onstove import OnStove
 
 # 1. Create an OnSSTOVE model
 output_directory = snakemake.params.output_directory
 country = snakemake.params.country
-model = OnSSTOVE()
+model = OnStove()
 model.output_directory = output_directory
 
 # 2. Read the model data
