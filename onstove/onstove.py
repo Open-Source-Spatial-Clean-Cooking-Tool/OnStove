@@ -33,7 +33,7 @@ from plotnine import (
     facet_wrap
 )
 
-from onsstove.technology import Technology, LPG, Biomass, Electricity, Biogas, Charcoal
+from onstove.technology import Technology, LPG, Biomass, Electricity, Biogas, Charcoal
 from .raster import *
 from .layer import VectorLayer, RasterLayer
 
@@ -391,7 +391,7 @@ class DataProcessor:
         return model
 
 
-class OnSSTOVE(DataProcessor):
+class OnStove(DataProcessor):
     """
     Class containing the methods to perform a geospatial max-benefit analysis
     on clean cooking access

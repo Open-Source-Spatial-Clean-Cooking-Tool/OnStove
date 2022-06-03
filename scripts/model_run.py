@@ -2,15 +2,15 @@ import sys
 from decouple import config
 import os
 
-onstove_path = config('ONSSTOVE').format(os.getlogin())
+onstove_path = config('ONSTOVE').format(os.getlogin())
 sys.path.append(onstove_path)
 
-from onsstove.onsstove import OnSSTOVE
+from onstove.onstove import OnStove
 
 # 1. Read the OnSSTOVE model
 country = snakemake.params.country
 print(f'[{country}] Reading model')
-model = OnSSTOVE.read_model(snakemake.input.model)
+model = OnStove.read_model(snakemake.input.model)
 
 # 2. Read the scenario data
 print(f'[{country}] Scenario data')

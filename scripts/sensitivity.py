@@ -3,16 +3,16 @@ from decouple import config
 import os
 import pandas as pd
 
-onstove_path = config('ONSSTOVE').format(os.getlogin())
+onstove_path = config('ONSTOVE').format(os.getlogin())
 sys.path.append(onstove_path)
 
-from onsstove.onsstove import OnSSTOVE
+from onstove.onstove import OnStove
 
 def run_model(country, model_file, sensitivity_file, tech_file, output_directory, file_name):
 	# 1. Read the OnSSTOVE model
 	print(f'[{country}] Reading model')
 	print(model_file)
-	model = OnSSTOVE.read_model(model_file)
+	model = OnStove.read_model(model_file)
 
 	# 2. Read the scenario data
 	print(f'[{country}] Scenario data')
