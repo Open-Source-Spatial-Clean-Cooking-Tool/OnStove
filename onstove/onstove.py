@@ -33,7 +33,7 @@ from plotnine import (
     facet_wrap
 )
 
-from onstove.technology import Technology, LPG, Biomass, Electricity, Biogas, Charcoal
+from .technology import Technology, LPG, Biomass, Electricity, Biogas, Charcoal
 from .raster import *
 from .layer import VectorLayer, RasterLayer
 
