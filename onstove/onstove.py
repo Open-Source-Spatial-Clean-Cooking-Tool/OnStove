@@ -459,6 +459,34 @@ class OnStove(DataProcessor):
             self.specs = config
         else:
             self.specs.update(config)
+    
+    def techshare_sumtoone(self):
+        """
+        This function checks if the sum of shares in the technology dictionary is 1.0. 
+            If it is not, it will adjust the shares to make the sum 1.0.
+
+            Parameters
+            ---------
+            techshare_dict : dictionary
+                The original dictionary of technology shares
+
+            Returns
+            -------
+            techshare_dict : dictionary
+                The updated dictionary of technology shares
+        """
+        sharesumrural = sum(item['current_share_rural'] for item in self.techs.values())
+
+        if sharesumrural != 1:
+            for item in self.techs.values():
+                item.current_share_rural = item.current_share_rural/sharesumrural
+
+        sharesumurban = sum(item['current_share_urban'] for item in self.techs.values())
+        
+        if sharesumurban != 1:
+            for item in self.techs.values():
+                item.current_share_urban = item.current_share_urban/sharesumurban
+       
 
     def set_base_fuel(self, techs: list = None):
         """
