@@ -1,3 +1,3 @@
-# OnSSET
+# OnStove
 
-This is an instruction guide to OnSSET. A preview is available at [Read the Docs](http://onsset-manual.readthedocs.io/en/latest/index.html)!
+This is an instruction guide to OnStove. A preview is available at [Read the Docs](https://onstove-documentation.readthedocs.io/en/latest/#)!
