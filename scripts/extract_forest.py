@@ -1,12 +1,12 @@
 import sys
 from decouple import config
 import os
-onstove_path = config('ONSSTOVE').format(os.getlogin())
+onstove_path = config('ONSTOVE').format(os.getlogin())
 sys.path.append(onstove_path)
 import rasterio
-from onsstove.raster import merge_rasters
-from onsstove.layer import VectorLayer
-from onsstove.layer import RasterLayer
+from onstove.raster import merge_rasters
+from onstove.layer import VectorLayer
+from onstove.layer import RasterLayer
 
 country = snakemake.params.country
 

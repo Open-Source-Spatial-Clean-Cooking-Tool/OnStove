@@ -265,7 +265,7 @@ class Technology:
     @staticmethod
     def discount_factor(specs):
         """
-        :param model: onsstove instance containing the informtion of the model
+        :param model: onstove instance containing the informtion of the model
         :return: discount factor to be used for all costs in the net benefit fucntion and the years of analysis
         """
         if specs["Start_year"] == specs["End_year"]:
