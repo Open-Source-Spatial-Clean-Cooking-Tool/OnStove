@@ -1,8 +1,7 @@
 Introduction to OnStove
 ======================
 
-.. figure::  img/OnStove_Logo_color.png
-   :align:   center
+.. figure::  img/OnStove_logo_color.png
 
 Universal access to clean cooking
 *******************************
