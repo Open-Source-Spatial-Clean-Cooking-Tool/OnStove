@@ -3,21 +3,13 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-Welcome to OnSSET's documentation!
+Welcome to OnStove's documentation!
 ===================================
 
-.. figure::  img/onsset_logo1.png
-   :align:   center
-
-   KTH dESA - http://www.onsset.org
-
-Electricity for all
+Clean cooking for all
 +++++++++++++++++++++
 
-In September 2015, the United Nations General Assembly adopted Agenda 2030, which comprises a set of 17 Sustainable Development Goals (SDGs) defined by 169 targets. “Ensuring access to affordable, reliable, sustainable and modern energy for all by 2030” is the seventh goal (SDG7). According to the World Bank’s 2015 Global Tracking Framework, roughly 15% of world population (or 1.1 billion people) lack access to electricity, and many more rely on poor quality electricity services. The majority of those without access (87%) reside in rural areas. Access to electricity services is one prerequisite for sustainable development and a powerful factor in poverty alleviation and well-being.
-
-.. figure::  img/optimusnew.png
-   :align:   center
+Clean cooking is defined as fuels and stove combinations meeting the standards set by the World Health Organization’s Guidelines for Indoor Air Quality: Household Fuel Combustion1. The purpose of these guidelines is to protect public health from Household Air Pollution (HAP). As of 2020, roughly 2.4 billion people still lacked access to clean cooking globally and relied on polluting fuels to meet their daily cooking need. The use of polluting fuels are estimated to cause approximately 3.2 million pre-mature deaths annually and impede progress on gender equality and environmental quality goals2. Due to the widespread negative impacts of polluting cooking fuels, universal access to clean cooking was incorporated as one of the targets of the Sustainable Development Goals (SDG target 7.1)3. This target has in previous research been shown to be directly linked to the achievement of 85% of the other SDG targets4  Progress towards the universal clean cooking target has however proven particularly difficult. 
 
 Contents
 +++++++++++++++++++++
@@ -26,18 +18,6 @@ Contents
    :maxdepth: 3
 
    introduction
-   OnSSET_model
-   installation
-   data_acquisition
-   data_preparation
-   otherinputs
-   running
-   analysis_visualization
-   applications
-   references
-   contact
-   faq
-   license
 
 
 Indices and tables
