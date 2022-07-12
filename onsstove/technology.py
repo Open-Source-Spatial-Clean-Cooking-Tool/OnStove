@@ -981,6 +981,9 @@ class Biogas(Technology):
         # Caluclates the daily time of collection based on friction (hour/meter), the available biogas energy from
         # each cell (MJ/yr/meter, 1000000 represents meters per km2) and the required energy per household (MJ/yr)
         time_of_collection = required_energy_hh * friction / (model.gdf["biogas_energy"] / 1000000) / 365
+        time_of_collection[time_of_collection==float('inf')] = np.nan
+        mean_value = time_of_collection.mean()
+        time_of_collection[time_of_collection.isna()] = mean_value
         self.time_of_collection = time_of_collection
 
     def available_biogas(self, model):

@@ -744,7 +744,7 @@ class OnSSTOVE(DataProcessor):
         self.raster_to_dataframe(GHS_path, name="IsUrban", method='sample')
 
         if self.specs["End_year"] > self.specs["Start_year"]:
-            population_current = self.specs["Population_end_year"]
+            population_current = self.specs["Population_start_year"]
             urban_current = self.specs["Urban_start"] * population_current
             rural_current = population_current - urban_current
 
@@ -1239,12 +1239,12 @@ class OnSSTOVE(DataProcessor):
 
         deaths_avoided = summary.loc['total', 'deaths_avoided']
         health_costs_avoided = summary.loc['total', 'health_costs_avoided'] / 1000
-        reduced_emissions = summary.loc['total', 'reduced_emissions'] / 1000
+        reduced_emissions = summary.loc['total', 'reduced_emissions']
         time_saved = summary.loc['total', 'time_saved']
 
         deaths = TextArea(f"{deaths_avoided:,.0f} pp/yr", textprops=dict(fontsize=fontsize, color='black'))
         health = TextArea(f"{health_costs_avoided:,.2f} BUSD", textprops=dict(fontsize=fontsize, color='black'))
-        emissions = TextArea(f"{reduced_emissions:,.2f} Bton", textprops=dict(fontsize=fontsize, color='black'))
+        emissions = TextArea(f"{reduced_emissions:,.2f} Mton", textprops=dict(fontsize=fontsize, color='black'))
         time = TextArea(f"{time_saved:,.2f} h/hh.day", textprops=dict(fontsize=fontsize, color='black'))
 
         values_vbox = VPacker(children=[deaths, health, emissions, time], pad=0, sep=6, align='right')
@@ -1293,7 +1293,7 @@ class OnSSTOVE(DataProcessor):
         if labels is not None:
             self.re_name(dff, labels, 'max_benefit_tech')
         for attribute in ['maximum_net_benefit', 'deaths_avoided', 'health_costs_avoided', 'time_saved',
-                          'opportunity_cost_gained', 'reduced_emissions', 'reduced_emissions', 'emissions_costs_saved',
+                          'opportunity_cost_gained', 'reduced_emissions', 'emissions_costs_saved',
                           'investment_costs', 'fuel_costs', 'om_costs', 'salvage_value']:
             dff[attribute] *= dff['Households']
         summary = dff.groupby(['max_benefit_tech']).agg({'Calibrated_pop': lambda row: np.nansum(row) / 1000000,
