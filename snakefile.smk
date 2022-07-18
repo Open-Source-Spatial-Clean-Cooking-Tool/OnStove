@@ -1,12 +1,9 @@
 import os
 cwd = os.getcwd()
 
-#SCENARIOS = ['Social_private_benefits', 'Private_benefits']
 SCENARIOS = ['Social_private_benefits', 'Private_benefits']
 # SCENARIOS, = glob_wildcards("../Clean cooking Africa paper/04. OnSSTOVE inputs/LPG International price - Rural-Urban/Scenario_files/{scenario}/BDI_scenario_file.csv")
 RESTRICTION = ['Positive_Benefits']
-
-# COUNTRIES = ['AGO']
 
 COUNTRIES = ['Africa']
 
@@ -17,18 +14,19 @@ COUNTRIES = ['Africa']
              # 'SEN', 'SLE', 'SOM', 'SSD', 'SWZ', 'TCD', 'TGO', 'TZA',
              # 'UGA', 'ZAF', 'ZMB', 'ZWE']
 
+
 # rule all:
 	# input:
 		# expand("../Clean cooking Africa paper/06. Results/LPG International price - Rural-Urban/{country}/{scenario}/{restriction}/results.pkl",
-              	# country=COUNTRIES,
-                	# scenario=SCENARIOS,
-                	# restriction=RESTRICTION)
+               # country=COUNTRIES,
+               # scenario=SCENARIOS,
+               # restriction=RESTRICTION)
 
 rule all:
-       input:
-                expand("../Clean cooking Africa paper/06. Results/LPG International price - Rural-Urban/Africa/{scenario}/{restriction}/results.pkl",
-                        scenario=SCENARIOS,
-                        restriction=RESTRICTION)
+	input:
+		expand("../Clean cooking Africa paper/06. Results/LPG International price - Rural-Urban/Africa/{scenario}/{restriction}/results.pkl",
+				scenario=SCENARIOS,
+				restriction=RESTRICTION)
 
 rule extract_forest:
     input:
@@ -87,7 +85,7 @@ rule process_data:
 rule prepare_model:
    input:
         prep_file = "../Clean cooking Africa paper/04. OnSSTOVE inputs/LPG International price - Rural-Urban/Prep_files/{country}_prep_file.csv",
-        techs_file = r"..\Clean cooking Africa paper\04. OnSSTOVE inputs\LPG International price - Rural-Urban\Technical_specs\{country}_file_tech_specs.csv",
+        techs_file = r"..\Clean cooking Africa paper\04. OnSSTOVE inputs\LPG International price - Rural-Urban\Technical_specs\{scenario}\{country}_file_tech_specs.csv",
         mask_layer = rules.process_data.output.mask_layer,
         population = rules.process_data.output.population,
         ghs = rules.process_data.output.ghs,
@@ -106,10 +104,10 @@ rule prepare_model:
         sheeps = rules.process_data.output.sheeps
    params:
          wealth_index = r"..\Clean cooking Africa paper\01. Data\GIS-data\Poverty\{country}_relative_wealth_index",
-         output_directory = "../Clean cooking Africa paper/06. Results/LPG International price - Rural-Urban/{country}",
+         output_directory = "../Clean cooking Africa paper/06. Results/LPG International price - Rural-Urban/{country}/{scenario}",
          country = "{country}"
    output:
-         model = "../Clean cooking Africa paper/06. Results/LPG International price - Rural-Urban/{country}/model.pkl"
+         model = "../Clean cooking Africa paper/06. Results/LPG International price - Rural-Urban/{country}/{scenario}/model.pkl"
    script:
          "scripts/model_preparation.py"
 
