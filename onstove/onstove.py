@@ -4,6 +4,7 @@ from copy import copy
 import dill
 from csv import DictReader
 
+import numpy as np
 import psycopg2
 import pandas as pd
 import scipy.spatial
@@ -572,6 +573,8 @@ class OnStove(DataProcessor):
                         if 'lpg' in row['Fuel'].lower():
                             techs[row['Fuel']] = LPG()
                         elif 'biomass' in row['Fuel'].lower():
+                            techs[row['Fuel']] = Biomass()
+                        elif 'pellets' in row['Fuel'].lower():
                             techs[row['Fuel']] = Biomass()
                         elif 'charcoal' in row['Fuel'].lower():
                             techs[row['Fuel']] = Charcoal()

@@ -9,18 +9,18 @@ sys.path.append(onstove_path)
 from onstove.layer import VectorLayer
 from onstove.onstove import OnStove
 
-cmap = {"Biomass ICS (Natural Draft)": '#6F4070', "LPG": '#66C5CC', "Biomass": '#FFB6C1',
-        "Biomass ICS (Forced Draft)": '#af04b3', "Biomass ICS (Pellets)": '#ef02f5',
+cmap = {"Biomass ICS (ND)": '#6F4070', "LPG": '#66C5CC', "Biomass": '#FFB6C1',
+        "Biomass ICS (FD)": '#af04b3', "Pellets ICS (FD)": '#ef02f5',
         "Charcoal": '#364135', "Charcoal ICS": '#d4bdc5',
-        "Biogas": '#73AF48', "Biogas and Biomass ICS (Natural Draft)": "#F6029E",
-        "Biogas and Biomass ICS (Forced Draft)": "#F6029E",
-        "Biogas and Biomass ICS (Pellets)": "#F6029E",
+        "Biogas": '#73AF48', "Biogas and Biomass ICS (ND)": "#F6029E",
+        "Biogas and Biomass ICS (FD)": "#F6029E",
+        "Biogas and Pellets ICS (FD)": "#F6029E",
         "Biogas and LPG": "#0F8554", "Biogas and Biomass": "#266AA6",
         "Biogas and Charcoal": "#3B05DF",
         "Biogas and Charcoal ICS": "#3B59DF",
-        "Electricity": '#CC503E', "Electricity and Biomass ICS (Natural Draft)": "#B497E7",
-        "Electricity and Biomass ICS (Forced Draft)": "#B497E7",
-        "Electricity and Biomass ICS (Pellets)": "#B497E7",
+        "Electricity": '#CC503E', "Electricity and Biomass ICS (ND)": "#B497E7",
+        "Electricity and Biomass ICS (FD)": "#B497E7",
+        "Electricity and Pellets ICS (FD)": "#B497E7",
         "Electricity and LPG": "#E17C05", "Electricity and Biomass": "#FFC107",
         "Electricity and Charcoal ICS": "#660000",
         "Electricity and Biogas": "#f97b72",
@@ -28,10 +28,10 @@ cmap = {"Biomass ICS (Natural Draft)": '#6F4070', "LPG": '#66C5CC', "Biomass": '
 
 labels = {"Biogas and Electricity": "Electricity and Biogas",
           'Collected Traditional Biomass': 'Biomass',
-          'Collected Improved Biomass': 'Biomass ICS (Natural Draft)',
+          'Collected Improved Biomass': 'Biomass ICS (ND)',
           'Traditional Charcoal': 'Charcoal',
-          'Biomass Forced Draft': 'Biomass ICS (Forced Draft)',
-          'Pellet': 'Biomass ICS (Pellets)'}
+          'Biomass Forced Draft': 'Biomass ICS (FD)',
+          'Pellets Forced Draft': 'Pellets ICS (FD)'}
 
 df = pd.DataFrame({'country': [], 'Households': [], 'max_benefit_tech': [], 'Calibrated_pop': [],
 				   'maximum_net_benefit': [], 'deaths_avoided': [], 'health_costs_avoided': [],

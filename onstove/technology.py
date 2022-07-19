@@ -424,14 +424,13 @@ class Technology:
         discounted salvage cost
         """
         discount_rate, proj_life = self.discount_factor(model.specs)
-        salvage = np.zeros(proj_life)
         used_life = proj_life % self.tech_life
         used_life_base = proj_life % model.base_fuel.tech_life
 
         base_salvage = model.base_fuel.inv_cost * (1 - used_life_base / model.base_fuel.tech_life)
-        salvage[-1] = self.inv_cost * (1 - used_life / self.tech_life)
+        salvage = self.inv_cost * (1 - used_life / self.tech_life)
 
-        salvage = salvage.sum() - base_salvage
+        salvage = salvage - base_salvage
         # TODO: this needs to be changed to use a series for each salvage value
         discounted_salvage = salvage / discount_rate
 
@@ -666,7 +665,7 @@ class LPG(Technology):
 
 class Biomass(Technology):
     """
-    LPG technology class. Inherits all functionality from the standard
+    Biomass technology class. Inherits all functionality from the standard
     Technology class
     """
     def __init__(self,
@@ -689,7 +688,9 @@ class Biomass(Technology):
                  forest_path=None,
                  friction_path=None,
                  travel_time=None,
-                 collection_capacity=25):
+                 collection_capacity=25,
+                 collected_fuel=True,
+                 draft_type='natural'):
         super().__init__(name, carbon_intensity, co2_intensity, ch4_intensity,
                          n2o_intensity, co_intensity, bc_intensity, oc_intensity,
                          energy_content, tech_life,
@@ -700,6 +701,19 @@ class Biomass(Technology):
         self.forest_path = forest_path
         self.friction_path = friction_path
         self.collection_capacity = collection_capacity
+        self.draft_type = draft_type
+        self.collected_fuel = collected_fuel
+        self.solar_panel_adjusted = False
+
+    def __setitem__(self, idx, value):
+        if 'collection_capacity' in idx:
+            self.collection_capacity = value
+        elif 'collected_fuel' in idx:
+            self.collected_fuel = value
+        elif 'draft_type' in idx:
+            self.draft_type = value
+        else:
+            super().__setitem__(idx, value)
 
     def transportation_time(self, friction_path, forest_path, model, align=False):
         forest = RasterLayer(self.name, 'Forest', layer_path=forest_path, resample='mode')
@@ -719,10 +733,13 @@ class Biomass(Technology):
         self.travel_time = travel_time
 
     def total_time(self, model):
-        self.transportation_time(self.friction_path, self.forest_path, model)
-        self.trips_per_yr = self.energy / (self.collection_capacity * self.energy_content)
-        self.total_time_yr = self.time_of_cooking * 365 + \
-                             (self.travel_time + self.time_of_collection) * self.trips_per_yr
+        if self.collected_fuel:
+            self.transportation_time(self.friction_path, self.forest_path, model)
+            self.trips_per_yr = self.energy / (self.collection_capacity * self.energy_content)
+            self.total_time_yr = self.time_of_cooking * 365 + \
+                                 (self.travel_time + self.time_of_collection) * self.trips_per_yr
+        else:
+            super().total_time(model)
 
     def get_carbon_intensity(self, model):
         intensity = self['co2_intensity']
@@ -730,6 +747,19 @@ class Biomass(Technology):
         super().get_carbon_intensity(model)
         self['co2_intensity'] = intensity
 
+    def solar_panel_investment(self, model):
+        if not self.solar_panel_adjusted:
+            solar_panel_cost = 7.5  # Based on a cost of 1.25 USD per watt
+            is_electrified = model.gdf['Elec_pop_calib'] > 0
+            inv_cost = pd.Series(np.ones(model.gdf.shape[0]) * self.inv_cost, index=model.gdf.index)
+            inv_cost[~is_electrified] += solar_panel_cost
+            self.inv_cost = inv_cost
+            self.solar_panel_adjusted = True  # This is to prevent to adjust the capital cost more than once
+
+    def discounted_inv(self, model, relative=True):
+        if self.draft_type.lower().replace('_', ' ') in ['forced', 'forced draft']:
+            self.solar_panel_investment(model)
+        super().discounted_inv(model, relative=relative)
 
 class Charcoal(Technology):
     def __init__(self,
@@ -784,7 +814,7 @@ class Charcoal(Technology):
 
 class Electricity(Technology):
     """
-    LPG technology class. Inherits all functionality from the standard
+    Electricity technology class. Inherits all functionality from the standard
     Technology class
     """
 
@@ -921,7 +951,7 @@ class Electricity(Technology):
 
 class Biogas(Technology):
     """
-    LPG technology class. Inherits all functionality from the standard
+    Biogas technology class. Inherits all functionality from the standard
     Technology class
     """
     def __init__(self,
