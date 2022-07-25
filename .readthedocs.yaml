@@ -1,0 +1,21 @@
+channels:
+  - bioconda
+  - jmcmurray
+  - conda-forge
+  - defaults
+dependencies:
+  - contextily
+  - dill
+  - gdal
+  - geopandas
+  - matplotlib
+  - numpydoc
+  - plotnine
+  - psycopg2
+  - psutil
+  - pydata-sphinx-theme
+  - python-decouple
+  - rasterio
+  - rasterstats
+  - scikit-learn
+  - scikit-image
