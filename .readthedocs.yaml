@@ -1,21 +1,5 @@
-channels:
-  - bioconda
-  - jmcmurray
-  - conda-forge
-  - defaults
-dependencies:
-  - contextily
-  - dill
-  - gdal
-  - geopandas
-  - matplotlib
-  - numpydoc
-  - plotnine
-  - psycopg2
-  - psutil
-  - pydata-sphinx-theme
-  - python-decouple
-  - rasterio
-  - rasterstats
-  - scikit-learn
-  - scikit-image
+python:
+  version: 3
+  pip_install: true
+conda:
+  file: readthedocs_env.yaml
