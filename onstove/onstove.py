@@ -410,7 +410,7 @@ class OnStove(DataProcessor):
         self.rows = None
         self.cols = None
         self.specs = None
-        self.techs = None
+        self.techs = {}
         self.base_fuel = None
         self.i = {}
         self.energy_per_meal = 3.64  # MJ

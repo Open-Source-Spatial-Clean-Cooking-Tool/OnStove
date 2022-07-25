@@ -749,6 +749,31 @@ class Biomass(Technology):
     forest_condition: Callable object (function or lambda function) with a numpy array as input, optional
         Function or lambda function describing which forest canopy cover to consider when assessing the potential
         points for biomass collection.
+
+    Examples
+    --------
+    An OnStove Biomass class can be created by providing the technology input data on an `csv` file and calling the
+    :meth:`read_tech_data<onstove.onstove.OnStove.read_tech_data>` method of the
+    :class:`OnStove<onstove.onstove.OnStove>` class, or by passing all technology information in the script.
+
+    Creating the technologies from a `csv` configuration file (see *link to examples or mendeley* for a example of the
+    configuration file):
+
+    >>> from onstove.onstove import OnStove
+    ... model = OnStove(output_directory='output_directory')
+    ... mode.read_tech_data(path_to_config='path_to_csv_file', delimiter=',')
+    ... model.techs
+    {'Biomass': {'Biomass': <onstove.technology.Biomass at 0x2478e85ee80>}}
+
+    Creating a Biomass technology in the script:
+
+    >>> from onstove.onstove import OnStove
+    ... from onstove.technology import Biomass
+    ... model = OnStove(output_directory='output_directory')
+    ... biomass = Biomass(name='Biomass')  # we define the name and leave all other parameters with the default values
+    ... model.techs['Biomass'] = biomass
+    ... model.techs
+    {'Biomass': {'Biomass': <onstove.technology.Biomass at 0x2478e85ee80>}}
     """
 
     forest: Optional[RasterLayer] = None
