@@ -1,2 +1,15 @@
+contextily
+dill
+geopandas==0.10.0
+matplotlib
 numpydoc
+pandas>=1.4.1
+plotnine
+psycopg2
+psutil
 pydata-sphinx-theme
+python-decouple
+rasterio==1.2.9
+rasterstats
+scikit-learn
+scikit-image
