@@ -31,6 +31,7 @@ Clean cooking is defined as fuels and stove combinations meeting the standards s
    modules
    license
 
+
 Indices and tables
 ==================
 
