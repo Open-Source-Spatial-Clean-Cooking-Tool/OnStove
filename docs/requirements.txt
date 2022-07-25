@@ -1,5 +1,6 @@
 contextily
 dill
+gdal
 geopandas
 matplotlib
 numpydoc
@@ -9,7 +10,6 @@ psycopg2
 psutil
 pydata-sphinx-theme
 python-decouple
-osgeo
 rasterio
 rasterstats
 scikit-learn
