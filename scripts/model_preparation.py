@@ -102,6 +102,10 @@ model.techs['Collected_Improved_Biomass'].friction_path = snakemake.input.biomas
 model.techs['Collected_Improved_Biomass'].forest_path = snakemake.input.forest
 model.techs['Collected_Improved_Biomass'].forest_condition = lambda x: x > 0
 
+model.techs['Biomass Forced Draft'].friction_path = snakemake.input.biomass_friction
+model.techs['Biomass Forced Draft'].forest_path = snakemake.input.forest
+model.techs['Biomass Forced Draft'].forest_condition = lambda x: x > 0
+
 # 15. Adding GIS data for Improved Biomass collected (ICS biomass)
 if 'Biogas' in model.techs.keys():
     # TODO: Need to finish this, add livestock data
