@@ -4,6 +4,7 @@ from copy import copy
 import dill
 from csv import DictReader
 
+import numpy as np
 import psycopg2
 import pandas as pd
 import scipy.spatial
@@ -409,7 +410,7 @@ class OnStove(DataProcessor):
         self.rows = None
         self.cols = None
         self.specs = None
-        self.techs = None
+        self.techs = {}
         self.base_fuel = None
         self.i = {}
         self.energy_per_meal = 3.64  # MJ
@@ -459,6 +460,34 @@ class OnStove(DataProcessor):
             self.specs = config
         else:
             self.specs.update(config)
+    
+    def techshare_sumtoone(self):
+        """This function checks if the sum of shares in the technology dictionary is 1.0.
+
+        If it is not, it will adjust the shares to make the sum 1.0.
+
+        Parameters
+        ---------
+        techshare_dict : dictionary
+            The original dictionary of technology shares
+
+        Returns
+        -------
+        techshare_dict : dictionary
+            The updated dictionary of technology shares
+        """
+        sharesumrural = sum(item['current_share_rural'] for item in self.techs.values())
+
+        if sharesumrural != 1:
+            for item in self.techs.values():
+                item.current_share_rural = item.current_share_rural/sharesumrural
+
+        sharesumurban = sum(item['current_share_urban'] for item in self.techs.values())
+        
+        if sharesumurban != 1:
+            for item in self.techs.values():
+                item.current_share_urban = item.current_share_urban/sharesumurban
+       
 
     def set_base_fuel(self, techs: list = None):
         """
@@ -544,6 +573,8 @@ class OnStove(DataProcessor):
                         if 'lpg' in row['Fuel'].lower():
                             techs[row['Fuel']] = LPG()
                         elif 'biomass' in row['Fuel'].lower():
+                            techs[row['Fuel']] = Biomass()
+                        elif 'pellets' in row['Fuel'].lower():
                             techs[row['Fuel']] = Biomass()
                         elif 'charcoal' in row['Fuel'].lower():
                             techs[row['Fuel']] = Charcoal()
@@ -744,7 +775,7 @@ class OnStove(DataProcessor):
         self.raster_to_dataframe(GHS_path, name="IsUrban", method='sample')
 
         if self.specs["End_year"] > self.specs["Start_year"]:
-            population_current = self.specs["Population_end_year"]
+            population_current = self.specs["Population_start_year"]
             urban_current = self.specs["Urban_start"] * population_current
             rural_current = population_current - urban_current
 
@@ -752,8 +783,8 @@ class OnStove(DataProcessor):
             urban_future = self.specs["Urban_end"] * population_future
             rural_future = population_future - urban_future
 
-            rural_growth = (rural_future - rural_current) / (self.specs["End_Year"] - self.specs["Start_Year"])
-            urban_growth = (urban_future - urban_current) / (self.specs["End_Year"] - self.specs["Start_Year"])
+            rural_growth = (rural_future - rural_current) / (self.specs["End_year"] - self.specs["Start_year"])
+            urban_growth = (urban_future - urban_current) / (self.specs["End_year"] - self.specs["Start_year"])
 
             self.gdf.loc[self.gdf['IsUrban'] > 20, 'Pop_future'] = self.gdf["Calibrated_pop"] * urban_growth
             self.gdf.loc[self.gdf['IsUrban'] < 20, 'Pop_future'] = self.gdf["Calibrated_pop"] * rural_growth
@@ -1095,10 +1126,12 @@ class OnStove(DataProcessor):
         else:
             raise ValueError("file_type needs to be either csv, raster, polygon or point.")
 
-    def re_name(self, df, labels, variable):
+    @staticmethod
+    def re_name(df, labels, variable):
         for value, label in labels.items():
             df[variable] = df[variable].str.replace('_', ' ')
             df.loc[df[variable] == value, variable] = label
+        return df
 
     def points_to_raster(self, dff, variable, dtype=rasterio.uint8, nodata=111):
         total_bounds = self.mask_layer.layer['geometry'].total_bounds
@@ -1134,11 +1167,14 @@ class OnStove(DataProcessor):
 
         if isinstance(self.gdf[variable].iloc[0], str):
             if isinstance(labels, dict):
-                self.re_name(dff, labels, variable)
+                dff = self.re_name(dff, labels, variable)
             dff[variable] += ' and '
             dff = dff.groupby('index').agg({variable: 'sum', 'geometry': 'first'})
             dff[variable] = [s[0:len(s) - 5] for s in dff[variable]]
+            if isinstance(labels, dict):
+                dff = self.re_name(dff, labels, variable)
             codes = {tech: i for i, tech in enumerate(dff[variable].unique())}
+			
             if isinstance(cmap, dict):
                 cmap = {i: cmap[tech] for i, tech in enumerate(dff[variable].unique())}
 
@@ -1239,12 +1275,12 @@ class OnStove(DataProcessor):
 
         deaths_avoided = summary.loc['total', 'deaths_avoided']
         health_costs_avoided = summary.loc['total', 'health_costs_avoided'] / 1000
-        reduced_emissions = summary.loc['total', 'reduced_emissions'] / 1000
+        reduced_emissions = summary.loc['total', 'reduced_emissions']
         time_saved = summary.loc['total', 'time_saved']
 
         deaths = TextArea(f"{deaths_avoided:,.0f} pp/yr", textprops=dict(fontsize=fontsize, color='black'))
         health = TextArea(f"{health_costs_avoided:,.2f} BUSD", textprops=dict(fontsize=fontsize, color='black'))
-        emissions = TextArea(f"{reduced_emissions:,.2f} Bton", textprops=dict(fontsize=fontsize, color='black'))
+        emissions = TextArea(f"{reduced_emissions:,.2f} Mton", textprops=dict(fontsize=fontsize, color='black'))
         time = TextArea(f"{time_saved:,.2f} h/hh.day", textprops=dict(fontsize=fontsize, color='black'))
 
         values_vbox = VPacker(children=[deaths, health, emissions, time], pad=0, sep=6, align='right')
@@ -1291,9 +1327,9 @@ class OnStove(DataProcessor):
     def summary(self, total=True, pretty=True, labels=None):
         dff = self.gdf.copy()
         if labels is not None:
-            self.re_name(dff, labels, 'max_benefit_tech')
+            dff = self.re_name(dff, labels, 'max_benefit_tech')
         for attribute in ['maximum_net_benefit', 'deaths_avoided', 'health_costs_avoided', 'time_saved',
-                          'opportunity_cost_gained', 'reduced_emissions', 'reduced_emissions', 'emissions_costs_saved',
+                          'opportunity_cost_gained', 'reduced_emissions', 'emissions_costs_saved',
                           'investment_costs', 'fuel_costs', 'om_costs', 'salvage_value']:
             dff[attribute] *= dff['Households']
         summary = dff.groupby(['max_benefit_tech']).agg({'Calibrated_pop': lambda row: np.nansum(row) / 1000000,
@@ -1505,19 +1541,19 @@ class OnStove(DataProcessor):
                                                                         'Households',
                                                                         'Calibrated_pop']].sum()
                 df.reset_index(inplace=True)
-                self.re_name(df, labels, 'max_benefit_tech')
+                df = self.re_name(df, labels, 'max_benefit_tech')
                 tech_list = df.groupby('max_benefit_tech')[['Calibrated_pop']].sum()
                 tech_list = tech_list.reset_index().sort_values('Calibrated_pop')['max_benefit_tech'].tolist()
                 x = 'max_benefit_tech'
             elif groupby.lower() == 'urbanrural':
                 df = self.gdf.copy()
-                self.re_name(df, labels, 'max_benefit_tech')
+                df = self.re_name(df, labels, 'max_benefit_tech')
                 df['Urban'] = df['IsUrban'] > 20
                 df['Urban'].replace({True: 'Urban', False: 'Rural'}, inplace=True)
                 x = 'Urban'
             else:
                 df = self.gdf.copy()
-                self.re_name(df, labels, 'max_benefit_tech')
+                df = self.re_name(df, labels, 'max_benefit_tech')
                 tech_list = df.groupby('max_benefit_tech')[['Calibrated_pop']].sum()
                 tech_list = tech_list.reset_index().sort_values('Calibrated_pop')['max_benefit_tech'].tolist()
                 x = 'max_benefit_tech'
@@ -1553,7 +1589,7 @@ class OnStove(DataProcessor):
                                                                     'Households',
                                                                     'Calibrated_pop']].sum()
             df.reset_index(inplace=True)
-            self.re_name(df, labels, 'max_benefit_tech')
+            df = self.re_name(df, labels, 'max_benefit_tech')
             p = (ggplot(df)
                  + geom_density(aes(
                         x='(health_costs_avoided + opportunity_cost_gained + emissions_costs_saved' +

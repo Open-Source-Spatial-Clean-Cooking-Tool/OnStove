@@ -1,0 +1,16 @@
+contextily
+dill
+gdal
+geopandas
+matplotlib
+numpydoc
+pandas
+plotnine
+psycopg2
+psutil
+pydata-sphinx-theme
+python-decouple
+rasterio
+rasterstats
+scikit-learn
+scikit-image

@@ -25,7 +25,9 @@ def try_import():
         time.sleep(1)
         return try_import()
 
+
 MCP_Geometric = try_import()
+
 
 class Layer:
     """
@@ -73,7 +75,7 @@ class Layer:
         row, col = self.start_points(condition=condition)
         pointlist = np.column_stack((row, col))
         # TODO: create method for restricted areas
-        if len(pointlist)>0:
+        if len(pointlist) > 0:
             cumulative_costs, traceback = mcp.find_costs(starts=pointlist)
             cumulative_costs[np.where(cumulative_costs == float('inf'))] = np.nan
         else:
@@ -90,6 +92,7 @@ class Layer:
         self.distance_raster.bounds = self.friction.bounds
         if output_path:
             self.distance_raster.save(output_path)
+
 
 class VectorLayer(Layer):
     """
@@ -428,8 +431,8 @@ class RasterLayer(Layer):
     def polygonize(self, mask=None):
         results = (
             {'properties': {'raster_val': v}, 'geometry': s}
-             for i, (s, v)
-             in enumerate(features.shapes(self.layer, transform=self.meta['transform'])))
+            for i, (s, v)
+            in enumerate(features.shapes(self.layer, transform=self.meta['transform'])))
 
         geoms = list(results)
         polygon = gpd.GeoDataFrame.from_features(geoms)
@@ -644,4 +647,4 @@ class RasterLayer(Layer):
 </StyledLayerDescriptor>
 """
         with open(os.path.join(output_path, f'{self.name}.sld'), 'w') as f:
-             f.write(string)
+            f.write(string)

@@ -1,4 +1,7 @@
+"""This module contains the technology classes used in OnStove."""
+
 from time import time
+from typing import Optional, Callable
 
 import numpy as np
 import pandas as pd
@@ -7,6 +10,7 @@ import os
 from math import exp
 
 from .layer import VectorLayer, RasterLayer
+import onstove.onstove
 
 
 def timeit(func):
@@ -26,6 +30,7 @@ class Technology:
     """
     Standard technology class.
     """
+
     def __init__(self,
                  name=None,
                  carbon_intensity=None,
@@ -424,14 +429,13 @@ class Technology:
         discounted salvage cost
         """
         discount_rate, proj_life = self.discount_factor(model.specs)
-        salvage = np.zeros(proj_life)
         used_life = proj_life % self.tech_life
         used_life_base = proj_life % model.base_fuel.tech_life
 
         base_salvage = model.base_fuel.inv_cost * (1 - used_life_base / model.base_fuel.tech_life)
-        salvage[-1] = self.inv_cost * (1 - used_life / self.tech_life)
+        salvage = self.inv_cost * (1 - used_life / self.tech_life)
 
-        salvage = salvage.sum() - base_salvage
+        salvage = salvage - base_salvage
         # TODO: this needs to be changed to use a series for each salvage value
         discounted_salvage = salvage / discount_rate
 
@@ -533,6 +537,7 @@ class LPG(Technology):
     LPG technology class. Inherits all functionality from the standard
     Technology class
     """
+
     def __init__(self,
                  name=None,
                  carbon_intensity=None,  # Kg/GJ
@@ -620,12 +625,14 @@ class LPG(Technology):
         super().discount_fuel_cost(model, relative)
 
     def transport_emissions(self, model):
-        """
-        Diesel consumption per h is assumed to be 14 l/h (14 l/100km)
+        """Diesel consumption per h is assumed to be 14 l/h (14 l/100km)
+
         Emissions intensities and diesel density are taken from:
+
             Ntziachristos, L. and Z. Samaras (2018), “1.A.3.b.i, 1.A.3.b.ii, 1.A.3.b.iii, 1.A.3.b.iv Passenger cars,
             light commercial trucks, heavy-duty vehicles including buses and motor cycles”, in EMEP/EEA air pollutant
             emission inventory guidebook 2016 – Update Jul. 2018
+
         Each truck is assumed to transport 2,000 kg LPG
         """
         diesel_density = 840  # kg/m3
@@ -665,70 +672,285 @@ class LPG(Technology):
 
 
 class Biomass(Technology):
+    """Biomass technology class used to model traditional and improved stoves.
+
+    This class inherits the standard :class:`Technology` class and is used to model traditional and Improved Cook
+    Stoves (ICS) using biomass as fuel. The biomass can be either collected or purchased, which is indicated with the
+    attribute ``collected_fuel``. Depending on the biomass type (e.g. fuelwood or pellets), the parameters passed to
+    the class such as efficiency, energy content, pm25 and emissions need to be representative of the fuel-stove.
+    Moreover, the ICS can be modelled as natural draft or forced draft options by specifying it with the
+    ``draft_type`` attribute. If forced draft is used, then the class will consider and extra capital cost for a
+    standard 6 watt solar panel in order to run the fan in unelectrified areas.
+
+    Attributes
+    ----------
+    forest: object of type RasterLayer, optional
+        This is the forest cover raster dataset read from the ``forest_path`` parameter. See the
+        :class:`onstove.layer.RasterLayer` class for more information.
+    friction: str, optional
+        This is the forest cover raster dataset read from the ``friction_path``.
+    trips_per_yr: float
+        The trips that a person per household needs to do to the nearest forest point, in order to collect the amount
+        of biomass required for cooking in one year.
+
+    Parameters
+    ----------
+    name: str, optional.
+        Name of the technology to model.
+    carbon_intensity: float, optional
+        The CO2 equivalent emissions in kg/GJ of burned fuel. If this attribute is used, then none of the
+        gas-specific
+        intensities will be used (e.g. ch4_intensity).
+    co2_intensity: float, default 112
+        The CO2 emissions in kg/GJ of burned fuel.
+    ch4_intensity: float, default 0.864
+        The CH4 emissions in kg/GJ of burned fuel.
+    n2o_intensity: float, default 0.0039
+        The N2O emissions in kg/GJ of burned fuel.
+    co_intensity: float, default 0
+        The CO emissions in kg/GJ of burned fuel.
+    bc_intensity: float, default 0.1075
+        The black carbon emissions in kg/GJ of burned fuel.
+    oc_intensity: float, default 0.308
+        The organic carbon emissions in kg/GJ of burned fuel.
+    energy_content: float, default 16
+        Energy content of the fuel in MJ/Kg.
+    tech_life: int, default 2
+        Technology life in year.
+    inv_cost: float, default 0
+        Investment cost of the stove in USD.
+    fuel_cost: float, default 0
+        Fuel cost in USD/Kg if any.
+    time_of_cooking: float, default 2.9
+        Daily average time spent for cooking with this stove in hours.
+    om_cost: float, default 0
+        Operation and maintenance cost in USD/year.
+    efficiency: float, default 0.12
+        Efficiency of the stove.
+    pm25: float, default 844
+        Particulate Matter emissions (PM25) in mg/Kg of fuel.
+    forest_path: str, optional
+        Path to the forest cover raster file.
+    friction_path: str, optional
+        Path to the friction raster file describing the time needed (in minutes) to travel one meter within each
+        cell.
+    travel_time: Pandas Series, optional
+        Pandas Series describing the time needed (in hours) to reach the closest forest cover point from each
+        population point. It is calculated using the forest cover, friction layer and population density layer.
+    collection_capacity: float, default 25
+        Average wood collection capacity per person in Kg/trip.
+    collected_fuel: bool, default True
+        Boolean indicating if the fuel is collected or purchased. If True, then the ``travel_time`` will be
+        calculated. If False, the ``fuel_cost`` will be used and a travel and collection time disregarded.
+    time_of_collection: float, default 2
+        Time spend collecting biomass on a single trip (excluding travel time) in hours.
+    draft_type: str, default 'natural'
+        Whether the ICS uses a natural draft or a forced draft.
+    forest_condition: Callable object (function or lambda function) with a numpy array as input, optional
+        Function or lambda function describing which forest canopy cover to consider when assessing the potential
+        points for biomass collection.
+
+    Examples
+    --------
+    An OnStove Biomass class can be created by providing the technology input data on an `csv` file and calling the
+    :meth:`read_tech_data<onstove.onstove.OnStove.read_tech_data>` method of the
+    :class:`OnStove<onstove.onstove.OnStove>` class, or by passing all technology information in the script.
+
+    Creating the technologies from a `csv` configuration file (see *link to examples or mendeley* for a example of the
+    configuration file):
+
+    >>> from onstove.onstove import OnStove
+    ... model = OnStove(output_directory='output_directory')
+    ... mode.read_tech_data(path_to_config='path_to_csv_file', delimiter=',')
+    ... model.techs
+    {'Biomass': {'Biomass': <onstove.technology.Biomass at 0x2478e85ee80>}}
+
+    Creating a Biomass technology in the script:
+
+    >>> from onstove.onstove import OnStove
+    ... from onstove.technology import Biomass
+    ... model = OnStove(output_directory='output_directory')
+    ... biomass = Biomass(name='Biomass')  # we define the name and leave all other parameters with the default values
+    ... model.techs['Biomass'] = biomass
+    ... model.techs
+    {'Biomass': {'Biomass': <onstove.technology.Biomass at 0x2478e85ee80>}}
     """
-    LPG technology class. Inherits all functionality from the standard
-    Technology class
-    """
+
+    forest: Optional[RasterLayer] = None
+    friction: Optional[RasterLayer] = None
+    trips_per_yr: float = 0.0
+
     def __init__(self,
-                 name=None,
-                 carbon_intensity=None,
-                 co2_intensity=112,
-                 ch4_intensity=0.864,
-                 n2o_intensity=0.0039,
-                 co_intensity=0,
-                 bc_intensity=0.1075,
-                 oc_intensity=0.308,
-                 energy_content=0,
-                 tech_life=0,  # in years
-                 inv_cost=0,  # in USD
-                 fuel_cost=0,
-                 time_of_cooking=0,
-                 om_cost=0,  # percentage of investement cost
-                 efficiency=0,  # ratio
-                 pm25=844,
-                 forest_path=None,
-                 friction_path=None,
-                 travel_time=None,
-                 collection_capacity=25):
+                 name: Optional[str] = None,
+                 carbon_intensity: Optional[float] = None,
+                 co2_intensity: float = 112,
+                 ch4_intensity: float = 0.864,
+                 n2o_intensity: float = 0.0039,
+                 co_intensity: float = 0,
+                 bc_intensity: float = 0.1075,
+                 oc_intensity: float = 0.308,
+                 energy_content: float = 16,
+                 tech_life: int = 2,
+                 inv_cost: float = 0,
+                 fuel_cost: float = 0,
+                 time_of_cooking: float = 2.9,
+                 om_cost: float = 0,
+                 efficiency: float = 0.12,
+                 pm25: float = 844,
+                 forest_path: Optional[str] = None,
+                 friction_path: Optional[str] = None,
+                 travel_time: Optional[pd.Series] = None,
+                 collection_capacity: float = 25,
+                 collected_fuel: bool = True,
+                 time_of_collection: float = 2,
+                 draft_type: str = 'natural',
+                 forest_condition: Optional[Callable[[np.ndarray], np.ndarray]] = None):
+        """Instantiates the class either with default or user defined values for each class attribute.
+        """
         super().__init__(name, carbon_intensity, co2_intensity, ch4_intensity,
                          n2o_intensity, co_intensity, bc_intensity, oc_intensity,
                          energy_content, tech_life,
                          inv_cost, fuel_cost, time_of_cooking,
                          om_cost, efficiency, pm25, is_clean=False)
-        self.forest_condition = None
+
+        self.forest_condition = forest_condition
         self.travel_time = travel_time
         self.forest_path = forest_path
         self.friction_path = friction_path
         self.collection_capacity = collection_capacity
+        self.draft_type = draft_type
+        self.collected_fuel = collected_fuel
+        self.time_of_collection = time_of_collection
+        self._solar_panel_adjusted: bool = False  #: boolean check to avoid adding the solar panel cost twice
 
-    def transportation_time(self, friction_path, forest_path, model, align=False):
-        forest = RasterLayer(self.name, 'Forest', layer_path=forest_path, resample='mode')
-        friction = RasterLayer(self.name, 'Friction', layer_path=friction_path, resample='average')
+    def __setitem__(self, idx, value):
+        self.__dict__[idx] = value
+
+    def transportation_time(self, friction_path: str, forest_path: str, model: 'onstove.onstove.OnStove', align: bool = False):
+        """This method calculates the travel time needed to gather biomass.
+
+        The travel time is calculated as the time needed (in hours) to reach the closest forest cover point from each
+        population point. It uses a forest cover layer, a friction layer and population density layer.
+
+        Parameters
+        ----------
+        friction_path: str
+            Path to the friction raster file describing the time needed (in minutes) to travel one meter within each
+            cell.
+        forest_path: str
+            Path to the forest cover raster file.
+        model: OnStove model
+            Instance of the OnStove model containing the main data of the study case. See
+            :class:`onstove.onstove.OnStove`.
+        align: bool, default False
+            Boolean parameter to indicate if the forest cover and friction layers need to be align with the population
+            data in the `model`.
+        """
+        self.forest = RasterLayer(self.name, 'Forest', layer_path=forest_path, resample='mode')
+        self.friction = RasterLayer(self.name, 'Friction', layer_path=friction_path, resample='average')
 
         if align:
-            forest.align(model.base_layer.path, os.path.join(model.output_directory, self.name, 'Forest'))
-            friction.align(model.base_layer.path, os.path.join(model.output_directory, self.name, 'Friction'))
+            self.forest.align(model.base_layer.path, os.path.join(model.output_directory, self.name, 'Forest'))
+            self.friction.align(model.base_layer.path, os.path.join(model.output_directory, self.name, 'Friction'))
 
-        forest.add_friction_raster(friction)
-        forest.travel_time(condition=self.forest_condition)
+        self.forest.add_friction_raster(self.friction)
+        self.forest.travel_time(condition=self.forest_condition)
 
-        travel_time = 2 * model.raster_to_dataframe(forest.distance_raster.layer,
-                                                         nodata=forest.distance_raster.meta['nodata'],
-                                                         fill_nodata='interpolate', method='read')
+        travel_time = 2 * model.raster_to_dataframe(self.forest.distance_raster.layer,
+                                                    nodata=self.forest.distance_raster.meta['nodata'],
+                                                    fill_nodata='interpolate', method='read')
         travel_time[travel_time > 7] = 7  # cap to max travel time based on literature
         self.travel_time = travel_time
 
-    def total_time(self, model):
-        self.transportation_time(self.friction_path, self.forest_path, model)
-        self.trips_per_yr = self.energy / (self.collection_capacity * self.energy_content)
-        self.total_time_yr = self.time_of_cooking * 365 + \
-                             (self.travel_time + self.time_of_collection) * self.trips_per_yr
+    def total_time(self, model: 'onstove.onstove.OnStove'):
+        """This method expands :meth:`Technology.total_time` when biomass is collected.
 
-    def get_carbon_intensity(self, model):
+        It calculates the time needed for collecting biomass, based on the ``collection_capacity`` the
+        ``energy_content`` of the fuel, the ``energy`` required for cooking a standard meal and the travel time to
+        the nearest forest area.
+
+        Parameters
+        ----------
+        model: OnStove model
+            Instance of the OnStove model containing the main data of the study case. See
+            :class:`onstove.onstove.OnStove`.
+        """
+        if self.collected_fuel:
+            self.transportation_time(self.friction_path, self.forest_path, model)
+            self.trips_per_yr = self.energy / (self.collection_capacity * self.energy_content)
+            self.total_time_yr = self.time_of_cooking * 365 + \
+                                 (self.travel_time + self.time_of_collection) * self.trips_per_yr
+        else:
+            self.time_of_collection = 0
+            super().total_time(model)
+
+    def get_carbon_intensity(self, model: 'onstove.onstove.OnStove'):
+        """This method expands :meth:`Technology.get_carbon_intensity`.
+
+        It excludes the CO2 emissions from the share of firewood that is sustainably harvested (i.e. it does not affect
+        other emissions such as CH4) by using the fraction of Non-Renewable Biomass (fNRB).
+
+        Parameters
+        ----------
+        model: OnStove model
+            Instance of the OnStove model containing the main data of the study case. See
+            :class:`onstove.onstove.OnStove`.
+
+        Notes
+        -----
+        For more information about fNRB see [1]_.
+
+        References
+        ----------
+        .. [1] R. Bailis, R. Drigo, A. Ghilardi, O. Masera, The carbon footprint of traditional woodfuels,
+           Nature Clim Change. 5 (2015) 266–272. https://doi.org/10.1038/nclimate2491.
+        """
         intensity = self['co2_intensity']
         self['co2_intensity'] *= model.specs['fnrb']
         super().get_carbon_intensity(model)
         self['co2_intensity'] = intensity
+
+    def solar_panel_investment(self, model: 'onstove.onstove.OnStove'):
+        """This method adds the cost of a solar panel to unelectrified areas.
+
+        The stove can be modelled a ICS with natural draft or forced draft. This is achieved by specifying the
+        ``draft_type`` attribute of the class. If forced draft is used, then the class will consider and extra capital
+        cost for a standard 6 watt solar panel in order to run the fan in unelectrified areas. The cost used for the
+        panel is 1.25 USD per watt.
+
+        Parameters
+        ----------
+        model: OnStove model
+            Instance of the OnStove model containing the main data of the study case. See
+            :class:`onstove.onstove.OnStove`.
+        """
+        if not self._solar_panel_adjusted:
+            solar_panel_cost = 7.5  # Based on a cost of 1.25 USD per watt
+            is_electrified = model.gdf['Elec_pop_calib'] > 0
+            inv_cost = pd.Series(np.ones(model.gdf.shape[0]) * self.inv_cost, index=model.gdf.index)
+            inv_cost[~is_electrified] += solar_panel_cost
+            self.inv_cost = inv_cost
+            self._solar_panel_adjusted = True  # This is to prevent to adjust the capital cost more than once
+
+    def discounted_inv(self, model: 'onstove.onstove.OnStove', relative: bool = True):
+        """This method expands :meth:`Technology.discounted_inv` by adding the solar panel cost in unlectrified areas.
+
+        Parameters
+        ----------
+        model: OnStove model
+            Instance of the OnStove model containing the main data of the study case. See
+            :class:`onstove.onstove.OnStove`.
+        relative: bool, default True
+            Boolean parameter to indicate if the discounted investments will be calculated relative to the `base_fuel`
+            or not.
+
+        See also
+        --------
+        solar_panel_investment
+        """
+        if self.draft_type.lower().replace('_', ' ') in ['forced', 'forced draft']:
+            self.solar_panel_investment(model)
+        super().discounted_inv(model, relative=relative)
 
 
 class Charcoal(Technology):
@@ -762,9 +984,10 @@ class Charcoal(Technology):
         self['co2_intensity'] = intensity
 
     def production_emissions(self, model):
-        """
-        Charcoal production emissioons calculations.
+        """Charcoal production emissioons calculations.
+
         Emissions factors are taken from:
+
             Akagi, S. K., Yokelson, R. J., Wiedinmyer, C., Alvarado, M. J., Reid, J. S., Karl, T., Crounse, J. D.,
             & Wennberg, P. O. (2010). Emission factors for open and domestic biomass burning for use in atmospheric
             models. Atmospheric Chemistry and Physics Discussions. 10: 27523–27602., 27523–27602.
@@ -784,7 +1007,7 @@ class Charcoal(Technology):
 
 class Electricity(Technology):
     """
-    LPG technology class. Inherits all functionality from the standard
+    Electricity technology class. Inherits all functionality from the standard
     Technology class
     """
 
@@ -921,9 +1144,10 @@ class Electricity(Technology):
 
 class Biogas(Technology):
     """
-    LPG technology class. Inherits all functionality from the standard
+    Biogas technology class. Inherits all functionality from the standard
     Technology class
     """
+
     def __init__(self,
                  name=None,
                  carbon_intensity=None,
@@ -981,6 +1205,9 @@ class Biogas(Technology):
         # Caluclates the daily time of collection based on friction (hour/meter), the available biogas energy from
         # each cell (MJ/yr/meter, 1000000 represents meters per km2) and the required energy per household (MJ/yr)
         time_of_collection = required_energy_hh * friction / (model.gdf["biogas_energy"] / 1000000) / 365
+        time_of_collection[time_of_collection == float('inf')] = np.nan
+        mean_value = time_of_collection.mean()
+        time_of_collection[time_of_collection.isna()] = mean_value
         self.time_of_collection = time_of_collection
 
     def available_biogas(self, model):
