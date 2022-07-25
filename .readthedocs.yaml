@@ -19,10 +19,6 @@ build:
 sphinx:
   configuration: docs/conf.py
 
-# If using Sphinx, optionally build your docs in additional formats such as PDF
-# formats:
-#    - pdf
-python:
-  version: 3.9
+# Setting-up conda environment
 conda:
   environment: readthedocs_env.yaml
