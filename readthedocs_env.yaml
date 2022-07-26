@@ -7,8 +7,8 @@ channels:
 dependencies:
   - contextily==1.2.0
   - dill==0.3.5.1
+  - gdal
   - geopandas==0.11.0
-  - libgdal
   - matplotlib==3.5.2
   - numpydoc==1.4.0
   - plotnine==0.9.0
