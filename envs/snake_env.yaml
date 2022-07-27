@@ -7,7 +7,6 @@ channels:
 dependencies:
   - contextily
   - dill
-  - gdal
   - geopandas
   - matplotlib
   - plotnine
