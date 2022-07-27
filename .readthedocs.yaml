@@ -12,7 +12,7 @@ build:
 
 
 conda:
-  file: envs/readthedocs_env.yaml
+  file: readthedocs_env.yaml
 
 
 # Build documentation in the docs/ directory with Sphinx
