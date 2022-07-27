@@ -28,7 +28,7 @@ def run_model(country, model_file, sensitivity_file, tech_file, output_directory
 	# 3. Calculating benefits and costs of each technology and getting the max benefit technology for each cell
 	model.run(technologies=['Electricity', 'LPG', 'Biogas',
 							'Collected_Improved_Biomass', 'Collected_Traditional_Biomass', 'Charcoal ICS',
-							'Traditional_Charcoal'
+							'Traditional_Charcoal', 'Biomass Forced Draft', 'Pellets Forced Draft'
 							])
 
 	# 4. Save the summary

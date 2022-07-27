@@ -1,17 +1,15 @@
 import os
 import geopandas as gpd
-import re
-import pandas as pd
 import datetime
 
-from osgeo import gdal
 from rasterio import windows
 from rasterio.transform import array_bounds
 from rasterio import warp, features
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from matplotlib.colors import ListedColormap, to_rgb, to_hex
-import time, sys
+from scipy import ndimage
+import time
 
 from .raster import *
 
@@ -147,6 +145,7 @@ class VectorLayer(Layer):
         self.save(output_path)
 
     def reproject(self, crs, output_path):
+        # TODO: skip the check
         if self.layer.crs != crs:
             self.layer.to_crs(crs, inplace=True)
             self.save(output_path)
@@ -163,29 +162,8 @@ class VectorLayer(Layer):
             data, meta = self.rasterize(value=1, width=width, height=height,
                                         transform=transform)
 
-            drv = gdal.GetDriverByName('MEM')
-            src_ds = drv.Create('',
-                                width, height, 1,
-                                gdal.GetDataTypeByName('Float32'))
-            src_ds.SetGeoTransform(transform.to_gdal())
-            src_ds.SetProjection(crs.wkt)
-            src_ds.WriteArray(data)
-            srcband = src_ds.GetRasterBand(1)
-
-            drv = gdal.GetDriverByName('MEM')
-            dst_ds = drv.Create('',
-                                width, height, 1,
-                                gdal.GetDataTypeByName('Float32'))
-
-            dst_ds.SetGeoTransform(transform.to_gdal())
-            dst_ds.SetProjection(crs.wkt)
-
-            dstband = dst_ds.GetRasterBand(1)
-
-            gdal.ComputeProximity(srcband, dstband,
-                                  ["VALUES=1",
-                                   "DISTUNITS=GEO"])
-            data = dstband.ReadAsArray()
+            data = ndimage.distance_transform_edt(1 - data.astype(int),
+                                                  sampling=[meta['transform'][0], -meta['transform'][4]])
 
             meta.update(nodata=np.nan, dtype='float32')
 
