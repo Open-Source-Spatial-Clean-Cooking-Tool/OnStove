@@ -6,13 +6,13 @@
 Welcome to OnStove's documentation!
 ===================================
 
-.. image:: _static/OnStove_Logo_color.svg
+.. image:: _static/OnStove_logo_color.svg
   :width: 400
   :alt: OnStove logo
   :align: center
   :class: only-light
   
-.. image:: _static/OnStove_Logo_dark.svg
+.. image:: _static/OnStove_logo_dark.svg
   :width: 400
   :alt: OnStove logo
   :align: center
