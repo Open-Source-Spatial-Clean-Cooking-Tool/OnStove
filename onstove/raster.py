@@ -1,8 +1,6 @@
-import os
 import glob
 import numpy as np
-from math import sqrt
-from heapq import heapify, heappush, heappop
+
 import rasterio
 import rasterio.mask
 from rasterio.merge import merge
@@ -12,8 +10,6 @@ from rasterio import features
 from rasterio.enums import Resampling as enumsResampling
 import geopandas as gpd
 import fiona
-import shapely
-from osgeo import gdal, osr
 import gzip
 
 
@@ -70,31 +66,6 @@ def polygonize(raster, mask=None):
     geoms = list(results)
     polygon = gpd.GeoDataFrame.from_features(geoms)
     return polygon
-
-
-def proximity_raster(src_filename, dst_filename, values, compression):
-    src_ds = gdal.Open(src_filename)
-    srcband = src_ds.GetRasterBand(1)
-    dst_filename = dst_filename
-
-    drv = gdal.GetDriverByName('GTiff')
-    dst_ds = drv.Create(dst_filename,
-                        src_ds.RasterXSize, src_ds.RasterYSize, 1,
-                        gdal.GetDataTypeByName('Float32'),
-                        options=['COMPRESS={}'.format(compression)])
-
-    dst_ds.SetGeoTransform(src_ds.GetGeoTransform())
-    dst_ds.SetProjection(src_ds.GetProjectionRef())
-
-    dstband = dst_ds.GetRasterBand(1)
-
-    gdal.ComputeProximity(srcband, dstband,
-                          ["VALUES={}".format(','.join([str(i) for i in values])),
-                           "DISTUNITS=GEO"])
-    srcband = None
-    dstband = None
-    src_ds = None
-    dst_ds = None
 
 
 def mask_raster(raster_path, mask_layer, output_file, nodata=0, compression='NONE',
