@@ -462,31 +462,204 @@ class OnStove(DataProcessor):
     
     def techshare_sumtoone(self):
         """
-        This function checks if the sum of shares in the technology dictionary is 1.0. 
-            If it is not, it will adjust the shares to make the sum 1.0.
+        Checks if the sum of shares in the technology dictionary is 1.0. 
+        If it is not, it will adjust the shares to make the sum 1.0.
 
-            Parameters
-            ---------
-            techshare_dict : dictionary
-                The original dictionary of technology shares
+        The function uses the dictionary of technology classes to do this. 
 
-            Returns
-            -------
-            techshare_dict : dictionary
-                The updated dictionary of technology shares
+        Returns
+        -------
+        If the sum of technology shares in rural and / or urban areas is not equal to 1, then 
+        the function prints a message to the user and the adjusted technology shares.
         """
         sharesumrural = sum(item['current_share_rural'] for item in self.techs.values())
 
         if sharesumrural != 1:
             for item in self.techs.values():
                 item.current_share_rural = item.current_share_rural/sharesumrural
+            print("The sum of rural technology shares you provided in the tech specs does not equal 1.0. \nThe shares have been adjusted to make the sum 1.0 as follows. \nIf you are not satisfied then please adjust the shares to your liking manually in the tech specs file.")
+            for name,tech in self.techs.items():
+                print(name,tech.current_share_rural)
 
         sharesumurban = sum(item['current_share_urban'] for item in self.techs.values())
-        
+
         if sharesumurban != 1:
             for item in self.techs.values():
                 item.current_share_urban = item.current_share_urban/sharesumurban
-       
+            print("The sum of urban technology shares you provided in the tech specs does not equal 1.0. \nThe shares have been adjusted to make the sum 1.0 as follows. \nIf you are not satisfied then please adjust the shares to your liking manually in the tech specs file.")
+            for name,tech in self.techs.items():
+                print(name,tech.current_share_urban)
+
+    def ecooking_adjustment(self):
+        """
+        Checks whether the share of the population cooking with electricity
+        is higher than the electrification rate in either rural and/or urban areas. If it is higher in rural 
+        and / or urban areas, then the share of the population cooking with electricity is made equal 
+        to the electrification rate. The leftover share of population is then reallocated across dirty fuels
+        proportionally. 
+
+        The function uses the social specs and dictionary of technology classes to do this.
+
+        Returns
+        -------
+        If the share of the population cooking with electricity is higher than the electrification rate
+        in either rural or urban areas, then the function prints a message to user and the adjusted technology shares
+        """
+        if self.specs["rural_elec_rate"] < self.techs["Electricity"].current_share_rural:
+            rural_difference = self.techs["Electricity"].current_share_rural - self.specs["rural_elec_rate"]
+            self.techs["Electricity"].current_share_rural = self.specs["rural_elec_rate"]
+            ruralsum_dirtyfuels = 0
+            for name, tech in self.techs.items():
+                if not tech.is_clean:
+                    ruralsum_dirtyfuels += tech.current_share_rural
+            for name, tech in self.techs.items():
+                if not tech.is_clean:
+                    tech.current_share_rural += (tech.current_share_rural/ruralsum_dirtyfuels) * rural_difference
+            
+            print("The rural electrification rate you provided in the tech specs is less \
+                \nthan the share of the population cooking with electricity. \
+                \nThe share of the population cooking with electricity has been made equal to the rural electrification rate. \
+                \nThe remaining population share has been reallocated proportionally to dirty fuels.\
+                \nIf you are not satisfied then please adjust the rural electrificaiton rate or tech shares accordingly in the specs.")
+            for name,tech in self.techs.items():
+                print(name,tech.current_share_rural)
+            
+        if self.specs["urban_elec_rate"] < self.techs["Electricity"].current_share_urban:
+            urban_difference = self.techs["Electricity"].current_share_urban - self.specs["urban_elec_rate"]
+            self.techs["Electricity"].current_share_urban = self.specs["urban_elec_rate"]
+            urbansum_dirtyfuels = 0
+            for name, tech in self.techs.items():
+                if not tech.is_clean:
+                    urbansum_dirtyfuels += tech.current_share_urban
+            for name, tech in self.techs.items():
+                if not tech.is_clean:
+                    tech.current_share_urban += (tech.current_share_urban/urbansum_dirtyfuels) * urban_difference
+        
+            print("The urban electrification rate you provided in the tech specs is less \
+                \nthan the share of the population cooking with electricity. \
+                \nThe share of the population cooking with electricity has been made equal to the urban electrification rate. \
+                \nThe remaining population share has been reallocated proportionally to dirty fuels.\
+                \nIf you are not satisfied then please adjust the rural electrificaiton rate or tech shares accordingly in the specs.")
+            for name,tech in self.techs.items():
+                print(name,tech.current_share_urban)
+
+    def biogas_adjustment(self):
+        """
+        Checks whether the share of the population cooking with biogas entered in the tech specs
+        is higher than what OnStove predicts is feasible given biogas availability. If it is higher, then the share of the population cooking 
+        with biogas is made equal to the predicted feasible share. The leftover share of population is then 
+        reallocated across dirty fuels proportionally. 
+        
+        The function uses the social specs and dictionary of technology classes to do this.
+        
+        Returns
+        -------
+        If the share of the population cooking with biogas is higher than the feasible share predicted by
+        OnStove, then the function prints a message to user and the adjusted technology shares    
+        """
+        biogas_calcshare = sum((self.techs["Biogas"].households * self.specs["Rural_HHsize"]))/((1-self.specs["Urban_start"]) * self.specs["Population_start_year"])
+        
+        if self.techs["Biogas"].current_share_rural > biogas_calcshare:
+            difference = self.techs["Biogas"].current_share_rural - biogas_calcshare
+            self.techs["Biogas"].current_share_rural = biogas_calcshare
+            ruralsum_dirtyfuels = 0
+            for name, tech in self.techs.items():
+                if not tech.is_clean:
+                    ruralsum_dirtyfuels += tech.current_share_rural
+            for name, tech in self.techs.items():
+                if not tech.is_clean:
+                    tech.current_share_rural += (tech.current_share_rural/ruralsum_dirtyfuels) * difference
+            
+            print("The calculated share of the population that can cook with biogas based upon the biogas availability GIS data is smaller than \
+                \nthe share of the population cooking with biogas you entered. \
+                \nThe share of the population cooking with biogas has been made equal to the calculated share based upon biogas availability. \
+                \nThe remaining population share has been reallocated proportionally to dirty fuels.\
+                \nIf you are not satisfied then please adjust the GIS data or tech shares accordingly in the tech specs.")
+            for name, tech in self.techs.items():
+                print(name, tech.current_share_rural)
+
+    def pop_tech(self):
+        """
+        Calculates the number of people cooking with each fuel in rural and urban areas
+        based upon the technology shares and population in rural and urban areas. These values are then added
+        as an attributed to each cooking technology in the dictionary of cooking technology classes. 
+
+        The function uses the social specs and dictionary of technology classes to do this.   
+        """ 
+        for name, tech in self.techs.items():
+            tech.population_cooking_rural = tech.current_share_rural * ((1-self.specs["Urban_start"]) * self.specs["Population_start_year"])
+            tech.population_cooking_urban = tech.current_share_urban * (self.specs["Urban_start"] * self.specs["Population_start_year"])
+    
+    def techshare_allocation(df, techshare_dict, biogas_colltime):
+        """
+        Calculates the baseline population cooking with each technology in each urban and rural square kilometer.
+        The function takes a stepwise approach to allocating population to each cooking technology:
+    
+        1. Allocates the population cooking with electricity in each cell based upon the population with access
+        to electricity. 
+        2. Allocates the population cooking with biogas in each rural cell based upon whether or not there is
+        biogas potential. 
+        3. Allocates the remaining population proprotionally to other cooking technologies in rural & urban cells.
+        
+        The number of people cooking with each technology in each urban and rural square km is added as an attribute to 
+        each technology class.
+
+        Parameters
+        ----------
+        techshare_dict: Dictionary
+            The dictionary containing the cooking technology classes
+        df: GeoDataFrame
+            The GeoDataFrame containing population parameters for each square kilometer 
+        biogas_colltime: Series
+            The series containing the calculated biogas collection time for each rural square kilometer
+        """
+        #allocate population in each urban cell to electricity
+        isurban = df["IsUrban"] > 20
+        urban_factor = techshare_dict["Electricity"].population_cooking_urban / sum(isurban * df["Elec_pop_calib"])
+        techshare_dict["Electricity"].pop_sqkm = (isurban) * (df["Elec_pop_calib"] * urban_factor)
+        #allocate population in each rural cell to electricity 
+        rural_factor = techshare_dict["Electricity"].population_cooking_rural / sum(~isurban * df["Elec_pop_calib"])
+        techshare_dict["Electricity"].pop_sqkm.loc[~isurban] = (df["Elec_pop_calib"] * rural_factor)
+        #create series for biogas same size as dataframe with zeros 
+        techshare_dict["Biogas"].pop_sqkm = pd.Series(np.zeros(df.shape[0]))
+        #allocate remaining population to biogas in rural areas where there's potential
+        biogas_factor = techshare_dict["Biogas"].population_cooking_rural / (df["Calibrated_pop"].loc[(biogas_colltime!=float('inf')) & ~isurban].sum())
+        techshare_dict["Biogas"].pop_sqkm.loc[(~isurban) & (biogas_colltime!=float('inf'))] = df["Calibrated_pop"] * biogas_factor
+        pop_diff = (techshare_dict["Biogas"].pop_sqkm + techshare_dict["Electricity"].pop_sqkm) > df["Calibrated_pop"]
+        techshare_dict["Biogas"].pop_sqkm.loc[pop_diff] = df["Calibrated_pop"] - techshare_dict["Electricity"].pop_sqkm
+        #allocate remaining population proportionally to techs other than biogas and electricity 
+        remaining_share = 0
+        for name, tech in techshare_dict.items():
+            if (name != "Biogas") & (name != "Electricity"):
+                remaining_share += tech.current_share_rural
+        remaining_pop = df["Calibrated_pop"] - (techshare_dict["Biogas"].pop_sqkm + techshare_dict["Electricity"].pop_sqkm)
+        for name, tech in techshare_dict.items():
+            if (name != "Biogas") & (name != "Electricity"):
+                tech.pop_sqkm = remaining_pop * tech.current_share_rural / remaining_share
+        #move excess population cooking with technologies other than electricity and biogas to biogas 
+        adjust_cells = np.ones(df.shape[0], dtype=int)
+        for name, tech in techshare_dict.items():
+            if name != "Electricity":
+                adjust_cells &= (tech.pop_sqkm > 0)
+        for name, tech in techshare_dict.items():
+            if (name != "Electricity") & (name != "Biogas"):
+                tech_remainingpop = sum(tech.pop_sqkm.loc[~isurban]) - tech.population_cooking_rural
+                remove_pop = sum(tech.pop_sqkm.loc[(~isurban) & (adjust_cells)])
+                share_allocate = tech_remainingpop/ remove_pop 
+                techshare_dict["Biogas"].pop_sqkm.loc[(~isurban) & (adjust_cells)] += tech.pop_sqkm * share_allocate
+                tech.pop_sqkm.loc[(~isurban) & (adjust_cells)] *= (1 - share_allocate)
+        #allocate urban population to technologies 
+        for name, tech in techshare_dict.items():
+            if (name != "Biogas") & (name != "Electricity"):
+                tech.pop_sqkm.loc[isurban] = 0 
+        remaining_urbshare = 0
+        for name, tech in techshare_dict.items():
+            if (name != "Biogas") & (name != "Electricity"):
+                remaining_urbshare += tech.current_share_urban
+        remaining_urbpop = df["Calibrated_pop"].loc[isurban] - techshare_dict["Electricity"].pop_sqkm.loc[isurban]
+        for name, tech in techshare_dict.items():
+            if (name != "Biogas") & (name != "Electricity"):
+                tech.pop_sqkm[isurban] = remaining_urbpop * tech.current_share_urban / remaining_urbshare
 
     def set_base_fuel(self, techs: list = None):
         """
