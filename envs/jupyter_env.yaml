@@ -1,0 +1,20 @@
+name: onstovejupytertest
+channels:
+  - bioconda
+  - jmcmurray
+  - conda-forge
+  - defaults
+dependencies:
+  - contextily==1.2.0
+  - dill==0.3.4
+  - geopandas==0.10.0
+  - jupyterlab
+  - matplotlib==3.2.2
+  - plotnine==0.8.0
+  - psutil==5.8.0
+  - psycopg2==2.9.1
+  - python-decouple==3.4
+  - rasterio==1.2.9
+  - rasterstats==0.15.0
+  - scikit-image==0.18.3
+  - scikit-learn==1.0
