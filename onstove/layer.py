@@ -1,17 +1,25 @@
+"""This module contains the GIS layer classes used in OnStove."""
+import math
 import os
+
+import numpy as np
 import geopandas as gpd
 import datetime
+import matplotlib
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+import time
 
+import pyproj
+import rasterio
 from rasterio import windows
 from rasterio.transform import array_bounds
 from rasterio import warp, features
-import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
 from matplotlib.colors import ListedColormap, to_rgb, to_hex
 from scipy import ndimage
-import time
+from typing import Optional, Callable, Union
 
-from .raster import *
+from onstove.raster import normalize, reproject_raster, align_raster
 
 
 def try_import():
@@ -29,13 +37,13 @@ MCP_Geometric = try_import()
 
 class Layer:
     """
-    Template Layer initializing all needed variables.
+    Template Layer initializing all common needed attributes.
     """
 
-    def __init__(self, category='', name='', layer_path=None,
-                 conn=None, normalization=None,
-                 inverse=False, distance=None,
-                 distance_limit=None):
+    def __init__(self, category: Optional[str] = None, name: Optional[str] = None,
+                 path: Optional[str] = None, conn: Optional[str] = None,
+                 normalization: Optional[str] = 'MinMax', inverse: bool = False,
+                 distance:  Optional[str] = 'proximity', distance_limit: Optional[float] = None):
         self.category = category
         self.name = name
         self.normalization = normalization
@@ -46,74 +54,112 @@ class Layer:
         self.distance_raster = None
         self.restrictions = []
         self.weight = 1
+        self.path = path
 
     def __repr__(self):
         return 'Layer(name=%r)' % self.name
 
     def __str__(self):
-        return f'Layer\n    - Name: {self.name}\n' + \
-               f'    - Category: {self.category}\n' + \
-               f'    - Normalization: {self.normalization}\n' + \
-               f'    - Distance method: {self.distance}\n' + \
-               f'    - Distance limit: {self.distance_limit}\n' + \
-               f'    - Inverse: {self.inverse}\n' + \
-               f'    - Resample: {self.resample}\n' + \
-               f'    - Path: {self.path}'
+        s = f'Layer\n    - Name: {self.name}\n'
+        for attr, value in self.__dict__.items():
+            s += f'    - {attr}: {value}\n'
+        return s
 
     def read_layer(self, layer_path, conn=None):
         pass
 
-    def travel_time(self, output_path=None, condition=None):
-        layer = self.friction.layer.copy()
-        layer *= (1000 / 60)  # to convert to hours per kilometer
-        layer[np.isnan(layer)] = float('inf')
-        layer[layer == self.friction.meta['nodata']] = float('inf')
-        layer[layer < 0] = float('inf')
-        mcp = MCP_Geometric(layer, fully_connected=True)
-        row, col = self.start_points(condition=condition)
-        pointlist = np.column_stack((row, col))
-        # TODO: create method for restricted areas
-        if len(pointlist) > 0:
-            cumulative_costs, traceback = mcp.find_costs(starts=pointlist)
-            cumulative_costs[np.where(cumulative_costs == float('inf'))] = np.nan
-        else:
-            cumulative_costs = np.full(self.friction.layer.shape, 2.0)
-
-        self.distance_raster = RasterLayer(self.category,
-                                           self.name + ' - traveltime',
-                                           distance_limit=self.distance_limit,
-                                           inverse=self.inverse,
-                                           normalization=self.normalization)
-
-        self.distance_raster.layer = cumulative_costs  # + (self.friction.layer * 1000 / 60)
-        self.distance_raster.meta = self.friction.meta.copy()
-        self.distance_raster.bounds = self.friction.bounds
-        if output_path:
-            self.distance_raster.save(output_path)
-
 
 class VectorLayer(Layer):
     """
-    Layer class for GIS Vector data. It stores a GeoPandas dataframe and some
-    required metadata as layer name, normalization algorithm and 
-    distance algorithm.
+    A ``VectorLayer`` is an object used to read, manipulate and visualize GIS vector data.
+
+    It uses a :doc:`GeoDataFrame<geopandas:docs/reference/geodataframe>` object  to store the georeferenced data in a
+    tabular format. It also stores metadata as `category` and `name` of the layer, `normalization` and `distance`
+    algorithms to use among others. This data structure is used in both the ``MCA`` and the
+    :class:`OnStove<onstove.onstove.OnStove>` models and the :class:`OnStove<onstove.onstove.DataProcessor>` object.
+
+    Parameters
+    ----------
+    category: str, optional
+        Category of the layer. This parameter is useful to group the data into logical categories such as
+        "Demographics", "Resources" and "Infrastructure" or "Demand", "Supply" and "Others". This categories are
+        particularly relevant for the ``MCA`` analysis.
+    name: str, optional
+        Name of the dataset. This name will be used as default in the :meth:`save` method as the name of the file.
+    path: str, optional
+        The relative path to the datafile. This file can be of any type that is accepted by
+        :doc:`geopandas:docs/reference/api/geopandas.read_file`.
+    conn: sqlalchemy.engine.Connection or sqlalchemy.engine.Engine, optional
+        PostgreSQL connection if the layer needs to be read from a database. This accepts any connection type used by
+        :doc:`geopandas:docs/reference/api/geopandas.read_postgis`.
+
+        .. seealso::
+            :meth:`read_layer` and :meth:`onstove.onstove.DataProcessor.set_postgres`
+
+    query: str, optional
+        A query string to filter the data. For more information refer to
+        :doc:`pandas:reference/api/pandas.DataFrame.query`.
+
+        .. seealso::
+            :meth:`read_layer`
+
+    normalization: str, default 'MinMax'
+        Sets the default normalization method to use when calling the :meth:`RasterLayer.normalize` for any
+        associated :class:`RasterLayer` (for example a distance raster). This is relevant to calculate the
+        :attr:`demand_index<onstove.onstove.DataProcessor.demand_index>`,
+        :attr:`supply_index<onstove.onstove.DataProcessor.supply_index>`,
+        :attr:`clean_cooking_index<onstove.onstove.DataProcessor.clean_cooking_index>` and
+        :attr:`assistance_need_index<onstove.onstove.DataProcessor.assistance_need_index>` of the ``MCA`` model.
+    inverse: str, optional
+        Sets the default mode for the normalization algorithm (see :meth:`RasterLayer.normalize`).
+    distance: str, default 'proximity'
+        Sets the default distance algorithm to use when calling the :meth:`get_distance_raster` method.
+    distance_limit: Callable object (function or lambda function) with a numpy array as input, optional
+        Defines a distance limit or range to consider when calculating the distance raster.
+
+        .. code-block:: python
+           :caption: Example: lambda function for distance range between 1,000 and 10,000 meters
+
+           distance_limit = lambda  x: (x >= 1000) & (x <= 10000)
+
+    bbox: tuple, gpd.GeoDataFrame, gpd.GeoSeries or shapely Geometry, optional
+        Filter features by given bounding box, GeoSeries, GeoDataFrame or a shapely geometry. For more information
+        refer to :doc:`geopandas:docs/reference/api/geopandas.read_file`.
+
+    Attributes
+    ----------
+    friction
+    distance_raster
+        :class:`RasterLayer` object containing a distance raster dataset calculated by the :meth:`get_distance_raster`
+        method using one of the ``distance`` methods.
+    restrictions
+        list of :class:`RasterLayer` or :class:`VectorLayer` used to restrict areas from the distance calculations.
+    weight
+        Value to weigh the layer's "importance" on the ``MCA`` model. It is initialized with a default value of 1.
+    bounds
+    style: dict
+        Contains the default style parameters for visualizing the layer.
+
+        .. seealso:
+            :meth:`plot`
     """
 
-    def __init__(self, category, name, layer_path=None, conn=None, query=None,
-                 normalization='MinMax', inverse=False, distance='proximity',
-                 distance_limit=None, bbox=None):
+    def __init__(self, category: Optional[str] = None, name: Optional[str] = None,
+                 path: Optional[str] = None, conn: Optional[str] = None, query: Optional[str] = None,
+                 normalization: Optional[str] = 'MinMax', inverse: bool = False,
+                 distance:  Optional[str] = 'proximity',
+                 distance_limit: Optional[Callable[[np.ndarray], np.ndarray]] = None,
+                 bbox: Optional[gpd.GeoDataFrame] = None):
         """
-        Initializes the class. It recibes the name of the layer, 
-        the path of the layer, a normalization algorithm, a distance algorithm 
-        and a PostgreSQL connection if the layer needs to be read from a database
+        Initializes the class with user defined or default parameters.
         """
         self.style = {}
         super().__init__(category=category, name=name,
-                         layer_path=layer_path, conn=conn,
+                         path=path, conn=conn,
                          normalization=normalization, inverse=inverse,
                          distance=distance,
                          distance_limit=distance_limit)
-        self.read_layer(layer_path, conn, bbox=bbox)
+        self.read_layer(path=path, conn=conn, bbox=bbox)
         if query:
             self.layer = self.layer.query(query)
 
@@ -123,94 +169,318 @@ class VectorLayer(Layer):
     def __str__(self):
         return 'Vector' + super().__str__()
 
-    def bounds(self):
-        bounds = self.layer.dissolve().bounds
-        return bounds.iloc[0].to_list()
+    @property
+    def bounds(self) -> list[float]:
+        """Wrapper property to get the bounds of the dataset using the total_bounds property of Pandas.
+        """
+        return self.layer['geometry'].total_bounds
 
-    def read_layer(self, layer_path, conn=None, bbox=None):
-        if layer_path:
+    @property
+    def friction(self):
+        """:class:`RasterLayer` object containing a friction raster dataset used to compute a travel time map.
+
+        .. seealso::
+            :meth:`RasterLayer.travel_time`
+        """
+        return self._friction
+
+    @friction.setter
+    def friction(self, raster):
+        if isinstance(raster, str):
+            self._friction = RasterLayer(self.category, self.name + ' - friction',
+                                         raster)
+        elif isinstance(raster, RasterLayer):
+            self._friction = raster
+        else:
+            raise ValueError('Raster file type or object not recognized.')
+
+    def read_layer(self, path, conn=None, bbox=None):
+        """Reads a dataset from GIS vector data file.
+
+        It works as a wrapper method that will use either the :doc:`geopandas:docs/reference/api/geopandas.read_file`
+        function or the :doc:`geopandas:docs/reference/api/geopandas.read_postgis` function to read vector data and
+        store the output in the :attr:`layer` attribute and the layer path in the ``path`` attribute.
+
+        Parameters
+        ----------
+        path: str, optional
+            The relative path to the datafile. This file can be of any type that is accepted by
+            :doc:`geopandas:docs/reference/api/geopandas.read_file`.
+        conn: sqlalchemy.engine.Connection or sqlalchemy.engine.Engine, optional
+            PostgreSQL connection if the layer needs to be read from a database. This accepts any connection type used by
+            :doc:`geopandas:docs/reference/api/geopandas.read_postgis`.
+        bbox: tuple, GeoDataFrame, GeoSeries or shapely Geometry, optional
+            Filter features by given bounding box, GeoSeries, GeoDataFrame or a shapely geometry. For more information
+            refer to :doc:`geopandas:docs/reference/api/geopandas.read_file`.
+        """
+        if path:
             if conn:
-                sql = f'SELECT * FROM {layer_path}'
+                sql = f'SELECT * FROM {path}'
                 self.layer = gpd.read_postgis(sql, conn)
             else:
                 if isinstance(bbox, gpd.GeoDataFrame):
                     bbox = bbox.dissolve()
-                else:
-                    bbox = None
-                self.layer = gpd.read_file(layer_path, bbox=bbox)
-        self.path = layer_path
+                elif bbox is not None:
+                    raise ValueError('The `bbox` parameter should be of type GeoDataFrame or None, '
+                                     f'type {type(bbox)} was given')
+                self.layer = gpd.read_file(path, bbox=bbox)
+        self.path = path
 
-    def mask(self, mask_layer, output_path, all_touched=True):
+    def mask(self, mask_layer: gpd.GeoDataFrame, output_path: str = None):
+        """Wrapper for the :doc:`geopandas:docs/reference/api/geopandas.GeoDataFrame.clip` method.
+
+        Parameters
+        ----------
+        mask_layer: GeoDataFrame
+            A :doc:`geopandas:docs/reference/api/geopandas.GeoDataFrame` object.
+        output_path: str, optional
+            A folder path where to save the output dataset. If not defined then the clipped dataset is not saved.
+        """
         self.layer = gpd.clip(self.layer, mask_layer.to_crs(self.layer.crs))
-        self.save(output_path)
-
-    def reproject(self, crs, output_path):
-        # TODO: skip the check
-        if self.layer.crs != crs:
-            self.layer.to_crs(crs, inplace=True)
+        if isinstance(output_path, str):
             self.save(output_path)
 
-    def get_distance_raster(self, base_layer, output_path=None, create_raster=True):
-        if self.distance == 'proximity':
+    def reproject(self, crs: Union[pyproj.CRS, int], output_path: str = None):
+        """Wrapper for the :doc:`geopandas:docs/reference/api/geopandas.GeoDataFrame.to_crs` method.
+
+        Parameters
+        ----------
+        crs: pyproj.CRS or int
+            The value can be anything accepted by :doc:`geopandas:docs/reference/api/geopandas.GeoDataFrame.to_crs`,
+            such as an authority string (eg “EPSG:4326”), a WKT string or an EPSG int.
+        output_path: str, optional
+            A folder path where to save the output dataset. If not defined then the clipped dataset is not saved.
+        """
+        if self.layer.crs != crs:
+            self.layer.to_crs(crs, inplace=True)
+        if isinstance(output_path, str):
+            self.save(output_path)
+
+    def proximity(self, base_layer: Optional[Union[str, 'RasterLayer']],
+                  output_path: Optional[str] = None,
+                  create_raster: Optional[bool] = True) -> 'RasterLayer':
+        """Calculates a proximity distance raster taking as starting points the vectors of the layer.
+
+        It uses the ``scipy.ndimage.distance_transform_edt`` function to calculate an exact Euclidean distance
+        transform.
+
+        Parameters
+        ----------
+        base_layer: str or RasterLayer
+            Raster layer used as a template to calculate the proximity of the vectors to each grid cell in the
+            base layer. The ``base_layer`` must be either a str of the path to a raster file or a :class:`RasterLayer`
+            object.
+        output_path: str, optional
+            A folder path where to save the output dataset. If not defined then the proximity dataset is not saved.
+        create_raster: bool, default True
+            Boolean condition. If `True`, a :class:`RasterLayer` will be created and stored in the ``distance_raster``
+            attribute of the class. If `False`, a :class:`RasterLayer` with the proximity distance calculation is
+            returned.
+
+        Returns
+        -------
+        RasterLayer
+            :class:`RasterLayer` containing the distance to the nearest point of the current :class:`VectorLayer`.
+
+        See also
+        --------
+        get_distance_raster
+        """
+        if isinstance(base_layer, str):
             with rasterio.open(base_layer) as src:
                 bounds = src.bounds
                 width = src.width
                 height = src.height
-                crs = src.crs
                 transform = src.transform
+        elif isinstance(base_layer, RasterLayer):
+            bounds = base_layer.bounds
+            width = base_layer.meta['width']
+            height = base_layer.meta['height']
+            transform = base_layer.meta['transform']
+        else:
+            raise ValueError('The `base_layer` (or `raster` if you are using the `get_distance_raster` method) '
+                             'must be either a raster file path or a '
+                             f'RasterLayer object. {type(base_layer)} was given instead.')
 
-            data, meta = self.rasterize(value=1, width=width, height=height,
-                                        transform=transform)
+        data, meta = self.rasterize(value=1, width=width, height=height,
+                                    transform=transform)
 
-            data = ndimage.distance_transform_edt(1 - data.astype(int),
-                                                  sampling=[meta['transform'][0], -meta['transform'][4]])
+        data = ndimage.distance_transform_edt(1 - data.astype(int),
+                                              sampling=[meta['transform'][0], -meta['transform'][4]])
 
-            meta.update(nodata=np.nan, dtype='float32')
+        meta.update(nodata=np.nan, dtype='float32')
 
-            if create_raster:
-                self.distance_raster = RasterLayer(self.category,
-                                                   self.name + '_dist',
-                                                   distance_limit=self.distance_limit,
-                                                   inverse=self.inverse,
-                                                   normalization=self.normalization)
-                self.distance_raster.layer = data
-                self.distance_raster.meta = meta
-                self.distance_raster.bounds = bounds
-                if output_path:
-                    self.distance_raster.save(output_path)
+        distance_raster = RasterLayer(self.category,
+                                      self.name + '_dist',
+                                      distance_limit=self.distance_limit,
+                                      inverse=self.inverse,
+                                      normalization=self.normalization)
+        distance_raster.layer = data
+        distance_raster.meta = meta
+        distance_raster.bounds = bounds
+
+        if output_path:
+            distance_raster.save(output_path)
+
+        if create_raster:
+            self.distance_raster = distance_raster
+        else:
+            return distance_raster
+
+    def travel_time(self, friction: Optional['RasterLayer'] = None,
+                    output_path: Optional[str] = None,
+                    create_raster: Optional[bool] = True) -> 'RasterLayer':
+        """Creates a travel time map to the nearest polygon in the layer using a friction surface.
+
+        It calculates the minimum time needed to travel to the nearest point defined by the current :class:`VectorLayer`
+        using a surface friction :class:`RasterLayer`. The friction dataset, describes how much time, in minutes, is
+        needed to travel one meter across each cell over the region.
+
+        Parameters
+        ----------
+        friction: RasterLayer, optional
+            Surface friction layer in minutes per minute traveled across each cell over a region.
+        output_path: str, optional
+            A folder path where to save the output dataset. If not defined then the travel time dataset is not saved.
+        create_raster: bool, default True
+            Boolean condition. If `True`, a :class:`RasterLayer` will be created and stored in the ``distance_raster``
+            attribute of the class. If `False`, a :class:`RasterLayer` with the travel time calculation is returned.
+
+        Returns
+        -------
+        RasterLayer
+            :class:`RasterLayer` with the travel time to the nearest polygon in the current :class:`VectorLayer`.
+
+        Notes
+        -----
+        For more information on surface friction layers see the
+        `Malarian Atlas Project <https://malariaatlas.org/explorer>`_.
+        """
+        if not isinstance(friction, RasterLayer):
+            if not isinstance(self.friction, RasterLayer):
+                raise ValueError('A friction `RasterLayer` is needed to calculate the travel time distance raster. '
+                                 'Please provide a friction dataset of type `RasterLayer` to the `raster` parameter'
+                                 'or set it as default in the `friction` attribute of the class '
+                                 '(see the `VectorLayer` documentation).')
             else:
-                return data, meta
+                friction = self.friction
 
-        elif self.distance == 'travel_time':
-            self.travel_time(output_path)
+        rows, cols = self.start_points(raster=friction)
+        distance_raster = friction.travel_time(rows=rows, cols=cols,
+                                             output_path=None, create_raster=False)
+        if output_path:
+            distance_raster.save(output_path)
 
-    def rasterize(self, attribute=None, value=1, width=None, height=None,
-                  transform=None, cell_width=None, cell_height=None,
-                  output=None, nodata=0, dtype=rasterio.uint8):
+        if create_raster:
+            self.distance_raster = distance_raster
+        else:
+            return distance_raster
+
+    def get_distance_raster(self, method: str = None,
+                            raster: Optional[Union[str, 'RasterLayer']] = None,
+                            output_path: Optional[str] = None):
+        """This method calls the specified distance calculation method.
+
+        It takes a ``method`` as input and calls the right method using either user predefined or default parameters.
+        The calculated distance raster is then stored in the :attr:`distance_raster` attribute of the class.
+
+        Parameters
+        ----------
+        method: str, optional
+            name of the method to use for the distance calculation. It can take "proximity", "travel_time" or None as
+            options. If "proximity" is used, then the :meth:`proximity` method is called and a :class:`RasterLayer`
+            needs to be passed to the ``raster`` parameter as base layer to use for the calculation. If "travel_time"
+            is used, then the :meth:`travel_time` method is called and a friction layer can be passed to the ``raster``
+            attribute. If None is used, then the predefined ``distance`` attribute of the :class:`VectorLayer` class
+            is used instead.
+        raster: RasterLayer
+            Raster layer used as base or friction layer depending on the ``method`` used (see above).
+        output_path: str, optional
+            A folder path where to save the output dataset. If not defined then the distance raster dataset is not
+            saved.
         """
-        Rasterizes the vector data by taking either a transform and the width
-        and height of the image, or by taking the cell size and the total
-        bounds of the vector layer.
-        """
-        if width is None:
-            total_bounds = self.layer['geometry'].total_bounds
-            height = round((total_bounds[3] - total_bounds[1]) / cell_width)
-            width = round((total_bounds[2] - total_bounds[0]) / cell_height)
+        if method is None:
+            if self.distance is None:
+                raise ValueError('Please pass a distance `method` ("proximity" or "travel time") or define the default '
+                                 'method in the `distance` attribute of the class.')
+            method = self.distance
 
+        if method == 'proximity':
+            self.proximity(base_layer=raster, output_path=output_path, create_raster=True)
+
+        elif method == 'travel_time':
+            self.travel_time(friction=raster, output_path=output_path, create_raster=True)
+
+    def rasterize(self, attribute: str = None,
+                  value: Union[int, float] = 1,
+                  width: int = None, height: int = None,
+                  transform: 'AffineTransform' = None,
+                  cell_width: Union[int, float] = None,
+                  cell_height: Union[int, float] = None,
+                  nodata: Union[int, float] = 0,
+                  all_touched: bool = True,
+                  output_path: Optional[str] = None) -> 'RasterLayer':
+        """Converts the vector data into a gridded raster dataset.
+
+        It rasterizes the vector data by taking either a transform, the width and height of the image, or the cell
+        width and height of the output raster. It uses the
+        :doc:`rasterio.features.rasterize<rasterio:api/rasterio.features>`
+        function.
+
+        Parameters
+        ----------
+        attribute: str, optional
+            Name of the column in the GeoDataFrame to rasterize. If defined then the values of such column will be
+            burned in the output raster.
+        value: int or float, default 1
+            If ``attribute`` is not defined, then a fixed value to burn can be defined here.
+        width: int, optional
+            The width of the output raster. This parameter needs to be passed along with the ``height``.
+        height: int, optional
+            The height of the output raster. This parameter needs to be passed along with the ``width``.
+        transform: Affine or sequence of GroundControlPoint or RPC
+            Transform suitable for input to AffineTransformer, GCPTransformer, or RPCTransformer according to
+            :doc:`rasterio Transform<rasterio:topics/transforms>`.
+        cell_width: int of float, optional
+            The width of the cell in the output raster. This parameter needs to be passed along with the
+            ``cell_height`` parameter.
+        cell_height: int of float, optional
+            The height of the cell in hte output raster. This parameter needs to be passed along with the
+            ``cell_width`` parameter.
+        nodata: int of float, default 0
+            No data value to be used for the cells with values outside the target values.
+        all_touched: bool, default True
+            Defines if all cells touched are considered for the rasterization.
+        output_path: str, optional
+            A folder path where to save the output dataset. If not defined then the rasterized dataset is not
+            saved.
+
+        Returns
+        -------
+        RasterLayer
+            :class:`RasterLayer` with the rasterized dataset of the current :class:`VectorLayer`.
+        """
+        bounds = self.layer['geometry'].total_bounds
         if transform is None:
-            transform = rasterio.transform.from_bounds(*self.layer['geometry'].total_bounds, width, height)
+            if (width is None) or (height is None):
+                width, height = RasterLayer.shape_from_cell(bounds, cell_height, cell_width)
+            transform = rasterio.transform.from_bounds(*bounds, width, height)
+        else:
+            width, height = RasterLayer.shape_from_cell(bounds, transform[0], -transform[4])
 
         if attribute:
             shapes = ((g, v) for v, g in zip(self.layer[attribute].values, self.layer['geometry'].values))
+            dtype = type(self.layer[attribute].values[0])
         else:
             shapes = ((g, value) for g in self.layer['geometry'].values)
+            dtype = type(value)
 
         rasterized = features.rasterize(
             shapes,
             out_shape=(height, width),
             transform=transform,
-            all_touched=True,
-            dtype=rasterio.uint8)
+            all_touched=all_touched,
+            dtype=dtype)
         meta = dict(driver='GTiff',
                     dtype=dtype,
                     count=1,
@@ -219,18 +489,52 @@ class VectorLayer(Layer):
                     height=height,
                     transform=transform,
                     nodata=nodata)
-        if output:
-            os.makedirs(output, exist_ok=True)
-            with rasterio.open(os.path.join(output, self.name + '.tif'), 'w', **meta) as dst:
-                dst.write(rasterized, indexes=1)
-        else:
-            return rasterized, meta
+        raster = RasterLayer()
+        raster.layer = rasterized
+        raster.meta = meta
+        raster.bounds = bounds
 
-    def start_points(self, condition=None):
-        return friction_start_points(self.friction.path,
-                                     self.layer)
+        if output_path:
+            raster.save(output_path)
 
-    def save(self, output_path):
+        return raster
+
+    def start_points(self, raster: "RasterLayer") -> tuple[list[int], list[int]]:
+        """Gets the indexes of the overlapping cells of the :class:`VectorLayer` with the input :class:`RasterLayer`.
+
+        Uses the :doc:`rasterio.transform.rowcol<rasterio:api/rasterio.transform>` function to get the rows and columns.
+
+        Parameters
+        ----------
+        raster: RasterLayer
+            Raster layer to overlap with the current :class:`VectorLayer`.
+
+        Returns
+        -------
+        Tuple of lists rows and columns
+            Returns a tupe containing two list, the first one with the row indexes and the second one with the column
+            indexes.
+        """
+        row_list = []
+        col_list = []
+        for index, row in self.layer.iterrows():
+            rows, cols = rasterio.transform.rowcol(raster.meta['transform'], row["geometry"].x, row["geometry"].y)
+            row_list.append(rows)
+            col_list.append(cols)
+
+        return row_list, col_list
+
+    def save(self, output_path: str):
+        """Saves the current :class:`VectorLayer` into disk.
+
+        It saves the layer in the ``output_path`` defined using the ``name`` attribute as filename and `geojson` as
+        extension.
+
+        Parameters
+        ----------
+        output_path: str
+            Output folder where to save the layer.
+        """
         for column in self.layer.columns:
             if isinstance(self.layer[column].iloc[0], datetime.date):
                 self.layer[column] = self.layer[column].astype('datetime64')
@@ -240,16 +544,8 @@ class VectorLayer(Layer):
         self.layer.to_file(output_file, driver='GeoJSON')
         self.path = output_file
 
-    def add_friction_raster(self, raster, resample='nearest'):
-        if isinstance(raster, str):
-            self.friction = RasterLayer(self.category, self.name + ' - friction',
-                                        raster, resample=resample)
-        elif isinstance(raster, RasterLayer):
-            self.friction = raster
-        else:
-            raise ValueError('Raster file type or object not recognized.')
-
-    def add_restricted_areas(self, layer_path, layer_type, **kwargs):
+    def _add_restricted_areas(self, layer_path, layer_type, **kwargs):
+        """Adds restricted areas for the calculations."""
         if layer_type == 'vector':
             i = len(self.restrictions) + 1
             self.restrictions.append(VectorLayer(self.category,
@@ -261,15 +557,29 @@ class VectorLayer(Layer):
                                                  self.name + f' - restriction{i}',
                                                  layer_path, **kwargs))
 
-    def plot(self, ax=None, style=None):
+    def plot(self, ax: Optional[matplotlib.axes.Axes] = None, style: dict = None):
+        """Plots a map of the layer using custom styles.
+
+        This is, in principle, a wrapper function for the :doc:`geopandas:docs/reference/api/geopandas.GeoDataFrame.plot`
+        method.
+
+        Parameters
+        ----------
+        ax: matplotlib axes instance
+            A matplotlib axes instance can be passed in order to overlay layers in the same axes.
+        style: dict, optional
+            Dictionary containing all custom styles wanted for the map. This dictionary can contain any input that is
+            accepted by :doc:`geopandas:docs/reference/api/geopandas.GeoDataFrame.plot`. If not defined, then the
+            :attr:`style` attribute is used.
+        """
         if style is None:
             style = self.style
 
         if ax is None:
-            self.layer.plot(**style,
-                            label=self.name)
-            lgnd = ax.legend(loc="upper right", prop={'size': 12})
-            lgnd.legendHandles[0]._sizes = [60]
+            ax = self.layer.plot(**style,
+                                 label=self.name)
+            # lgnd = ax.legend(loc="upper right", prop={'size': 12})
+            # lgnd.legendHandles[0]._sizes = [60]
         else:
             self.layer.plot(ax=ax,
                             **style,
@@ -283,23 +593,23 @@ class RasterLayer(Layer):
     normalization algorithm.
     """
 
-    def __init__(self, category, name, layer_path=None, conn=None,
+    def __init__(self, category='', name='', path=None, conn=None,
                  normalization='MinMax', inverse=False, distance='proximity',
                  distance_limit=None, resample='nearest', window=None,
                  rescale=False):
         """
-        Initializes the class. It recibes the name of the layer,
+        Initializes the class. It receives the name of the layer,
         the path of the layer, a normalization algorithm, a distance algorithm
         and a PostgreSQL connection if the layer needs to be read from a database
         """
         self.resample = resample
         self.rescale = rescale
         super().__init__(category=category, name=name,
-                         layer_path=layer_path, conn=conn,
+                         path=path, conn=conn,
                          normalization=normalization, inverse=inverse,
                          distance=distance,
                          distance_limit=distance_limit)
-        self.read_layer(layer_path, conn, window=window)
+        self.read_layer(path, conn, window=window)
 
     def __repr__(self):
         return 'Raster' + super().__repr__()
@@ -329,12 +639,45 @@ class RasterLayer(Layer):
                 self.meta['nodata'] = np.nan
         self.path = layer_path
 
-    def mask(self, mask_layer, output_path, all_touched=False):
-        output_file = os.path.join(output_path,
-                                   self.name + '.tif')
-        mask_raster(self.path, mask_layer.to_crs(self.meta['crs']),
-                    output_file, self.meta['nodata'], 'DEFLATE', all_touched=all_touched)
-        self.read_layer(output_file)
+    @staticmethod
+    def shape_from_cell(bounds, cell_height, cell_width):
+        height = round((bounds[3] - bounds[1]) / cell_height)
+        width = round((bounds[2] - bounds[0]) / cell_width)
+        return width, height
+
+    def mask(self, mask_layer, output_path=None, crop=True, all_touched=True):
+        shape_mask, meta = mask_layer.rasterize(value=1, transform=self.meta['transform'],
+                                                width=self.meta['width'], height=self.meta['height'],
+                                                nodata=0, all_touched=all_touched)
+
+        self.layer[shape_mask == 0] = self.meta['nodata']
+
+        if crop:
+            total_bounds = mask_layer.layer['geometry'].total_bounds
+            window = windows.from_bounds(*total_bounds, transform=self.meta['transform'])
+            width, height = self.shape_from_cell(total_bounds, self.meta['transform'][0], -self.meta['transform'][4])
+            row_off = max(round(window.row_off), 0)
+            col_off = max(round(window.col_off), 0)
+            window = windows.Window(
+                col_off=col_off,
+                row_off=row_off,
+                width=width,
+                height=height,
+            )
+            bounds = rasterio.windows.bounds(window, self.meta['transform'])
+            transform = rasterio.transform.from_bounds(*bounds, width, height)
+            self.layer = self.layer[row_off:(row_off + height),
+                                    col_off:(col_off + width)]
+            self.meta.update(transform=transform, height=height, width=width)
+
+        if output_path:
+            self.save(output_path)
+
+        # output_file = os.path.join(output_path,
+        #                            self.name + '.tif')
+        # mask_raster(self.path, mask_layer.to_crs(self.meta['crs']),
+        #             output_file, self.meta['nodata'], 'DEFLATE', all_touched=all_touched)
+        # self.read_layer(output_file)
 
     def reproject(self, crs, output_path=None,
                   cell_width=None, cell_height=None):
@@ -346,7 +689,6 @@ class RasterLayer(Layer):
             self.bounds = warp.transform_bounds(self.meta['crs'], crs, *self.bounds)
             self.meta = meta
             if output_path:
-                os.makedirs(output_path, exist_ok=True)
                 self.save(output_path)
 
     def calculate_default_transform(self, dst_crs):
@@ -359,32 +701,78 @@ class RasterLayer(Layer):
                                                    dst_height=self.meta['height'])
         return t, w, h
 
-    def get_distance_raster(self, base_layer, output_path,
-                            mask_layer):
+    def travel_time(self, rows, cols,
+                    output_path: Optional[str] = None,
+                    create_raster: Optional[bool] = True) -> 'RasterLayer':
+        layer = self.layer.copy()
+        layer *= (1000 / 60)  # to convert to hours per kilometer
+        layer[np.isnan(layer)] = float('inf')
+        layer[layer == self.meta['nodata']] = float('inf')
+        layer[layer < 0] = float('inf')
+        mcp = MCP_Geometric(layer, fully_connected=True)
+        pointlist = np.column_stack((rows, cols))
+        # TODO: create method for restricted areas
+        if len(pointlist) > 0:
+            cumulative_costs, traceback = mcp.find_costs(starts=pointlist)
+            cumulative_costs[np.where(cumulative_costs == float('inf'))] = np.nan
+        else:
+            cumulative_costs = np.full(self.layer.shape, 2.0)
+
+        distance_raster = RasterLayer(self.category,
+                                      'traveltime',
+                                      distance_limit=self.distance_limit,
+                                      inverse=self.inverse,
+                                      normalization=self.normalization)
+
+        meta = self.meta.copy()
+        meta.update(nodata=np.nan)
+        distance_raster.layer = cumulative_costs  # + (self.friction.layer * 1000 / 60)
+        distance_raster.meta = meta
+        distance_raster.bounds = self.friction.bounds
+
+        if output_path:
+            distance_raster.save(output_path)
+
+        if create_raster:
+            self.distance_raster = distance_raster
+        else:
+            return distance_raster
+
+    def log(self, mask_layer,
+            output_path: Optional[str] = None,
+            create_raster: Optional[bool] = True) -> 'RasterLayer':
+        layer = self.layer.copy()
+        layer[layer == 0] = np.nan
+        layer[layer > 0] = np.log(layer[layer > 0])
+        layer = np.nan_to_num(layer, nan=0)
+
+        meta = self.meta.copy()
+        meta.update(nodata=np.nan, dtype='float64')
+
+        distance_raster = RasterLayer(self.category,
+                                      self.name + ' - log',
+                                      distance_limit=self.distance_limit,
+                                      inverse=self.inverse,
+                                      normalization=self.normalization)
+        distance_raster.layer = layer
+        distance_raster.meta = meta
+        # distance_raster.save(output_path)
+        distance_raster.mask(mask_layer)
+
+        if output_path:
+            distance_raster.save(output_path)
+
+        if create_raster:
+            self.distance_raster = distance_raster
+        else:
+            return distance_raster
+
+    def get_distance_raster(self, output_path, mask_layer, starting_points=None):
         if self.distance == 'log':
-            layer = self.layer.copy()
-            layer[layer == 0] = np.nan
-            layer[layer > 0] = np.log(layer[layer > 0])
-            layer = np.nan_to_num(layer, nan=0)
-            # layer[layer < 0] = np.nan
-
-            meta = self.meta.copy()
-            meta.update(nodata=np.nan, dtype='float64')
-
-            self.distance_raster = RasterLayer(self.category,
-                                               self.name + ' - log',
-                                               distance_limit=self.distance_limit,
-                                               inverse=self.inverse,
-                                               normalization=self.normalization)
-
-            self.distance_raster.layer = layer
-            self.distance_raster.meta = meta
-            self.distance_raster.save(output_path)
-            self.distance_raster.mask(mask_layer, output_path)
-
+            self.distance_raster = self.log(mask_layer=mask_layer)
         elif self.distance == 'travel_time':
-            self.travel_time(output_path)
-
+            rows, cols = self.start_points(condition=starting_points)
+            self.distance_raster = self.travel_time(rows, cols)
         else:
             self.distance_raster = self
 
@@ -401,12 +789,11 @@ class RasterLayer(Layer):
             normalize(raster=self.layer, limit=self.distance_limit,
                       inverse=self.inverse, output_file=output_file,
                       meta=self.meta, buffer=buffer)
-            mask_raster(output_file, mask_layer,
-                        output_file, np.nan, 'DEFLATE')
             self.normalized = RasterLayer(self.category, self.name + ' - normalized',
-                                          layer_path=output_file)
+                                          path=output_file)
+            self.mask(mask_layer=mask_layer, output_path=output_file, all_touched=True)
 
-    def polygonize(self, mask=None):
+    def polygonize(self):
         results = (
             {'properties': {'raster_val': v}, 'geometry': s}
             for i, (s, v)
@@ -506,8 +893,8 @@ class RasterLayer(Layer):
 
     def plot(self, cmap='viridis', ticks=None, tick_labels=None,
              cumulative_count=None, quantiles=None, categories=None, legend_position=(1.05, 1),
-             admin_layer=None, title=None, ax=None, dpi=150, legend=True, legend_title='', legend_cols=1,
-             rasterized=True, colorbar=True, return_image=False):
+             admin_layer=None, title=None, ax=None, dpi=150, figsize=(16, 9), legend=True, legend_title='',
+             legend_cols=1, rasterized=True, colorbar=True, return_image=False):
         extent = [self.bounds[0], self.bounds[2],
                   self.bounds[1], self.bounds[3]]  # [left, right, bottom, top]
 
@@ -527,7 +914,7 @@ class RasterLayer(Layer):
         layer[layer == self.meta['nodata']] = np.nan
 
         if ax is None:
-            fig, ax = plt.subplots(1, 1, figsize=(16, 9), dpi=dpi)
+            fig, ax = plt.subplots(1, 1, figsize=figsize, dpi=dpi)
 
         if isinstance(cmap, dict):
             values = np.sort(np.unique(layer[~np.isnan(layer)]))

@@ -1,29 +1,13 @@
 """This module contains the technology classes used in OnStove."""
 
-from time import time
-from typing import Optional, Callable
-
+import os
 import numpy as np
 import pandas as pd
-import os
-
+from typing import Optional, Callable
 from math import exp
 
-from .layer import VectorLayer, RasterLayer
+from onstove.layer import VectorLayer, RasterLayer
 import onstove.onstove
-
-
-def timeit(func):
-    # This function shows the execution time of
-    # the function object passed
-    def wrap_func(*args, **kwargs):
-        t1 = time()
-        result = func(*args, **kwargs)
-        t2 = time()
-        print(f'Function {func.__name__!r} executed in {(t2 - t1):.4f}s')
-        return result
-
-    return wrap_func
 
 
 class Technology:
@@ -578,15 +562,15 @@ class LPG(Technology):
         self.cylinder_life = cylinder_life
 
     def add_travel_time(self, model, align=False):
-        lpg = VectorLayer(self.name, 'Suppliers', layer_path=self.lpg_path)
-        friction = RasterLayer(self.name, 'Friction', layer_path=self.friction_path, resample='average')
+        lpg = VectorLayer(self.name, 'Suppliers', path=self.lpg_path)
+        friction = RasterLayer(self.name, 'Friction', path=self.friction_path, resample='average')
 
         if align:
             os.makedirs(os.path.join(model.output_directory, self.name, 'Suppliers'), exist_ok=True)
             lpg.reproject(model.base_layer.meta['crs'], os.path.join(model.output_directory, self.name, 'Suppliers'))
             friction.align(model.base_layer.path, os.path.join(model.output_directory, self.name, 'Friction'))
 
-        lpg.add_friction_raster(friction)
+        lpg.friction = friction
         lpg.travel_time(os.path.join(model.output_directory, self.name))
         self.travel_time = 2 * model.raster_to_dataframe(lpg.distance_raster.layer,
                                                          nodata=lpg.distance_raster.meta['nodata'],
@@ -699,8 +683,7 @@ class Biomass(Technology):
         Name of the technology to model.
     carbon_intensity: float, optional
         The CO2 equivalent emissions in kg/GJ of burned fuel. If this attribute is used, then none of the
-        gas-specific
-        intensities will be used (e.g. ch4_intensity).
+        gas-specific intensities will be used (e.g. ch4_intensity).
     co2_intensity: float, default 112
         The CO2 emissions in kg/GJ of burned fuel.
     ch4_intensity: float, default 0.864
@@ -737,6 +720,11 @@ class Biomass(Technology):
     travel_time: Pandas Series, optional
         Pandas Series describing the time needed (in hours) to reach the closest forest cover point from each
         population point. It is calculated using the forest cover, friction layer and population density layer.
+
+        .. seealso::
+           :meth:`transportation_time<onstove.technology.Biomass.transportation_time>` and
+           :meth:`total_time<onstove.technology.Biomass.total_time>`
+
     collection_capacity: float, default 25
         Average wood collection capacity per person in Kg/trip.
     collected_fuel: bool, default True
@@ -749,6 +737,11 @@ class Biomass(Technology):
     forest_condition: Callable object (function or lambda function) with a numpy array as input, optional
         Function or lambda function describing which forest canopy cover to consider when assessing the potential
         points for biomass collection.
+
+        .. code-block:: python
+           :caption: **Example**: lambda function for canopy cover equal or over 30%
+
+           forest_condition = lambda  x: x >= 0.3
 
     Examples
     --------
@@ -821,7 +814,7 @@ class Biomass(Technology):
         self.draft_type = draft_type
         self.collected_fuel = collected_fuel
         self.time_of_collection = time_of_collection
-        self._solar_panel_adjusted: bool = False  #: boolean check to avoid adding the solar panel cost twice
+        self.solar_panel_adjusted: bool = False  #: boolean check to avoid adding the solar panel cost twice
 
     def __setitem__(self, idx, value):
         self.__dict__[idx] = value
@@ -846,14 +839,14 @@ class Biomass(Technology):
             Boolean parameter to indicate if the forest cover and friction layers need to be align with the population
             data in the `model`.
         """
-        self.forest = RasterLayer(self.name, 'Forest', layer_path=forest_path, resample='mode')
-        self.friction = RasterLayer(self.name, 'Friction', layer_path=friction_path, resample='average')
+        self.forest = RasterLayer(self.name, 'Forest', path=forest_path, resample='mode')
+        self.friction = RasterLayer(self.name, 'Friction', path=friction_path, resample='average')
 
         if align:
             self.forest.align(model.base_layer.path, os.path.join(model.output_directory, self.name, 'Forest'))
             self.friction.align(model.base_layer.path, os.path.join(model.output_directory, self.name, 'Friction'))
 
-        self.forest.add_friction_raster(self.friction)
+        self.forest.friction = self.friction
         self.forest.travel_time(condition=self.forest_condition)
 
         travel_time = 2 * model.raster_to_dataframe(self.forest.distance_raster.layer,
@@ -924,13 +917,13 @@ class Biomass(Technology):
             Instance of the OnStove model containing the main data of the study case. See
             :class:`onstove.onstove.OnStove`.
         """
-        if not self._solar_panel_adjusted:
+        if not self.solar_panel_adjusted:
             solar_panel_cost = 7.5  # Based on a cost of 1.25 USD per watt
             is_electrified = model.gdf['Elec_pop_calib'] > 0
             inv_cost = pd.Series(np.ones(model.gdf.shape[0]) * self.inv_cost, index=model.gdf.index)
             inv_cost[~is_electrified] += solar_panel_cost
             self.inv_cost = inv_cost
-            self._solar_panel_adjusted = True  # This is to prevent to adjust the capital cost more than once
+            self.solar_panel_adjusted = True  # This is to prevent to adjust the capital cost more than once
 
     def discounted_inv(self, model: 'onstove.onstove.OnStove', relative: bool = True):
         """This method expands :meth:`Technology.discounted_inv` by adding the solar panel cost in unlectrified areas.
@@ -1185,7 +1178,7 @@ class Biogas(Technology):
         Read a friction layer in min/meter (walking time per meter) and returns a pandas series with the values
         for each populated grid cell in hours/meter
         """
-        friction = RasterLayer(self.name, 'Friction', layer_path=friction_path, resample='average')
+        friction = RasterLayer(self.name, 'Friction', path=friction_path, resample='average')
         data = model.raster_to_dataframe(friction.layer, nodata=friction.meta['nodata'],
                                          fill_nodata='interpolate', method='read')
         return data / 60
@@ -1255,7 +1248,7 @@ class Biogas(Technology):
 
         for name, path in paths.items():
             layer = RasterLayer('Livestock', name,
-                                layer_path=path)
+                                path=path)
             model.raster_to_dataframe(layer.layer, name=name, method='read',
                                       nodata=layer.meta['nodata'], fill_nodata='interpolate')
 

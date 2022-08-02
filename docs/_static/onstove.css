@@ -19,11 +19,11 @@ pre, code {
 
 h1 {
   font-family: "Lato", sans-serif;
-  color: #013243; /* warm black */
+  color: #ff6600ff; /* warm black */
 }
 
 h2 {
-  color: #4d77cf; /* han blue */
+  color: #00aad4ff; /* han blue */
   letter-spacing: -.03em;
 }
 
@@ -121,10 +121,6 @@ html[data-theme=dark] .intro-card .card-header {
 
 html[data-theme=dark] .intro-card .card-footer {
   background-color:var(--pst-color-background);
-}
-
-html[data-theme=dark] h1 {
-  color: var(--pst-color-primary);
 }
 
 html[data-theme=dark] h3 {

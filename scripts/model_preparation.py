@@ -20,7 +20,7 @@ model.read_scenario_data(path, delimiter=',')
 
 # 3. Add a country mask layer
 path = snakemake.input.mask_layer
-mask_layer = VectorLayer('admin', 'adm_1', layer_path=path)
+mask_layer = VectorLayer('admin', 'adm_1', path=path)
 model.mask_layer = mask_layer
 
 # 4. Add a population base layer
@@ -49,7 +49,7 @@ else:
 # 8. Read electricity network GIS layers
 # Read MV lines
 path = snakemake.input.mv_lines
-mv_lines = VectorLayer('Electricity', 'MV_lines', layer_path=path, distance='proximity')
+mv_lines = VectorLayer('Electricity', 'MV_lines', path=path, distance='proximity')
 
 # Read HV lines
 # path = snakemake.input.hv_lines
@@ -61,7 +61,7 @@ model.distance_to_electricity(mv_lines=mv_lines)
 
 # 8.2. Add night time lights data
 path = snakemake.input.ntl
-ntl = RasterLayer('Electricity', 'Night_time_lights', layer_path=path)
+ntl = RasterLayer('Electricity', 'Night_time_lights', path=path)
 
 model.raster_to_dataframe(ntl.layer, name='Night_lights', method='read',
                           nodata=ntl.meta['nodata'], fill_nodata='interpolate')

@@ -1,19 +1,23 @@
-from time import time
-from copy import copy
+"""This module contains the model classes of OnStove."""
 
+import os
 import dill
-from csv import DictReader
-
-import numpy as np
-import psycopg2
 import pandas as pd
-import scipy.spatial
+import numpy as np
+import geopandas as gpd
+import rasterio
 import matplotlib.pyplot as plt
+import psycopg2
+import scipy.spatial
+from copy import copy
+from csv import DictReader
+from time import time
 from matplotlib import cm
 from matplotlib.colors import to_rgb
-from rasterio.warp import transform_bounds
 from matplotlib.offsetbox import (TextArea, AnnotationBbox, VPacker, HPacker)
-
+from rasterio import features
+from rasterio.fill import fillnodata
+from rasterio.warp import transform_bounds
 from plotnine import (
     ggplot,
     aes,
@@ -34,9 +38,9 @@ from plotnine import (
     facet_wrap
 )
 
-from .technology import Technology, LPG, Biomass, Electricity, Biogas, Charcoal
-from .raster import *
-from .layer import VectorLayer, RasterLayer
+from onstove.layer import VectorLayer, RasterLayer
+from onstove.technology import Technology, LPG, Biomass, Electricity, Biogas, Charcoal
+from onstove.raster import sample_raster
 
 
 def timeit(func):
@@ -467,7 +471,7 @@ class OnStove(DataProcessor):
         If it is not, it will adjust the shares to make the sum 1.0.
 
         Parameters
-        ---------
+        ----------
         techshare_dict : dictionary
             The original dictionary of technology shares
 
@@ -743,6 +747,7 @@ class OnStove(DataProcessor):
         """
         Takes a RasterLayer and a method (sample or read), gets the values from the raster layer using the population points previously extracted and saves the values in a new column of OnSSTOVE.gdf
         """
+        layer = layer.copy()
         if method == 'sample':
             with rasterio.open(layer) as src:
                 if src.meta['crs'] != self.gdf.crs:
@@ -756,7 +761,9 @@ class OnStove(DataProcessor):
                     mask[mask == nodata] = np.nan
                     if np.isnan(mask[self.rows, self.cols]).sum() > 0:
                         mask[~np.isnan(mask)] = 1
-                        rows, cols = np.where(np.isnan(mask) & ~np.isnan(self.base_layer.layer))
+                        base = self.base_layer.layer.copy()
+                        base[base == self.base_layer.meta['nodata']] = np.nan
+                        rows, cols = np.where(np.isnan(mask) & ~np.isnan(base))
                         mask[rows, cols] = 0
                         layer = fillnodata(layer, mask=mask,
                                            max_search_distance=100)
@@ -1117,7 +1124,7 @@ class OnStove(DataProcessor):
 
             self.gdf = gpd.sjoin(self.gdf, gdf[["relative_wealth", "geometry"]], how="left")
         elif file_type == "raster":
-            layer = RasterLayer('Demographics', 'Wealth', layer_path=wealth_index, resample='average')
+            layer = RasterLayer('Demographics', 'Wealth', path=wealth_index, resample='average')
 
             layer.align(self.base_layer.path)
 
