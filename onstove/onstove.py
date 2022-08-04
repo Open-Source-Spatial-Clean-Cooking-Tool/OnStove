@@ -33,7 +33,7 @@ from plotnine import (
     facet_wrap
 )
 
-from onstove.technology import Technology, LPG, Biomass, Electricity, Biogas, Charcoal
+from .technology import Technology, LPG, Biomass, Electricity, Biogas, Charcoal
 from .raster import *
 from .layer import VectorLayer, RasterLayer
 
@@ -590,7 +590,7 @@ class OnStove(DataProcessor):
             tech.population_cooking_rural = tech.current_share_rural * ((1-self.specs["Urban_start"]) * self.specs["Population_start_year"])
             tech.population_cooking_urban = tech.current_share_urban * (self.specs["Urban_start"] * self.specs["Population_start_year"])
     
-    def techshare_allocation(df, techshare_dict, biogas_colltime):
+    def techshare_allocation(self, tech_dict):
         """
         Calculates the baseline population cooking with each technology in each urban and rural square kilometer.
         The function takes a stepwise approach to allocating population to each cooking technology:
@@ -605,61 +605,60 @@ class OnStove(DataProcessor):
         each technology class.
 
         Parameters
-        ----------
-        techshare_dict: Dictionary
-            The dictionary containing the cooking technology classes
-        df: GeoDataFrame
-            The GeoDataFrame containing population parameters for each square kilometer 
-        biogas_colltime: Series
-            The series containing the calculated biogas collection time for each rural square kilometer
+        ---------
+        tech_dict: Dictionary
+        The dictionary of technology classses
+
+        The function uses the dictionary of technology classes, including biogas collection time, and main GeoDataFrame to do this.
         """
         #allocate population in each urban cell to electricity
-        isurban = df["IsUrban"] > 20
-        urban_factor = techshare_dict["Electricity"].population_cooking_urban / sum(isurban * df["Elec_pop_calib"])
-        techshare_dict["Electricity"].pop_sqkm = (isurban) * (df["Elec_pop_calib"] * urban_factor)
+        isurban = self.gdf["IsUrban"] > 20
+        urban_factor = tech_dict["Electricity"].population_cooking_urban / sum(isurban * self.gdf["Elec_pop_calib"])
+        tech_dict["Electricity"].pop_sqkm = (isurban) * (self.gdf["Elec_pop_calib"] * urban_factor)
         #allocate population in each rural cell to electricity 
-        rural_factor = techshare_dict["Electricity"].population_cooking_rural / sum(~isurban * df["Elec_pop_calib"])
-        techshare_dict["Electricity"].pop_sqkm.loc[~isurban] = (df["Elec_pop_calib"] * rural_factor)
+        rural_factor = tech_dict["Electricity"].population_cooking_rural / sum(~isurban * self.gdf["Elec_pop_calib"])
+        tech_dict["Electricity"].pop_sqkm.loc[~isurban] = (self.gdf["Elec_pop_calib"] * rural_factor)
         #create series for biogas same size as dataframe with zeros 
-        techshare_dict["Biogas"].pop_sqkm = pd.Series(np.zeros(df.shape[0]))
+        tech_dict["Biogas"].pop_sqkm = pd.Series(np.zeros(self.gdf.shape[0]))
         #allocate remaining population to biogas in rural areas where there's potential
-        biogas_factor = techshare_dict["Biogas"].population_cooking_rural / (df["Calibrated_pop"].loc[(biogas_colltime!=float('inf')) & ~isurban].sum())
-        techshare_dict["Biogas"].pop_sqkm.loc[(~isurban) & (biogas_colltime!=float('inf'))] = df["Calibrated_pop"] * biogas_factor
-        pop_diff = (techshare_dict["Biogas"].pop_sqkm + techshare_dict["Electricity"].pop_sqkm) > df["Calibrated_pop"]
-        techshare_dict["Biogas"].pop_sqkm.loc[pop_diff] = df["Calibrated_pop"] - techshare_dict["Electricity"].pop_sqkm
+        biogas_factor = tech_dict["Biogas"].population_cooking_rural / (self.gdf["Calibrated_pop"].loc[(tech_dict["Biogas"].time_of_collection!=float('inf')) & ~isurban].sum())
+        tech_dict["Biogas"].pop_sqkm.loc[(~isurban) & (tech_dict["Biogas"].time_of_collection!=float('inf'))] = self.gdf["Calibrated_pop"] * biogas_factor
+        pop_diff = (tech_dict["Biogas"].pop_sqkm + tech_dict["Electricity"].pop_sqkm) > self.gdf["Calibrated_pop"]
+        tech_dict["Biogas"].pop_sqkm.loc[pop_diff] = self.gdf["Calibrated_pop"] - tech_dict["Electricity"].pop_sqkm
         #allocate remaining population proportionally to techs other than biogas and electricity 
         remaining_share = 0
-        for name, tech in techshare_dict.items():
+        for name, tech in tech_dict.items():
             if (name != "Biogas") & (name != "Electricity"):
                 remaining_share += tech.current_share_rural
-        remaining_pop = df["Calibrated_pop"] - (techshare_dict["Biogas"].pop_sqkm + techshare_dict["Electricity"].pop_sqkm)
-        for name, tech in techshare_dict.items():
+        remaining_pop = self.gdf["Calibrated_pop"] - (tech_dict["Biogas"].pop_sqkm + tech_dict["Electricity"].pop_sqkm)
+        for name, tech in tech_dict.items():
             if (name != "Biogas") & (name != "Electricity"):
                 tech.pop_sqkm = remaining_pop * tech.current_share_rural / remaining_share
         #move excess population cooking with technologies other than electricity and biogas to biogas 
-        adjust_cells = np.ones(df.shape[0], dtype=int)
-        for name, tech in techshare_dict.items():
+        adjust_cells = np.ones(self.gdf.shape[0], dtype=int)
+        for name, tech in tech_dict.items():
             if name != "Electricity":
                 adjust_cells &= (tech.pop_sqkm > 0)
-        for name, tech in techshare_dict.items():
+        for name, tech in tech_dict.items():
             if (name != "Electricity") & (name != "Biogas"):
                 tech_remainingpop = sum(tech.pop_sqkm.loc[~isurban]) - tech.population_cooking_rural
                 remove_pop = sum(tech.pop_sqkm.loc[(~isurban) & (adjust_cells)])
                 share_allocate = tech_remainingpop/ remove_pop 
-                techshare_dict["Biogas"].pop_sqkm.loc[(~isurban) & (adjust_cells)] += tech.pop_sqkm * share_allocate
+                tech_dict["Biogas"].pop_sqkm.loc[(~isurban) & (adjust_cells)] += tech.pop_sqkm * share_allocate
                 tech.pop_sqkm.loc[(~isurban) & (adjust_cells)] *= (1 - share_allocate)
         #allocate urban population to technologies 
-        for name, tech in techshare_dict.items():
+        for name, tech in tech_dict.items():
             if (name != "Biogas") & (name != "Electricity"):
                 tech.pop_sqkm.loc[isurban] = 0 
         remaining_urbshare = 0
-        for name, tech in techshare_dict.items():
+        for name, tech in tech_dict.items():
             if (name != "Biogas") & (name != "Electricity"):
                 remaining_urbshare += tech.current_share_urban
-        remaining_urbpop = df["Calibrated_pop"].loc[isurban] - techshare_dict["Electricity"].pop_sqkm.loc[isurban]
-        for name, tech in techshare_dict.items():
+        remaining_urbpop = self.gdf["Calibrated_pop"].loc[isurban] - tech_dict["Electricity"].pop_sqkm.loc[isurban]
+        for name, tech in tech_dict.items():
             if (name != "Biogas") & (name != "Electricity"):
                 tech.pop_sqkm[isurban] = remaining_urbpop * tech.current_share_urban / remaining_urbshare
+            tech.pop_sqkm = tech.pop_sqkm / self.gdf["Calibrated_pop"]
 
     def set_base_fuel(self, techs: list = None):
         """
@@ -669,16 +668,17 @@ class OnStove(DataProcessor):
         as is_base = True, then it calculates the base fuel properties considering
         all technologies in the model
         """
+        #TODO: fix this CAMILO 
         if techs is None:
             techs = self.techs.values()
-        base_fuels = []
+        base_fuels = {}
         for tech in techs:
             share = tech.current_share_rural + tech.current_share_urban
             if (share > 0) or tech.is_base:
                 tech.is_base = True
-                base_fuels.append(tech)
+                base_fuels[tech.name] = tech
         if len(base_fuels) == 1:
-            self.base_fuel = copy(base_fuels[0])
+            self.base_fuel = copy(base_fuels.values()[0])
             self.base_fuel.carb(self)
             self.base_fuel.total_time(self)
             self.base_fuel.required_energy(self)
@@ -692,14 +692,26 @@ class OnStove(DataProcessor):
                                                index=self.gdf.index)
         else:
             if len(base_fuels) == 0:
-                base_fuels = techs
+                base_fuels = self.techs
             base_fuel = Technology(name='Base fuel')
             base_fuel.carbon = 0
             base_fuel.total_time_yr = 0
 
-            for tech in base_fuels:
-                current_share = (self.gdf['IsUrban'] > 20) * tech.current_share_urban
-                current_share[self.gdf['IsUrban'] < 20] = tech.current_share_rural
+            self.techshare_sumtoone()
+            self.ecooking_adjustment()
+            self.techs["Biogas"].total_time(self)
+            required_energy_hh = self.techs["Biogas"].required_energy_hh(self)
+            factor = self.gdf['biogas_energy'] / (required_energy_hh * self.gdf['Households'])
+            factor[factor > 1] = 1
+            self.techs["Biogas"].factor = factor
+            self.techs["Biogas"].households = self.gdf['Households'] * factor
+            self.biogas_adjustment()
+            self.pop_tech()
+            self.techshare_allocation(base_fuels)
+
+            for name,tech in base_fuels.items():
+                #tech.pop_sqkm = (self.gdf['IsUrban'] > 20) * tech.current_share_urban
+                #tech.pop_sqkm[self.gdf['IsUrban'] < 20] = tech.current_share_rural
 
                 tech.carb(self)
                 tech.total_time(self)
@@ -709,19 +721,19 @@ class OnStove(DataProcessor):
                     tech.transportation_cost(self)
 
                 tech.discounted_inv(self, relative=False)
-                base_fuel.tech_life += tech.tech_life * current_share
-                base_fuel.discounted_investments += tech.discounted_investments * current_share
+                base_fuel.tech_life += tech.tech_life * tech.pop_sqkm
+                base_fuel.discounted_investments += tech.discounted_investments * tech.pop_sqkm
 
                 tech.adjusted_pm25()
                 tech.health_parameters(self)
 
-                base_fuel.carbon += tech.carbon * current_share
-                base_fuel.total_time_yr += tech.total_time_yr * current_share
-                base_fuel.inv_cost += tech.inv_cost * current_share
-                base_fuel.om_cost += tech.om_cost * current_share
+                base_fuel.carbon += tech.carbon * tech.pop_sqkm
+                base_fuel.total_time_yr += tech.total_time_yr * tech.pop_sqkm
+                base_fuel.inv_cost += tech.inv_cost * tech.pop_sqkm
+                base_fuel.om_cost += tech.om_cost * tech.pop_sqkm
 
                 tech.discount_fuel_cost(self, relative=False)
-                base_fuel.discounted_fuel_cost += tech.discounted_fuel_cost * current_share
+                base_fuel.discounted_fuel_cost += tech.discounted_fuel_cost * tech.pop_sqkm
 
                 for paf in ['paf_alri_r', 'paf_copd_r', 'paf_ihd_r',
                             'paf_lc_r', 'paf_stroke_r']:
@@ -1240,16 +1252,16 @@ class OnStove(DataProcessor):
         pt["X"] = pt["geometry"].x
         pt["Y"] = pt["geometry"].y
 
-        df = pd.DataFrame(pt.drop(columns='geometry'))
-        df.to_csv(name)
+        self.gdf = pd.DataFrame(pt.drop(columns='geometry'))
+        self.gdf.to_csv(name)
 
     def extract_wealth_index(self, wealth_index, file_type="csv", x_column="longitude", y_column="latitude",
                              wealth_column="rwi"):
 
         if file_type == "csv":
-            df = pd.read_csv(wealth_index)
+            self.gdf = pd.read_csv(wealth_index)
 
-            gdf = gpd.GeoDataFrame(df, geometry=gpd.points_from_xy(df[x_column], df[y_column]))
+            gdf = gpd.GeoDataFrame(self.gdf, geometry=gpd.points_from_xy(self.gdf[x_column], self.gdf[y_column]))
             gdf.crs = 4326
             gdf.to_crs(self.gdf.crs, inplace=True)
 
@@ -1536,18 +1548,18 @@ class OnStove(DataProcessor):
         return summary
 
     def plot_split(self, cmap=None, labels=None, save=False, height=1.5, width=2.5):
-        df = self.summary(total=False, pretty=False, labels=labels)
+        self.gdf = self.summary(total=False, pretty=False, labels=labels)
 
-        tech_list = df.sort_values('Calibrated_pop')['max_benefit_tech'].tolist()
+        tech_list = self.gdf.sort_values('Calibrated_pop')['max_benefit_tech'].tolist()
         ccolor = 'black'
 
-        p = (ggplot(df)
+        p = (ggplot(self.gdf)
              + geom_col(aes(x='max_benefit_tech', y='Calibrated_pop', fill='max_benefit_tech'))
-             + geom_text(aes(y=df['Calibrated_pop'], x='max_benefit_tech',
-                             label=df['Calibrated_pop'] / df['Calibrated_pop'].sum()),
+             + geom_text(aes(y=self.gdf['Calibrated_pop'], x='max_benefit_tech',
+                             label=self.gdf['Calibrated_pop'] / self.gdf['Calibrated_pop'].sum()),
                          format_string='{:.0%}',
                          color=ccolor, size=8, va='center', ha='left')
-             + ylim(0, df['Calibrated_pop'].max() * 1.15)
+             + ylim(0, self.gdf['Calibrated_pop'].max() * 1.15)
              + scale_x_discrete(limits=tech_list)
              + scale_fill_manual(cmap)
              + coord_flip()
@@ -1562,16 +1574,16 @@ class OnStove(DataProcessor):
             return p
 
     def plot_costs_benefits(self, cmap=None, labels=None, save=False, height=1.5, width=2.5):
-        df = self.summary(total=False, pretty=False, labels=labels)
-        df['investment_costs'] -= df['salvage_value']
-        df['fuel_costs'] *= -1
-        df['investment_costs'] *= -1
-        df['om_costs'] *= -1
+        self.gdf = self.summary(total=False, pretty=False, labels=labels)
+        self.gdf['investment_costs'] -= self.gdf['salvage_value']
+        self.gdf['fuel_costs'] *= -1
+        self.gdf['investment_costs'] *= -1
+        self.gdf['om_costs'] *= -1
 
         value_vars = ['investment_costs', 'fuel_costs', 'om_costs',
                       'health_costs_avoided', 'emissions_costs_saved', 'opportunity_cost_gained']
 
-        dff = df.melt(id_vars=['max_benefit_tech'], value_vars=value_vars)
+        dff = self.gdf.melt(id_vars=['max_benefit_tech'], value_vars=value_vars)
 
         dff['variable'] = dff['variable'].str.replace('_', ' ').str.capitalize()
 
@@ -1580,7 +1592,7 @@ class OnStove(DataProcessor):
                     'Fuel costs': '#f1a340', 'Emissions costs saved': '#998ec3',
                     'Om costs': '#fee0b6', 'Opportunity cost gained': '#d8daeb'}
 
-        tech_list = df.sort_values('Calibrated_pop')['max_benefit_tech'].tolist()
+        tech_list = self.gdf.sort_values('Calibrated_pop')['max_benefit_tech'].tolist()
         cat_order = ['Health costs avoided',
                      'Emissions costs saved',
                      'Opportunity cost gained',
@@ -1606,7 +1618,7 @@ class OnStove(DataProcessor):
             return p
 
     def plot_costs_benefits_unit(self, technologies, area='urban', cmap=None, save=False, height=1.5, width=2.5):
-        df = pd.DataFrame({'Settlement': [], 'Technology': [], 'investment_costs': [], 'fuel_costs': [],
+        self.gdf = pd.DataFrame({'Settlement': [], 'Technology': [], 'investment_costs': [], 'fuel_costs': [],
                            'om_costs': [], 'health_costs_avoided': [],
                            'emissions_costs_saved': [], 'opportunity_cost_gained': []})
 
@@ -1631,7 +1643,7 @@ class OnStove(DataProcessor):
             ghg = np.nansum(tech.decreased_carbon_costs[settlement] * tech.households[settlement]) / total_hh
             time = np.nansum(tech.time_value[settlement] * tech.households[settlement]) / total_hh
 
-            df = pd.concat([df, pd.DataFrame({'Settlement': [set_type],
+            self.gdf = pd.concat([self.gdf, pd.DataFrame({'Settlement': [set_type],
                                               'Technology': [name],
                                               'Investment costs': [inv],
                                               'Fuel costs': [fuel],
@@ -1640,9 +1652,9 @@ class OnStove(DataProcessor):
                                               'Emissions costs saved': [ghg],
                                               'Opportunity cost gained': [time]})])
 
-        df['Fuel costs'] *= -1
-        df['Investment costs'] *= -1
-        df['O&M costs'] *= -1
+        self.gdf['Fuel costs'] *= -1
+        self.gdf['Investment costs'] *= -1
+        self.gdf['O&M costs'] *= -1
 
         if cmap is None:
             cmap = {'Health costs avoided': '#542788', 'Investment costs': '#b35806',
@@ -1658,9 +1670,9 @@ class OnStove(DataProcessor):
                       'Fuel costs',
                       'O&M costs']
 
-        df['net_benefit'] = df['Health costs avoided'] + df['Emissions costs saved'] + df['Opportunity cost gained'] + \
-                            df['Investment costs'] + df['Fuel costs'] + df['O&M costs']
-        dff = df.melt(id_vars=['Technology', 'Settlement', 'net_benefit'], value_vars=value_vars)
+        self.gdf['net_benefit'] = self.gdf['Health costs avoided'] + self.gdf['Emissions costs saved'] + self.gdf['Opportunity cost gained'] + \
+                            self.gdf['Investment costs'] + self.gdf['Fuel costs'] + self.gdf['O&M costs']
+        dff = self.gdf.melt(id_vars=['Technology', 'Settlement', 'net_benefit'], value_vars=value_vars)
 
         tech_list = list(dict.fromkeys(dff.sort_values(['Settlement', 'net_benefit'])['Technology'].tolist()))
         dff['Technology_cat'] = pd.Categorical(dff['Technology'], categories=tech_list)
@@ -1696,7 +1708,7 @@ class OnStove(DataProcessor):
                                   width=2.5):
         if type.lower() == 'box':
             if groupby.lower() == 'isurban':
-                df = self.gdf.groupby(['IsUrban', 'max_benefit_tech'])[['health_costs_avoided',
+                self.gdf = self.gdf.groupby(['IsUrban', 'max_benefit_tech'])[['health_costs_avoided',
                                                                         'opportunity_cost_gained',
                                                                         'emissions_costs_saved',
                                                                         'salvage_value',
@@ -1705,24 +1717,24 @@ class OnStove(DataProcessor):
                                                                         'om_costs',
                                                                         'Households',
                                                                         'Calibrated_pop']].sum()
-                df.reset_index(inplace=True)
-                self.re_name(df, labels, 'max_benefit_tech')
-                tech_list = df.groupby('max_benefit_tech')[['Calibrated_pop']].sum()
+                self.gdf.reset_index(inplace=True)
+                self.re_name(self.gdf, labels, 'max_benefit_tech')
+                tech_list = self.gdf.groupby('max_benefit_tech')[['Calibrated_pop']].sum()
                 tech_list = tech_list.reset_index().sort_values('Calibrated_pop')['max_benefit_tech'].tolist()
                 x = 'max_benefit_tech'
             elif groupby.lower() == 'urbanrural':
-                df = self.gdf.copy()
-                self.re_name(df, labels, 'max_benefit_tech')
-                df['Urban'] = df['IsUrban'] > 20
-                df['Urban'].replace({True: 'Urban', False: 'Rural'}, inplace=True)
+                self.gdf = self.gdf.copy()
+                self.re_name(self.gdf, labels, 'max_benefit_tech')
+                self.gdf['Urban'] = self.gdf['IsUrban'] > 20
+                self.gdf['Urban'].replace({True: 'Urban', False: 'Rural'}, inplace=True)
                 x = 'Urban'
             else:
-                df = self.gdf.copy()
-                self.re_name(df, labels, 'max_benefit_tech')
-                tech_list = df.groupby('max_benefit_tech')[['Calibrated_pop']].sum()
+                self.gdf = self.gdf.copy()
+                self.re_name(self.gdf, labels, 'max_benefit_tech')
+                tech_list = self.gdf.groupby('max_benefit_tech')[['Calibrated_pop']].sum()
                 tech_list = tech_list.reset_index().sort_values('Calibrated_pop')['max_benefit_tech'].tolist()
                 x = 'max_benefit_tech'
-            p = (ggplot(df)
+            p = (ggplot(self.gdf)
                  + geom_boxplot(aes(x=x,
                                     y='(health_costs_avoided + opportunity_cost_gained + emissions_costs_saved' +
                                       ' - investment_costs - fuel_costs - om_costs)',
@@ -1744,7 +1756,7 @@ class OnStove(DataProcessor):
                 p += labs(x='')
 
         elif type.lower() == 'density':
-            df = self.gdf.groupby(['IsUrban', 'max_benefit_tech'])[['health_costs_avoided',
+            self.gdf = self.gdf.groupby(['IsUrban', 'max_benefit_tech'])[['health_costs_avoided',
                                                                     'opportunity_cost_gained',
                                                                     'emissions_costs_saved',
                                                                     'salvage_value',
@@ -1753,9 +1765,9 @@ class OnStove(DataProcessor):
                                                                     'om_costs',
                                                                     'Households',
                                                                     'Calibrated_pop']].sum()
-            df.reset_index(inplace=True)
-            self.re_name(df, labels, 'max_benefit_tech')
-            p = (ggplot(df)
+            self.gdf.reset_index(inplace=True)
+            self.re_name(self.gdf, labels, 'max_benefit_tech')
+            p = (ggplot(self.gdf)
                  + geom_density(aes(
                         x='(health_costs_avoided + opportunity_cost_gained + emissions_costs_saved' +
                           ' + salvage_value - investment_costs - fuel_costs - om_costs)',
