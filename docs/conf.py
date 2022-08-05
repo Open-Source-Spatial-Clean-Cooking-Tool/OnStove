@@ -60,7 +60,8 @@ exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 intersphinx_mapping = {
     'geopandas': ('https://geopandas.org/en/stable/', None),
     'pandas' : ('https://pandas.pydata.org/docs/', None),
-    'rasterio': ('https://rasterio.readthedocs.io/en/latest/', None)
+    'rasterio': ('https://rasterio.readthedocs.io/en/latest/', None),
+    'numpy': ('https://numpy.org/doc/stable/', None)
 }
 
 

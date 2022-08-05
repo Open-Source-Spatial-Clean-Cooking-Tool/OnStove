@@ -114,15 +114,15 @@ class DataProcessor:
             if postgres:
                 layer = VectorLayer(category, name, layer_path, conn=self.conn,
                                     normalization=normalization,
-                                    distance=distance,
+                                    distance_method=distance,
                                     distance_limit=distance_limit,
                                     inverse=inverse, query=query)
             else:
                 if window:
-                    window = self.mask_layer.layer
+                    window = self.mask_layer.data
                 layer = VectorLayer(category, name, layer_path,
                                     normalization=normalization,
-                                    distance=distance,
+                                    distance_method=distance,
                                     distance_limit=distance_limit,
                                     inverse=inverse, query=query, bbox=window)
 
@@ -130,12 +130,12 @@ class DataProcessor:
             if window:
                 with rasterio.open(layer_path) as src:
                     src_crs = src.meta['crs']
-                if src_crs != self.mask_layer.layer.crs:
-                    bounds = transform_bounds(self.mask_layer.layer.crs, src_crs, *self.mask_layer.bounds())
+                if src_crs != self.mask_layer.data.crs:
+                    bounds = transform_bounds(self.mask_layer.data.crs, src_crs, *self.mask_layer.bounds())
                 window = bounds
             layer = RasterLayer(category, name, layer_path,
                                 normalization=normalization, inverse=inverse,
-                                distance=distance, resample=resample,
+                                distance_method=distance, resample=resample,
                                 window=window, rescale=rescale)
 
             if base_layer:
@@ -172,7 +172,7 @@ class DataProcessor:
         else:
             self.mask_layer = VectorLayer(category, name, layer_path, query=query)
 
-        if self.mask_layer.layer.crs != self.project_crs:
+        if self.mask_layer.data.crs != self.project_crs:
             output_path = os.path.join(self.output_directory, category, name)
             self.mask_layer.reproject(self.project_crs, output_path)
 
@@ -194,11 +194,11 @@ class DataProcessor:
                     all_touched = True
                 else:
                     all_touched = False
-                layer.mask(self.mask_layer.layer, output_path, all_touched=all_touched)
+                layer.mask(self.mask_layer.data, output_path, all_touched=all_touched)
                 if isinstance(layer.friction, RasterLayer):
-                    layer.friction.mask(self.mask_layer.layer, output_path)
+                    layer.friction.mask(self.mask_layer.data, output_path)
                 if isinstance(layer.distance_raster, RasterLayer):
-                    layer.distance_raster.mask(self.mask_layer.layer, output_path)
+                    layer.distance_raster.mask(self.mask_layer.data, output_path)
 
     def align_layers(self, datasets='all'):
         datasets = self.get_layers(datasets)
@@ -242,7 +242,7 @@ class DataProcessor:
                                            category, name)
                 os.makedirs(output_path, exist_ok=True)
                 layer.get_distance_raster(self.base_layer.path,
-                                          output_path, self.mask_layer.layer)
+                                          output_path, self.mask_layer.data)
                 # if isinstance(layer.friction, RasterLayer):
                 #     layer.friction.get_distance_raster(self.base_layer.path,
                 #                                        output_path, self.mask_layer.layer)
@@ -256,7 +256,7 @@ class DataProcessor:
             for name, layer in layers.items():
                 output_path = os.path.join(self.output_directory,
                                            category, name)
-                layer.distance_raster.normalize(output_path, self.mask_layer.layer, buffer=buffer)
+                layer.distance_raster.normalize(output_path, self.mask_layer.data, buffer=buffer)
 
     @staticmethod
     def index(layers):
@@ -266,7 +266,7 @@ class DataProcessor:
         weights = []
         rasters = []
         for name, layer in data.items():
-            rasters.append(layer.weight * layer.distance_raster.normalized.layer)
+            rasters.append(layer.weight * layer.distance_raster.normalized.data)
             weights.append(layer.weight)
 
         return sum(rasters) / sum(weights)
@@ -275,12 +275,12 @@ class DataProcessor:
         self.normalize_rasters(datasets=datasets, buffer=buffer)
         datasets = self.get_layers(datasets)
         layer = RasterLayer('Indexes', 'Demand_index', normalization='MinMax')
-        layer.layer = self.index(datasets)
+        layer.data = self.index(datasets)
         layer.meta = self.base_layer.meta
         output_path = os.path.join(self.output_directory,
                                    'Indexes', 'Demand Index')
         os.makedirs(output_path, exist_ok=True)
-        layer.normalize(output_path, self.mask_layer.layer, buffer=buffer)
+        layer.normalize(output_path, self.mask_layer.data, buffer=buffer)
         layer.normalized.name = 'Demand Index'
         self.demand_index = layer.normalized
 
@@ -288,24 +288,24 @@ class DataProcessor:
         self.normalize_rasters(datasets=datasets, buffer=buffer)
         datasets = self.get_layers(datasets)
         layer = RasterLayer('Indexes', 'Supply index', normalization='MinMax')
-        layer.layer = self.index(datasets)
+        layer.data = self.index(datasets)
         layer.meta = self.base_layer.meta
         output_path = os.path.join(self.output_directory,
                                    'Indexes', 'Supply Index')
         os.makedirs(output_path, exist_ok=True)
-        layer.normalize(output_path, self.mask_layer.layer, buffer=buffer)
+        layer.normalize(output_path, self.mask_layer.data, buffer=buffer)
         layer.normalized.name = 'Supply Index'
         self.supply_index = layer.normalized
 
     def get_clean_cooking_index(self, demand_weight=1, supply_weight=1, buffer=False):
         layer = RasterLayer('Indexes', 'Clean Cooking Potential Index', normalization='MinMax')
-        layer.layer = (demand_weight * self.demand_index.layer + supply_weight * self.supply_index.layer) / \
-                      (demand_weight + supply_weight)
+        layer.data = (demand_weight * self.demand_index.data + supply_weight * self.supply_index.data) / \
+                     (demand_weight + supply_weight)
         layer.meta = self.base_layer.meta
         output_path = os.path.join(self.output_directory,
                                    'Indexes', 'Clean Cooking Potential Index')
         os.makedirs(output_path, exist_ok=True)
-        layer.normalize(output_path, self.mask_layer.layer, buffer=buffer)
+        layer.normalize(output_path, self.mask_layer.data, buffer=buffer)
         layer.normalized.name = 'Clean Cooking Potential Index'
         self.clean_cooking_index = layer.normalized
 
@@ -313,12 +313,12 @@ class DataProcessor:
         self.normalize_rasters(datasets=datasets, buffer=buffer)
         datasets = self.get_layers(datasets)
         layer = RasterLayer('Indexes', 'Assistance need index', normalization='MinMax')
-        layer.layer = self.index(datasets)
+        layer.data = self.index(datasets)
         layer.meta = self.base_layer.meta
         output_path = os.path.join(self.output_directory,
                                    'Indexes', 'Assistance need index')
         os.makedirs(output_path, exist_ok=True)
-        layer.normalize(output_path, self.mask_layer.layer, buffer=buffer)
+        layer.normalize(output_path, self.mask_layer.data, buffer=buffer)
         layer.normalized.name = 'Assistance need index'
         self.assistance_need_index = layer.normalized
 
@@ -346,11 +346,11 @@ class DataProcessor:
                    title='Clean Cooking Potential Index', output_file=None):
         levels = []
         if index.lower() in 'clean cooking potential index':
-            data = self.clean_cooking_index.layer
+            data = self.clean_cooking_index.data
         elif index.lower() in 'assistance need index':
-            data = self.assistance_need_index.layer
+            data = self.assistance_need_index.data
         elif index.lower() in 'supply index':
-            data = self.supply_index.layer
+            data = self.supply_index.data
 
         for level in [0.2, 0.4, 0.6, 0.8, 1]:
             levels.append(np.where(
@@ -358,7 +358,7 @@ class DataProcessor:
 
         share = []
         for level in levels:
-            value = np.nansum(self.layers[layer[0]][layer[1]].layer[level])
+            value = np.nansum(self.layers[layer[0]][layer[1]].data[level])
             if np.isnan(value):
                 value = 0
             share.append(value)
@@ -726,7 +726,7 @@ class OnStove(DataProcessor):
         """
         if not layer:
             if self.base_layer:
-                layer = self.base_layer.layer.copy()
+                layer = self.base_layer.data.copy()
                 meta = self.base_layer.meta
             else:
                 raise ValueError("No population layer was provided as input to the method or in the model base_layer")
@@ -761,7 +761,7 @@ class OnStove(DataProcessor):
                     mask[mask == nodata] = np.nan
                     if np.isnan(mask[self.rows, self.cols]).sum() > 0:
                         mask[~np.isnan(mask)] = 1
-                        base = self.base_layer.layer.copy()
+                        base = self.base_layer.data.copy()
                         base[base == self.base_layer.meta['nodata']] = np.nan
                         rows, cols = np.where(np.isnan(mask) & ~np.isnan(base))
                         mask[rows, cols] = 0
@@ -1128,7 +1128,7 @@ class OnStove(DataProcessor):
 
             layer.align(self.base_layer.path)
 
-            self.raster_to_dataframe(layer.layer, name="relative_wealth", method='read',
+            self.raster_to_dataframe(layer.data, name="relative_wealth", method='read',
                                      nodata=layer.meta['nodata'], fill_nodata='interpolate')
         else:
             raise ValueError("file_type needs to be either csv, raster, polygon or point.")
@@ -1141,7 +1141,7 @@ class OnStove(DataProcessor):
         return df
 
     def points_to_raster(self, dff, variable, dtype=rasterio.uint8, nodata=111):
-        total_bounds = self.mask_layer.layer['geometry'].total_bounds
+        total_bounds = self.mask_layer.data['geometry'].total_bounds
         height = round((total_bounds[3] - total_bounds[1]) / 1000)
         width = round((total_bounds[2] - total_bounds[0]) / 1000)
         transform = rasterio.transform.from_bounds(*total_bounds, width, height)
@@ -1166,7 +1166,7 @@ class OnStove(DataProcessor):
     def create_layer(self, variable, name=None, labels=None, cmap=None, metric='mean'):
         codes = None
         if self.base_layer is not None:
-            layer = np.empty(self.base_layer.layer.shape)
+            layer = np.empty(self.base_layer.data.shape)
             layer[:] = np.nan
             dff = self.gdf.copy().reset_index(drop=False)
         else:
@@ -1219,7 +1219,7 @@ class OnStove(DataProcessor):
         if name is not None:
             variable = name
         raster = RasterLayer('Output', variable)
-        raster.layer = layer
+        raster.data = layer
         raster.meta = meta
         # raster.meta.update(nodata=np.nan, dtype='float32')
         raster.bounds = bounds
@@ -1247,7 +1247,7 @@ class OnStove(DataProcessor):
         if isinstance(admin_layer, gpd.GeoDataFrame):
             admin_layer = admin_layer
         elif not admin_layer:
-            admin_layer = self.mask_layer.layer
+            admin_layer = self.mask_layer.data
         if stats:
             fig, ax = plt.subplots(1, 1, figsize=(16, 9), dpi=dpi)
             self.add_statistics(ax, stats_position, stats_fontsize)
@@ -1312,7 +1312,7 @@ class OnStove(DataProcessor):
         if isinstance(admin_layer, gpd.GeoDataFrame):
             admin_layer = admin_layer
         elif not admin_layer:
-            admin_layer = self.mask_layer.layer
+            admin_layer = self.mask_layer.data
 
         if stats:
             fig, ax = plt.subplots(1, 1, figsize=(16, 9), dpi=dpi)

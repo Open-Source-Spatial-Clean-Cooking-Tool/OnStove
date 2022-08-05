@@ -20,7 +20,7 @@ else:
 adm_path = r"..\Clean cooking Africa paper\01. Data\GIS-data\Admin\Admin_1.shp"
 adm_0 = VectorLayer('', 'Boundaries', adm_path, query=f"GID_0 == '{country}'")
 
-bounds = adm_0.layer.dissolve().bounds
+bounds = adm_0.data.dissolve().bounds
 bounds = bounds.iloc[0].to_list()
 
 out_folder = r"..\Clean cooking Africa paper\01. Data\GIS-data\Forest"
@@ -44,9 +44,9 @@ for location in locations:
     else:
         name = 'Forest'
     forest = RasterLayer('', name, forest_path, window=new_bounds)
-    forest.layer[forest.layer > 60] = 0
+    forest.data[forest.data > 60] = 0
 
-    forest.layer = forest.layer.astype('byte')
+    forest.data = forest.data.astype('byte')
     forest.meta.update(dtype='int8', nodata=0)
 
     print('       - Saving raster')

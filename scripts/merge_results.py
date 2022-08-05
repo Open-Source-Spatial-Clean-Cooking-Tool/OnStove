@@ -45,7 +45,7 @@ africa = OnStove()
 africa.output_directory = snakemake.params.output_directory
 
 mask_layer = VectorLayer('admin', 'adm_1', path=snakemake.input.boundaries)
-mask_layer.layer = mask_layer.layer.to_crs(3857)
+mask_layer.data = mask_layer.data.to_crs(3857)
 africa.mask_layer = mask_layer
 africa.gdf = gpd.GeoDataFrame(df, crs='epsg:3857')
 

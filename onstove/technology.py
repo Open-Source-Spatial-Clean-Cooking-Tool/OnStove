@@ -572,7 +572,7 @@ class LPG(Technology):
 
         lpg.friction = friction
         lpg.travel_time(os.path.join(model.output_directory, self.name))
-        self.travel_time = 2 * model.raster_to_dataframe(lpg.distance_raster.layer,
+        self.travel_time = 2 * model.raster_to_dataframe(lpg.distance_raster.data,
                                                          nodata=lpg.distance_raster.meta['nodata'],
                                                          fill_nodata='interpolate', method='read')
 
@@ -849,7 +849,7 @@ class Biomass(Technology):
         self.forest.friction = self.friction
         self.forest.travel_time(condition=self.forest_condition)
 
-        travel_time = 2 * model.raster_to_dataframe(self.forest.distance_raster.layer,
+        travel_time = 2 * model.raster_to_dataframe(self.forest.distance_raster.data,
                                                     nodata=self.forest.distance_raster.meta['nodata'],
                                                     fill_nodata='interpolate', method='read')
         travel_time[travel_time > 7] = 7  # cap to max travel time based on literature
@@ -1179,7 +1179,7 @@ class Biogas(Technology):
         for each populated grid cell in hours/meter
         """
         friction = RasterLayer(self.name, 'Friction', path=friction_path, resample='average')
-        data = model.raster_to_dataframe(friction.layer, nodata=friction.meta['nodata'],
+        data = model.raster_to_dataframe(friction.data, nodata=friction.meta['nodata'],
                                          fill_nodata='interpolate', method='read')
         return data / 60
 
@@ -1221,7 +1221,7 @@ class Biogas(Technology):
             if isinstance(self.temperature, str):
                 self.temperature = RasterLayer('Biogas', 'Temperature', self.temperature)
 
-            model.raster_to_dataframe(self.temperature.layer, name="Temperature", method='read',
+            model.raster_to_dataframe(self.temperature.data, name="Temperature", method='read',
                                       nodata=self.temperature.meta['nodata'], fill_nodata='interpolate')
             model.gdf.loc[model.gdf["Temperature"] < 10, "available_biogas"] = 0
             model.gdf.loc[(model.gdf["IsUrban"] > 20), "available_biogas"] = 0
@@ -1229,8 +1229,8 @@ class Biogas(Technology):
         # Water availability restriction
         if self.water is not None:
             if isinstance(self.water, str):
-                self.water = VectorLayer('Biogas', 'Water scarcity', self.water, bbox=model.mask_layer.layer)
-            model.raster_to_dataframe(self.water.layer, name="Water",
+                self.water = VectorLayer('Biogas', 'Water scarcity', self.water, bbox=model.mask_layer.data)
+            model.raster_to_dataframe(self.water.data, name="Water",
                                       fill_nodata='interpolate', method='read')
             model.gdf.loc[model.gdf["Water"] == 0, "available_biogas"] = 0
 
@@ -1249,7 +1249,7 @@ class Biogas(Technology):
         for name, path in paths.items():
             layer = RasterLayer('Livestock', name,
                                 path=path)
-            model.raster_to_dataframe(layer.layer, name=name, method='read',
+            model.raster_to_dataframe(layer.data, name=name, method='read',
                                       nodata=layer.meta['nodata'], fill_nodata='interpolate')
 
     def total_time(self, model):
