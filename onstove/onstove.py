@@ -623,8 +623,10 @@ class OnStove(DataProcessor):
         #allocate remaining population to biogas in rural areas where there's potential
         biogas_factor = tech_dict["Biogas"].population_cooking_rural / (self.gdf["Calibrated_pop"].loc[(tech_dict["Biogas"].time_of_collection!=float('inf')) & ~isurban].sum())
         tech_dict["Biogas"].pop_sqkm.loc[(~isurban) & (tech_dict["Biogas"].time_of_collection!=float('inf'))] = self.gdf["Calibrated_pop"] * biogas_factor
+        print((tech_dict["Biogas"].pop_sqkm < 0).sum())
         pop_diff = (tech_dict["Biogas"].pop_sqkm + tech_dict["Electricity"].pop_sqkm) > self.gdf["Calibrated_pop"]
         tech_dict["Biogas"].pop_sqkm.loc[pop_diff] = self.gdf["Calibrated_pop"] - tech_dict["Electricity"].pop_sqkm
+        print((tech_dict["Biogas"].pop_sqkm < 0).sum())
         #allocate remaining population proportionally to techs other than biogas and electricity 
         remaining_share = 0
         for name, tech in tech_dict.items():
@@ -645,6 +647,7 @@ class OnStove(DataProcessor):
                 remove_pop = sum(tech.pop_sqkm.loc[(~isurban) & (adjust_cells)])
                 share_allocate = tech_remainingpop/ remove_pop 
                 tech_dict["Biogas"].pop_sqkm.loc[(~isurban) & (adjust_cells)] += tech.pop_sqkm * share_allocate
+                print(name, (tech_dict["Biogas"].pop_sqkm < 0).sum())
                 tech.pop_sqkm.loc[(~isurban) & (adjust_cells)] *= (1 - share_allocate)
         #allocate urban population to technologies 
         for name, tech in tech_dict.items():
@@ -659,6 +662,7 @@ class OnStove(DataProcessor):
             if (name != "Biogas") & (name != "Electricity"):
                 tech.pop_sqkm[isurban] = remaining_urbpop * tech.current_share_urban / remaining_urbshare
             tech.pop_sqkm = tech.pop_sqkm / self.gdf["Calibrated_pop"]
+        
 
     def set_base_fuel(self, techs: list = None):
         """
@@ -714,7 +718,8 @@ class OnStove(DataProcessor):
                 #tech.pop_sqkm[self.gdf['IsUrban'] < 20] = tech.current_share_rural
 
                 tech.carb(self)
-                tech.total_time(self)
+                if name != "Biogas":
+                    tech.total_time(self)
                 tech.required_energy(self)
 
                 if isinstance(tech, LPG):
