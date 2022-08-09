@@ -593,8 +593,9 @@ class RasterLayer(Layer):
             return cax
 
     def save_image(self, output_path, type='png', cmap='viridis', ticks=None, tick_labels=None,
-                   cumulative_count=None, categories=None, legend_position=(1.05, 1),
+                   cumulative_count=None, categories=None, legend_position=(1.05, 1), figsize=(6.4, 4.8),
                    admin_layer=None, title=None, ax=None, dpi=300, quantiles=None,
+                   legend_prop={'title': {'size': 12, 'weight': 'bold'}, 'size': 12},
                    legend=True, legend_title='', legend_cols=1, rasterized=True, scale_bar=None, north_arrow=None):
         os.makedirs(output_path, exist_ok=True)
         output_file = os.path.join(output_path,
@@ -603,7 +604,7 @@ class RasterLayer(Layer):
                   categories=categories, legend_position=legend_position, rasterized=rasterized,
                   admin_layer=admin_layer, title=title, ax=ax, dpi=dpi, quantiles=quantiles,
                   legend=legend, legend_title=legend_title, legend_cols=legend_cols,
-                  scale_bar=scale_bar, north_arrow=north_arrow)
+                  scale_bar=scale_bar, north_arrow=north_arrow, figsize=figsize, legend_prop=legend_prop)
 
         plt.savefig(output_file, dpi=dpi, bbox_inches='tight', transparent=True)
         plt.close()

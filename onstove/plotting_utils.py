@@ -9,12 +9,47 @@ import matplotlib.pyplot as plt
 
 
 class ScaleBar(matplotlib.offsetbox.AnchoredOffsetbox):
-    """ size: length of bar in data units
-        extent : height of bar ends in axes units """
+    """Object used to create a scale bar based on an axes transform.
 
-    def __init__(self, style='single', size=1, extent=0.03, loc=2, ax=None,
-                 pad=0.4, borderpad=0.5, ppad=0, sep=2, prop=None,
-                 frameon=True, linekw={}, textprops={}, **kwargs):
+    This makes use of the :doc:`matplotlib.offsetbox.AnchoredOffsetbox<matplotlib:api/offsetbox_api>` object to render
+    the scale.
+
+    Parameters
+    ----------
+    style: str, default 'single'
+        Graphic style of the scale, available options 'single' or 'double'.
+    size: int, default 1
+        Length of bar in data units, this will match the units of the axes.
+    extent: float, default 0.03
+        Height of bar ends in axes fraction.
+    loc: str or int, default 'upper left'
+        A location code, same as matplotlib's legend, either: ``upper right``, ``upper left``, ``lower left``,
+        ``lower right``, ``right``, ``center left``, ``center right``, ``lower center``, ``upper center`` or ``center``.
+    ax: matplotlib.axes.Axes, optional
+        Object of type :doc:`matplotlib.axes.Axes<matplotlib:api/axes_api>`.
+    pad: float, default 0.4
+        Padding around the child as fraction of the fontsize.
+    borderpad: float, default 0.5
+        Padding between the offsetbox frame and the `bbox_to_anchor`.
+    sep: float, default 2
+        Separation between the scale bar and the units.
+    prop: matplotlib.font_manager.FontProperties, optional
+        This is only used as a reference for paddings. If not given,
+        :doc:`rcParams["legend.fontsize"]<matplotlib:tutorials/introductory/customizing>` (default: 'medium')
+        is used.
+    frameon: bool, default False
+        Whether to draw a frame around the scale bar.
+    linekw: dict, optional
+        Style properties for the scale bar.
+    textprops: dict, optional
+        Font properties for the text.
+    **kwargs
+        All other parameters are passed on to :doc:`OffsetBox<matplotlib:api/offsetbox_api>`.
+    """
+
+    def __init__(self, style='single', size=1, extent=0.03, loc='upper left', ax=None,
+                 pad=0.4, borderpad=0.5, sep=2, prop=None,
+                 frameon=False, linekw={}, textprops={}, **kwargs):
         if not ax:
             ax = plt.gca()
         trans = ax.get_xaxis_transform()
@@ -49,13 +84,48 @@ class ScaleBar(matplotlib.offsetbox.AnchoredOffsetbox):
             size_units.add_artist(text4)
 
         self.vpac = matplotlib.offsetbox.HPacker(children=[size_bar, size_units],
-                                                 align="center", pad=ppad, sep=sep)
+                                                 align="center", pad=0, sep=sep)
         matplotlib.offsetbox.AnchoredOffsetbox.__init__(self, loc, pad=pad, borderpad=borderpad,
                                                         child=self.vpac, prop=prop, frameon=frameon, **kwargs)
 
 
-def scale_bar(style='single', size=100000, loc='lower right', frameon=False,
-              pad=0, sep=4, linekw=None, ax=None, textprops=None, extent=0.02):
+def scale_bar(style='single', size=100000, extent=0.02, loc='lower right', ax=None,
+              borderpad=0.5, sep=4, frameon=False, linekw=None, textprops=None):
+    """Function to create a :class:`ScaleBar` object and add it to a specified or current axes.
+
+    This function takes as inputs the basic parameters needed to create a :class:`ScaleBar` and adds the object as a
+    :doc:`matplotlib.artist.Artist<matplotli:api/artist_api>` to a specified
+    :doc:`axes<matplotlib:api/axes_api>` or to the current :doc:`axes<matplotlib:api/axes_api>` in use if not
+    specified.
+
+    Parameters
+    ----------
+    style: str, default 'single'
+        Graphic style of the scale, available options 'single' or 'double'.
+    size: int, default 1
+        Length of bar in data units, this will match the units of the axes.
+    extent: float, default 0.03
+        Height of bar ends in axes fraction.
+    loc: str or int, default 'upper left'
+        A location code, same as matplotlib's legend, either: ``upper right``, ``upper left``, ``lower left``,
+        ``lower right``, ``right``, ``center left``, ``center right``, ``lower center``, ``upper center`` or ``center``.
+    ax: matplotlib.axes.Axes, optional
+        Object of type :doc:`matplotlib.axes.Axes<matplotlib:api/axes_api>`.
+    borderpad: float, default 0.5
+        Padding between the offsetbox frame and the `bbox_to_anchor`.
+    sep: float, default 2
+        Separation between the scale bar and the units.
+    frameon: bool, default False
+        Whether to draw a frame around the scale bar.
+    linekw: dict, optional
+        Style properties for the scale bar.
+    textprops: dict, optional
+        Font properties for the text.
+
+    See also
+    --------
+    ScaleBar
+    """
     if linekw is None:
         linekw = dict(color="black")
     if textprops is None:
@@ -64,12 +134,32 @@ def scale_bar(style='single', size=100000, loc='lower right', frameon=False,
     if not ax:
         ax = plt.gca()
     scalebar = ScaleBar(style=style, size=size, loc=loc, frameon=frameon,
-                        pad=pad, sep=sep, linekw=linekw, ax=ax,
+                        borderpad=borderpad, sep=sep, linekw=linekw, ax=ax,
                         textprops=textprops, extent=extent)
     ax.add_artist(scalebar)
 
 
 def add_svg(path, ax=None, location=(0.95, 0.95), size=30, color='black', linewidth=1):
+    """Function to add an ``svg`` image as an icon to a location on a specified axes.
+
+    It reads in the path to a ``svg`` image, converts the svg to a marker and plots it to a location in a specified
+    :doc:`axes<matplotlib:api/axes_api>` or the current axes in used if not defined.
+
+    Parameters
+    ----------
+    path: str
+        Path to a ``svg`` image.
+    ax: matplotlib.axes.Axes, optional
+        Object of type :doc:`matplotlib.axes.Axes<matplotlib:api/axes_api>`.
+    location: tuple of floats, default (0.95, 0.95)
+        Location to plot the image in fraction of the x and y axes.
+    size: int, default 30
+        Size of the image in pixels.
+    color: str, default 'black'
+        color of the image.
+    linewidth: int, default 1
+        Width of the borders of the image in pixels.
+    """
     if not ax:
         ax = plt.gca()
 
@@ -91,6 +181,28 @@ def add_svg(path, ax=None, location=(0.95, 0.95), size=30, color='black', linewi
 
 
 def north_arrow(ax=None, location=(0.95, 0.95), size=30, color='black', linewidth=1):
+    """Function to plot a north arrow in a map.
+
+    It makes use of the :func:`add_svg` to add a north arrow icon in a specified location of an
+    :doc:`axes<matplotlib:api/axes_api>`.
+
+    Parameters
+    ----------
+    ax: matplotlib.axes.Axes, optional
+        Object of type :doc:`matplotlib.axes.Axes<matplotlib:api/axes_api>`.
+    location: tuple of floats, default (0.95, 0.95)
+        Location to plot the image in fraction of the x and y axes.
+    size: int, default 30
+        Size of the image in pixels.
+    color: str, default 'black'
+        color of the image.
+    linewidth: int, default 1
+        Width of the borders of the image in pixels.
+
+    See also
+    --------
+    add_svg
+    """
     dir_path = os.path.dirname(os.path.realpath(__file__))
     file_path = os.path.join(dir_path, 'static/svg/north-arrow.svg')
     add_svg(file_path, ax=ax, location=location,
