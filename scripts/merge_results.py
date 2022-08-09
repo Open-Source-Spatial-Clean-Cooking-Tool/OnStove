@@ -33,12 +33,16 @@ labels = {"Biogas and Electricity": "Electricity and Biogas",
           'Biomass Forced Draft': 'Biomass ICS (FD)',
           'Pellets Forced Draft': 'Pellets ICS (FD)'}
 
-df = pd.DataFrame({'country': [], 'Households': [], 'max_benefit_tech': [], 'Calibrated_pop': [],
-				   'maximum_net_benefit': [], 'deaths_avoided': [], 'health_costs_avoided': [],
-				   'time_saved': [], 'reduced_emissions': [], 'investment_costs': [],
-				   'om_costs': [], 'fuel_costs': [], 'emissions_costs_saved': [],
-				   'opportunity_cost_gained': [], 'salvage_value': [], 
-				   'IsUrban': [], 'Current_elec': [], 'geometry': []})
+df = pd.DataFrame({'country': [], 'Households': [], 'Calibrated_pop': [],
+                   'costs_Electricity': [], 'costs_LPG': [], 'costs_Biogas': [],
+                   'costs_Collected_Improved_Biomass': [], 'costs_Collected_Traditional_Biomass': [],
+                   'costs_Charcoal ICS': [], 'costs_Traditional_Charcoal': [],
+                   'costs_Biomass Forced Draft': [], 'costs_Pellets Forced Draft': [],
+                   'max_benefit_tech': [], 'maximum_net_benefit': [], 'deaths_avoided': [],
+                   'health_costs_avoided': [], 'time_saved': [], 'reduced_emissions': [],
+                   'investment_costs': [], 'om_costs': [], 'fuel_costs': [],
+                   'emissions_costs_saved': [], 'opportunity_cost_gained': [],
+                   'salvage_value': [], 'IsUrban': [], 'Current_elec': [], 'geometry': []})
 
 print('Creating Africa model...')
 africa = OnStove()

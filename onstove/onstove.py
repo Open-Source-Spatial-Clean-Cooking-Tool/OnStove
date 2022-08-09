@@ -1221,8 +1221,6 @@ class OnStove(DataProcessor):
         raster = RasterLayer('Output', variable)
         raster.data = layer
         raster.meta = meta
-        # raster.meta.update(nodata=np.nan, dtype='float32')
-        raster.bounds = bounds
 
         return raster, codes, cmap
 
