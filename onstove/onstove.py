@@ -1239,27 +1239,30 @@ class OnStove(DataProcessor):
                     f.write(f'{code} {r} {g} {b} 255 {label}\n')
 
     def plot(self, variable, cmap='viridis', cumulative_count=None, quantiles=None,
-             legend_position=(1.05, 1), dpi=150,
-             admin_layer=None, title=None, labels=None, legend=True, legend_title='', legend_cols=1, rasterized=True,
+             legend_position=(1.05, 1), dpi=150, figsize=(6.4, 4.8),
+             admin_layer=None, title=None, labels=None,
+             legend=True, legend_title='', legend_cols=1,
+             legend_prop={'title': {'size': 12, 'weight': 'bold'}, 'size': 12}, rasterized=True,
              stats=False, stats_position=(1.05, 0.5), stats_fontsize=12, metric='mean',
-             save_style=False, classes=5):
+             save_style=False, classes=5, ax=None, scale_bar=None, north_arrow=None):
         raster, codes, cmap = self.create_layer(variable, labels=labels, cmap=cmap, metric=metric)
         if isinstance(admin_layer, gpd.GeoDataFrame):
             admin_layer = admin_layer
         elif not admin_layer:
-            admin_layer = self.mask_layer.data
+            admin_layer = self.mask_layer.layer
+
+        if not ax:
+            fig, ax = plt.subplots(1, 1, figsize=figsize, dpi=dpi)
+
         if stats:
-            fig, ax = plt.subplots(1, 1, figsize=(16, 9), dpi=dpi)
             self.add_statistics(ax, stats_position, stats_fontsize)
-        else:
-            ax = None
 
         raster.plot(cmap=cmap, cumulative_count=cumulative_count,
                     quantiles=quantiles,
                     categories=codes, legend_position=legend_position,
                     admin_layer=admin_layer, title=title, legend=legend,
                     legend_title=legend_title, legend_cols=legend_cols, rasterized=rasterized,
-                    ax=ax)
+                    ax=ax, legend_prop=legend_prop, scale_bar=scale_bar, north_arrow=north_arrow)
 
         if save_style:
             if codes:
@@ -1296,7 +1299,7 @@ class OnStove(DataProcessor):
 
         ab = AnnotationBbox(hvox, stats_position,
                             xycoords='axes fraction',
-                            box_alignment=(0, 0),
+                            box_alignment=(0, 1),
                             pad=0.0,
                             bboxprops=dict(boxstyle='round',
                                            facecolor='#f1f1f1ff',
@@ -1307,7 +1310,8 @@ class OnStove(DataProcessor):
     def to_image(self, variable, name=None, type='png', cmap='viridis', cumulative_count=None, quantiles=None,
                  legend_position=(1.05, 1), admin_layer=None, title=None, dpi=300, labels=None, legend=True,
                  legend_title='', legend_cols=1, rasterized=True, stats=False, stats_position=(1.05, 0.5),
-                 stats_fontsize=12, metric='mean'):
+                 stats_fontsize=12, metric='mean', scale_bar=None, north_arrow=None, figsize=(6.4, 4.8),
+                 legend_prop={'title': {'size': 12, 'weight': 'bold'}, 'size': 12}):
         raster, codes, cmap = self.create_layer(variable, name=name, labels=labels, cmap=cmap, metric=metric)
         if isinstance(admin_layer, gpd.GeoDataFrame):
             admin_layer = admin_layer
@@ -1315,7 +1319,7 @@ class OnStove(DataProcessor):
             admin_layer = self.mask_layer.data
 
         if stats:
-            fig, ax = plt.subplots(1, 1, figsize=(16, 9), dpi=dpi)
+            fig, ax = plt.subplots(1, 1, figsize=figsize, dpi=dpi)
             self.add_statistics(ax, stats_position, stats_fontsize)
         else:
             ax = None
@@ -1323,7 +1327,8 @@ class OnStove(DataProcessor):
         raster.save_image(self.output_directory, type=type, cmap=cmap, cumulative_count=cumulative_count,
                           quantiles=quantiles, categories=codes, legend_position=legend_position,
                           admin_layer=admin_layer, title=title, ax=ax, dpi=dpi,
-                          legend=legend, legend_title=legend_title, legend_cols=legend_cols, rasterized=rasterized)
+                          legend=legend, legend_title=legend_title, legend_cols=legend_cols, rasterized=rasterized,
+                          scale_bar=scale_bar, north_arrow=north_arrow, legend_prop=legend_prop)
 
     def to_json(self, name):
         self.gdf.to_file(os.path.join(self.output_directory, name), driver='GeoJSON')

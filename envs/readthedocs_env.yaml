@@ -19,3 +19,5 @@ dependencies:
   - rasterstats
   - scikit-learn
   - scikit-image
+  - svgpathtools
+  - svgpath2mpl

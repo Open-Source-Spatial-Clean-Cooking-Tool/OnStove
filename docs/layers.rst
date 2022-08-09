@@ -1,7 +1,7 @@
 GIS layer objects
 -----------------
 
-.. currentmodule:: onstove.layer
+.. currentmodule:: onstove
 
 .. autosummary::
    :toctree: generated/

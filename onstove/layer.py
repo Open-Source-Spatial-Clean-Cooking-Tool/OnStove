@@ -16,8 +16,9 @@ from matplotlib.colors import ListedColormap, to_rgb, to_hex
 from scipy import ndimage
 from typing import Optional, Callable, Union
 
-from onstove.raster import normalize, reproject_raster, align_raster
-
+from onstove import scale_bar as scale_bar_func
+from onstove import north_arrow as north_arrow_func
+from .raster import *
 
 def try_import():
     try:
@@ -1040,7 +1041,8 @@ class RasterLayer(_Layer):
         return layer
 
     @staticmethod
-    def category_legend(im, categories, legend_position=(1.05, 1), title='', legend_cols=1):
+    def category_legend(im, categories, legend_position=(1.05, 1), title='', legend_cols=1,
+                        legend_prop={'title': {'size': 12, 'weight': 'bold'}, 'size': 12}):
         values = list(categories.values())
         titles = list(categories.keys())
 
@@ -1048,17 +1050,23 @@ class RasterLayer(_Layer):
         # create a patch (proxy artist) for every color
         patches = [mpatches.Patch(color=colors[i], label="{}".format(titles[i])) for i in range(len(values))]
         # put those patched as legend-handles into the legend
-        legend = plt.legend(handles=patches, bbox_to_anchor=legend_position, loc=2, borderaxespad=0., ncol=legend_cols)
-        legend.set_title(title, prop={'size': 12, 'weight': 'bold'})
+        prop = legend_prop.copy()
+        prop.pop('title')
+        legend = plt.legend(handles=patches, bbox_to_anchor=legend_position, loc='upper left',
+                            borderaxespad=0., ncol=legend_cols, prop=prop)
+        legend.set_title(title, prop=legend_prop['title'])
         legend._legend_box.align = "left"
 
     def plot(self, cmap='viridis', ticks=None, tick_labels=None,
              cumulative_count=None, quantiles=None, categories=None, legend_position=(1.05, 1),
-             admin_layer=None, title=None, ax=None, dpi=150, figsize=(16, 9), legend=True, legend_title='',
-             legend_cols=1, rasterized=True, colorbar=True, return_image=False):
-        bounds = self.bounds
-        extent = [bounds[0], bounds[2],
-                  bounds[1], bounds[3]]  # [left, right, bottom, top]
+             admin_layer=None, title=None, ax=None, dpi=150,
+             legend=True, legend_title='', legend_cols=1,
+             legend_prop={'title': {'size': 12, 'weight': 'bold'}, 'size': 12},
+             rasterized=True, colorbar=True, return_image=False, figsize=(6.4, 4.8),
+             scale_bar=None, north_arrow=None):
+
+        extent = [self.bounds[0], self.bounds[2],
+                  self.bounds[1], self.bounds[3]]  # [left, right, bottom, top]
 
         if cumulative_count:
             layer = self.cumulative_count(cumulative_count)
@@ -1086,7 +1094,7 @@ class RasterLayer(_Layer):
         if legend:
             if categories:
                 self.category_legend(cax, categories, legend_position=legend_position,
-                                     title=legend_title, legend_cols=legend_cols)
+                                     title=legend_title, legend_cols=legend_cols, legend_prop=legend_prop)
             elif colorbar:
                 colorbar = dict(shrink=0.8)
                 if ticks:
@@ -1111,20 +1119,41 @@ class RasterLayer(_Layer):
         ax.spines['bottom'].set_visible(False)
         ax.spines['left'].set_visible(False)
 
+        if scale_bar is not None:
+            if scale_bar == 'default':
+                scale_bar_func()
+            elif isinstance(scale_bar, dict):
+                scale_bar_func(**scale_bar)
+            else:
+                raise ValueError('Parameter `scale_bar` need to be a dictionary with parameter/value pairs, '
+                                 'accepted by the `onstove.scale_bar` function.')
+
+        if north_arrow is not None:
+            if north_arrow == 'default':
+                north_arrow_func()
+            elif isinstance(north_arrow, dict):
+                north_arrow_func(**north_arrow)
+            else:
+                raise ValueError('Parameter `north_arrow` need to be a dictionary with parameter/value pairs, '
+                                 'accepted by the `onstove.north_arrow` function.')
+
         if return_image:
             return cax
 
     def save_image(self, output_path, type='png', cmap='viridis', ticks=None, tick_labels=None,
-                   cumulative_count=None, categories=None, legend_position=(1.05, 1),
+                   cumulative_count=None, categories=None, legend_position=(1.05, 1), figsize=(6.4, 4.8),
                    admin_layer=None, title=None, ax=None, dpi=300, quantiles=None,
-                   legend=True, legend_title='', legend_cols=1, rasterized=True):
+                   legend_prop={'title': {'size': 12, 'weight': 'bold'}, 'size': 12},
+                   legend=True, legend_title='', legend_cols=1, rasterized=True, scale_bar=None, north_arrow=None):
         os.makedirs(output_path, exist_ok=True)
         output_file = os.path.join(output_path,
                                    self.name + f'.{type}')
         self.plot(cmap=cmap, ticks=ticks, tick_labels=tick_labels, cumulative_count=cumulative_count,
                   categories=categories, legend_position=legend_position, rasterized=rasterized,
                   admin_layer=admin_layer, title=title, ax=ax, dpi=dpi, quantiles=quantiles,
-                  legend=legend, legend_title=legend_title, legend_cols=legend_cols)
+                  legend=legend, legend_title=legend_title, legend_cols=legend_cols,
+                  scale_bar=scale_bar, north_arrow=north_arrow, figsize=figsize, legend_prop=legend_prop)
+
         plt.savefig(output_file, dpi=dpi, bbox_inches='tight', transparent=True)
         plt.close()
 
