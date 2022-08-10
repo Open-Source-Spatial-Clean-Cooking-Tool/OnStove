@@ -810,8 +810,26 @@ class RasterLayer(_Layer):
         width = round((bounds[2] - bounds[0]) / cell_width)
         return width, height
 
-    def mask(self, mask_layer, output_path=None, crop=True, all_touched=True):
-        """"""
+    def mask(self, mask_layer: VectorLayer, output_path: Optional[str] = None,
+             crop: bool = True, all_touched: bool = True):
+        """Creates a masked version of the layer, based on an input shape given by a :class:`VectorLayer`.
+
+        It uses the :doc:`rasterio.mas.mask<rasterio:api/rasterio.mask>` function to create a masked version of the
+        raster, based on input shapes that are defined by a :class:`VectorLayer`.
+
+        Parameters
+        ----------
+        mask_layer: VectorLayer
+            Layer that contains the shapes that are used to create the mask. Every pixel of the raster outside the mask,
+            will be set to the raster's ``nodata`` value.
+        output_path: str, optional
+            A folder path where to save the output dataset. If not defined then the masked dataset is not saved to disk.
+        crop: bool, default True
+            Boolean indicating if the raster extent should be cropped to the ``mask_layer`` extent.
+        all_touched: bool, default True
+             Include a pixel in the mask if it touches any of the shapes. If False, include a pixel only if its center
+             is within one of the shapes, or if it is selected by Bresenham’s line algorithm.
+        """
         shape_mask, meta = mask_layer.rasterize(value=1, transform=self.meta['transform'],
                                                 width=self.meta['width'], height=self.meta['height'],
                                                 nodata=0, all_touched=all_touched)
@@ -845,8 +863,28 @@ class RasterLayer(_Layer):
         #             output_file, self.meta['nodata'], 'DEFLATE', all_touched=all_touched)
         # self.read_layer(output_file)
 
-    def reproject(self, crs, output_path=None,
-                  cell_width=None, cell_height=None):
+    def reproject(self, crs: rasterio.crs.CRS, output_path: Optional[str] = None,
+                  cell_width: Optional[float] = None, cell_height: Optional[float] = None):
+        """Reprojects the raster data into a specified coordinate system.
+
+        Uses the :doc:`rasterio.features.rasterize<rasterio:api/rasterio.features>` function to reproject the current
+        raster data into a different ``crs``.
+
+        Parameters
+        ----------
+        crs: rasterio.crs.CRS or dict
+            Target coordinate reference system. this can be anything accepted by
+            :doc:`rasterio.warp.reproject<rasterio:api/rasterio.warp>`.
+        output_path: str, optional
+            A folder path where to save the output dataset. If not defined then the reprojected dataset is not saved
+            to disk.
+        cell_width: float, optional
+            The cell width in units consistent with the raster's crs. If provided the transform of the raster will be
+            adjusted accordingly.
+        cell_height: float, optional
+            The cell height in units consistent with the raster's crs. If provided the transform of the raster will be
+            adjusted accordingly.
+        """
         if (self.meta['crs'] != crs) or cell_width:
             data, meta = reproject_raster(self.path, crs,
                                           cell_width=cell_width, cell_height=cell_height,

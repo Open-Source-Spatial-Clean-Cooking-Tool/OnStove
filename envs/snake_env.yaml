@@ -18,3 +18,5 @@ dependencies:
   - scikit-learn
   - scikit-image
   - snakemake-minimal
+  - svgpathtools
+  - svgpath2mpl
