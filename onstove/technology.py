@@ -517,36 +517,96 @@ class Technology:
 
 
 class LPG(Technology):
-    """
-    LPG technology class. Inherits all functionality from the standard
-    Technology class
+    """LPG technology class used to model LPG stoves.
+
+    This class inherits the standard :class:`Technology` class and is used to model stoves using LPG as fuel.
+    The LPG is assumed to be bought either by the closest vendor or in the closest urban settlement depedning on
+    data availability. In the first case a point layer indicating vendors is assumed to be passed to the OnStove after
+    which a least-cost path is determined using a friction map. In the other case it is assumed that the traveltime map
+    is passed to OnStove directly.
+
+    Parameters
+    ----------
+    name: str, optional.
+       Name of the technology to model.
+    carbon_intensity: float, optional
+       The CO2 equivalent emissions in kg/GJ of burned fuel. If this attribute is used, then none of the
+       gas-specific intensities will be used (e.g. ch4_intensity).
+    co2_intensity: float, default 63
+       The CO2 emissions in kg/GJ of burned fuel.
+    ch4_intensity: float, default 0.003
+       The CH4 emissions in kg/GJ of burned fuel.
+    n2o_intensity: float, default 0.0001
+       The N2O emissions in kg/GJ of burned fuel.
+    co_intensity: float, default 0
+       The CO emissions in kg/GJ of burned fuel.
+    bc_intensity: float, default 0.0044
+       The black carbon emissions in kg/GJ of burned fuel.
+    oc_intensity: float, default 0.0091
+       The organic carbon emissions in kg/GJ of burned fuel.
+    energy_content: float, default 45.5
+       Energy content of the fuel in MJ/kg.
+    tech_life: int, default 7
+       Stove life in year.
+    inv_cost: float, default 44
+       Investment cost of the stove in USD.
+    fuel_cost: float, default 1.04
+       Fuel cost in USD/kg.
+    time_of_cooking: float, default 2
+       Daily average time spent for cooking with this stove in hours.
+    om_cost: float, default 3.7
+       Operation and maintenance cost in USD/year.
+    efficiency: float, default 0.5
+       Efficiency of the stove.
+    pm25: float, default 43
+       Particulate Matter emissions (PM25) in mg/kg of fuel.
+    travel_time: Pandas Series, optional
+       Pandas Series describing the time needed (in hours) to reach either the closest LPG supply point or urban
+       settlement  from each population point. It is either calculated using the LPG supply points, friction layer and
+       population density layer or taken directly from a traveltime map.
+    truck_capacity: float, default 2000
+       Capacity of the truck carrying the fuel in kg.
+    diesel_cost: float, 1.04
+       Cost of diesel used in order to estimate the cost of transportation. Given in USD/liter
+    diesel_per_hour: float, default 14
+       Average diesel consumption of the truck carrying the fuel. Measured in liter/h
+    lpg_path: str, optional
+        Path to the lpg supply points (point vector file).
+    friction_path: str, optional
+       Path to the friction raster file describing the time needed (in minutes) to travel one meter within each
+       cell using motorized transport.
+    cylinder_cost: float, default 2.78
+       Cost of LPG cylinder. This is relevant for first time buyers currenty not having access to an LPG cylinder.
+       Given in USD/kg
+    cylinder_life: float, 15
+       Lifetime of LPG cylinder, measured in years.
     """
 
     def __init__(self,
-                 name=None,
-                 carbon_intensity=None,  # Kg/GJ
-                 co2_intensity=63,
-                 ch4_intensity=0.003,
-                 n2o_intensity=0.0001,
-                 co_intensity=0,
-                 bc_intensity=0.0044,
-                 oc_intensity=0.0091,
-                 energy_content=0,
-                 tech_life=0,  # in years
-                 inv_cost=0,  # in USD
-                 fuel_cost=0,
-                 time_of_cooking=0,
-                 om_cost=0,  # percentage of investement cost
-                 efficiency=0,  # ratio
-                 pm25=43,
-                 travel_time=None,
-                 truck_capacity=2000,
-                 diesel_cost=0.88,
-                 diesel_per_hour=14,
-                 lpg_path=None,
-                 friction_path=None,
-                 cylinder_cost=2.78,  # USD/kg,
-                 cylinder_life=15):
+                 name: Optional[str] = None,
+                 carbon_intensity: Optional[float] = None ,
+                 co2_intensity: float = 63,
+                 ch4_intensity: float = 0.003,
+                 n2o_intensity: float = 0.0001,
+                 co_intensity: float = 0,
+                 bc_intensity: float = 0.0044,
+                 oc_intensity: float = 0.0091,
+                 energy_content: float = 45.5,
+                 tech_life: int = 7,  # in years
+                 inv_cost: float = 44,  # in USD
+                 fuel_cost: float = 0.73,
+                 time_of_cooking: float = 2,
+                 om_cost: float = 3.7,
+                 efficiency: float = 0.5,  # ratio
+                 pm25: float = 43,
+                 travel_time: Optional[pd.Series] = None,
+                 truck_capacity: float = 2000,
+                 diesel_cost: float = 1.04,
+                 diesel_per_hour: float = 14,
+                 lpg_path: Optional[str] = None,
+                 friction_path: Optional[str] = None,
+                 cylinder_cost: float = 2.78,  # USD/kg,
+                 cylinder_life: float = 15):
         super().__init__(name, carbon_intensity, co2_intensity, ch4_intensity,
                          n2o_intensity, co_intensity, bc_intensity, oc_intensity,
                          energy_content, tech_life, inv_cost, fuel_cost, time_of_cooking,
@@ -561,9 +621,37 @@ class LPG(Technology):
         self.cylinder_cost = cylinder_cost
         self.cylinder_life = cylinder_life
 
-    def add_travel_time(self, model, align=False):
-        lpg = VectorLayer(self.name, 'Suppliers', path=self.lpg_path)
-        friction = RasterLayer(self.name, 'Friction', path=self.friction_path, resample='average')
+    def add_travel_time(self, lpg_path: Optional[str] = None, friction_path: Optional[str] = None,
+                        model: 'onstove.onstove.OnStove', align: bool = False):
+        """This method calculates the travel time needed to transport LPG.
+
+        The travel time is calculated as the time needed (in hours) to reach the closest LPG supplier from each
+        population point. It uses a point layer for LPG suppliers, a friction layer and a population density layer.
+
+        Parameters
+        ----------
+        lpg_path: str
+            Path to the LPG supply points.
+        friction_path: str
+            Path to the friction raster file describing the time needed (in minutes) to travel one meter within each
+            cell using motorized transport.
+        model: OnStove model
+            Instance of the OnStove model containing the main data of the study case. See
+            :class:`onstove.onstove.OnStove`.
+        align: bool, default False
+            Boolean parameter to indicate if the friction layer need to be align with the population
+            data in the `model`.
+        """
+
+        if lpg_path is None:
+            lpg_path = self.lpg_path
+
+        lpg = VectorLayer(self.name, 'Suppliers', path=lpg_path)
+
+        if friction_path is None:
+            friction_path = self.friction_path
+
+        friction = RasterLayer(self.name, 'Friction', path=friction_path, resample='average')
 
         if align:
             os.makedirs(os.path.join(model.output_directory, self.name, 'Suppliers'), exist_ok=True)
@@ -576,27 +664,33 @@ class LPG(Technology):
                                                          nodata=lpg.distance_raster.meta['nodata'],
                                                          fill_nodata='interpolate', method='read')
 
-    def transportation_cost(self, model):
-        """The cost of transporting LPG. See https://iopscience.iop.org/article/10.1088/1748-9326/6/3/034002/pdf for the formula
+    def transportation_cost(self, model: 'onstove.onstove.OnStove'):
+        """The cost of transporting LPG.
 
         Transportation cost = (2 * diesel consumption per h * national diesel price * travel time)/transported LPG
 
         Total cost = (LPG cost + Transportation cost)/efficiency of LPG stoves
 
+        For more information about cost formula see [1]_.
 
-        Each truck is assumed to transport 2,000 kg LPG
-        (3.5 MT truck https://www.wlpga.org/wp-content/uploads/2019/09/2019-Guide-to-Good-Industry-Practices-for-LPG-Cylinders-in-the-
-        Distribution-Channel.pdf)
-        National diesel price in Nepal is assumed to be 0.88 USD/l
-        Diesel consumption per h is assumed to be 14 l/h (14 l/100km)
-        (https://www.iea.org/reports/fuel-consumption-of-cars-and-vans)
-        LPG cost in Nepal is assumed to be 19 USD per cylinder (1.34 USD/kg)
-        LPG stove efficiency is assumed to be 60%
+        The function uses the following attributes of model: ``diesel_per_hour``, ``diesel_cost``, ``travel_time``,
+        ``truck_capacity``, ``efficiency`` and ``energy_content``.
 
-        :param param1:  travel_time_raster
-                        Hour to travel between each point and the startpoints as array
-        :returns:       The cost of LPG in each cell per kg
+
+        References
+        ----------
+        .. [1] Szabó, S., Bódis, K., Huld, T. & Moner-Girona, M. Energy solutions in rural Africa: mapping
+        electrification costs of distributed solar and diesel generation versus grid extension.
+        Environ. Res. Lett. 6, 034002 (2011).
+
+
+        Parameters
+        ----------
+        model: OnStove model
+            Instance of the OnStove model containing the main data of the study case. See
+            :class:`onstove.onstove.OnStove`.
         """
+
         transport_cost = (self.diesel_per_hour * self.diesel_cost * self.travel_time) / self.truck_capacity
         kg_yr = (model.specs["Meals_per_day"] * 365 * model.energy_per_meal) / (
                 self.efficiency * self.energy_content)  # energy content in MJ/kg
@@ -604,20 +698,50 @@ class LPG(Technology):
         transport_cost[transport_cost < 0] = np.nan
         self.transport_cost = transport_cost
 
-    def discount_fuel_cost(self, model, relative=True):
+    def discount_fuel_cost(self, model: 'onstove.onstove.OnStove', relative: bool = True):
+        """This method expands :meth:`discount_fuel_cost` when LPG is the stove assessed in order to ensure that the
+         transportation costs are included
+
+        Parameters
+        ----------
+        model: OnStove model
+            Instance of the OnStove model containing the main data of the study case. See
+            :class:`onstove.onstove.OnStove`.
+        relative: bool, default True
+            Boolean parameter to indicate if the discounted investments will be calculated relative to the `base_fuel`
+            or not.
+
+        See also
+        --------
+        discount_fuel_cost
+        """
+
         self.transportation_cost(model)
         super().discount_fuel_cost(model, relative)
 
-    def transport_emissions(self, model):
-        """Diesel consumption per h is assumed to be 14 l/h (14 l/100km)
+    def transport_emissions(self, model: 'onstove.onstove.OnStove'):
+        """Calculates the emissions caused by the transportation of LPG. This is dependent on the diesel consumption of
+         the truck. Diesel consumption is assumed to be 14 l/h (14 l/100km). Each truck is assumed to transport 2,000
+         kg LPG
 
-        Emissions intensities and diesel density are taken from:
+        Emissions intensities and diesel density are taken from [1]_.
 
-            Ntziachristos, L. and Z. Samaras (2018), “1.A.3.b.i, 1.A.3.b.ii, 1.A.3.b.iii, 1.A.3.b.iv Passenger cars,
-            light commercial trucks, heavy-duty vehicles including buses and motor cycles”, in EMEP/EEA air pollutant
-            emission inventory guidebook 2016 – Update Jul. 2018
+        The function uses the following attributes of model: ``energy``, ``energy_content``, ``travel_time`` and
+        ``truck_capacity``.
 
-        Each truck is assumed to transport 2,000 kg LPG
+        .. [1]Ntziachristos, L. and Z. Samaras (2018), “1.A.3.b.i, 1.A.3.b.ii, 1.A.3.b.iii, 1.A.3.b.iv Passenger cars,
+        light commercial trucks, heavy-duty vehicles including buses and motor cycles”, in EMEP/EEA air pollutant
+        emission inventory guidebook 2016 – Update Jul. 2018
+
+        Parameters
+        ----------
+        model: OnStove model
+            Instance of the OnStove model containing the main data of the study case. See
+            :class:`onstove.onstove.OnStove`.
+
+        Returns
+        -------
+        The total transport emissions that can be associated with each household in kg of CO2-eq per year.
         """
         diesel_density = 840  # kg/m3
         bc_fraction = 0.55  # BC fraction of pm2.5
@@ -631,22 +755,87 @@ class LPG(Technology):
                             pollutant, ef in diesel_ef.items()])  # in gCO2eq per yr
         return hh_emissions / 1000  # in kgCO2eq per yr
 
-    def carb(self, model):
+    def carb(self, model: 'onstove.onstove.OnStove'):
+        """This method expands :meth:`Technology.carbon` when LPG is the stove assessed in order to ensure that the
+         emissions caused by the transportation is included.
+
+        Parameters
+        ----------
+        model: OnStove model
+            Instance of the OnStove model containing the main data of the study case. See
+            :class:`onstove.onstove.OnStove`.
+
+        See also
+        --------
+        transport_emissions
+        """
         super().carb(model)
         self.carbon += self.transport_emissions(model)
 
-    def infrastructure_cost(self, model):
+    def infrastructure_cost(self, model: 'onstove.onstove.OnStove'):
+        """Calculates cost of cylinders for first-time LPG users. It is assumed that the cylinder contains 12.5 kg of
+        LPG. The function calls ``infrastructure_salvage``.
+
+        The function uses the ``cylinder_cost`` attribute of the model.
+
+        Parameters
+        ----------
+        model: OnStove model
+            Instance of the OnStove model containing the main data of the study case. See
+            :class:`onstove.onstove.OnStove`.
+
+        See also
+        --------
+        infrastructure_salvage
+        """
         cost = self.cylinder_cost * 12.5
         salvage = self.infrastructure_salvage(model, cost, self.cylinder_life)
         self.discounted_infra_cost = (cost - salvage)
 
-    def infrastructure_salvage(self, model, cost, life):
+    def infrastructure_salvage(self, model: 'onstove.onstove.OnStove', cost: float, life: int):
+        """Calculates the salvaged cylinder cost. The function calls ``discount_factor``.
+
+        Parameters
+        ----------
+        model: OnStove model
+            Instance of the OnStove model containing the main data of the study case. See
+            :class:`onstove.onstove.OnStove`.
+        cost: float
+            The cost of buying an LPG-cylinder.
+        life: int
+            The lifetime of a cylinder.
+
+        Returns
+        -------
+        The discounted salvage cost of an LPG-cylinder.
+
+        See also
+        --------
+        discount_factor
+        """
         discount_rate, proj_life = self.discount_factor(model.specs)
         used_life = proj_life % life
         salvage = cost * (1 - used_life / life)
         return salvage / discount_rate[0]
 
-    def discounted_inv(self, model, relative=True):
+    def discounted_inv(self, model: 'onstove.onstove.OnStove', relative: bool = True):
+        """This method expands :meth:`Technology.discounted_inv` by adding the cylinder cost for households currently
+        not using LPG.
+
+        Parameters
+        ----------
+        model: OnStove model
+            Instance of the OnStove model containing the main data of the study case. See
+            :class:`onstove.onstove.OnStove`.
+        relative: bool, default True
+            Boolean parameter to indicate if the discounted investments will be calculated relative to the `base_fuel`
+            or not.
+
+        See also
+        --------
+        infrastructure_cost
+        """
+
         super().discounted_inv(model, relative=relative)
         self.infrastructure_cost(model)
         if relative:
@@ -697,13 +886,13 @@ class Biomass(Technology):
     oc_intensity: float, default 0.308
         The organic carbon emissions in kg/GJ of burned fuel.
     energy_content: float, default 16
-        Energy content of the fuel in MJ/Kg.
+        Energy content of the fuel in MJ/kg.
     tech_life: int, default 2
-        Technology life in year.
+        Stove life in year.
     inv_cost: float, default 0
         Investment cost of the stove in USD.
     fuel_cost: float, default 0
-        Fuel cost in USD/Kg if any.
+        Fuel cost in USD/kg if any.
     time_of_cooking: float, default 2.9
         Daily average time spent for cooking with this stove in hours.
     om_cost: float, default 0
@@ -711,7 +900,7 @@ class Biomass(Technology):
     efficiency: float, default 0.12
         Efficiency of the stove.
     pm25: float, default 844
-        Particulate Matter emissions (PM25) in mg/Kg of fuel.
+        Particulate Matter emissions (PM25) in mg/kg of fuel.
     forest_path: str, optional
         Path to the forest cover raster file.
     friction_path: str, optional
@@ -726,7 +915,7 @@ class Biomass(Technology):
            :meth:`total_time<onstove.technology.Biomass.total_time>`
 
     collection_capacity: float, default 25
-        Average wood collection capacity per person in Kg/trip.
+        Average wood collection capacity per person in kg/trip.
     collected_fuel: bool, default True
         Boolean indicating if the fuel is collected or purchased. If True, then the ``travel_time`` will be
         calculated. If False, the ``fuel_cost`` will be used and a travel and collection time disregarded.
@@ -947,23 +1136,64 @@ class Biomass(Technology):
 
 
 class Charcoal(Technology):
+    """Charcoal technology class used to model traditional and improved stoves.
+
+    This class inherits the standard :class:`Technology` class and is used to model traditional and Improved Cook
+    Stoves (ICS) using charcoal as fuel.
+
+    Parameters
+    ----------
+    name: str, optional.
+        Name of the technology to model.
+    carbon_intensity: float, optional
+        The CO2 equivalent emissions in kg/GJ of burned fuel. If this attribute is used, then none of the
+        gas-specific intensities will be used (e.g. ch4_intensity).
+    co2_intensity: float, default 121
+        The CO2 emissions in kg/GJ of burned fuel.
+    ch4_intensity: float, default 0.576
+        The CH4 emissions in kg/GJ of burned fuel.
+    n2o_intensity: float, default 0.001
+        The N2O emissions in kg/GJ of burned fuel.
+    co_intensity: float, default 0
+        The CO emissions in kg/GJ of burned fuel.
+    bc_intensity: float, default 0.1075
+        The black carbon emissions in kg/GJ of burned fuel.
+    oc_intensity: float, default 0.308
+        The organic carbon emissions in kg/GJ of burned fuel.
+    energy_content: float, default 30
+        Energy content of the fuel in MJ/kg.
+    tech_life: int, default 2
+        Stove life in year.
+    inv_cost: float, default 4
+        Investment cost of the stove in USD.
+    fuel_cost: float, default 0.09
+        Fuel cost in USD/kg if any.
+    time_of_cooking: float, default 2.6
+        Daily average time spent for cooking with this stove in hours.
+    om_cost: float, default 3.7
+        Operation and maintenance cost in USD/year.
+    efficiency: float, default 0.2
+        Efficiency of the stove.
+    pm25: float, default 256
+    """
+
     def __init__(self,
                  name=None,
                  carbon_intensity=None,
-                 co2_intensity=112,
-                 ch4_intensity=0.864,
-                 n2o_intensity=0.0039,
+                 co2_intensity=121,
+                 ch4_intensity=0.576,
+                 n2o_intensity=0.001,
                  co_intensity=0,
                  bc_intensity=0.1075,
                  oc_intensity=0.308,
-                 energy_content=0,
-                 tech_life=0,  # in years
-                 inv_cost=0,  # in USD
-                 fuel_cost=0,
-                 time_of_cooking=0,
-                 om_cost=0,  # percentage of investement cost
-                 efficiency=0,  # ratio
-                 pm25=844):
+                 energy_content=30,
+                 tech_life=2,  # in years
+                 inv_cost=4,  # in USD
+                 fuel_cost=0.09,
+                 time_of_cooking=2.6,
+                 om_cost=3.7,
+                 efficiency=0.2,  # ratio
+                 pm25=256):
         super().__init__(name, carbon_intensity, co2_intensity, ch4_intensity,
                          n2o_intensity, co_intensity, bc_intensity, oc_intensity,
                          energy_content, tech_life,
@@ -971,20 +1201,51 @@ class Charcoal(Technology):
                          om_cost, efficiency, pm25, is_clean=False)
 
     def get_carbon_intensity(self, model):
+        """This method expands :meth:`Technology.get_carbon_intensity`.
+
+        It excludes the CO2 emissions from the share of firewood that is sustainably harvested (i.e. it does not affect
+        other emissions such as CH4) by using the fraction of Non-Renewable Biomass (fNRB).
+
+        Parameters
+        ----------
+        model: OnStove model
+            Instance of the OnStove model containing the main data of the study case. See
+            :class:`onstove.onstove.OnStove`.
+
+        Notes
+        -----
+        For more information about fNRB see [1]_.
+
+        References
+        ----------
+        .. [1] R. Bailis, R. Drigo, A. Ghilardi, O. Masera, The carbon footprint of traditional woodfuels,
+           Nature Clim Change. 5 (2015) 266–272. https://doi.org/10.1038/nclimate2491.
+        """
         intensity = self['co2_intensity']
         self['co2_intensity'] *= model.specs['fnrb']
         super().get_carbon_intensity(model)
         self['co2_intensity'] = intensity
 
     def production_emissions(self, model):
-        """Charcoal production emissioons calculations.
+        """Calculates the emissions caused by the production of Charcoal. The function uses emission factors with regards
+        to CO2, CO, CH4, BC and OC as well as the ``energy`` and ``energy_content`` attributes of te model.
+        Emissions factors for the production of charcoal are taken from [1]_.
 
-        Emissions factors are taken from:
-
-            Akagi, S. K., Yokelson, R. J., Wiedinmyer, C., Alvarado, M. J., Reid, J. S., Karl, T., Crounse, J. D.,
+        .. [1]Akagi, S. K., Yokelson, R. J., Wiedinmyer, C., Alvarado, M. J., Reid, J. S., Karl, T., Crounse, J. D.,
             & Wennberg, P. O. (2010). Emission factors for open and domestic biomass burning for use in atmospheric
             models. Atmospheric Chemistry and Physics Discussions. 10: 27523–27602., 27523–27602.
             https://www.fs.usda.gov/treesearch/pubs/39297
+
+        Parameters
+        ----------
+        model: OnStove model
+            Instance of the OnStove model containing the main data of the study case. See
+            :class:`onstove.onstove.OnStove`.
+
+        Returns
+        -------
+        The total charcoal production emissions that can be associated with each household measured in
+        kg of CO2-eq per year.
         """
         emission_factors = {'co2': 1626, 'co': 255, 'ch4': 39.6, 'bc': 0.02, 'oc': 0.74}  # g/kg_Charcoal
         # Charcoal produced (kg/yr). Energy required (MJ/yr)/Charcoal energy content (MJ/kg)
@@ -994,6 +1255,21 @@ class Charcoal(Technology):
         return hh_emissions / 1000  # kgCO2/yr
 
     def carb(self, model):
+        """This method expands :meth:`Technology.carbon` when Charcoal is the fuel used (both traditional stoves and ICS)
+         in order to ensure that the emissions caused by the production and transportation is included in the total emissions.
+
+        Parameters
+        ----------
+        model: OnStove model
+            Instance of the OnStove model containing the main data of the study case. See
+            :class:`onstove.onstove.OnStove`.
+
+        See also
+        --------
+        carbon
+        """
+        super().carb(model)
+        self.carbon += self.transport_emissions(model)
         super().carb(model)
         self.carbon += self.production_emissions(model)
 
