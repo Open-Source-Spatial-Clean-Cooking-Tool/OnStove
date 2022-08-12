@@ -920,7 +920,7 @@ class Biomass(Technology):
         Boolean indicating if the fuel is collected or purchased. If True, then the ``travel_time`` will be
         calculated. If False, the ``fuel_cost`` will be used and a travel and collection time disregarded.
     time_of_collection: float, default 2
-        Time spend collecting biomass on a single trip (excluding travel time) in hours.
+        Time spent collecting biomass on a single trip (excluding travel time) in hours.
     draft_type: str, default 'natural'
         Whether the ICS uses a natural draft or a forced draft.
     forest_condition: Callable object (function or lambda function) with a numpy array as input, optional
@@ -1175,25 +1175,26 @@ class Charcoal(Technology):
     efficiency: float, default 0.2
         Efficiency of the stove.
     pm25: float, default 256
+        Particulate Matter emissions (PM25) in mg/kg of fuel.
     """
 
     def __init__(self,
-                 name=None,
-                 carbon_intensity=None,
-                 co2_intensity=121,
-                 ch4_intensity=0.576,
-                 n2o_intensity=0.001,
-                 co_intensity=0,
-                 bc_intensity=0.1075,
-                 oc_intensity=0.308,
-                 energy_content=30,
-                 tech_life=2,  # in years
-                 inv_cost=4,  # in USD
-                 fuel_cost=0.09,
-                 time_of_cooking=2.6,
-                 om_cost=3.7,
-                 efficiency=0.2,  # ratio
-                 pm25=256):
+                 name: Optional[str] = None,
+                 carbon_intensity: Optional[float] = None,
+                 co2_intensity: float = 121,
+                 ch4_intensity: float = 0.576,
+                 n2o_intensity: float = 0.001,
+                 co_intensity: float = 0,
+                 bc_intensity: float = 0.1075,
+                 oc_intensity: float = 0.308,
+                 energy_content: float = 30,
+                 tech_life: float = 2,  # in years
+                 inv_cost: int = 4,  # in USD
+                 fuel_cost: float = 0.09,
+                 time_of_cooking: float = 2.6,
+                 om_cost: float = 3.7,
+                 efficiency: float = 0.2,  # ratio
+                 pm25: float = 256):
         super().__init__(name, carbon_intensity, co2_intensity, ch4_intensity,
                          n2o_intensity, co_intensity, bc_intensity, oc_intensity,
                          energy_content, tech_life,
@@ -1231,6 +1232,9 @@ class Charcoal(Technology):
         to CO2, CO, CH4, BC and OC as well as the ``energy`` and ``energy_content`` attributes of te model.
         Emissions factors for the production of charcoal are taken from [1]_.
 
+
+        References
+        ----------
         .. [1]Akagi, S. K., Yokelson, R. J., Wiedinmyer, C., Alvarado, M. J., Reid, J. S., Karl, T., Crounse, J. D.,
             & Wennberg, P. O. (2010). Emission factors for open and domestic biomass burning for use in atmospheric
             models. Atmospheric Chemistry and Physics Discussions. 10: 27523–27602., 27523–27602.
@@ -1275,9 +1279,37 @@ class Charcoal(Technology):
 
 
 class Electricity(Technology):
-    """
-    Electricity technology class. Inherits all functionality from the standard
-    Technology class
+    """Electricity technology class used to model electrical stoves.
+
+    This class inherits the standard :class:`Technology` class and is used to model electrical stoves.
+
+    Parameters
+    ----------
+    name: str, optional
+        Name of the technology to model.
+    carbon_intensity: float, optional
+        The CO2 equivalent emissions in kg/GJ of burned fuel. If this attribute is used, then none of the
+        gas-specific intensities will be used (e.g. ch4_intensity).
+    energy_content: float, default 3.6
+        Energy content in MJ/kWh.
+    tech_life: int, default 10
+        Stove life in year.
+    connection_cost: float, defualt 2
+        Cost of strengthening a household connection to enable electrical cooking.
+    grid_capacity_cost: float, optional
+        Cost of added capacity in the grid (USD/kW)
+    inv_cost: float, default 4
+        Investment cost of the stove in USD.
+    fuel_cost: float, default 0.09
+        Fuel cost in USD/kg if any.
+    time_of_cooking: float, default 2.6
+        Daily average time spent for cooking with this stove in hours.
+    om_cost: float, default 3.7
+        Operation and maintenance cost in USD/year.
+    efficiency: float, default 0.2
+        Efficiency of the stove.
+    pm25: float, default 256
+        Particulate Matter emissions (PM25) in mg/kg of fuel.
     """
 
     def __init__(self,
@@ -1299,10 +1331,8 @@ class Electricity(Technology):
                          om_cost, efficiency, pm25, is_clean=True)
         # Carbon intensity of fossil fuel plants in kg/GWh
         self.generation = {}
-
         self.capacities = {}
         self.grid_capacity_cost = grid_capacity_cost
-
         self.tiers_path = None
         self.connection_cost = connection_cost
         self.carbon_intensities = {'coal': 0.090374363, 'natural_gas': 0.050300655,
@@ -1312,13 +1342,11 @@ class Electricity(Technology):
                                    'waste': 0.010736111, 'biofuels_and_waste': 0.010736111,
                                    'nuclear': 0, 'hydro': 0, 'wind': 0,
                                    'solar': 0, 'other': 0, 'geothermal': 0}
-
         # TODO: make this general, with other fuel mix this crash
         self.grid_capacity_costs = {'oil': 1467, 'natural_gas': 550,
                                     'biofuels_and_waste': 2117,
                                     'nuclear': 4000, 'hydro': 2100, 'coal': 1600, 'wind': 1925,
                                     'solar': 1400, 'geothermal': 2917}
-
         self.grid_techs_life = {'oil': 40, 'natural_gas': 30,
                                 'biofuels_and_waste': 25,
                                 'nuclear': 50, 'hydro': 60, 'coal': 40, 'wind': 22,
@@ -1412,47 +1440,113 @@ class Electricity(Technology):
 
 
 class Biogas(Technology):
-    """
-    Biogas technology class. Inherits all functionality from the standard
-    Technology class
+    """Biogas technology class used to model biogas fueled stoves. This class inherits the standard
+    :class:`Technology` class and is used to model stove using biogas as fuel. Biogas stoves are assumed to not
+    be available in urban settlements as the collection of manure is assumed to be limited. If the fuel is assumed
+    to be purchased changes can be made to the function called ``available_biogas``. Biogas is also assumed to be
+    restricted based on temperature (an average yearly temperature below 10 degrees Celsius is assumed to lead to
+    heavy drops of efficiency [1]_). Biogas production is also assumed to be a very water intensive process [2]_, hence
+    areas under water stress are assumed restricted as well.
+
+    References
+    ----------
+    .. [1]Lohani, S. P., Dhungana, B., Horn, H. & Khatiwada, D. Small-scale biogas technology and clean cooking fuel:
+        Assessing the potential and links with SDGs in low-income countries – A case study of Nepal.
+        Sustainable Energy Technologies and Assessments 46, 101301 (2021).
+    .. [2]Bansal, V., Tumwesige, V. & Smith, J. U. Water for small-scale biogas digesters in sub-Saharan Africa.
+        GCB Bioenergy 9, 339–357 (2017).
+
+    Parameters
+    ----------
+    name: str, optional.
+        Name of the technology to model.
+    carbon_intensity: float, optional
+        The CO2 equivalent emissions in kg/GJ of burned fuel. If this attribute is used, then none of the
+        gas-specific intensities will be used (e.g. ch4_intensity).
+    co2_intensity: float, default 0
+        The CO2 emissions in kg/GJ of burned fuel.
+    ch4_intensity: float, default 0.029
+        The CH4 emissions in kg/GJ of burned fuel.
+    n2o_intensity: float, default 0.0006
+        The N2O emissions in kg/GJ of burned fuel.
+    co_intensity: float, default 0
+        The CO emissions in kg/GJ of burned fuel.
+    bc_intensity: float, default 0.0043
+        The black carbon emissions in kg/GJ of burned fuel.
+    oc_intensity: float, default 0.0091
+        The organic carbon emissions in kg/GJ of burned fuel.
+    energy_content: float, default 22.8
+        Energy content of the fuel in MJ/kg.
+    tech_life: int, default 20
+        Stove life in year.
+    inv_cost: float, default 550
+        Investment cost of the stove in USD.
+    fuel_cost: float, default 0
+        Fuel cost in USD/kg if any.
+    time_of_cooking: float, default 2
+        Daily average time spent for cooking with this stove in hours.
+    time_of_collection: float, default 3
+        Time spent collecting biomass on a single trip (excluding travel time) in hours.
+    om_cost: float, default 3.7
+        Operation and maintenance cost in USD/year.
+    efficiency: float, default 0.4
+        Efficiency of the stove.
+    pm25: float, default 43
+        Particulate Matter emissions (PM25) in mg/kg of fuel.
+    digestor_eff: float, default 0.4
+        Efficiency of the digestor.
+    friction_path: str, optional
+        Path to the friction raster file describing the time needed (in minutes) to travel one meter within each
+        cell.
     """
 
     def __init__(self,
-                 name=None,
-                 carbon_intensity=None,
-                 co2_intensity=0,
-                 ch4_intensity=0.0288,
-                 n2o_intensity=0.0006,
-                 co_intensity=0,
-                 bc_intensity=0.0043,
-                 oc_intensity=0.0091,
-                 energy_content=0,
-                 tech_life=0,  # in years
-                 inv_cost=0,  # in USD
-                 fuel_cost=0,
-                 time_of_cooking=0,
-                 om_cost=0,  # percentage of investement cost
-                 efficiency=0,  # ratio
-                 pm25=43,
-                 utilization_factor=0.5,
-                 digestor_eff=0.4,
-                 friction_path=None):
+                 name: Optional[str] = None,
+                 carbon_intensity: Optional[float] = None,
+                 co2_intensity: float = 0,
+                 ch4_intensity: float = 0.029,
+                 n2o_intensity: float = 0.0006,
+                 co_intensity: float = 0,
+                 bc_intensity: float = 0.0043,
+                 oc_intensity: float = 0.0091,
+                 energy_content: float = 22.8,
+                 tech_life: int = 20,  # in years
+                 inv_cost: float = 550,  # in USD
+                 fuel_cost: float = 0,
+                 time_of_cooking: float = 2,
+                 time_of_collection: float = 3,
+                 om_cost: float = 3.7,
+                 efficiency: float = 0.4,  # ratio
+                 pm25: float = 43,
+                 digestor_eff: float = 0.4,
+                 friction_path: Optional[str] = None):
         super().__init__(name, carbon_intensity, co2_intensity, ch4_intensity,
                          n2o_intensity, co_intensity, bc_intensity, oc_intensity,
                          energy_content, tech_life,
                          inv_cost, fuel_cost, time_of_cooking,
                          om_cost, efficiency, pm25, is_clean=True)
-        # TODO: Check what's the difference between these two factors
-        self.utilization_factor = utilization_factor
+
         self.digestor_eff = digestor_eff
         self.friction_path = friction_path
+        self.time_of_collection = time_of_collection
         self.water = None
         self.temperature = None
 
     def read_friction(self, model, friction_path):
-        """
-        Read a friction layer in min/meter (walking time per meter) and returns a pandas series with the values
-        for each populated grid cell in hours/meter
+        """Reads a friction layer in min per meter (walking time per meter) and returns a pandas series with the values
+        for each populated grid cell in hours per meter
+
+        Parameters
+        ----------
+        model: OnStove model
+            Instance of the OnStove model containing the main data of the study case. See
+            :class:`onstove.onstove.OnStove`.
+        friction_path: str
+            Path to where the friction layer is stored.
+
+        Returns
+        -------
+        A pandas series with the values for each populated grid cell in hours per meter
         """
         friction = RasterLayer(self.name, 'Friction', path=friction_path, resample='average')
         data = model.raster_to_dataframe(friction.data, nodata=friction.meta['nodata'],
@@ -1460,19 +1554,38 @@ class Biogas(Technology):
         return data / 60
 
     def required_energy_hh(self, model):
-        # Gets required annual energy for cooking (already affected by stove efficiency) in MJ/yr
+        """Determines the required annual energy needed for cooking taking into account the stove efficiency.
+
+        Parameters
+        ----------
+        model: OnStove model
+            Instance of the OnStove model containing the main data of the study case. See
+            :class:`onstove.onstove.OnStove`.
+
+        Returns
+        -------
+        Required annual energy needed for cooking
+        """
+
         self.required_energy(model)
         return self.energy / self.digestor_eff
 
     def get_collection_time(self, model):
+        """Caluclates the daily time of collection based on friction (hour/meter), the available biogas energy from
+        each cell (MJ/yr/meter, 1000000 represents meters per km2) and the required energy per household (MJ/yr)
+
+        Parameters
+        ----------
+        model: OnStove model
+            Instance of the OnStove model containing the main data of the study case. See
+            :class:`onstove.onstove.OnStove`.
+
+        """
         self.available_biogas(model)
         required_energy_hh = self.required_energy_hh(model)
 
-        # Read friction in h/meter
         friction = self.read_friction(model, self.friction_path)
 
-        # Caluclates the daily time of collection based on friction (hour/meter), the available biogas energy from
-        # each cell (MJ/yr/meter, 1000000 represents meters per km2) and the required energy per household (MJ/yr)
         time_of_collection = required_energy_hh * friction / (model.gdf["biogas_energy"] / 1000000) / 365
         time_of_collection[time_of_collection == float('inf')] = np.nan
         mean_value = time_of_collection.mean()
@@ -1480,7 +1593,28 @@ class Biogas(Technology):
         self.time_of_collection = time_of_collection
 
     def available_biogas(self, model):
-        # Biogas production potential in liters per day
+        """Caluclates the biogas production potential in liters per day. It currently takes into account 6 categories
+        of livestock (cattle, buffalo, sheep, goat, pig and poultry). The biogas potential for each category is determined
+        following the methodology outlined by Lohani et al.[1]_ This function also applies a restriction to biogas
+        production with regards to urban areas, areas with temperature lower than 10 degrees[1]_ celsius and areas under
+        water stress[2]_.
+
+        References
+        ----------
+        .. [1]Lohani, S. P., Dhungana, B., Horn, H. & Khatiwada, D. Small-scale biogas technology and clean cooking
+            fuel: Assessing the potential and links with SDGs in low-income countries – A case study of Nepal.
+            Sustainable Energy Technologies and Assessments 46, 101301 (2021).
+        .. [2]Bansal, V., Tumwesige, V. & Smith, J. U. Water for small-scale biogas digesters in sub-Saharan Africa.
+            GCB Bioenergy 9, 339–357 (2017).
+
+        Parameters
+        ----------
+        model: OnStove model
+            Instance of the OnStove model containing the main data of the study case. See
+            :class:`onstove.onstove.OnStove`.
+
+        """
+
         from_cattle = model.gdf["Cattles"] * 12 * 0.15 * 0.8 * 305
         from_buffalo = model.gdf["Buffaloes"] * 14 * 0.2 * 0.75 * 305
         from_sheep = model.gdf["Sheeps"] * 0.7 * 0.25 * 0.8 * 452
@@ -1488,7 +1622,7 @@ class Biogas(Technology):
         from_pig = model.gdf["Pigs"] * 5 * 0.75 * 0.14 * 470
         from_poultry = model.gdf["Poultry"] * 0.12 * 0.25 * 0.75 * 450
 
-        # Available produced biogas per year in m3
+
         model.gdf["available_biogas"] = ((from_cattle + from_buffalo + from_goat + from_pig + from_poultry +
                                           from_sheep) * self.digestor_eff / 1000) * 365
 
@@ -1514,6 +1648,27 @@ class Biogas(Technology):
         model.gdf["biogas_energy"] = model.gdf["available_biogas"] * self.energy_content
 
     def recalibrate_livestock(self, model, buffaloes, cattles, poultry, goats, pigs, sheeps):
+        """Recalibrates the livestock maps and adds them to the main dataframe. It currently takes into account 6 categories
+        of livestock (cattle, buffalo, sheep, goat, pig and poultry).
+
+        Parameters
+        ----------
+        model: OnStove model
+            Instance of the OnStove model containing the main data of the study case. See
+            :class:`onstove.onstove.OnStove`.
+        buffaloes: str
+            Path to the buffalo dataset.
+        cattles: str
+            Path to the cattle dataset.
+        poultry: str
+            Path to the poultry dataset.
+        goats: str
+            Path to the goat dataset.
+        pigs: str
+            Path to the pig dataset.
+        sheeps: str
+            Path to the sheep dataset.
+        """
         paths = {
             'Buffaloes': buffaloes,
             'Cattles': cattles,
@@ -1529,10 +1684,49 @@ class Biogas(Technology):
                                       nodata=layer.meta['nodata'], fill_nodata='interpolate')
 
     def total_time(self, model):
+        """This method expands :meth:`Technology.total_time` by adding the biogas collection time
+
+        Parameters
+        ----------
+        model: OnStove model
+            Instance of the OnStove model containing the main data of the study case. See
+            :class:`onstove.onstove.OnStove`.
+
+        See also
+        --------
+        total_time
+        """
         self.get_collection_time(model)
         super().total_time(model)
 
     def net_benefit(self, model, w_health=1, w_spillovers=1, w_environment=1, w_time=1, w_costs=1):
+        """This method expands :meth:`Technology.net_benefit` by taking into account biogas availability
+        in the calculations.
+
+        Parameters
+        ----------
+        model: OnStove model
+            Instance of the OnStove model containing the main data of the study case. See
+            :class:`onstove.onstove.OnStove`.
+        w_health: int
+            Determines whether health parameters (reduced morbidity and mortality)
+            should be considered in the net-benefit equation.
+        w_spillovers: int
+            Determines whether spillover effects from cooking with traditional fuels
+            should be considered in the net-benefit equation.
+        w_environment: int
+            Determines whether environmental effects (reduced emissions) should be considered in the net-benefit
+            equation.
+        w_time: int
+            Determines whether opportunity cost (reduced time spent) should be considered in the net-benefit
+            equation.
+        w_costs: int
+            Determines whether costs should be considered in the net-benefit equation.
+
+        See also
+        --------
+        net_benefit
+        """
         super().net_benefit(model, w_health, w_spillovers, w_environment, w_time, w_costs)
         required_energy_hh = self.required_energy_hh(model)
         model.gdf.loc[(model.gdf['biogas_energy'] < required_energy_hh), "benefits_{}".format(self.name)] = np.nan
