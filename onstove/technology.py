@@ -1210,7 +1210,7 @@ class Charcoal(Technology):
                          inv_cost, fuel_cost, time_of_cooking,
                          om_cost, efficiency, pm25, is_clean=False)
 
-    def get_carbon_intensity(self, model):
+    def get_carbon_intensity(self, model: 'onstove.onstove.OnStove'):
         """This method expands :meth:`Technology.get_carbon_intensity`.
 
         It excludes the CO2 emissions from the share of firewood that is sustainably harvested (i.e. it does not affect
@@ -1236,7 +1236,7 @@ class Charcoal(Technology):
         super().get_carbon_intensity(model)
         self['co2_intensity'] = intensity
 
-    def production_emissions(self, model):
+    def production_emissions(self, model: 'onstove.onstove.OnStove'):
         """Calculates the emissions caused by the production of Charcoal. The function uses emission factors with regards
         to CO2, CO, CH4, BC and OC as well as the ``energy`` and ``energy_content`` attributes of te model.
         Emissions factors for the production of charcoal are taken from [1]_.
@@ -1267,7 +1267,7 @@ class Charcoal(Technology):
                             emission_factors.items()])  # gCO2eq/yr
         return hh_emissions / 1000  # kgCO2/yr
 
-    def carb(self, model):
+    def carb(self, model: 'onstove.onstove.OnStove'):
         """This method expands :meth:`Technology.carbon` when Charcoal is the fuel used (both traditional stoves and ICS)
          in order to ensure that the emissions caused by the production and transportation is included in the total emissions.
 
@@ -1290,6 +1290,15 @@ class Electricity(Technology):
 
     This class inherits the standard :class:`Technology` class and is used to model electrical stoves.
 
+    Attributes
+    ----------
+    carbon_intensities: dict
+        Carbon intensities of the different power plants used in the electricity generation mix.
+    grid_capacity_costs: dict
+        Costs of adding capacity of the different power plants used in the generation mix.
+    grid_techs_life: dict
+        Technology life of the different power plants used in the generation mix.
+
     Parameters
     ----------
     name: str, optional
@@ -1301,37 +1310,37 @@ class Electricity(Technology):
         Energy content in MJ/kWh.
     tech_life: int, default 10
         Stove life in year.
-    connection_cost: float, defualt 2
+    connection_cost: float, defualt 0
         Cost of strengthening a household connection to enable electrical cooking.
     grid_capacity_cost: float, optional
         Cost of added capacity in the grid (USD/kW)
-    inv_cost: float, default 4
+    inv_cost: float, default 36.3
         Investment cost of the stove in USD.
-    fuel_cost: float, default 0.09
+    fuel_cost: float, default 0.1
         Fuel cost in USD/kg if any.
-    time_of_cooking: float, default 2.6
+    time_of_cooking: float, default 1.8
         Daily average time spent for cooking with this stove in hours.
     om_cost: float, default 3.7
         Operation and maintenance cost in USD/year.
-    efficiency: float, default 0.2
+    efficiency: float, default 0.85
         Efficiency of the stove.
-    pm25: float, default 256
+    pm25: float, default 32
         Particulate Matter emissions (PM25) in mg/kg of fuel.
     """
 
     def __init__(self,
-                 name=None,
-                 carbon_intensity=None,
-                 energy_content=0,
-                 tech_life=0,  # in years
-                 inv_cost=0,  # in USD
-                 connection_cost=0,  # cost of additional infrastructure
-                 grid_capacity_cost=None,
-                 fuel_cost=0,
-                 time_of_cooking=0,
-                 om_cost=0,  # percentage of investement cost
-                 efficiency=0,  # ratio
-                 pm25=41):
+                 name: Optional[str] = None,
+                 carbon_intensity: Optional[str] = None,
+                 energy_content: float = 3.6,
+                 tech_life: int = 10,  # in years
+                 inv_cost: float = 36.3,  # in USD
+                 connection_cost: float = 0,  # cost of additional infrastructure
+                 grid_capacity_cost: float = None,
+                 fuel_cost: float = 0.1,
+                 time_of_cooking: float = 1.8,
+                 om_cost: float = 3.7,  # percentage of investement cost
+                 efficiency: float = 0.85,  # ratio
+                 pm25: float = 32):
         super().__init__(name, carbon_intensity, None, None, None,
                          None, None, None, energy_content, tech_life,
                          inv_cost, fuel_cost, time_of_cooking,
@@ -1377,7 +1386,18 @@ class Electricity(Technology):
         else:
             super().__setitem__(idx, value)
 
-    def get_capacity_cost(self, model):
+    def get_capacity_cost(self, model: 'onstove.onstove.OnStove'):
+        """This method determines the cost of electricity for each added unit of capacity (kW). The added capacity is
+        assumed to be the same shares as the current installed capacity (i.e. if a country uses 10% coal powered power
+        plants and 90% natural gas, the added capacity will consist of 10% coal and 90% natural gas)
+
+        Parameters
+        ----------
+        model: OnStove model
+            Instance of the OnStove model containing the main data of the study case. See
+            :class:`onstove.onstove.OnStove`.
+
+        """
         self.required_energy(model)
         if self.tiers_path is None:
             add_capacity = 1
@@ -1395,17 +1415,38 @@ class Electricity(Technology):
         self.capacity = self.energy * add_capacity / (3.6 * self.time_of_cooking * 365)
         self.capacity_cost = self.capacity * (self.grid_capacity_cost - salvage)
 
-    def get_carbon_intensity(self, model):
+    def get_carbon_intensity(self, model: 'onstove.onstove.OnStove'):
+        """This function determines the carbon intensity of generated electricity based on the power plant mix in the
+        area of interest.
+
+        Parameters
+        ----------
+        model: OnStove model
+            Instance of the OnStove model containing the main data of the study case. See
+            :class:`onstove.onstove.OnStove`.
+
+        """
         grid_emissions = sum([gen * self.carbon_intensities[fuel] for fuel, gen in self.generation.items()])
         grid_generation = sum(self.generation.values())
         self.carbon_intensity = grid_emissions / grid_generation * 1000  # to convert from Mton/PJ to kg/GJ
 
     def get_grid_capacity_cost(self):
+        """This function determines the grid capacity cost in the area of interest."""
         self.grid_capacity_cost = sum(
             [self.grid_capacity_costs[fuel] * (cap / sum(self.capacities.values())) for fuel, cap in
              self.capacities.items()])
 
-    def grid_salvage(self, model, single=False):
+    def grid_salvage(self, model: 'onstove.onstove.OnStove', single: bool = False):
+        """This method determines the salvage cost of the grid connected power plants.
+
+        Parameters
+        ----------
+        model: OnStove model
+            Instance of the OnStove model containing the main data of the study case. See
+            :class:`onstove.onstove.OnStove`.
+        single: bool, default True
+            Boolean parameter to indicate if there is only one grid_capacity_cost or several.
+        """
         discount_rate, proj_life = self.discount_factor(model.specs)
         if single:
             used_life = proj_life % self.grid_cap_life
@@ -1422,12 +1463,40 @@ class Electricity(Technology):
 
         return salvage / discount_rate[0]
 
-    def carb(self, model):
+    def carb(self,  model: 'onstove.onstove.OnStove'):
+        """This method expands :meth:`Technology.carbon` when electricity is the fuel used
+
+
+         Parameters
+         ----------
+         model: OnStove model
+             Instance of the OnStove model containing the main data of the study case. See
+             :class:`onstove.onstove.OnStove`.
+
+         See also
+         --------
+         carbon
+         """
         if self.carbon_intensity is None:
             self.get_carbon_intensity(model)
         super().carb(model)
 
-    def discounted_inv(self, model, relative=True):
+    def discounted_inv(self, model: 'onstove.onstove.OnStove', relative: bool = True):
+        """This method expands :meth:`Technology.discounted_inv` by adding connection and added capacity costs.
+
+        Parameters
+        ----------
+        model: OnStove model
+            Instance of the OnStove model containing the main data of the study case. See
+            :class:`onstove.onstove.OnStove`.
+        relative: bool, default True
+            Boolean parameter to indicate if the discounted investments will be calculated relative to the `base_fuel`
+            or not.
+
+        See also
+        --------
+        get_capacity_cost
+        """
         super().discounted_inv(model, relative=relative)
         if relative:
             share = (model.gdf['IsUrban'] > 20) * self.current_share_urban
@@ -1437,7 +1506,35 @@ class Electricity(Technology):
     def total_costs(self):
         super().total_costs()
 
-    def net_benefit(self, model, w_health=1, w_spillovers=1, w_environment=1, w_time=1, w_costs=1):
+    def net_benefit(self, model: 'onstove.onstove.OnStove', w_health: int = 1, w_spillovers: int = 1,
+                    w_environment: int = 1, w_time: int = 1, w_costs: int = 1):
+        """This method expands :meth:`Technology.net_benefit` by taking into account electricity availability
+         in the calculations.
+
+         Parameters
+         ----------
+         model: OnStove model
+             Instance of the OnStove model containing the main data of the study case. See
+             :class:`onstove.onstove.OnStove`.
+         w_health: int, default 1
+             Determines whether health parameters (reduced morbidity and mortality)
+             should be considered in the net-benefit equation.
+         w_spillovers: int, default 1
+             Determines whether spillover effects from cooking with traditional fuels
+             should be considered in the net-benefit equation.
+         w_environment: int, default 1
+             Determines whether environmental effects (reduced emissions) should be considered in the net-benefit
+             equation.
+         w_time: int, default 1
+             Determines whether opportunity cost (reduced time spent) should be considered in the net-benefit
+             equation.
+         w_costs: int, default 1
+             Determines whether costs should be considered in the net-benefit equation.
+
+         See also
+         --------
+         net_benefit
+         """
         super().net_benefit(model, w_health, w_spillovers, w_environment, w_time, w_costs)
         model.gdf.loc[model.gdf['Current_elec'] == 0, "net_benefit_{}".format(self.name)] = np.nan
         factor = model.gdf['Elec_pop_calib'] / model.gdf['Calibrated_pop']
@@ -1539,7 +1636,7 @@ class Biogas(Technology):
         self.water = None
         self.temperature = None
 
-    def read_friction(self, model, friction_path):
+    def read_friction(self, model: 'onstove.onstove.OnStove', friction_path: str):
         """Reads a friction layer in min per meter (walking time per meter) and returns a pandas series with the values
         for each populated grid cell in hours per meter
 
@@ -1560,7 +1657,7 @@ class Biogas(Technology):
                                          fill_nodata='interpolate', method='read')
         return data / 60
 
-    def required_energy_hh(self, model):
+    def required_energy_hh(self, model: 'onstove.onstove.OnStove'):
         """Determines the required annual energy needed for cooking taking into account the stove efficiency.
 
         Parameters
@@ -1577,7 +1674,7 @@ class Biogas(Technology):
         self.required_energy(model)
         return self.energy / self.digestor_eff
 
-    def get_collection_time(self, model):
+    def get_collection_time(self, model: 'onstove.onstove.OnStove'):
         """Caluclates the daily time of collection based on friction (hour/meter), the available biogas energy from
         each cell (MJ/yr/meter, 1000000 represents meters per km2) and the required energy per household (MJ/yr)
 
@@ -1599,7 +1696,7 @@ class Biogas(Technology):
         time_of_collection[time_of_collection.isna()] = mean_value
         self.time_of_collection = time_of_collection
 
-    def available_biogas(self, model):
+    def available_biogas(self, model: 'onstove.onstove.OnStove'):
         """Caluclates the biogas production potential in liters per day. It currently takes into account 6 categories
         of livestock (cattle, buffalo, sheep, goat, pig and poultry). The biogas potential for each category is determined
         following the methodology outlined by Lohani et al.[1]_ This function also applies a restriction to biogas
@@ -1654,7 +1751,8 @@ class Biogas(Technology):
         # Available biogas energy per year in MJ (energy content in MJ/m3)
         model.gdf["biogas_energy"] = model.gdf["available_biogas"] * self.energy_content
 
-    def recalibrate_livestock(self, model, buffaloes, cattles, poultry, goats, pigs, sheeps):
+    def recalibrate_livestock(self, model: 'onstove.onstove.OnStove', buffaloes: str, cattles: str, poultry: str,
+                              goats: str, pigs: str, sheeps: str):
         """Recalibrates the livestock maps and adds them to the main dataframe. It currently takes into account 6 categories
         of livestock (cattle, buffalo, sheep, goat, pig and poultry).
 
@@ -1690,7 +1788,7 @@ class Biogas(Technology):
             model.raster_to_dataframe(layer.data, name=name, method='read',
                                       nodata=layer.meta['nodata'], fill_nodata='interpolate')
 
-    def total_time(self, model):
+    def total_time(self, model: 'onstove.onstove.OnStove'):
         """This method expands :meth:`Technology.total_time` by adding the biogas collection time
 
         Parameters
@@ -1706,7 +1804,8 @@ class Biogas(Technology):
         self.get_collection_time(model)
         super().total_time(model)
 
-    def net_benefit(self, model, w_health=1, w_spillovers=1, w_environment=1, w_time=1, w_costs=1):
+    def net_benefit(self, model: 'onstove.onstove.OnStove', w_health: int = 1, w_spillovers: int = 1,
+                    w_environment: int = 1, w_time: int = 1, w_costs: int = 1):
         """This method expands :meth:`Technology.net_benefit` by taking into account biogas availability
         in the calculations.
 
@@ -1718,16 +1817,16 @@ class Biogas(Technology):
         w_health: int, default 1
             Determines whether health parameters (reduced morbidity and mortality)
             should be considered in the net-benefit equation.
-        w_spillovers: int
+        w_spillovers: int, default 1
             Determines whether spillover effects from cooking with traditional fuels
             should be considered in the net-benefit equation.
-        w_environment: int
+        w_environment: int, default 1
             Determines whether environmental effects (reduced emissions) should be considered in the net-benefit
             equation.
-        w_time: int
+        w_time: int, default 1
             Determines whether opportunity cost (reduced time spent) should be considered in the net-benefit
             equation.
-        w_costs: int
+        w_costs: int, default 1
             Determines whether costs should be considered in the net-benefit equation.
 
         See also
