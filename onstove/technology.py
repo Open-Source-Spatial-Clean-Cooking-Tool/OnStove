@@ -12,32 +12,80 @@ import onstove.onstove
 
 class Technology:
     """
-    Standard technology class.
+    Standard technology class used in order to model the different stoves used in the analysis.
+
+        Parameters
+    ----------
+    name: str, optional.
+        Name of the technology to model.
+    carbon_intensity: float, optional
+        The CO2 equivalent emissions in kg/GJ of burned fuel. If this attribute is used, then none of the
+        gas-specific intensities will be used (e.g. ch4_intensity).
+    co2_intensity: float, default 0
+        The CO2 emissions in kg/GJ of burned fuel.
+    ch4_intensity: float, default 0
+        The CH4 emissions in kg/GJ of burned fuel.
+    n2o_intensity: float, default 0
+        The N2O emissions in kg/GJ of burned fuel.
+    co_intensity: float, default 0
+        The CO emissions in kg/GJ of burned fuel.
+    bc_intensity: float, default 0
+        The black carbon emissions in kg/GJ of burned fuel.
+    oc_intensity: float, default 0
+        The organic carbon emissions in kg/GJ of burned fuel.
+    energy_content: float, default 0
+        Energy content of the fuel in MJ/kg.
+    tech_life: int, default 0
+        Stove life in year.
+    inv_cost: float, default 0
+        Investment cost of the stove in USD.
+    fuel_cost: float, default 0
+        Fuel cost in USD/kg if any.
+    time_of_cooking: float, default 0
+        Daily average time spent for cooking with this stove in hours.
+    om_cost: float, default 0
+        Operation and maintenance cost in USD/year.
+    efficiency: float, default 0
+        Efficiency of the stove.
+    pm25: float, default 0
+        Particulate Matter emissions (PM25) in mg/kg of fuel.
+    is_base: boolean, default False
+        Boolean determining if a specific stove is the base stove for everyone in the area of interest.
+    transport_cost: float, default 0
+        Cost of transportation
+    is_clean: boolean, default False
+        Boolean indicating whether the stove is clean or not.
+    current_share_urban: float, default 0
+        Current share of the stove assessed in the urban areas of the area of interest.
+    current_share_rural: float, default 0
+        Current share of the stove assessed in the rural areas of the area of interest.
+    epsilon: float, default 0.71
+        Emissions adjustment factor multiplied with the PM25 emissions.
     """
 
     def __init__(self,
-                 name=None,
-                 carbon_intensity=None,
-                 co2_intensity=0,
-                 ch4_intensity=0,
-                 n2o_intensity=0,
-                 co_intensity=0,
-                 bc_intensity=0,
-                 oc_intensity=0,
-                 energy_content=0,
-                 tech_life=0,  # in years
-                 inv_cost=0,  # in USD
-                 fuel_cost=0,
-                 time_of_cooking=0,
-                 om_cost=0,  # percentage of investement cost
-                 efficiency=0,  # ratio
-                 pm25=0,
-                 is_base=False,
-                 transport_cost=0,
-                 is_clean=False,
-                 current_share_urban=0,
-                 current_share_rural=0,
-                 epsilon=0.71):  # 24-h PM2.5 concentration
+                 name: Optional[str] = None,
+                 carbon_intensity: Optional[str] =None,
+                 co2_intensity: float = 0,
+                 ch4_intensity: float = 0,
+                 n2o_intensity: float = 0,
+                 co_intensity: float = 0,
+                 bc_intensity: float = 0,
+                 oc_intensity: float = 0,
+                 energy_content: float = 0,
+                 tech_life: int = 0,
+                 inv_cost: float = 0,
+                 fuel_cost: float = 0,
+                 time_of_cooking: float = 0,
+                 om_cost: float = 0,
+                 efficiency: float = 0,
+                 pm25: float = 0,
+                 is_base: bool = False,
+                 transport_cost: float = 0,
+                 is_clean: bool = False,
+                 current_share_urban: float = 0,
+                 current_share_rural: float = 0,
+                 epsilon: float = 0.71):
 
         self.name = name
         self.carbon_intensity = carbon_intensity
@@ -217,9 +265,39 @@ class Technology:
             raise KeyError(idx)
 
     def adjusted_pm25(self):
+        """Adjusts the PM25 value of each stove based on the adjusment factor. This is to take into account the
+        potential behaviour change resulting from stove change [1]_.
+
+        References
+        ----------
+        .. [1] Das, I. et al. The benefits of action to reduce household air pollution (BAR-HAP) model:
+            A new decision support tool. PLOS ONE 16, e0245729 (2021).
+        """
         self.pm25 *= self.epsilon
 
-    def relative_risk(self):
+    def relative_risk(self) -> float:
+        """Calculates the relative risk of contracting ALRI, COPD, IHD, lung cancer or stroke based on the adjusted
+          PM25 emissions. The equations and parameters used are based on the work done by Burnett et al.[1]_
+
+        References
+        ----------
+        .. [1] Burnett, R. T. et al. An Integrated Risk Function for Estimating the Global Burden of Disease
+            Attributable to Ambient Fine Particulate Matter Exposure.
+            Environmental Health Perspectives 122, 397–403 (2014).
+
+        Returns
+        -------
+        rr_alri: float
+            Relative Risk of ALRI
+        rr_copd: float
+            Relative Risk of COPD
+        rr_ihd: float
+            Relative Risk of IHD
+        rr_lc: float
+            Relative Risk of lung cancer
+        rr_stroke: float
+            Relative Risk of stroke
+        """
         if self.pm25 < 7.298:
             rr_alri = 1
         else:
@@ -247,15 +325,45 @@ class Technology:
 
         return rr_alri, rr_copd, rr_ihd, rr_lc, rr_stroke
 
-    def paf(self, rr, sfu):
+    def paf(self, rr: float, sfu: float) -> float:
+        """Calculates the population attributable fraction for ALRI, COPD, IHD, lung cancer or stroke
+        based on the percentage of population using non-clean stoves and the relative risk [1]_.
+
+        References
+        ----------
+        .. [1] Jeuland, M., Tan Soo, J.-S. & Shindell, D. The need for policies to reduce the costs of cleaner
+            cooking in low income settings: Implications from systematic analysis of costs and benefits.
+            Energy Policy 121, 275–285 (2018).
+
+        Parameters
+        ----------
+        rr: float
+            The relative risk of contracting ALRI, COPD, IHD, lung cancer and stroke.
+        sfu: float
+            Solid Fuel Users. This is the percentage of people using traditional cooking fuels. This is read from the
+            techno-economic specification file as fuels not being clean
+
+        Returns
+        -------
+        paf: float
+            The Population Attributable Fraction for each disease
+        """
         paf = (sfu * (rr - 1)) / (sfu * (rr - 1) + 1)
         return paf
 
     @staticmethod
-    def discount_factor(specs):
-        """
-        :param model: onstove instance containing the informtion of the model
-        :return: discount factor to be used for all costs in the net benefit fucntion and the years of analysis
+    def discount_factor(specs: dict):
+        """Calculates and returns the discount factor used for benefits and costs in the net-benefit equation. Also
+        returns the length of the analysis in years
+
+        Parameters
+        ----------
+        specs: dict
+            The socio-economic specification file containing socio-economic data applying to your study area
+
+        Returns
+        -------
+        Discount factor and the project life
         """
         if specs["Start_year"] == specs["End_year"]:
             proj_life = 1
@@ -268,22 +376,65 @@ class Technology:
 
         return discount_factor, proj_life
 
-    def required_energy(self, model):
-        # Annual energy needed for cooking, affected by stove efficiency (MJ/yr)
+    def required_energy(self, model: 'onstove.onstove.OnStove'):
+        """ Calculates the annual energy needed for cooking in MJ/yr. This is dependent on the number of meals cooked
+        and the efficiency of the stove.
+
+        Parameters
+        ----------
+        model: OnStove model
+            Instance of the OnStove model containing the main data of the study case. See
+            :class:`onstove.onstove.OnStove`.
+        """
+
         self.energy = model.specs["Meals_per_day"] * 365 * model.energy_per_meal / self.efficiency
 
-    def get_carbon_intensity(self, model):
+    def get_carbon_intensity(self, model: 'onstove.onstove.OnStove'):
+        """Calculates the carbon intensity of the associated stove.
+
+        Parameters
+        ----------
+        model: OnStove model
+            Instance of the OnStove model containing the main data of the study case. See
+            :class:`onstove.onstove.OnStove`.
+        """
         pollutants = ['co2', 'ch4', 'n2o', 'co', 'bc', 'oc']
         self.carbon_intensity = sum([self[f'{pollutant}_intensity'] * model.gwp[pollutant] for pollutant in pollutants])
 
-    def carb(self, model):
+    def carb(self, model: 'onstove.onstove.OnStove'):
+        """Checks if carbon_emission is given in the socio-economic specification file. If it is given this is read
+        directly, otherwise the get_carbon_intensity function is called
+
+        Parameters
+        ----------
+        model: OnStove model
+            Instance of the OnStove model containing the main data of the study case. See
+            :class:`onstove.onstove.OnStove`.
+
+        See also
+        --------
+        get_carbon_intensity
+        """
+
         self.required_energy(model)
         if self.carbon_intensity is None:
             self.get_carbon_intensity(model)
         self.carbon = pd.Series([(self.energy * self.carbon_intensity) / 1000] * model.gdf.shape[0],
                                 index=model.gdf.index)
 
-    def carbon_emissions(self, model):
+    def carbon_emissions(self, model: 'onstove.onstove.OnStove'):
+        """Calculates the reduced emissions and the costs avoided by reducing these emissions.
+
+        Parameters
+        ----------
+        model: OnStove model
+            Instance of the OnStove model containing the main data of the study case. See
+            :class:`onstove.onstove.OnStove`.
+
+        See also
+        --------
+        carb
+        """
         self.carb(model)
         proj_life = model.specs['End_year'] - model.specs['Start_year']
         carbon = model.specs["Cost of carbon emissions"] * (model.base_fuel.carbon - self.carbon) / 1000 / (
@@ -292,7 +443,20 @@ class Technology:
         self.decreased_carbon_emissions = model.base_fuel.carbon - self.carbon
         self.decreased_carbon_costs = carbon
 
-    def health_parameters(self, model):
+    def health_parameters(self, model: 'onstove.onstove.OnStove'):
+        """Calculates the population attributable fraction for ALRI, COPD, IHD, lung cancer or stroke for urban and
+        rural settlements of the area of interest.
+
+        Parameters
+        ----------
+        model: OnStove model
+            Instance of the OnStove model containing the main data of the study case. See
+            :class:`onstove.onstove.OnStove`.
+
+        See also
+        --------
+        relative_risk, paf
+        """
         rr_alri, rr_copd, rr_ihd, rr_lc, rr_stroke = self.relative_risk()
         self.paf_alri_r = self.paf(rr_alri, 1 - model.clean_cooking_access_r)
         self.paf_copd_r = self.paf(rr_copd, 1 - model.clean_cooking_access_r)
@@ -306,13 +470,23 @@ class Technology:
         self.paf_lc_u = self.paf(rr_lc, 1 - model.clean_cooking_access_u)
         self.paf_stroke_u = self.paf(rr_stroke, 1 - model.clean_cooking_access_u)
 
-    def mort_morb(self, model, parameter='Mort', dr='Discount_rate'):
+    def mort_morb(self, model: 'onstove.onstove.OnStove', parameter: str = 'Mort', dr: str ='Discount_rate'):
         """
         Calculates mortality or morbidity rate per fuel
 
+        Parameters
+        ----------
+        model: OnStove model
+            Instance of the OnStove model containing the main data of the study case. See
+            :class:`onstove.onstove.OnStove`.
+        parameter: str, default 'Mort'
+            Parameter to calculate. For mortality enter 'Mort' and for morbidity enter 'Morb'
+        dr: str, default 'Discount_rate'
+            Discount rate used in the analysis read from the socio-economic file
+
         Returns
         ----------
-        Monetary mortality for each stove in urban and rural settings
+        Monetary mortality or morbidity for each stove in urban and rural settings
         """
         self.health_parameters(model)
 
@@ -1502,9 +1676,6 @@ class Electricity(Technology):
             share = (model.gdf['IsUrban'] > 20) * self.current_share_urban
             share[model.gdf['IsUrban'] < 20] *= self.current_share_rural
             self.discounted_investments += (self.connection_cost + self.capacity_cost * (1 - share))
-
-    def total_costs(self):
-        super().total_costs()
 
     def net_benefit(self, model: 'onstove.onstove.OnStove', w_health: int = 1, w_spillovers: int = 1,
                     w_environment: int = 1, w_time: int = 1, w_costs: int = 1):
