@@ -412,8 +412,8 @@ class VectorLayer(_Layer):
             options. If "proximity" is used, then the :meth:`proximity` method is called and a :class:`RasterLayer`
             needs to be passed to the ``raster`` parameter as base layer to use for the calculation. If "travel_time"
             is used, then the :meth:`travel_time` method is called and a friction layer can be passed to the ``raster``
-            attribute. If None is used, then the predefined ``distance`` attribute of the :class:`VectorLayer` class
-            is used instead.
+            attribute. If None is used, then the predefined ``distance_method`` attribute of the :class:`VectorLayer`
+            class is used instead.
         raster: RasterLayer
             Raster layer used as base or friction layer depending on the ``method`` used (see above).
         output_path: str, optional
@@ -484,10 +484,10 @@ class VectorLayer(_Layer):
         bounds = self.data['geometry'].total_bounds
         if transform is None:
             if (width is None) or (height is None):
-                width, height = RasterLayer.shape_from_cell(bounds, cell_height, cell_width)
+                height, width = RasterLayer.shape_from_cell(bounds, cell_height, cell_width)
             transform = rasterio.transform.from_bounds(*bounds, width, height)
         else:
-            width, height = RasterLayer.shape_from_cell(bounds, transform[0], -transform[4])
+            height, width = RasterLayer.shape_from_cell(bounds, transform[0], -transform[4])
 
         if attribute:
             shapes = ((g, v) for v, g in zip(self.data[attribute].values, self.data['geometry'].values))
@@ -513,7 +513,7 @@ class VectorLayer(_Layer):
         raster = RasterLayer()
         raster.data = rasterized
         raster.meta = meta
-        raster.bounds = bounds
+        # raster.bounds = bounds
 
         if output_path:
             raster.save(output_path)
@@ -808,7 +808,7 @@ class RasterLayer(_Layer):
         """
         height = round((bounds[3] - bounds[1]) / cell_height)
         width = round((bounds[2] - bounds[0]) / cell_width)
-        return width, height
+        return height, width
 
     def mask(self, mask_layer: VectorLayer, output_path: Optional[str] = None,
              crop: bool = True, all_touched: bool = True):
@@ -839,7 +839,7 @@ class RasterLayer(_Layer):
         if crop:
             total_bounds = mask_layer.data['geometry'].total_bounds
             window = windows.from_bounds(*total_bounds, transform=self.meta['transform'])
-            width, height = self.shape_from_cell(total_bounds, self.meta['transform'][0], -self.meta['transform'][4])
+            height, width = self.shape_from_cell(total_bounds, self.meta['transform'][0], -self.meta['transform'][4])
             row_off = max(round(window.row_off), 0)
             col_off = max(round(window.col_off), 0)
             window = windows.Window(
@@ -894,7 +894,21 @@ class RasterLayer(_Layer):
             if output_path:
                 self.save(output_path)
 
-    def calculate_default_transform(self, dst_crs):
+    def calculate_default_transform(self, dst_crs: rasterio.crs.CRS) -> tuple['AffineTransform', int, int]:
+        """Wrapper function to calculate the default transform using the
+        :doc:`rasterio.warp.calculate_default_transform<rasterio:api/rasterio.warp>` function.
+
+        Parameters
+        ----------
+        dst_crs: rasterio.crs.CRS or dict
+            Target coordinate reference system. this can be anything accepted by
+            :doc:`rasterio.warp.reproject<rasterio:api/rasterio.warp>`.
+
+        Returns
+        -------
+        Tuple of Affine transform, int and int
+            Output affine transformation matrix, width and height.
+        """
         t, w, h = warp.calculate_default_transform(self.meta['crs'],
                                                    dst_crs,
                                                    self.meta['width'],
@@ -904,9 +918,33 @@ class RasterLayer(_Layer):
                                                    dst_height=self.meta['height'])
         return t, w, h
 
-    def travel_time(self, rows, cols,
+    def travel_time(self, rows: np.ndarray, cols: np.ndarray,
                     output_path: Optional[str] = None,
                     create_raster: Optional[bool] = True) -> 'RasterLayer':
+        """Calculates a travel time map using the raster data as cost surface and specific cells as starting points.
+
+        This method uses the data of the current :class:`RasterLayer` as a cost surface, to calculate the
+        distance-weighted minimum cost map from specific cells (``rows`` and ``cols``) to every other cell in the cost
+        surface. It makes use of the :doc:`skimage.graph.mcp.MCP_Geometric<skimage:api/skimage.graph>` class.
+
+        Parameters
+        ----------
+        rows: np.ndarray
+            Row indexes of the cells to consider as starting points.
+        cols: np.ndarray
+            Column indexes of the cells to consider as starting points.
+        output_path: str, optional
+            A folder path where to save the output dataset. If not defined then the travel time dataset is not saved
+            to disk.
+        create_raster: bool, default True
+            Boolean condition. If `True`, a :class:`RasterLayer` will be created and stored in the ``distance_raster``
+            attribute of the class. If `False`, a :class:`RasterLayer` with the travel time calculation is returned.
+
+        Returns
+        -------
+        RasterLayer
+            :class:`RasterLayer` with the least-cost travel time data.
+        """
         layer = self.data.copy()
         layer *= (1000 / 60)  # to convert to hours per kilometer
         layer[np.isnan(layer)] = float('inf')
@@ -940,9 +978,29 @@ class RasterLayer(_Layer):
         else:
             return distance_raster
 
-    def log(self, mask_layer,
+    def log(self, mask_layer: VectorLayer,
             output_path: Optional[str] = None,
             create_raster: Optional[bool] = True) -> 'RasterLayer':
+        """Calculates a logarithmic representation of the raster dataset.
+
+        This is used as ``distance`_raster`` for layers that can vary widely in magnitude from cell to cell, like
+        `population`. This useful when using the ``MCA`` model.
+
+        Parameters
+        ----------
+        mask_layer: VectorLayer
+            Layer used to set to ``nodata`` every pixel of the raster outside the mask.
+        output_path: str, optional
+            A folder path where to save the output dataset. If not defined then the masked dataset is not saved to disk.
+        create_raster: bool, default True
+            Boolean condition. If `True`, a :class:`RasterLayer` will be created and stored in the ``distance_raster``
+            attribute of the class. If `False`, a :class:`RasterLayer` with the logarithmic data is returned.
+
+        Returns
+        -------
+        RasterLayer
+            :class:`RasterLayer` with the logarithmic raster data.
+        """
         layer = self.data.copy()
         layer[layer == 0] = np.nan
         layer[layer > 0] = np.log(layer[layer > 0])
@@ -968,20 +1026,65 @@ class RasterLayer(_Layer):
         else:
             return distance_raster
 
-    def get_distance_raster(self, output_path, mask_layer, starting_points=None):
-        if self.distance_method == 'log':
-            self.distance_raster = self.log(mask_layer=mask_layer)
-        elif self.distance_method == 'travel_time':
+    def get_distance_raster(self, method: Optional[str] = 'log',
+                            output_path: Optional[str] = None,
+                            mask_layer: Optional[VectorLayer] = None,
+                            starting_points: Optional[Callable[[np.ndarray], np.ndarray]] = None):
+        """This method calls the specified distance calculation method.
+
+        It takes a ``method`` as input and calls the right method using either user predefined or default parameters.
+        The calculated distance raster is then stored in the :attr:`distance_raster` attribute of the class.
+
+        Parameters
+        ----------
+        method: str, optional
+            name of the method to use for the distance calculation. It can take "log", "travel_time" or None as
+            options. If "log" is used, then the :meth:`log` method is called and a :class:`VectorLayer`
+            needs to be passed to the ``mask_layer`` parameter to be used for the calculation. If "travel_time"
+            is used, then the :meth:`travel_time` method is called and the ``starting_points`` `need to be passed.
+            If None is used, then the predefined ``distance_method`` attribute of the :class:`RasterLayer` class
+            is used instead. If the previous is also None, then the raster it self is used as a distance raster.
+        output_path: str, optional
+            A folder path where to save the output dataset. If not defined then the distance raster dataset is not
+            saved.
+        mask_layer: VectorLayer
+            Layer used to set to ``nodata`` every pixel of the raster outside the mask (used with the ``log`` method
+            only).
+        starting_points: Callable object (function or lambda function) with a numpy array as input, optional
+            Function or lambda function describing which are the starting points to consider when calculating the
+            travel time map (used with the ``travel_time`` method only).
+        """
+        if method is None:
+            if self.distance_method is None:
+                raise ValueError('Please pass a distance `method` ("log" or "travel time") or define the default '
+                                 'method in the `distance` attribute of the class.')
+            method = self.distance_method
+
+        if method == 'log':
+            self.distance_raster = self.log(mask_layer=mask_layer, output_path=output_path)
+        elif method == 'travel_time':
             rows, cols = self.start_points(condition=starting_points)
-            self.distance_raster = self.travel_time(rows, cols)
+            self.distance_raster = self.travel_time(rows, cols, output_path=output_path)
         else:
             self.distance_raster = self
 
-    def start_points(self, condition=None):
+    def start_points(self, condition: Optional[Callable[[np.ndarray], np.ndarray]]):
+        """Gets the rows and columns of the cells tha fulfil a condition.
+
+        Parameters
+        ----------
+        condition: Callable object with a numpy array as input, or a list of values, optional
+            This condition is used to find the cells in the array that are equal to the values
+
+        Returns
+        -------
+        Tuple of numpy ndarrays
+            Tuple with rows and columns arrays containing locations of the cells.
+        """
         if callable(condition):
             return np.where(condition(self.data))
         else:
-            return np.where(np.isin(self.data, self.starting_cells))
+            raise TypeError('The condition can only be a callable object.')
 
     def normalize(self, output_path, mask_layer=None, buffer=False):
         if self.normalization == 'MinMax':

@@ -17,6 +17,6 @@ dependencies:
   - rasterstats
   - scikit-learn
   - scikit-image
-  - snakemake-minimal
+  - snakemake-minimal<7.12.0
   - svgpathtools
   - svgpath2mpl

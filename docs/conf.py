@@ -62,7 +62,8 @@ intersphinx_mapping = {
     'pandas' : ('https://pandas.pydata.org/docs/', None),
     'rasterio': ('https://rasterio.readthedocs.io/en/latest/', None),
     'numpy': ('https://numpy.org/doc/stable/', None),
-    'matplotlib': ('https://matplotlib.org/stable', None)
+    'matplotlib': ('https://matplotlib.org/stable', None),
+    'skimage': ('https://scikit-image.org/docs/stable/', None)
 }
 
 

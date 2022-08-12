@@ -1,6 +1,8 @@
 """This module contains the model classes of OnStove."""
 
 import os
+from typing import Optional
+
 import dill
 import pandas as pd
 import numpy as np
@@ -719,21 +721,26 @@ class OnStove(DataProcessor):
                                          name=layer.name + '_dist',
                                          method='read')
 
-    def population_to_dataframe(self, layer=None):
+    def population_to_dataframe(self, layer: Optional[RasterLayer] = None):
         """
         Takes a population `RasterLayer` as input and extracts the populated points to a GeoDataFrame that is
         saved in `OnSSTOVE.gdf`.
         """
-        if not layer:
+
+        if isinstance(layer, RasterLayer):
+            data = RasterLayer.data.copy()
+            meta = RasterLayer.meta
+        else:
             if self.base_layer:
-                layer = self.base_layer.data.copy()
+                data = self.base_layer.data.copy()
                 meta = self.base_layer.meta
             else:
                 raise ValueError("No population layer was provided as input to the method or in the model base_layer")
-        layer[layer == meta['nodata']] = np.nan
-        layer[layer == 0] = np.nan
-        layer[layer < 1] = np.nan
-        self.rows, self.cols = np.where(~np.isnan(layer))
+
+        data[data == meta['nodata']] = np.nan
+        data[data == 0] = np.nan
+        data[data < 1] = np.nan
+        self.rows, self.cols = np.where(~np.isnan(data))
         x, y = rasterio.transform.xy(meta['transform'],
                                      self.rows, self.cols,
                                      offset='center')
@@ -1140,11 +1147,11 @@ class OnStove(DataProcessor):
             df.loc[df[variable] == value, variable] = label
         return df
 
-    def points_to_raster(self, dff, variable, dtype=rasterio.uint8, nodata=111):
-        total_bounds = self.mask_layer.data['geometry'].total_bounds
-        height = round((total_bounds[3] - total_bounds[1]) / 1000)
-        width = round((total_bounds[2] - total_bounds[0]) / 1000)
-        transform = rasterio.transform.from_bounds(*total_bounds, width, height)
+    def points_to_raster(self, dff, variable, cell_width=1000, cell_height=1000,
+                         dtype=rasterio.uint8, nodata=111):
+        bounds = self.mask_layer.bounds
+        height, width = RasterLayer.shape_from_cell(bounds, cell_height, cell_width)
+        transform = rasterio.transform.from_bounds(*bounds, width, height)
         rasterized = features.rasterize(
             ((g, v) for v, g in zip(dff[variable].values, dff['geometry'].values)),
             out_shape=(height, width),
@@ -1153,15 +1160,43 @@ class OnStove(DataProcessor):
             fill=nodata,
             dtype=dtype)
         meta = dict(driver='GTiff',
-                    dtype=rasterized.dtype,
+                    dtype=dtype,
                     count=1,
-                    crs=3857,
+                    crs=self.mask_layer.data.crs,
                     width=width,
                     height=height,
                     transform=transform,
                     nodata=nodata,
                     compress='DEFLATE')
-        return rasterized, meta, total_bounds
+        return rasterized, meta
+
+    @staticmethod
+    def empty_raster_from_shape(crs, transform, height, width):
+        array = np.empty((height, width))
+        array[:] = np.nan
+        raster = RasterLayer()
+        raster.data = array
+        raster.meta = dict(crs=crs,
+                           dtype=float,
+                           width=width,
+                           height=height,
+                           nodata=np.nan,
+                           transform=transform)
+        return raster
+
+    def base_layer_from_bounds(self, bounds, cell_height, cell_width):
+        if 'index' not in self.gdf.columns:
+            dff = self.gdf.copy().reset_index(drop=False)
+        else:
+            dff = self.gdf
+        height, width = RasterLayer.shape_from_cell(bounds, cell_height, cell_width)
+        transform = rasterio.transform.from_bounds(*bounds, width, height)
+        geometry = dff["geometry"].apply(lambda geom: geom.wkb)
+        gdf = dff.loc[geometry.drop_duplicates().index]
+        rows, cols = rasterio.transform.rowcol(transform, gdf['geometry'].x, gdf['geometry'].y)
+        self.rows = np.array(rows)
+        self.cols = np.array(cols)
+        self.base_layer = self.empty_raster_from_shape(self.gdf.crs, transform, height, width)
 
     def create_layer(self, variable, name=None, labels=None, cmap=None, metric='mean'):
         codes = None
@@ -1170,6 +1205,7 @@ class OnStove(DataProcessor):
             layer[:] = np.nan
             dff = self.gdf.copy().reset_index(drop=False)
         else:
+            layer = None
             dff = self.gdf.copy()
 
         if isinstance(self.gdf[variable].iloc[0], str):
@@ -1188,10 +1224,9 @@ class OnStove(DataProcessor):
             if self.rows is not None:
                 layer[self.rows, self.cols] = [codes[tech] for tech in dff[variable]]
                 meta = self.base_layer.meta
-                bounds = self.base_layer.bounds
             else:
-                dff['codes'] = [codes[tech] for tech in dff['max_benefit_tech']]
-                layer, meta, bounds = self.points_to_raster(dff, 'codes')
+                dff['codes'] = [codes[tech] for tech in dff[variable]]
+                layer, meta = self.points_to_raster(dff, 'codes')
         else:
             if metric == 'total':
                 dff[variable] = dff[variable] * dff['Households']
@@ -1211,9 +1246,8 @@ class OnStove(DataProcessor):
             if self.rows is not None:
                 layer[self.rows, self.cols] = dff[variable]
                 meta = self.base_layer.meta
-                bounds = self.base_layer.bounds
             else:
-                layer, meta, bounds = self.points_to_raster(dff, variable, dtype='float32',
+                layer, meta = self.points_to_raster(dff, variable, dtype='float32',
                                                             nodata=np.nan)
             variable = variable + '_' + metric
         if name is not None:
@@ -1247,7 +1281,7 @@ class OnStove(DataProcessor):
         if isinstance(admin_layer, gpd.GeoDataFrame):
             admin_layer = admin_layer
         elif not admin_layer:
-            admin_layer = self.mask_layer.layer
+            admin_layer = self.mask_layer.data
 
         if not ax:
             fig, ax = plt.subplots(1, 1, figsize=figsize, dpi=dpi)

@@ -33,7 +33,7 @@ labels = {"Biogas and Electricity": "Electricity and Biogas",
           'Biomass Forced Draft': 'Biomass ICS (FD)',
           'Pellets Forced Draft': 'Pellets ICS (FD)'}
 
-df = pd.DataFrame({'country': [], 'Households': [], 'Calibrated_pop': [],
+df = pd.DataFrame({'country': [], 'Households': [], 'Calibrated_pop': [], 'value_of_time': [],
                    'costs_Electricity': [], 'costs_LPG': [], 'costs_Biogas': [],
                    'costs_Collected_Improved_Biomass': [], 'costs_Collected_Traditional_Biomass': [],
                    'costs_Charcoal ICS': [], 'costs_Traditional_Charcoal': [],
@@ -72,10 +72,15 @@ africa.plot_benefit_distribution(type='box', groupby='None', cmap=cmap,
                                  labels=labels, save=True, height=1.5, width=3.5)
 
 print('Creating map...')
-africa.to_image('max_benefit_tech', cmap=cmap, legend_position=(0.03, 0.47),
-                type='pdf', dpi=300, stats=True, stats_position=(-0.002, 0.5), stats_fontsize=10,
+scale_bar_prop = dict(size=1000000, style='double', textprops=dict(size=8),
+                      linekw=dict(lw=1, color='black'), extent=0.01)
+north_arow_prop = dict(size=30, location=(0.92, 0.92), linewidth=0.5)
+
+africa.to_image('max_benefit_tech', cmap=cmap, legend_position=(0.03, 0.47), figsize=(16, 9),
+                type='pdf', dpi=300, stats=True, stats_position=(-0.002, 0.61), stats_fontsize=10,
                 labels=labels, legend=True, legend_title='Maximum benefit\ncooking technology',
-                rasterized=True)
+                legend_prop={'title': {'size': 10, 'weight': 'bold'}, 'size': 10},
+                scale_bar=scale_bar_prop, north_arrow=north_arow_prop, rasterized=True)
 
 print('Saving results...')
 africa.summary().to_csv(os.path.join(africa.output_directory, 'summary.csv'), index=False)
