@@ -621,8 +621,8 @@ class LPG(Technology):
         self.cylinder_cost = cylinder_cost
         self.cylinder_life = cylinder_life
 
-    def add_travel_time(self, lpg_path: Optional[str] = None, friction_path: Optional[str] = None,
-                        model: 'onstove.onstove.OnStove', align: bool = False):
+    def add_travel_time(self, model: 'onstove.onstove.OnStove', lpg_path: Optional[str] = None,
+                        friction_path: Optional[str] = None, align: bool = False):
         """This method calculates the travel time needed to transport LPG.
 
         The travel time is calculated as the time needed (in hours) to reach the closest LPG supplier from each
@@ -644,12 +644,19 @@ class LPG(Technology):
         """
 
         if lpg_path is None:
-            lpg_path = self.lpg_path
+            if self.lpg_path is not None:
+                lpg_path = self.lpg_path
+            else:
+                raise ValueError('A path to a LPG point layer must be passed or stored in the `lpg_path` attribute.')
 
         lpg = VectorLayer(self.name, 'Suppliers', path=lpg_path)
 
         if friction_path is None:
-            friction_path = self.friction_path
+            if self.friction_path is not None:
+                friction_path = self.friction_path
+            else:
+                raise ValueError('A path to a friction raster layer must be passed or stored in the `friction_path`'
+                                 ' attribute.')
 
         friction = RasterLayer(self.name, 'Friction', path=friction_path, resample='average')
 
@@ -729,7 +736,9 @@ class LPG(Technology):
         The function uses the following attributes of model: ``energy``, ``energy_content``, ``travel_time`` and
         ``truck_capacity``.
 
-        .. [1]Ntziachristos, L. and Z. Samaras (2018), “1.A.3.b.i, 1.A.3.b.ii, 1.A.3.b.iii, 1.A.3.b.iv Passenger cars,
+        References
+        ----------
+        .. [1] Ntziachristos, L. and Z. Samaras (2018), “1.A.3.b.i, 1.A.3.b.ii, 1.A.3.b.iii, 1.A.3.b.iv Passenger cars,
         light commercial trucks, heavy-duty vehicles including buses and motor cycles”, in EMEP/EEA air pollutant
         emission inventory guidebook 2016 – Update Jul. 2018
 
@@ -1085,7 +1094,7 @@ class Biomass(Technology):
         References
         ----------
         .. [1] R. Bailis, R. Drigo, A. Ghilardi, O. Masera, The carbon footprint of traditional woodfuels,
-           Nature Clim Change. 5 (2015) 266–272. https://doi.org/10.1038/nclimate2491.
+        Nature Clim Change. 5 (2015) 266–272. https://doi.org/10.1038/nclimate2491.
         """
         intensity = self['co2_intensity']
         self['co2_intensity'] *= model.specs['fnrb']
@@ -1220,7 +1229,7 @@ class Charcoal(Technology):
         References
         ----------
         .. [1] R. Bailis, R. Drigo, A. Ghilardi, O. Masera, The carbon footprint of traditional woodfuels,
-           Nature Clim Change. 5 (2015) 266–272. https://doi.org/10.1038/nclimate2491.
+        Nature Clim Change. 5 (2015) 266–272. https://doi.org/10.1038/nclimate2491.
         """
         intensity = self['co2_intensity']
         self['co2_intensity'] *= model.specs['fnrb']
@@ -1235,7 +1244,7 @@ class Charcoal(Technology):
 
         References
         ----------
-        .. [1]Akagi, S. K., Yokelson, R. J., Wiedinmyer, C., Alvarado, M. J., Reid, J. S., Karl, T., Crounse, J. D.,
+        .. [1] Akagi, S. K., Yokelson, R. J., Wiedinmyer, C., Alvarado, M. J., Reid, J. S., Karl, T., Crounse, J. D.,
             & Wennberg, P. O. (2010). Emission factors for open and domestic biomass burning for use in atmospheric
             models. Atmospheric Chemistry and Physics Discussions. 10: 27523–27602., 27523–27602.
             https://www.fs.usda.gov/treesearch/pubs/39297
@@ -1272,8 +1281,6 @@ class Charcoal(Technology):
         --------
         carbon
         """
-        super().carb(model)
-        self.carbon += self.transport_emissions(model)
         super().carb(model)
         self.carbon += self.production_emissions(model)
 
@@ -1450,10 +1457,10 @@ class Biogas(Technology):
 
     References
     ----------
-    .. [1]Lohani, S. P., Dhungana, B., Horn, H. & Khatiwada, D. Small-scale biogas technology and clean cooking fuel:
+    .. [1] Lohani, S. P., Dhungana, B., Horn, H. & Khatiwada, D. Small-scale biogas technology and clean cooking fuel:
         Assessing the potential and links with SDGs in low-income countries – A case study of Nepal.
         Sustainable Energy Technologies and Assessments 46, 101301 (2021).
-    .. [2]Bansal, V., Tumwesige, V. & Smith, J. U. Water for small-scale biogas digesters in sub-Saharan Africa.
+    .. [2] Bansal, V., Tumwesige, V. & Smith, J. U. Water for small-scale biogas digesters in sub-Saharan Africa.
         GCB Bioenergy 9, 339–357 (2017).
 
     Parameters
@@ -1601,10 +1608,10 @@ class Biogas(Technology):
 
         References
         ----------
-        .. [1]Lohani, S. P., Dhungana, B., Horn, H. & Khatiwada, D. Small-scale biogas technology and clean cooking
+        .. [1] Lohani, S. P., Dhungana, B., Horn, H. & Khatiwada, D. Small-scale biogas technology and clean cooking
             fuel: Assessing the potential and links with SDGs in low-income countries – A case study of Nepal.
             Sustainable Energy Technologies and Assessments 46, 101301 (2021).
-        .. [2]Bansal, V., Tumwesige, V. & Smith, J. U. Water for small-scale biogas digesters in sub-Saharan Africa.
+        .. [2] Bansal, V., Tumwesige, V. & Smith, J. U. Water for small-scale biogas digesters in sub-Saharan Africa.
             GCB Bioenergy 9, 339–357 (2017).
 
         Parameters
@@ -1708,7 +1715,7 @@ class Biogas(Technology):
         model: OnStove model
             Instance of the OnStove model containing the main data of the study case. See
             :class:`onstove.onstove.OnStove`.
-        w_health: int
+        w_health: int, default 1
             Determines whether health parameters (reduced morbidity and mortality)
             should be considered in the net-benefit equation.
         w_spillovers: int
