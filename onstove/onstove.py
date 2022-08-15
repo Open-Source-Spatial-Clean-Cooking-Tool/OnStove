@@ -176,10 +176,18 @@ class DataProcessor:
             output_path = os.path.join(self.output_directory, category, name)
             self.mask_layer.reproject(self.project_crs, output_path)
 
-    def mask_layers(self, datasets='all'):
+    def mask_layers(self, datasets: str ='all'):
         """
-        Uses the previously added mask layer in self.mask_layer to mask all
-        other layers to its boundaries
+        Uses the a mask layer in self.mask_layer to mask all other layers to its boundaries
+
+        Parameters
+        ----------
+        datasets: str, default 'all'
+            Specifies which dataset(s) to clip.
+
+        See also
+        ----------
+        add_mask_layer
         """
         if not isinstance(self.mask_layer, VectorLayer):
             raise Exception('The `mask_layer` attribute is empty, please first ' + \

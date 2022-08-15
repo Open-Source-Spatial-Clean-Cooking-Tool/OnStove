@@ -352,7 +352,7 @@ class Technology:
         return paf
 
     @staticmethod
-    def discount_factor(specs: dict):
+    def discount_factor(specs: dict) -> tuple[list[float],list[float]]:
         """Calculates and returns the discount factor used for benefits and costs in the net-benefit equation. Also
         returns the length of the analysis in years
 
@@ -470,7 +470,7 @@ class Technology:
         self.paf_lc_u = self.paf(rr_lc, 1 - model.clean_cooking_access_u)
         self.paf_stroke_u = self.paf(rr_stroke, 1 - model.clean_cooking_access_u)
 
-    def mort_morb(self, model: 'onstove.onstove.OnStove', parameter: str = 'Mort', dr: str ='Discount_rate'):
+    def mort_morb(self, model: 'onstove.onstove.OnStove', parameter: str = 'Mort', dr: str ='Discount_rate') -> tuple[float, float]:
         """
         Calculates mortality or morbidity rate per fuel. These two calculations are very similar in nature and are
         therefore combined in one function. In order to indicate if morbidity or mortality should be calculated, the
@@ -695,7 +695,7 @@ class Technology:
             Instance of the OnStove model containing the main data of the study case. See
             :class:`onstove.onstove.OnStove`.
         relative: bool, default True
-            Boolean parameter to indicate if the discounted investments will be calculated relative to the `base_fuel`
+            Boolean parameter to indicate if the discounted fuel cost will be calculated relative to the `base_fuel`
             or not.
 
         See also
