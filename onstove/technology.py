@@ -472,7 +472,9 @@ class Technology:
 
     def mort_morb(self, model: 'onstove.onstove.OnStove', parameter: str = 'Mort', dr: str ='Discount_rate'):
         """
-        Calculates mortality or morbidity rate per fuel
+        Calculates mortality or morbidity rate per fuel. These two calculations are very similar in nature and are
+        therefore combined in one function. In order to indicate if morbidity or mortality should be calculated, the
+        `parameter` parameter can be changed (to either `Morb` or `Mort`).
 
         Parameters
         ----------
@@ -543,13 +545,20 @@ class Technology:
 
         return distributed_cost, cases_avoided
 
-    def mortality(self, model):
+    def mortality(self, model: 'onstove.onstove.OnStove'):
         """
-        Calculates mortality rate per fuel
+        Distributes the total mortality across the study area per fuel.
 
-        Returns
+        Parameters
         ----------
-        Monetary mortality for each stove in urban and rural settings
+        model: OnStove model
+            Instance of the OnStove model containing the main data of the study case. See
+            :class:`onstove.onstove.OnStove`.
+
+        See also
+        --------
+        mort_morb
+
         """
         distributed_mortality, deaths_avoided = self.mort_morb(model, parameter='Mort', dr='Discount_rate')
         self.distributed_mortality = distributed_mortality
@@ -561,13 +570,19 @@ class Technology:
         else:
             self.distributed_spillovers_mort = pd.Series(0, index=model.gdf.index, dtype='float64')
 
-    def morbidity(self, model):
+    def morbidity(self, model: 'onstove.onstove.OnStove'):
         """
-        Calculates morbidity rate per fuel
+        Distributes the total morbidity across the study area per fuel.
 
-        Returns
+        Parameters
         ----------
-        Monetary morbidity for each stove in urban and rural settings
+        model: OnStove model
+            Instance of the OnStove model containing the main data of the study case. See
+            :class:`onstove.onstove.OnStove`.
+
+        See also
+        --------
+        mort_morb
         """
         distributed_morbidity, cases_avoided = self.mort_morb(model, parameter='Morb', dr='Discount_rate')
         self.distributed_morbidity = distributed_morbidity
@@ -579,12 +594,19 @@ class Technology:
         else:
             self.distributed_spillovers_morb = pd.Series(0, index=model.gdf.index, dtype='float64')
 
-    def salvage(self, model):
+    def salvage(self, model: 'onstove.onstove.OnStove'):
         """
-        Calculates discounted salvage cost assuming straight-line depreciation
-        Returns
+        Calls discount_factor function and calculates discounted salvage cost for each stove assuming a straight-line depreciation.
+
+                Parameters
         ----------
-        discounted salvage cost
+        model: OnStove model
+            Instance of the OnStove model containing the main data of the study case. See
+            :class:`onstove.onstove.OnStove`.
+
+        See also
+        --------
+        discount_factor
         """
         discount_rate, proj_life = self.discount_factor(model.specs)
         used_life = proj_life % self.tech_life
@@ -599,12 +621,20 @@ class Technology:
 
         self.discounted_salvage_cost = discounted_salvage
 
-    def discounted_om(self, model):
+    def discounted_om(self,  model: 'onstove.onstove.OnStove'):
         """
-        Calls discount_factor function and creates discounted OM costs.
-        Returns
+        Calls discount_factor function and calculates discounted operation and maintenance cost for each stove.
+
+        Parameters
         ----------
-        discountedOM costs for each stove during the project lifetime
+        model: OnStove model
+            Instance of the OnStove model containing the main data of the study case. See
+            :class:`onstove.onstove.OnStove`.
+
+
+        See also
+        --------
+        discount_factor
         """
         discount_rate, proj_life = self.discount_factor(model.specs)
         operation_and_maintenance = self.om_cost * np.ones(proj_life)
@@ -613,14 +643,23 @@ class Technology:
                                   x in model.base_fuel.om_cost])
         self.discounted_om_costs = pd.Series(discounted_om, index=model.gdf.index)
 
-    def discounted_inv(self, model, relative=True):
+    def discounted_inv(self, model: 'onstove.onstove.OnStove', relative: bool = True):
         """
-        Calls discount_factor function and creates discounted investment cost. Uses proj_life and tech_life to determine
+        Calls discount_factor function and calculates discounted investment cost. Uses proj_life and tech_life to determine
         number of necessary re-investments
 
-        Returns
+        Parameters
         ----------
-        discounted investment cost for each stove during the project lifetime
+        model: OnStove model
+            Instance of the OnStove model containing the main data of the study case. See
+            :class:`onstove.onstove.OnStove`.
+        relative: bool, default True
+            Boolean parameter to indicate if the discounted investments will be calculated relative to the `base_fuel`
+            or not.
+
+        See also
+        --------
+        discount_factor
         """
         discount_rate, proj_life = self.discount_factor(model.specs)
 
@@ -646,7 +685,23 @@ class Technology:
         self.discounted_investments = pd.Series(investments_discounted, index=model.gdf.index) + self.inv_cost - \
                                       discounted_base_investments
 
-    def discount_fuel_cost(self, model, relative=True):
+    def discount_fuel_cost(self, model: 'onstove.onstove.OnStove', relative: bool = True):
+        """
+        Calls discount_factor function and calculates discounted fuel costs.
+
+        Parameters
+        ----------
+        model: OnStove model
+            Instance of the OnStove model containing the main data of the study case. See
+            :class:`onstove.onstove.OnStove`.
+        relative: bool, default True
+            Boolean parameter to indicate if the discounted investments will be calculated relative to the `base_fuel`
+            or not.
+
+        See also
+        --------
+        discount_factor
+        """
         self.required_energy(model)
         discount_rate, proj_life = self.discount_factor(model.specs)
 
@@ -663,10 +718,30 @@ class Technology:
 
         self.discounted_fuel_cost = pd.Series(fuel_cost_discounted, index=model.gdf.index) - discounted_base_fuel_cost
 
-    def total_time(self, model):
+    def total_time(self, model: 'onstove.onstove.OnStove'):
+        """
+        Calculates total time used per year by taking into account time of cooking and time of fuel collection (if relevant)
+
+        Parameters
+        ----------
+        model: OnStove model
+            Instance of the OnStove model containing the main data of the study case. See
+            :class:`onstove.onstove.OnStove`.
+        """
         self.total_time_yr = (self.time_of_cooking + self.time_of_collection) * 365
 
-    def time_saved(self, model):
+    def time_saved(self, model: 'onstove.onstove.OnStove'):
+        """
+        Calculates time saved per year by adopting a new stove.
+
+        Parameters
+        ----------
+        model: OnStove model
+            Instance of the OnStove model containing the main data of the study case. See
+            :class:`onstove.onstove.OnStove`.
+
+        """
+
         proj_life = model.specs['End_year'] - model.specs['Start_year']
         self.total_time(model)
         self.total_time_saved = model.base_fuel.total_time_yr - self.total_time_yr
@@ -675,10 +750,50 @@ class Technology:
                 1 + model.specs["Discount_rate"]) ** (proj_life)
 
     def total_costs(self):
+        """
+        Calculates total costs (fuel, investment, operation and maintenance as well as salvage costs)
+
+        Parameters
+        ----------
+        model: OnStove model
+            Instance of the OnStove model containing the main data of the study case. See
+            :class:`onstove.onstove.OnStove`.
+
+        See also
+        --------
+        discount_fuel_cost, discounted_om, salvage, discounted_inv
+        """
         self.costs = (self.discounted_fuel_cost + self.discounted_investments +  # - self.time_value +
                       self.discounted_om_costs - self.discounted_salvage_cost)
 
-    def net_benefit(self, model, w_health=1, w_spillovers=1, w_environment=1, w_time=1, w_costs=1):
+    def net_benefit(self, model: 'onstove.onstove.OnStove', w_health: int = 1, w_spillovers: int = 1,
+                    w_environment: int = 1, w_time: int = 1, w_costs: int = 1):
+        """This method combines all costs and benefits as specified by the user using the weights parameters
+
+         Parameters
+         ----------
+         model: OnStove model
+             Instance of the OnStove model containing the main data of the study case. See
+             :class:`onstove.onstove.OnStove`.
+         w_health: int, default 1
+             Determines whether health parameters (reduced morbidity and mortality)
+             should be considered in the net-benefit equation.
+         w_spillovers: int, default 1
+             Determines whether spillover effects from cooking with traditional fuels
+             should be considered in the net-benefit equation.
+         w_environment: int, default 1
+             Determines whether environmental effects (reduced emissions) should be considered in the net-benefit
+             equation.
+         w_time: int, default 1
+             Determines whether opportunity cost (reduced time spent) should be considered in the net-benefit
+             equation.
+         w_costs: int, default 1
+             Determines whether costs should be considered in the net-benefit equation.
+
+         See also
+         --------
+         total_costs, morbidity, mortality, time_saved, carbon_emissions
+        """
         self.total_costs()
         self.benefits = w_health * (self.distributed_morbidity + self.distributed_mortality) + \
                         w_spillovers * (self.distributed_spillovers_morb + self.distributed_spillovers_mort) + \
