@@ -208,7 +208,20 @@ class DataProcessor:
                 if isinstance(layer.distance_raster, RasterLayer):
                     layer.distance_raster.mask(self.mask_layer.data, output_path)
 
-    def align_layers(self, datasets='all'):
+    def align_layers(self, datasets: str ='all'):
+        """
+        Ensures that the coordinate sysmtem and resolution of the raster is the same as the base layer
+
+        Parameters
+        ----------
+        datasets: str, default 'all'
+            Specifies which dataset(s) to allign.
+
+        See also
+        ----------
+        add_layer
+        """
+
         datasets = self.get_layers(datasets)
         for category, layers in datasets.items():
             for name, layer in layers.items():
@@ -224,10 +237,18 @@ class DataProcessor:
                     if isinstance(layer.friction, RasterLayer):
                         layer.friction.align(self.base_layer.path, output_path)
 
-    def reproject_layers(self, datasets='all'):
+    def reproject_layers(self, datasets: str = 'all'):
         """
-        Goes through all layer and call their `.reproject` method with the
-        `project_crs` as argument
+        Repreojects the layers specified by the user.
+
+        Parameters
+        ----------
+        datasets: str, default 'all'
+            Specifies which dataset(s) to reproject.
+
+        See also
+        ----------
+        layer.reproject,
         """
         datasets = self.get_layers(datasets)
         for category, layers in datasets.items():
