@@ -21,7 +21,7 @@ Through the environment.yml using [Anaconda](https://www.anaconda.com/distributi
 ```
 
 ## Changelog
-**X-April-2022**: Original code base (V 1.0) published
+**22-June-2022**: Original code base (v0.1.0) published
 
 ## Resources
 
