@@ -1,4 +1,4 @@
-name: readthedocs
+name: onstovejupyter
 channels:
   - bioconda
   - jmcmurray
@@ -8,16 +8,15 @@ dependencies:
   - contextily
   - dill
   - geopandas
+  - jupyterlab
   - matplotlib
-  - numpydoc
   - plotnine
-  - psycopg2
   - psutil
-  - pydata-sphinx-theme
+  - psycopg2
   - python-decouple
   - rasterio
   - rasterstats
-  - scikit-learn
   - scikit-image
+  - scikit-learn
   - svgpathtools
   - svgpath2mpl

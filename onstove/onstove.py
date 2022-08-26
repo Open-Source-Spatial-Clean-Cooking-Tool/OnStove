@@ -1,19 +1,25 @@
-from time import time
-from copy import copy
+"""This module contains the model classes of OnStove."""
+
+import os
+from typing import Optional
 
 import dill
-from csv import DictReader
-
-import numpy as np
-import psycopg2
 import pandas as pd
-import scipy.spatial
+import numpy as np
+import geopandas as gpd
+import rasterio
 import matplotlib.pyplot as plt
+import psycopg2
+import scipy.spatial
+from copy import copy
+from csv import DictReader
+from time import time
 from matplotlib import cm
 from matplotlib.colors import to_rgb
-from rasterio.warp import transform_bounds
 from matplotlib.offsetbox import (TextArea, AnnotationBbox, VPacker, HPacker)
-
+from rasterio import features
+from rasterio.fill import fillnodata
+from rasterio.warp import transform_bounds
 from plotnine import (
     ggplot,
     aes,
@@ -34,9 +40,9 @@ from plotnine import (
     facet_wrap
 )
 
-from .technology import Technology, LPG, Biomass, Electricity, Biogas, Charcoal
-from .raster import *
-from .layer import VectorLayer, RasterLayer
+from onstove.layer import VectorLayer, RasterLayer
+from onstove.technology import Technology, LPG, Biomass, Electricity, Biogas, Charcoal
+from onstove.raster import sample_raster
 
 
 def timeit(func):
@@ -110,15 +116,15 @@ class DataProcessor:
             if postgres:
                 layer = VectorLayer(category, name, layer_path, conn=self.conn,
                                     normalization=normalization,
-                                    distance=distance,
+                                    distance_method=distance,
                                     distance_limit=distance_limit,
                                     inverse=inverse, query=query)
             else:
                 if window:
-                    window = self.mask_layer.layer
+                    window = self.mask_layer.data
                 layer = VectorLayer(category, name, layer_path,
                                     normalization=normalization,
-                                    distance=distance,
+                                    distance_method=distance,
                                     distance_limit=distance_limit,
                                     inverse=inverse, query=query, bbox=window)
 
@@ -126,12 +132,12 @@ class DataProcessor:
             if window:
                 with rasterio.open(layer_path) as src:
                     src_crs = src.meta['crs']
-                if src_crs != self.mask_layer.layer.crs:
-                    bounds = transform_bounds(self.mask_layer.layer.crs, src_crs, *self.mask_layer.bounds())
+                if src_crs != self.mask_layer.data.crs:
+                    bounds = transform_bounds(self.mask_layer.data.crs, src_crs, *self.mask_layer.bounds())
                 window = bounds
             layer = RasterLayer(category, name, layer_path,
                                 normalization=normalization, inverse=inverse,
-                                distance=distance, resample=resample,
+                                distance_method=distance, resample=resample,
                                 window=window, rescale=rescale)
 
             if base_layer:
@@ -168,14 +174,22 @@ class DataProcessor:
         else:
             self.mask_layer = VectorLayer(category, name, layer_path, query=query)
 
-        if self.mask_layer.layer.crs != self.project_crs:
+        if self.mask_layer.data.crs != self.project_crs:
             output_path = os.path.join(self.output_directory, category, name)
             self.mask_layer.reproject(self.project_crs, output_path)
 
-    def mask_layers(self, datasets='all'):
+    def mask_layers(self, datasets: str ='all'):
         """
-        Uses the previously added mask layer in self.mask_layer to mask all
-        other layers to its boundaries
+        Uses the a mask layer in self.mask_layer to mask all other layers to its boundaries
+
+        Parameters
+        ----------
+        datasets: str, default 'all'
+            Specifies which dataset(s) to clip.
+
+        See also
+        ----------
+        add_mask_layer
         """
         if not isinstance(self.mask_layer, VectorLayer):
             raise Exception('The `mask_layer` attribute is empty, please first ' + \
@@ -190,13 +204,26 @@ class DataProcessor:
                     all_touched = True
                 else:
                     all_touched = False
-                layer.mask(self.mask_layer.layer, output_path, all_touched=all_touched)
+                layer.mask(self.mask_layer.data, output_path, all_touched=all_touched)
                 if isinstance(layer.friction, RasterLayer):
-                    layer.friction.mask(self.mask_layer.layer, output_path)
+                    layer.friction.mask(self.mask_layer.data, output_path)
                 if isinstance(layer.distance_raster, RasterLayer):
-                    layer.distance_raster.mask(self.mask_layer.layer, output_path)
+                    layer.distance_raster.mask(self.mask_layer.data, output_path)
 
-    def align_layers(self, datasets='all'):
+    def align_layers(self, datasets: str ='all'):
+        """
+        Ensures that the coordinate sysmtem and resolution of the raster is the same as the base layer
+
+        Parameters
+        ----------
+        datasets: str, default 'all'
+            Specifies which dataset(s) to allign.
+
+        See also
+        ----------
+        add_layer
+        """
+
         datasets = self.get_layers(datasets)
         for category, layers in datasets.items():
             for name, layer in layers.items():
@@ -212,10 +239,18 @@ class DataProcessor:
                     if isinstance(layer.friction, RasterLayer):
                         layer.friction.align(self.base_layer.path, output_path)
 
-    def reproject_layers(self, datasets='all'):
+    def reproject_layers(self, datasets: str = 'all'):
         """
-        Goes through all layer and call their `.reproject` method with the
-        `project_crs` as argument
+        Repreojects the layers specified by the user.
+
+        Parameters
+        ----------
+        datasets: str, default 'all'
+            Specifies which dataset(s) to reproject.
+
+        See also
+        ----------
+        layer.reproject,
         """
         datasets = self.get_layers(datasets)
         for category, layers in datasets.items():
@@ -238,7 +273,7 @@ class DataProcessor:
                                            category, name)
                 os.makedirs(output_path, exist_ok=True)
                 layer.get_distance_raster(self.base_layer.path,
-                                          output_path, self.mask_layer.layer)
+                                          output_path, self.mask_layer.data)
                 # if isinstance(layer.friction, RasterLayer):
                 #     layer.friction.get_distance_raster(self.base_layer.path,
                 #                                        output_path, self.mask_layer.layer)
@@ -252,7 +287,7 @@ class DataProcessor:
             for name, layer in layers.items():
                 output_path = os.path.join(self.output_directory,
                                            category, name)
-                layer.distance_raster.normalize(output_path, self.mask_layer.layer, buffer=buffer)
+                layer.distance_raster.normalize(output_path, self.mask_layer.data, buffer=buffer)
 
     @staticmethod
     def index(layers):
@@ -262,7 +297,7 @@ class DataProcessor:
         weights = []
         rasters = []
         for name, layer in data.items():
-            rasters.append(layer.weight * layer.distance_raster.normalized.layer)
+            rasters.append(layer.weight * layer.distance_raster.normalized.data)
             weights.append(layer.weight)
 
         return sum(rasters) / sum(weights)
@@ -271,12 +306,12 @@ class DataProcessor:
         self.normalize_rasters(datasets=datasets, buffer=buffer)
         datasets = self.get_layers(datasets)
         layer = RasterLayer('Indexes', 'Demand_index', normalization='MinMax')
-        layer.layer = self.index(datasets)
+        layer.data = self.index(datasets)
         layer.meta = self.base_layer.meta
         output_path = os.path.join(self.output_directory,
                                    'Indexes', 'Demand Index')
         os.makedirs(output_path, exist_ok=True)
-        layer.normalize(output_path, self.mask_layer.layer, buffer=buffer)
+        layer.normalize(output_path, self.mask_layer.data, buffer=buffer)
         layer.normalized.name = 'Demand Index'
         self.demand_index = layer.normalized
 
@@ -284,24 +319,24 @@ class DataProcessor:
         self.normalize_rasters(datasets=datasets, buffer=buffer)
         datasets = self.get_layers(datasets)
         layer = RasterLayer('Indexes', 'Supply index', normalization='MinMax')
-        layer.layer = self.index(datasets)
+        layer.data = self.index(datasets)
         layer.meta = self.base_layer.meta
         output_path = os.path.join(self.output_directory,
                                    'Indexes', 'Supply Index')
         os.makedirs(output_path, exist_ok=True)
-        layer.normalize(output_path, self.mask_layer.layer, buffer=buffer)
+        layer.normalize(output_path, self.mask_layer.data, buffer=buffer)
         layer.normalized.name = 'Supply Index'
         self.supply_index = layer.normalized
 
     def get_clean_cooking_index(self, demand_weight=1, supply_weight=1, buffer=False):
         layer = RasterLayer('Indexes', 'Clean Cooking Potential Index', normalization='MinMax')
-        layer.layer = (demand_weight * self.demand_index.layer + supply_weight * self.supply_index.layer) / \
-                      (demand_weight + supply_weight)
+        layer.data = (demand_weight * self.demand_index.data + supply_weight * self.supply_index.data) / \
+                     (demand_weight + supply_weight)
         layer.meta = self.base_layer.meta
         output_path = os.path.join(self.output_directory,
                                    'Indexes', 'Clean Cooking Potential Index')
         os.makedirs(output_path, exist_ok=True)
-        layer.normalize(output_path, self.mask_layer.layer, buffer=buffer)
+        layer.normalize(output_path, self.mask_layer.data, buffer=buffer)
         layer.normalized.name = 'Clean Cooking Potential Index'
         self.clean_cooking_index = layer.normalized
 
@@ -309,12 +344,12 @@ class DataProcessor:
         self.normalize_rasters(datasets=datasets, buffer=buffer)
         datasets = self.get_layers(datasets)
         layer = RasterLayer('Indexes', 'Assistance need index', normalization='MinMax')
-        layer.layer = self.index(datasets)
+        layer.data = self.index(datasets)
         layer.meta = self.base_layer.meta
         output_path = os.path.join(self.output_directory,
                                    'Indexes', 'Assistance need index')
         os.makedirs(output_path, exist_ok=True)
-        layer.normalize(output_path, self.mask_layer.layer, buffer=buffer)
+        layer.normalize(output_path, self.mask_layer.data, buffer=buffer)
         layer.normalized.name = 'Assistance need index'
         self.assistance_need_index = layer.normalized
 
@@ -342,11 +377,11 @@ class DataProcessor:
                    title='Clean Cooking Potential Index', output_file=None):
         levels = []
         if index.lower() in 'clean cooking potential index':
-            data = self.clean_cooking_index.layer
+            data = self.clean_cooking_index.data
         elif index.lower() in 'assistance need index':
-            data = self.assistance_need_index.layer
+            data = self.assistance_need_index.data
         elif index.lower() in 'supply index':
-            data = self.supply_index.layer
+            data = self.supply_index.data
 
         for level in [0.2, 0.4, 0.6, 0.8, 1]:
             levels.append(np.where(
@@ -354,7 +389,7 @@ class DataProcessor:
 
         share = []
         for level in levels:
-            value = np.nansum(self.layers[layer[0]][layer[1]].layer[level])
+            value = np.nansum(self.layers[layer[0]][layer[1]].data[level])
             if np.isnan(value):
                 value = 0
             share.append(value)
@@ -467,7 +502,7 @@ class OnStove(DataProcessor):
         If it is not, it will adjust the shares to make the sum 1.0.
 
         Parameters
-        ---------
+        ----------
         techshare_dict : dictionary
             The original dictionary of technology shares
 
@@ -715,21 +750,26 @@ class OnStove(DataProcessor):
                                          name=layer.name + '_dist',
                                          method='read')
 
-    def population_to_dataframe(self, layer=None):
+    def population_to_dataframe(self, layer: Optional[RasterLayer] = None):
         """
         Takes a population `RasterLayer` as input and extracts the populated points to a GeoDataFrame that is
         saved in `OnSSTOVE.gdf`.
         """
-        if not layer:
+
+        if isinstance(layer, RasterLayer):
+            data = RasterLayer.data.copy()
+            meta = RasterLayer.meta
+        else:
             if self.base_layer:
-                layer = self.base_layer.layer.copy()
+                data = self.base_layer.data.copy()
                 meta = self.base_layer.meta
             else:
                 raise ValueError("No population layer was provided as input to the method or in the model base_layer")
-        layer[layer == meta['nodata']] = np.nan
-        layer[layer == 0] = np.nan
-        layer[layer < 1] = np.nan
-        self.rows, self.cols = np.where(~np.isnan(layer))
+
+        data[data == meta['nodata']] = np.nan
+        data[data == 0] = np.nan
+        data[data < 1] = np.nan
+        self.rows, self.cols = np.where(~np.isnan(data))
         x, y = rasterio.transform.xy(meta['transform'],
                                      self.rows, self.cols,
                                      offset='center')
@@ -743,6 +783,7 @@ class OnStove(DataProcessor):
         """
         Takes a RasterLayer and a method (sample or read), gets the values from the raster layer using the population points previously extracted and saves the values in a new column of OnSSTOVE.gdf
         """
+        layer = layer.copy()
         if method == 'sample':
             with rasterio.open(layer) as src:
                 if src.meta['crs'] != self.gdf.crs:
@@ -756,7 +797,9 @@ class OnStove(DataProcessor):
                     mask[mask == nodata] = np.nan
                     if np.isnan(mask[self.rows, self.cols]).sum() > 0:
                         mask[~np.isnan(mask)] = 1
-                        rows, cols = np.where(np.isnan(mask) & ~np.isnan(self.base_layer.layer))
+                        base = self.base_layer.data.copy()
+                        base[base == self.base_layer.meta['nodata']] = np.nan
+                        rows, cols = np.where(np.isnan(mask) & ~np.isnan(base))
                         mask[rows, cols] = 0
                         layer = fillnodata(layer, mask=mask,
                                            max_search_distance=100)
@@ -1117,27 +1160,28 @@ class OnStove(DataProcessor):
 
             self.gdf = gpd.sjoin(self.gdf, gdf[["relative_wealth", "geometry"]], how="left")
         elif file_type == "raster":
-            layer = RasterLayer('Demographics', 'Wealth', layer_path=wealth_index, resample='average')
+            layer = RasterLayer('Demographics', 'Wealth', path=wealth_index, resample='average')
 
             layer.align(self.base_layer.path)
 
-            self.raster_to_dataframe(layer.layer, name="relative_wealth", method='read',
+            self.raster_to_dataframe(layer.data, name="relative_wealth", method='read',
                                      nodata=layer.meta['nodata'], fill_nodata='interpolate')
         else:
             raise ValueError("file_type needs to be either csv, raster, polygon or point.")
 
     @staticmethod
     def re_name(df, labels, variable):
-        for value, label in labels.items():
-            df[variable] = df[variable].str.replace('_', ' ')
-            df.loc[df[variable] == value, variable] = label
-        return df
+        if labels is not None:
+            for value, label in labels.items():
+                df[variable] = df[variable].str.replace('_', ' ')
+                df.loc[df[variable] == value, variable] = label
+            return df
 
-    def points_to_raster(self, dff, variable, dtype=rasterio.uint8, nodata=111):
-        total_bounds = self.mask_layer.layer['geometry'].total_bounds
-        height = round((total_bounds[3] - total_bounds[1]) / 1000)
-        width = round((total_bounds[2] - total_bounds[0]) / 1000)
-        transform = rasterio.transform.from_bounds(*total_bounds, width, height)
+    def points_to_raster(self, dff, variable, cell_width=1000, cell_height=1000,
+                         dtype=rasterio.uint8, nodata=111):
+        bounds = self.mask_layer.bounds
+        height, width = RasterLayer.shape_from_cell(bounds, cell_height, cell_width)
+        transform = rasterio.transform.from_bounds(*bounds, width, height)
         rasterized = features.rasterize(
             ((g, v) for v, g in zip(dff[variable].values, dff['geometry'].values)),
             out_shape=(height, width),
@@ -1146,23 +1190,52 @@ class OnStove(DataProcessor):
             fill=nodata,
             dtype=dtype)
         meta = dict(driver='GTiff',
-                    dtype=rasterized.dtype,
+                    dtype=dtype,
                     count=1,
-                    crs=3857,
+                    crs=self.mask_layer.data.crs,
                     width=width,
                     height=height,
                     transform=transform,
                     nodata=nodata,
                     compress='DEFLATE')
-        return rasterized, meta, total_bounds
+        return rasterized, meta
+
+    @staticmethod
+    def empty_raster_from_shape(crs, transform, height, width):
+        array = np.empty((height, width))
+        array[:] = np.nan
+        raster = RasterLayer()
+        raster.data = array
+        raster.meta = dict(crs=crs,
+                           dtype=float,
+                           width=width,
+                           height=height,
+                           nodata=np.nan,
+                           transform=transform)
+        return raster
+
+    def base_layer_from_bounds(self, bounds, cell_height, cell_width):
+        if 'index' not in self.gdf.columns:
+            dff = self.gdf.copy().reset_index(drop=False)
+        else:
+            dff = self.gdf
+        height, width = RasterLayer.shape_from_cell(bounds, cell_height, cell_width)
+        transform = rasterio.transform.from_bounds(*bounds, width, height)
+        geometry = dff["geometry"].apply(lambda geom: geom.wkb)
+        gdf = dff.loc[geometry.drop_duplicates().index]
+        rows, cols = rasterio.transform.rowcol(transform, gdf['geometry'].x, gdf['geometry'].y)
+        self.rows = np.array(rows)
+        self.cols = np.array(cols)
+        self.base_layer = self.empty_raster_from_shape(self.gdf.crs, transform, height, width)
 
     def create_layer(self, variable, name=None, labels=None, cmap=None, metric='mean'):
         codes = None
         if self.base_layer is not None:
-            layer = np.empty(self.base_layer.layer.shape)
+            layer = np.empty(self.base_layer.data.shape)
             layer[:] = np.nan
             dff = self.gdf.copy().reset_index(drop=False)
         else:
+            layer = None
             dff = self.gdf.copy()
 
         if isinstance(self.gdf[variable].iloc[0], str):
@@ -1181,10 +1254,9 @@ class OnStove(DataProcessor):
             if self.rows is not None:
                 layer[self.rows, self.cols] = [codes[tech] for tech in dff[variable]]
                 meta = self.base_layer.meta
-                bounds = self.base_layer.bounds
             else:
-                dff['codes'] = [codes[tech] for tech in dff['max_benefit_tech']]
-                layer, meta, bounds = self.points_to_raster(dff, 'codes')
+                dff['codes'] = [codes[tech] for tech in dff[variable]]
+                layer, meta = self.points_to_raster(dff, 'codes')
         else:
             if metric == 'total':
                 dff[variable] = dff[variable] * dff['Households']
@@ -1204,18 +1276,15 @@ class OnStove(DataProcessor):
             if self.rows is not None:
                 layer[self.rows, self.cols] = dff[variable]
                 meta = self.base_layer.meta
-                bounds = self.base_layer.bounds
             else:
-                layer, meta, bounds = self.points_to_raster(dff, variable, dtype='float32',
+                layer, meta = self.points_to_raster(dff, variable, dtype='float32',
                                                             nodata=np.nan)
             variable = variable + '_' + metric
         if name is not None:
             variable = name
         raster = RasterLayer('Output', variable)
-        raster.layer = layer
+        raster.data = layer
         raster.meta = meta
-        # raster.meta.update(nodata=np.nan, dtype='float32')
-        raster.bounds = bounds
 
         return raster, codes, cmap
 
@@ -1232,27 +1301,30 @@ class OnStove(DataProcessor):
                     f.write(f'{code} {r} {g} {b} 255 {label}\n')
 
     def plot(self, variable, cmap='viridis', cumulative_count=None, quantiles=None,
-             legend_position=(1.05, 1), dpi=150,
-             admin_layer=None, title=None, labels=None, legend=True, legend_title='', legend_cols=1, rasterized=True,
+             legend_position=(1.05, 1), dpi=150, figsize=(6.4, 4.8),
+             admin_layer=None, title=None, labels=None,
+             legend=True, legend_title='', legend_cols=1,
+             legend_prop={'title': {'size': 12, 'weight': 'bold'}, 'size': 12}, rasterized=True,
              stats=False, stats_position=(1.05, 0.5), stats_fontsize=12, metric='mean',
-             save_style=False, classes=5):
+             save_style=False, classes=5, ax=None, scale_bar=None, north_arrow=None):
         raster, codes, cmap = self.create_layer(variable, labels=labels, cmap=cmap, metric=metric)
         if isinstance(admin_layer, gpd.GeoDataFrame):
             admin_layer = admin_layer
         elif not admin_layer:
-            admin_layer = self.mask_layer.layer
+            admin_layer = self.mask_layer.data
+
+        if not ax:
+            fig, ax = plt.subplots(1, 1, figsize=figsize, dpi=dpi)
+
         if stats:
-            fig, ax = plt.subplots(1, 1, figsize=(16, 9), dpi=dpi)
             self.add_statistics(ax, stats_position, stats_fontsize)
-        else:
-            ax = None
 
         raster.plot(cmap=cmap, cumulative_count=cumulative_count,
                     quantiles=quantiles,
                     categories=codes, legend_position=legend_position,
                     admin_layer=admin_layer, title=title, legend=legend,
                     legend_title=legend_title, legend_cols=legend_cols, rasterized=rasterized,
-                    ax=ax)
+                    ax=ax, legend_prop=legend_prop, scale_bar=scale_bar, north_arrow=north_arrow)
 
         if save_style:
             if codes:
@@ -1289,7 +1361,7 @@ class OnStove(DataProcessor):
 
         ab = AnnotationBbox(hvox, stats_position,
                             xycoords='axes fraction',
-                            box_alignment=(0, 0),
+                            box_alignment=(0, 1),
                             pad=0.0,
                             bboxprops=dict(boxstyle='round',
                                            facecolor='#f1f1f1ff',
@@ -1300,15 +1372,16 @@ class OnStove(DataProcessor):
     def to_image(self, variable, name=None, type='png', cmap='viridis', cumulative_count=None, quantiles=None,
                  legend_position=(1.05, 1), admin_layer=None, title=None, dpi=300, labels=None, legend=True,
                  legend_title='', legend_cols=1, rasterized=True, stats=False, stats_position=(1.05, 0.5),
-                 stats_fontsize=12, metric='mean'):
+                 stats_fontsize=12, metric='mean', scale_bar=None, north_arrow=None, figsize=(6.4, 4.8),
+                 legend_prop={'title': {'size': 12, 'weight': 'bold'}, 'size': 12}):
         raster, codes, cmap = self.create_layer(variable, name=name, labels=labels, cmap=cmap, metric=metric)
         if isinstance(admin_layer, gpd.GeoDataFrame):
             admin_layer = admin_layer
         elif not admin_layer:
-            admin_layer = self.mask_layer.layer
+            admin_layer = self.mask_layer.data
 
         if stats:
-            fig, ax = plt.subplots(1, 1, figsize=(16, 9), dpi=dpi)
+            fig, ax = plt.subplots(1, 1, figsize=figsize, dpi=dpi)
             self.add_statistics(ax, stats_position, stats_fontsize)
         else:
             ax = None
@@ -1316,7 +1389,8 @@ class OnStove(DataProcessor):
         raster.save_image(self.output_directory, type=type, cmap=cmap, cumulative_count=cumulative_count,
                           quantiles=quantiles, categories=codes, legend_position=legend_position,
                           admin_layer=admin_layer, title=title, ax=ax, dpi=dpi,
-                          legend=legend, legend_title=legend_title, legend_cols=legend_cols, rasterized=rasterized)
+                          legend=legend, legend_title=legend_title, legend_cols=legend_cols, rasterized=rasterized,
+                          scale_bar=scale_bar, north_arrow=north_arrow, legend_prop=legend_prop)
 
     def to_json(self, name):
         self.gdf.to_file(os.path.join(self.output_directory, name), driver='GeoJSON')
@@ -1324,6 +1398,7 @@ class OnStove(DataProcessor):
     def read_data(self, path):
         self.gdf = gpd.read_file(path)
 
+    # TODO: make this a property
     def summary(self, total=True, pretty=True, labels=None):
         dff = self.gdf.copy()
         if labels is not None:
@@ -1333,7 +1408,7 @@ class OnStove(DataProcessor):
                           'investment_costs', 'fuel_costs', 'om_costs', 'salvage_value']:
             dff[attribute] *= dff['Households']
         summary = dff.groupby(['max_benefit_tech']).agg({'Calibrated_pop': lambda row: np.nansum(row) / 1000000,
-                                                         'Households': 'sum',
+                                                         'Households': lambda row: np.nansum(row) / 1000000,
                                                          'maximum_net_benefit': lambda row: np.nansum(row) / 1000000,
                                                          'deaths_avoided': 'sum',
                                                          'health_costs_avoided': lambda row: np.nansum(row) / 1000000,
@@ -1352,10 +1427,11 @@ class OnStove(DataProcessor):
             total['max_benefit_tech'] = 'total'
             summary = pd.concat([summary, total.to_frame().T])
 
-        summary['time_saved'] /= (summary['Households'] * 365)
+        summary['time_saved'] /= (summary['Households'] * 1000000 * 365)
         if pretty:
             summary.rename(columns={'max_benefit_tech': 'Max benefit technology',
                                     'Calibrated_pop': 'Population (Million)',
+                                    'Households': 'Households (Millions)',
                                     'maximum_net_benefit': 'Total net benefit (MUSD)',
                                     'deaths_avoided': 'Total deaths avoided (pp/yr)',
                                     'health_costs_avoided': 'Health costs avoided (MUSD)',
@@ -1370,28 +1446,30 @@ class OnStove(DataProcessor):
 
         return summary
 
-    def plot_split(self, cmap=None, labels=None, save=False, height=1.5, width=2.5):
+    def plot_split(self, cmap=None, labels=None, save_as=None, height=1.5, width=2.5, x_variable='Calibrated_pop'):
         df = self.summary(total=False, pretty=False, labels=labels)
 
-        tech_list = df.sort_values('Calibrated_pop')['max_benefit_tech'].tolist()
+        variables = {'Calibrated_pop': 'Population (Millions)', 'Households': 'Households (Millions)'}
+
+        tech_list = df.sort_values(x_variable)['max_benefit_tech'].tolist()
         ccolor = 'black'
 
         p = (ggplot(df)
-             + geom_col(aes(x='max_benefit_tech', y='Calibrated_pop', fill='max_benefit_tech'))
-             + geom_text(aes(y=df['Calibrated_pop'], x='max_benefit_tech',
-                             label=df['Calibrated_pop'] / df['Calibrated_pop'].sum()),
+             + geom_col(aes(x='max_benefit_tech', y=x_variable, fill='max_benefit_tech'))
+             + geom_text(aes(y=df[x_variable], x='max_benefit_tech',
+                             label=df[x_variable] / df[x_variable].sum()),
                          format_string='{:.0%}',
                          color=ccolor, size=8, va='center', ha='left')
-             + ylim(0, df['Calibrated_pop'].max() * 1.15)
+             + ylim(0, df[x_variable].max() * 1.15)
              + scale_x_discrete(limits=tech_list)
              + scale_fill_manual(cmap)
              + coord_flip()
              + theme_minimal()
              + theme(legend_position='none')
-             + labs(x='', y='Population (Millions)', fill='Cooking technology')
+             + labs(x='', y=variables[x_variable], fill='Cooking technology')
              )
-        if save:
-            file = os.path.join(self.output_directory, 'tech_split.pdf')
+        if save_as is not None:
+            file = os.path.join(self.output_directory, f'{save_as}.pdf')
             p.save(file, height=height, width=width)
         else:
             return p
@@ -1527,8 +1605,8 @@ class OnStove(DataProcessor):
         else:
             return p
 
-    def plot_benefit_distribution(self, type='box', groupby='None', cmap=None, labels=None, save=False, height=1.5,
-                                  width=2.5):
+    def plot_benefit_distribution(self, type='box', groupby='None', variable='net_benefit', best_mix=True,
+                                  cmap=None, labels=None, save_as=None, height=1.5, width=2.5):
         if type.lower() == 'box':
             if groupby.lower() == 'isurban':
                 df = self.gdf.groupby(['IsUrban', 'max_benefit_tech'])[['health_costs_avoided',
@@ -1552,24 +1630,54 @@ class OnStove(DataProcessor):
                 df['Urban'].replace({True: 'Urban', False: 'Rural'}, inplace=True)
                 x = 'Urban'
             else:
-                df = self.gdf.copy()
-                df = self.re_name(df, labels, 'max_benefit_tech')
-                tech_list = df.groupby('max_benefit_tech')[['Calibrated_pop']].sum()
-                tech_list = tech_list.reset_index().sort_values('Calibrated_pop')['max_benefit_tech'].tolist()
-                x = 'max_benefit_tech'
+                if best_mix:
+                    df = self.gdf.copy()
+                    df = self.re_name(df, labels, 'max_benefit_tech')
+                    tech_list = df.groupby('max_benefit_tech')[['Calibrated_pop']].sum()
+                    tech_list = tech_list.reset_index().sort_values('Calibrated_pop')['max_benefit_tech'].tolist()
+                    x = 'max_benefit_tech'
+                    if variable == 'net_benefit':
+                        # y = '(health_costs_avoided + opportunity_cost_gained + emissions_costs_saved + salvage_value' + \
+                        #     ' - investment_costs - fuel_costs - om_costs)'
+                        y = 'maximum_net_benefit'
+                        title = 'Net benefit per household (kUSD/yr)'
+                    elif variable == 'costs':
+                        y = 'investment_costs - salvage_value + fuel_costs + om_costs'
+                        title = 'Costs per household (kUSD/yr)'
+                else:
+                    tech_list = []
+                    for name, tech in self.techs.items():
+                        if tech.benefits is not None:
+                        # if 'net_benefit' in tech.__dict__.keys():
+                            tech_list.append(name)
+                    x = 'tech'
+                    if variable == 'net_benefit':
+                        y = 'net_benefit'
+                        title = 'Net benefit per household (kUSD/yr)'
+                    elif variable == 'costs':
+                        y = 'costs'
+                        title = 'Costs per household (kUSD/yr)'
+
+                    df = pd.DataFrame({x: [], y: []})
+                    for tech in tech_list:
+                        df = pd.concat([df, pd.DataFrame({x: [tech] * self.techs[tech][y].shape[0],
+                                                          y: self.techs[tech][y]})], axis=0)
+                    df = self.re_name(df, labels, x)
+                    tech_list = df.groupby(x)[[y]].mean()
+                    tech_list = tech_list.reset_index().sort_values(y)[x].tolist()
+
             p = (ggplot(df)
                  + geom_boxplot(aes(x=x,
-                                    y='(health_costs_avoided + opportunity_cost_gained + emissions_costs_saved' +
-                                      ' - investment_costs - fuel_costs - om_costs)',
-                                    fill='max_benefit_tech',
-                                    color='max_benefit_tech'
+                                    y=y,
+                                    fill=x,
+                                    color=x
                                     ),
                                 alpha=0.5, outlier_alpha=0.1, raster=True)
                  + scale_fill_manual(cmap)
                  + scale_color_manual(cmap, guide=False)
                  + coord_flip()
                  + theme_minimal()
-                 + labs(y='Net benefit per household (kUSD/yr)', fill='Cooking technology')
+                 + labs(y=title, fill='Cooking technology')
                  )
             if groupby.lower() == 'urbanrural':
                 p += labs(x='Settlement')
@@ -1608,12 +1716,12 @@ class OnStove(DataProcessor):
         # scale y limits based on ylim1
         # p = p + coord_flip()
 
-        if save:
-            if groupby.lower() not in ['none', '']:
-                sufix = f'_{groupby}'
-            else:
-                sufix = ''
-            file = os.path.join(self.output_directory, f'max_benefits_{type}{sufix}.pdf')
+        if save_as is not None:
+            # if groupby.lower() not in ['none', '']:
+            #     sufix = f'_{groupby}'
+            # else:
+            #     sufix = ''
+            file = os.path.join(self.output_directory, f'{save_as}.pdf')
             p.save(file, height=height, width=width, dpi=600)
         else:
             return p

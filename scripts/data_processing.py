@@ -37,8 +37,8 @@ print(f'[{country}] Adding forest')
 forest_path = snakemake.input.forest
 data.add_layer(category='Biomass', name='Forest', layer_path=forest_path, layer_type='raster',
                resample='sum')
-data.layers['Biomass']['Forest'].layer[data.layers['Biomass']['Forest'].layer < 5] = 0
-data.layers['Biomass']['Forest'].layer[data.layers['Biomass']['Forest'].layer >= 5] = 1
+data.layers['Biomass']['Forest'].data[data.layers['Biomass']['Forest'].data < 5] = 0
+data.layers['Biomass']['Forest'].data[data.layers['Biomass']['Forest'].data >= 5] = 1
 data.layers['Biomass']['Forest'].save(f'{data.output_directory}/Biomass/Forest')
 transform = data.layers['Biomass']['Forest'].calculate_default_transform(data.project_crs)[0]
 factor = (data.cell_size[0] ** 2) / (transform[0] ** 2)
@@ -94,11 +94,11 @@ for key, path in {'buffaloes': buffaloes,
                    layer_type='raster', resample='nearest', window=True, rescale=True)
 
 print(f'[{country}] Adding water scarcity')
-water = VectorLayer('Biogas', 'Water scarcity', snakemake.input.water, bbox=data.mask_layer.layer)
-water.layer["class"] = 0
-water.layer['class'] = np.where(water.layer['bws_label'].isin(['Low (<10%)',
+water = VectorLayer('Biogas', 'Water scarcity', snakemake.input.water, bbox=data.mask_layer.data)
+water.data["class"] = 0
+water.data['class'] = np.where(water.data['bws_label'].isin(['Low (<10%)',
                                                                'Low - Medium (10-20%)']), 1, 0)
-water.layer.to_crs(data.project_crs, inplace=True)
+water.data.to_crs(data.project_crs, inplace=True)
 out_folder = os.path.join(data.output_directory, "Biogas", "Water scarcity")
 water.rasterize(cell_height=data.cell_size[0], cell_width=data.cell_size[1],
                 attribute="class", output=out_folder, nodata=0)
@@ -118,7 +118,7 @@ data.reproject_layers(datasets={'Electricity': ['MV_lines']})
 
 # Canopy calculation
 print(f'[{country}] Calculating forest canopy cover')
-data.layers['Biomass']['Forest'].layer /= factor
-data.layers['Biomass']['Forest'].layer *= 100
-data.layers['Biomass']['Forest'].layer[data.layers['Biomass']['Forest'].layer > 100] = 100
+data.layers['Biomass']['Forest'].data /= factor
+data.layers['Biomass']['Forest'].data *= 100
+data.layers['Biomass']['Forest'].data[data.layers['Biomass']['Forest'].data > 100] = 100
 data.layers['Biomass']['Forest'].save(f'{data.output_directory}/Biomass/Forest')

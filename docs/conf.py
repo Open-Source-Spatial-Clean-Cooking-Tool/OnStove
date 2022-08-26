@@ -35,7 +35,7 @@ extensions = [
     'sphinx.ext.autodoc',
     # 'sphinx.ext.napoleon',
     'numpydoc',
-    # 'sphinx.ext.intersphinx',
+    'sphinx.ext.intersphinx',
     # 'sphinx.ext.coverage',
     # 'sphinx.ext.doctest',
     'sphinx.ext.autosummary',
@@ -56,6 +56,15 @@ templates_path = ['_templates']
 # directories to ignore when looking for source files.
 # This pattern also affects html_static_path and html_extra_path.
 exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
+
+intersphinx_mapping = {
+    'geopandas': ('https://geopandas.org/en/stable/', None),
+    'pandas' : ('https://pandas.pydata.org/docs/', None),
+    'rasterio': ('https://rasterio.readthedocs.io/en/latest/', None),
+    'numpy': ('https://numpy.org/doc/stable/', None),
+    'matplotlib': ('https://matplotlib.org/stable', None),
+    'skimage': ('https://scikit-image.org/docs/stable/', None)
+}
 
 
 # -- Options for HTML output -------------------------------------------------
