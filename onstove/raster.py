@@ -12,11 +12,9 @@ from rasterio.enums import Resampling as enumsResampling
 
 
 def align_raster(raster_1, raster_2, method='nearest', compression='DEFLATE'):
-    with rasterio.open(raster_1) as src:
-        raster_1_meta = src.meta
-    with rasterio.open(raster_2) as src:
-        raster_2 = src.read(1)
-        raster_2_meta = src.meta
+    raster_1_meta = raster_1.meta
+    raster_2 = raster_2.data
+    raster_2_meta = raster_2.meta
 
     out_meta = raster_1_meta.copy()
     out_meta.update({

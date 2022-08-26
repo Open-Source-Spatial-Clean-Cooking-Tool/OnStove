@@ -1086,18 +1086,74 @@ class RasterLayer(_Layer):
         else:
             raise TypeError('The condition can only be a callable object.')
 
-    def normalize(self, output_path, mask_layer=None, buffer=False):
-        if self.normalization == 'MinMax':
-            output_file = os.path.join(output_path,
-                                       self.name + ' - normalized.tif')
-            normalize(raster=self.data, limit=self.distance_limit,
-                      inverse=self.inverse, output_file=output_file,
-                      meta=self.meta, buffer=buffer)
-            self.normalized = RasterLayer(self.category, self.name + ' - normalized',
-                                          path=output_file)
-            self.mask(mask_layer=mask_layer, output_path=output_file, all_touched=True)
+    def normalize(self, output_path: Optional[str] = None,
+                  buffer: bool = False, inverse: bool = False,
+                  create_raster: Optional[bool] = True) -> 'RasterLayer':
+        """Normalizes the raster data by a given normalization method.
 
-    def polygonize(self):
+        Parameters
+        ----------
+        output_path: str, optional
+            A folder path where to save the output dataset. If not defined then the normalized dataset is not saved
+            to disk.
+        buffer: bool, default False
+            Whether to exclude the areas outside the ``distance_limit`` attribute and make them `np.nan`.
+        inverse: bool, default False
+            Whether to invert the normalized layer or not.
+        create_raster: bool, default True
+            Boolean condition. If `True`, a :class:`RasterLayer` will be created and stored in the ``normalized``
+            attribute of the class. If `False`, a :class:`RasterLayer` with the normalized data is returned.
+
+        Returns
+        -------
+        RasterLayer
+            :class:`RasterLayer` with the normalized data.
+        """
+        if self.normalization == 'MinMax':
+            raster = self.raster.copy()
+            nodata = self.meta['nodata']
+            meta = self.meta
+            if callable(self.distance_limit):
+                raster[~self.distance_limit(raster)] = np.nan
+
+            raster[raster == nodata] = np.nan
+            min_value = np.nanmin(raster)
+            max_value = np.nanmax(raster)
+            raster = (raster - min_value) / (max_value - min_value)
+            if inverse:
+                if not buffer:
+                    raster[np.isnan(raster)] = 1
+                raster = 1 - raster
+            else:
+                if not buffer:
+                    raster[np.isnan(raster)] = 0
+
+            raster[self.raster == nodata] = np.nan
+            meta.update(nodata=np.nan, dtype='float32')
+
+            normalized = RasterLayer(category=self.category,
+                                     name=self.name + ' - normalized')
+            normalized.data = raster
+            normalized.meta = meta
+
+            if output_path:
+                normalized.save(output_path)
+
+            if create_raster:
+                self.normalized = normalized
+            else:
+                return normalized
+
+    def polygonize(self) -> VectorLayer:
+        """Polygonizes the raster layer based on the gridded data values.
+
+        It takes the unique values from the ``data`` array as categories and converts the cells into polygons.
+
+        Returns
+        ----------
+        VectorLayer
+            :class:`VectorLayer` with the polygonized data.
+        """
         results = (
             {'properties': {'raster_val': v}, 'geometry': s}
             for i, (s, v)
@@ -1108,49 +1164,101 @@ class RasterLayer(_Layer):
         polygon.crs = self.meta['crs']
         return polygon
 
-    def save(self, output_path, sufix=''):
+    def save(self, output_path: str):
+        """Saves the raster layer as a `tif` file.
+
+        It uses the ``name`` attribute as the name of the file.
+
+        Parameters
+        ----------
+        output_path: str
+            A folder path where to save the output dataset.
+        """
         output_file = os.path.join(output_path,
-                                   self.name + f'{sufix}.tif')
+                                   self.name + '.tif')
         self.path = output_file
         os.makedirs(output_path, exist_ok=True)
         self.meta.update(compress='DEFLATE', driver='GTiff')
         with rasterio.open(output_file, "w", **self.meta) as dest:
             dest.write(self.data, 1)
 
-    def add_friction_raster(self, raster, starting_cells=[1],
-                            resample='nearest'):
-        self.starting_cells = starting_cells
-        if isinstance(raster, str):
-            self.friction = RasterLayer(self.category,
-                                        self.name + ' - friction',
-                                        raster, resample=resample)
-        elif isinstance(raster, RasterLayer):
-            self.friction = raster
-        else:
-            raise ValueError('Raster file type or object not recognized.')
+    def align(self, base_layer: Union['RasterLayer', str],
+              rescale: Optional[bool] = None,
+              output_path: Optional[str] = None,
+              inplace: bool = True) -> 'RasterLayer':
+        """Aligns the rasters gridded data with grid of an input raster.
 
-    def align(self, base_layer, output_path=None):
-        if self.rescale:
+        Parameters
+        ----------
+        base_layer: RasterLater or str path to file
+            Raster layer to use as base for the grid alignment.
+        rescale: bool, optional
+            Whether to rescale the values proportionally to the the cell size difference between the
+            ``base_layer`` and the current raster. If not defined then the ``rescale`` attribute is used.
+        output_path: str, optional
+            A folder path where to save the output dataset. If not defined then the aligned raster is not saved
+            to disk.
+        inplace: bool, default True
+            Whether to replace the current raster with the aligned data or return a new :class:`RasterLayer`.
+
+        Returns
+        -------
+        RasterLayer
+            :class:`RasterLayer` with the aligned data.
+        """
+        if isinstance(base_layer, str):
             with rasterio.open(base_layer) as src:
-                crs = src.meta['crs']
-                cell_size = src.meta['transform'][0]
+                base_layer = RasterLayer(path=base_layer)
+
+        if rescale is None:
+            rescale = self.rescale
+
+        if rescale:
+            crs = base_layer.meta['crs']
+            cell_size = base_layer.meta['transform'][0]
             transform = self.calculate_default_transform(crs)[0]
 
-        layer, meta = align_raster(base_layer, self.path,
+        layer, meta = align_raster(base_layer, self,
                                    method=self.resample)
-        self.data = layer
-        self.meta = meta
+        data = layer
+        meta = meta
 
-        if self.rescale:
-            self.data[self.data == self.meta['nodata']] = np.nan
-            self.meta['nodata'] = np.nan
+        if rescale:
+            data[data == meta['nodata']] = np.nan
+            meta['nodata'] = np.nan
             factor = (cell_size ** 2) / (transform[0] ** 2)
-            self.data *= factor
+            data *= factor
 
         if output_path:
             self.save(output_path)
+        if inplace:
+            self.data = data
+            self.meta = meta
+        else:
+            raster = RasterLayer()
+            raster.data = data
+            raster.meta = meta
+            return raster
 
-    def cumulative_count(self, min_max=[0.02, 0.98]):
+    def cumulative_count(self, min_max: list[float, float] = [0.02, 0.98]) -> np.ndarray:
+        """Calculates a new data array flattening the raster's data values that fall in in either of the lower or upper
+         specified percentile.
+
+         For example, a if we use a ``min_max`` of ``[0.02, 0.98]``, the array will be first ordered in ascending
+         order and then all values that fall inside the lowest 2% will be "flattened" giving them the value of the
+         highest number inside that 2%. The same is done for the upper bound, where all data values that fall in the
+         highest 2% will be given the value of the lowest number within that 2%.
+
+         Parameters
+         ----------
+         min_max: list of float
+            List of lower and upper limits to consider for the cumulative count.
+
+         Returns
+         -------
+         np.ndarray
+            Raster data array with the flattened values.
+         """
         x = self.data.flat
         x = np.sort(x[~np.isnan(x)])
         count = x.shape[0]
