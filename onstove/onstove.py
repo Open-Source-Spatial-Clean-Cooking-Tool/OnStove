@@ -1142,10 +1142,11 @@ class OnStove(DataProcessor):
 
     @staticmethod
     def re_name(df, labels, variable):
-        for value, label in labels.items():
-            df[variable] = df[variable].str.replace('_', ' ')
-            df.loc[df[variable] == value, variable] = label
-        return df
+        if labels is not None:
+            for value, label in labels.items():
+                df[variable] = df[variable].str.replace('_', ' ')
+                df.loc[df[variable] == value, variable] = label
+            return df
 
     def points_to_raster(self, dff, variable, cell_width=1000, cell_height=1000,
                          dtype=rasterio.uint8, nodata=111):
@@ -1368,6 +1369,7 @@ class OnStove(DataProcessor):
     def read_data(self, path):
         self.gdf = gpd.read_file(path)
 
+    # TODO: make this a property
     def summary(self, total=True, pretty=True, labels=None):
         dff = self.gdf.copy()
         if labels is not None:
@@ -1377,7 +1379,7 @@ class OnStove(DataProcessor):
                           'investment_costs', 'fuel_costs', 'om_costs', 'salvage_value']:
             dff[attribute] *= dff['Households']
         summary = dff.groupby(['max_benefit_tech']).agg({'Calibrated_pop': lambda row: np.nansum(row) / 1000000,
-                                                         'Households': 'sum',
+                                                         'Households': lambda row: np.nansum(row) / 1000000,
                                                          'maximum_net_benefit': lambda row: np.nansum(row) / 1000000,
                                                          'deaths_avoided': 'sum',
                                                          'health_costs_avoided': lambda row: np.nansum(row) / 1000000,
@@ -1396,10 +1398,11 @@ class OnStove(DataProcessor):
             total['max_benefit_tech'] = 'total'
             summary = pd.concat([summary, total.to_frame().T])
 
-        summary['time_saved'] /= (summary['Households'] * 365)
+        summary['time_saved'] /= (summary['Households'] * 1000000 * 365)
         if pretty:
             summary.rename(columns={'max_benefit_tech': 'Max benefit technology',
                                     'Calibrated_pop': 'Population (Million)',
+                                    'Households': 'Households (Millions)',
                                     'maximum_net_benefit': 'Total net benefit (MUSD)',
                                     'deaths_avoided': 'Total deaths avoided (pp/yr)',
                                     'health_costs_avoided': 'Health costs avoided (MUSD)',
@@ -1414,28 +1417,30 @@ class OnStove(DataProcessor):
 
         return summary
 
-    def plot_split(self, cmap=None, labels=None, save=False, height=1.5, width=2.5):
+    def plot_split(self, cmap=None, labels=None, save_as=None, height=1.5, width=2.5, x_variable='Calibrated_pop'):
         df = self.summary(total=False, pretty=False, labels=labels)
 
-        tech_list = df.sort_values('Calibrated_pop')['max_benefit_tech'].tolist()
+        variables = {'Calibrated_pop': 'Population (Millions)', 'Households': 'Households (Millions)'}
+
+        tech_list = df.sort_values(x_variable)['max_benefit_tech'].tolist()
         ccolor = 'black'
 
         p = (ggplot(df)
-             + geom_col(aes(x='max_benefit_tech', y='Calibrated_pop', fill='max_benefit_tech'))
-             + geom_text(aes(y=df['Calibrated_pop'], x='max_benefit_tech',
-                             label=df['Calibrated_pop'] / df['Calibrated_pop'].sum()),
+             + geom_col(aes(x='max_benefit_tech', y=x_variable, fill='max_benefit_tech'))
+             + geom_text(aes(y=df[x_variable], x='max_benefit_tech',
+                             label=df[x_variable] / df[x_variable].sum()),
                          format_string='{:.0%}',
                          color=ccolor, size=8, va='center', ha='left')
-             + ylim(0, df['Calibrated_pop'].max() * 1.15)
+             + ylim(0, df[x_variable].max() * 1.15)
              + scale_x_discrete(limits=tech_list)
              + scale_fill_manual(cmap)
              + coord_flip()
              + theme_minimal()
              + theme(legend_position='none')
-             + labs(x='', y='Population (Millions)', fill='Cooking technology')
+             + labs(x='', y=variables[x_variable], fill='Cooking technology')
              )
-        if save:
-            file = os.path.join(self.output_directory, 'tech_split.pdf')
+        if save_as is not None:
+            file = os.path.join(self.output_directory, f'{save_as}.pdf')
             p.save(file, height=height, width=width)
         else:
             return p
@@ -1571,8 +1576,8 @@ class OnStove(DataProcessor):
         else:
             return p
 
-    def plot_benefit_distribution(self, type='box', groupby='None', cmap=None, labels=None, save=False, height=1.5,
-                                  width=2.5):
+    def plot_benefit_distribution(self, type='box', groupby='None', variable='net_benefit', best_mix=True,
+                                  cmap=None, labels=None, save_as=None, height=1.5, width=2.5):
         if type.lower() == 'box':
             if groupby.lower() == 'isurban':
                 df = self.gdf.groupby(['IsUrban', 'max_benefit_tech'])[['health_costs_avoided',
@@ -1596,24 +1601,54 @@ class OnStove(DataProcessor):
                 df['Urban'].replace({True: 'Urban', False: 'Rural'}, inplace=True)
                 x = 'Urban'
             else:
-                df = self.gdf.copy()
-                df = self.re_name(df, labels, 'max_benefit_tech')
-                tech_list = df.groupby('max_benefit_tech')[['Calibrated_pop']].sum()
-                tech_list = tech_list.reset_index().sort_values('Calibrated_pop')['max_benefit_tech'].tolist()
-                x = 'max_benefit_tech'
+                if best_mix:
+                    df = self.gdf.copy()
+                    df = self.re_name(df, labels, 'max_benefit_tech')
+                    tech_list = df.groupby('max_benefit_tech')[['Calibrated_pop']].sum()
+                    tech_list = tech_list.reset_index().sort_values('Calibrated_pop')['max_benefit_tech'].tolist()
+                    x = 'max_benefit_tech'
+                    if variable == 'net_benefit':
+                        # y = '(health_costs_avoided + opportunity_cost_gained + emissions_costs_saved + salvage_value' + \
+                        #     ' - investment_costs - fuel_costs - om_costs)'
+                        y = 'maximum_net_benefit'
+                        title = 'Net benefit per household (kUSD/yr)'
+                    elif variable == 'costs':
+                        y = 'investment_costs - salvage_value + fuel_costs + om_costs'
+                        title = 'Costs per household (kUSD/yr)'
+                else:
+                    tech_list = []
+                    for name, tech in self.techs.items():
+                        if tech.benefits is not None:
+                        # if 'net_benefit' in tech.__dict__.keys():
+                            tech_list.append(name)
+                    x = 'tech'
+                    if variable == 'net_benefit':
+                        y = 'net_benefit'
+                        title = 'Net benefit per household (kUSD/yr)'
+                    elif variable == 'costs':
+                        y = 'costs'
+                        title = 'Costs per household (kUSD/yr)'
+
+                    df = pd.DataFrame({x: [], y: []})
+                    for tech in tech_list:
+                        df = pd.concat([df, pd.DataFrame({x: [tech] * self.techs[tech][y].shape[0],
+                                                          y: self.techs[tech][y]})], axis=0)
+                    df = self.re_name(df, labels, x)
+                    tech_list = df.groupby(x)[[y]].mean()
+                    tech_list = tech_list.reset_index().sort_values(y)[x].tolist()
+
             p = (ggplot(df)
                  + geom_boxplot(aes(x=x,
-                                    y='(health_costs_avoided + opportunity_cost_gained + emissions_costs_saved' +
-                                      ' - investment_costs - fuel_costs - om_costs)',
-                                    fill='max_benefit_tech',
-                                    color='max_benefit_tech'
+                                    y=y,
+                                    fill=x,
+                                    color=x
                                     ),
                                 alpha=0.5, outlier_alpha=0.1, raster=True)
                  + scale_fill_manual(cmap)
                  + scale_color_manual(cmap, guide=False)
                  + coord_flip()
                  + theme_minimal()
-                 + labs(y='Net benefit per household (kUSD/yr)', fill='Cooking technology')
+                 + labs(y=title, fill='Cooking technology')
                  )
             if groupby.lower() == 'urbanrural':
                 p += labs(x='Settlement')
@@ -1652,12 +1687,12 @@ class OnStove(DataProcessor):
         # scale y limits based on ylim1
         # p = p + coord_flip()
 
-        if save:
-            if groupby.lower() not in ['none', '']:
-                sufix = f'_{groupby}'
-            else:
-                sufix = ''
-            file = os.path.join(self.output_directory, f'max_benefits_{type}{sufix}.pdf')
+        if save_as is not None:
+            # if groupby.lower() not in ['none', '']:
+            #     sufix = f'_{groupby}'
+            # else:
+            #     sufix = ''
+            file = os.path.join(self.output_directory, f'{save_as}.pdf')
             p.save(file, height=height, width=width, dpi=600)
         else:
             return p

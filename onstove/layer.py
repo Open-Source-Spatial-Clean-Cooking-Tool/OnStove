@@ -1113,9 +1113,9 @@ class RasterLayer(_Layer):
                                    self.name + f'{sufix}.tif')
         self.path = output_file
         os.makedirs(output_path, exist_ok=True)
-        self.meta.update(compress='DEFLATE')
+        self.meta.update(compress='DEFLATE', driver='GTiff')
         with rasterio.open(output_file, "w", **self.meta) as dest:
-            dest.write(self.data, indexes=1)
+            dest.write(self.data, 1)
 
     def add_friction_raster(self, raster, starting_cells=[1],
                             resample='nearest'):
@@ -1173,13 +1173,15 @@ class RasterLayer(_Layer):
         min_val = np.nanmin(layer)
         layer = layer - min_val
         qs = qs - min_val
+        new_layer = layer.copy()
         while i < (len(qs)):
             if i == 0:
-                layer[(layer >= 0) & (layer <= qs[i])] = quantiles[i] * 100
+                new_layer[(layer >= 0) & (layer < qs[i])] = 0
             else:
-                layer[(layer > qs[i - 1]) & (layer <= qs[i])] = quantiles[i] * 100
+                new_layer[(layer >= qs[i - 1]) & (layer < qs[i])] = quantiles[i - 1] * 100
             i += 1
-        return layer
+        new_layer[layer >= qs[i - 1]] = quantiles[i - 1] * 100
+        return new_layer
 
     @staticmethod
     def category_legend(im, categories, legend_position=(1.05, 1), title='', legend_cols=1,
@@ -1211,12 +1213,13 @@ class RasterLayer(_Layer):
 
         if cumulative_count:
             layer = self.cumulative_count(cumulative_count)
-        elif quantiles:
+        elif quantiles is not None:
             layer = self.quantiles(quantiles)
             qs = self.get_quantiles(quantiles)
-            categories = {i: j * 100 for i, j in zip(qs, quantiles)}
+            categories = {round(i, 4): j * 100 for i, j in zip(qs, quantiles)}
             legend = True
-            legend_title = 'Quantiles'
+            if legend_title is None:
+                legend_title = 'Quantiles'
         else:
             layer = self.data
 
