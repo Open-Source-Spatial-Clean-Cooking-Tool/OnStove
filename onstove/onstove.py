@@ -1,6 +1,8 @@
 """This module contains the model classes of OnStove."""
 
 import os
+from typing import Optional
+
 import dill
 import pandas as pd
 import numpy as np
@@ -748,21 +750,26 @@ class OnStove(DataProcessor):
                                          name=layer.name + '_dist',
                                          method='read')
 
-    def population_to_dataframe(self, layer=None):
+    def population_to_dataframe(self, layer: Optional[RasterLayer] = None):
         """
         Takes a population `RasterLayer` as input and extracts the populated points to a GeoDataFrame that is
         saved in `OnSSTOVE.gdf`.
         """
-        if not layer:
+
+        if isinstance(layer, RasterLayer):
+            data = RasterLayer.data.copy()
+            meta = RasterLayer.meta
+        else:
             if self.base_layer:
-                layer = self.base_layer.data.copy()
+                data = self.base_layer.data.copy()
                 meta = self.base_layer.meta
             else:
                 raise ValueError("No population layer was provided as input to the method or in the model base_layer")
-        layer[layer == meta['nodata']] = np.nan
-        layer[layer == 0] = np.nan
-        layer[layer < 1] = np.nan
-        self.rows, self.cols = np.where(~np.isnan(layer))
+
+        data[data == meta['nodata']] = np.nan
+        data[data == 0] = np.nan
+        data[data < 1] = np.nan
+        self.rows, self.cols = np.where(~np.isnan(data))
         x, y = rasterio.transform.xy(meta['transform'],
                                      self.rows, self.cols,
                                      offset='center')
@@ -1164,16 +1171,17 @@ class OnStove(DataProcessor):
 
     @staticmethod
     def re_name(df, labels, variable):
-        for value, label in labels.items():
-            df[variable] = df[variable].str.replace('_', ' ')
-            df.loc[df[variable] == value, variable] = label
-        return df
+        if labels is not None:
+            for value, label in labels.items():
+                df[variable] = df[variable].str.replace('_', ' ')
+                df.loc[df[variable] == value, variable] = label
+            return df
 
-    def points_to_raster(self, dff, variable, dtype=rasterio.uint8, nodata=111):
-        total_bounds = self.mask_layer.data['geometry'].total_bounds
-        height = round((total_bounds[3] - total_bounds[1]) / 1000)
-        width = round((total_bounds[2] - total_bounds[0]) / 1000)
-        transform = rasterio.transform.from_bounds(*total_bounds, width, height)
+    def points_to_raster(self, dff, variable, cell_width=1000, cell_height=1000,
+                         dtype=rasterio.uint8, nodata=111):
+        bounds = self.mask_layer.bounds
+        height, width = RasterLayer.shape_from_cell(bounds, cell_height, cell_width)
+        transform = rasterio.transform.from_bounds(*bounds, width, height)
         rasterized = features.rasterize(
             ((g, v) for v, g in zip(dff[variable].values, dff['geometry'].values)),
             out_shape=(height, width),
@@ -1182,15 +1190,43 @@ class OnStove(DataProcessor):
             fill=nodata,
             dtype=dtype)
         meta = dict(driver='GTiff',
-                    dtype=rasterized.dtype,
+                    dtype=dtype,
                     count=1,
-                    crs=3857,
+                    crs=self.mask_layer.data.crs,
                     width=width,
                     height=height,
                     transform=transform,
                     nodata=nodata,
                     compress='DEFLATE')
-        return rasterized, meta, total_bounds
+        return rasterized, meta
+
+    @staticmethod
+    def empty_raster_from_shape(crs, transform, height, width):
+        array = np.empty((height, width))
+        array[:] = np.nan
+        raster = RasterLayer()
+        raster.data = array
+        raster.meta = dict(crs=crs,
+                           dtype=float,
+                           width=width,
+                           height=height,
+                           nodata=np.nan,
+                           transform=transform)
+        return raster
+
+    def base_layer_from_bounds(self, bounds, cell_height, cell_width):
+        if 'index' not in self.gdf.columns:
+            dff = self.gdf.copy().reset_index(drop=False)
+        else:
+            dff = self.gdf
+        height, width = RasterLayer.shape_from_cell(bounds, cell_height, cell_width)
+        transform = rasterio.transform.from_bounds(*bounds, width, height)
+        geometry = dff["geometry"].apply(lambda geom: geom.wkb)
+        gdf = dff.loc[geometry.drop_duplicates().index]
+        rows, cols = rasterio.transform.rowcol(transform, gdf['geometry'].x, gdf['geometry'].y)
+        self.rows = np.array(rows)
+        self.cols = np.array(cols)
+        self.base_layer = self.empty_raster_from_shape(self.gdf.crs, transform, height, width)
 
     def create_layer(self, variable, name=None, labels=None, cmap=None, metric='mean'):
         codes = None
@@ -1199,6 +1235,7 @@ class OnStove(DataProcessor):
             layer[:] = np.nan
             dff = self.gdf.copy().reset_index(drop=False)
         else:
+            layer = None
             dff = self.gdf.copy()
 
         if isinstance(self.gdf[variable].iloc[0], str):
@@ -1217,10 +1254,9 @@ class OnStove(DataProcessor):
             if self.rows is not None:
                 layer[self.rows, self.cols] = [codes[tech] for tech in dff[variable]]
                 meta = self.base_layer.meta
-                bounds = self.base_layer.bounds
             else:
-                dff['codes'] = [codes[tech] for tech in dff['max_benefit_tech']]
-                layer, meta, bounds = self.points_to_raster(dff, 'codes')
+                dff['codes'] = [codes[tech] for tech in dff[variable]]
+                layer, meta = self.points_to_raster(dff, 'codes')
         else:
             if metric == 'total':
                 dff[variable] = dff[variable] * dff['Households']
@@ -1240,9 +1276,8 @@ class OnStove(DataProcessor):
             if self.rows is not None:
                 layer[self.rows, self.cols] = dff[variable]
                 meta = self.base_layer.meta
-                bounds = self.base_layer.bounds
             else:
-                layer, meta, bounds = self.points_to_raster(dff, variable, dtype='float32',
+                layer, meta = self.points_to_raster(dff, variable, dtype='float32',
                                                             nodata=np.nan)
             variable = variable + '_' + metric
         if name is not None:
@@ -1276,7 +1311,7 @@ class OnStove(DataProcessor):
         if isinstance(admin_layer, gpd.GeoDataFrame):
             admin_layer = admin_layer
         elif not admin_layer:
-            admin_layer = self.mask_layer.layer
+            admin_layer = self.mask_layer.data
 
         if not ax:
             fig, ax = plt.subplots(1, 1, figsize=figsize, dpi=dpi)
@@ -1363,6 +1398,7 @@ class OnStove(DataProcessor):
     def read_data(self, path):
         self.gdf = gpd.read_file(path)
 
+    # TODO: make this a property
     def summary(self, total=True, pretty=True, labels=None):
         dff = self.gdf.copy()
         if labels is not None:
@@ -1372,7 +1408,7 @@ class OnStove(DataProcessor):
                           'investment_costs', 'fuel_costs', 'om_costs', 'salvage_value']:
             dff[attribute] *= dff['Households']
         summary = dff.groupby(['max_benefit_tech']).agg({'Calibrated_pop': lambda row: np.nansum(row) / 1000000,
-                                                         'Households': 'sum',
+                                                         'Households': lambda row: np.nansum(row) / 1000000,
                                                          'maximum_net_benefit': lambda row: np.nansum(row) / 1000000,
                                                          'deaths_avoided': 'sum',
                                                          'health_costs_avoided': lambda row: np.nansum(row) / 1000000,
@@ -1391,10 +1427,11 @@ class OnStove(DataProcessor):
             total['max_benefit_tech'] = 'total'
             summary = pd.concat([summary, total.to_frame().T])
 
-        summary['time_saved'] /= (summary['Households'] * 365)
+        summary['time_saved'] /= (summary['Households'] * 1000000 * 365)
         if pretty:
             summary.rename(columns={'max_benefit_tech': 'Max benefit technology',
                                     'Calibrated_pop': 'Population (Million)',
+                                    'Households': 'Households (Millions)',
                                     'maximum_net_benefit': 'Total net benefit (MUSD)',
                                     'deaths_avoided': 'Total deaths avoided (pp/yr)',
                                     'health_costs_avoided': 'Health costs avoided (MUSD)',
@@ -1409,28 +1446,30 @@ class OnStove(DataProcessor):
 
         return summary
 
-    def plot_split(self, cmap=None, labels=None, save=False, height=1.5, width=2.5):
+    def plot_split(self, cmap=None, labels=None, save_as=None, height=1.5, width=2.5, x_variable='Calibrated_pop'):
         df = self.summary(total=False, pretty=False, labels=labels)
 
-        tech_list = df.sort_values('Calibrated_pop')['max_benefit_tech'].tolist()
+        variables = {'Calibrated_pop': 'Population (Millions)', 'Households': 'Households (Millions)'}
+
+        tech_list = df.sort_values(x_variable)['max_benefit_tech'].tolist()
         ccolor = 'black'
 
         p = (ggplot(df)
-             + geom_col(aes(x='max_benefit_tech', y='Calibrated_pop', fill='max_benefit_tech'))
-             + geom_text(aes(y=df['Calibrated_pop'], x='max_benefit_tech',
-                             label=df['Calibrated_pop'] / df['Calibrated_pop'].sum()),
+             + geom_col(aes(x='max_benefit_tech', y=x_variable, fill='max_benefit_tech'))
+             + geom_text(aes(y=df[x_variable], x='max_benefit_tech',
+                             label=df[x_variable] / df[x_variable].sum()),
                          format_string='{:.0%}',
                          color=ccolor, size=8, va='center', ha='left')
-             + ylim(0, df['Calibrated_pop'].max() * 1.15)
+             + ylim(0, df[x_variable].max() * 1.15)
              + scale_x_discrete(limits=tech_list)
              + scale_fill_manual(cmap)
              + coord_flip()
              + theme_minimal()
              + theme(legend_position='none')
-             + labs(x='', y='Population (Millions)', fill='Cooking technology')
+             + labs(x='', y=variables[x_variable], fill='Cooking technology')
              )
-        if save:
-            file = os.path.join(self.output_directory, 'tech_split.pdf')
+        if save_as is not None:
+            file = os.path.join(self.output_directory, f'{save_as}.pdf')
             p.save(file, height=height, width=width)
         else:
             return p
@@ -1566,8 +1605,8 @@ class OnStove(DataProcessor):
         else:
             return p
 
-    def plot_benefit_distribution(self, type='box', groupby='None', cmap=None, labels=None, save=False, height=1.5,
-                                  width=2.5):
+    def plot_benefit_distribution(self, type='box', groupby='None', variable='net_benefit', best_mix=True,
+                                  cmap=None, labels=None, save_as=None, height=1.5, width=2.5):
         if type.lower() == 'box':
             if groupby.lower() == 'isurban':
                 df = self.gdf.groupby(['IsUrban', 'max_benefit_tech'])[['health_costs_avoided',
@@ -1591,24 +1630,54 @@ class OnStove(DataProcessor):
                 df['Urban'].replace({True: 'Urban', False: 'Rural'}, inplace=True)
                 x = 'Urban'
             else:
-                df = self.gdf.copy()
-                df = self.re_name(df, labels, 'max_benefit_tech')
-                tech_list = df.groupby('max_benefit_tech')[['Calibrated_pop']].sum()
-                tech_list = tech_list.reset_index().sort_values('Calibrated_pop')['max_benefit_tech'].tolist()
-                x = 'max_benefit_tech'
+                if best_mix:
+                    df = self.gdf.copy()
+                    df = self.re_name(df, labels, 'max_benefit_tech')
+                    tech_list = df.groupby('max_benefit_tech')[['Calibrated_pop']].sum()
+                    tech_list = tech_list.reset_index().sort_values('Calibrated_pop')['max_benefit_tech'].tolist()
+                    x = 'max_benefit_tech'
+                    if variable == 'net_benefit':
+                        # y = '(health_costs_avoided + opportunity_cost_gained + emissions_costs_saved + salvage_value' + \
+                        #     ' - investment_costs - fuel_costs - om_costs)'
+                        y = 'maximum_net_benefit'
+                        title = 'Net benefit per household (kUSD/yr)'
+                    elif variable == 'costs':
+                        y = 'investment_costs - salvage_value + fuel_costs + om_costs'
+                        title = 'Costs per household (kUSD/yr)'
+                else:
+                    tech_list = []
+                    for name, tech in self.techs.items():
+                        if tech.benefits is not None:
+                        # if 'net_benefit' in tech.__dict__.keys():
+                            tech_list.append(name)
+                    x = 'tech'
+                    if variable == 'net_benefit':
+                        y = 'net_benefit'
+                        title = 'Net benefit per household (kUSD/yr)'
+                    elif variable == 'costs':
+                        y = 'costs'
+                        title = 'Costs per household (kUSD/yr)'
+
+                    df = pd.DataFrame({x: [], y: []})
+                    for tech in tech_list:
+                        df = pd.concat([df, pd.DataFrame({x: [tech] * self.techs[tech][y].shape[0],
+                                                          y: self.techs[tech][y]})], axis=0)
+                    df = self.re_name(df, labels, x)
+                    tech_list = df.groupby(x)[[y]].mean()
+                    tech_list = tech_list.reset_index().sort_values(y)[x].tolist()
+
             p = (ggplot(df)
                  + geom_boxplot(aes(x=x,
-                                    y='(health_costs_avoided + opportunity_cost_gained + emissions_costs_saved' +
-                                      ' - investment_costs - fuel_costs - om_costs)',
-                                    fill='max_benefit_tech',
-                                    color='max_benefit_tech'
+                                    y=y,
+                                    fill=x,
+                                    color=x
                                     ),
                                 alpha=0.5, outlier_alpha=0.1, raster=True)
                  + scale_fill_manual(cmap)
                  + scale_color_manual(cmap, guide=False)
                  + coord_flip()
                  + theme_minimal()
-                 + labs(y='Net benefit per household (kUSD/yr)', fill='Cooking technology')
+                 + labs(y=title, fill='Cooking technology')
                  )
             if groupby.lower() == 'urbanrural':
                 p += labs(x='Settlement')
@@ -1647,12 +1716,12 @@ class OnStove(DataProcessor):
         # scale y limits based on ylim1
         # p = p + coord_flip()
 
-        if save:
-            if groupby.lower() not in ['none', '']:
-                sufix = f'_{groupby}'
-            else:
-                sufix = ''
-            file = os.path.join(self.output_directory, f'max_benefits_{type}{sufix}.pdf')
+        if save_as is not None:
+            # if groupby.lower() not in ['none', '']:
+            #     sufix = f'_{groupby}'
+            # else:
+            #     sufix = ''
+            file = os.path.join(self.output_directory, f'{save_as}.pdf')
             p.save(file, height=height, width=width, dpi=600)
         else:
             return p

@@ -59,7 +59,7 @@ class ScaleBar(matplotlib.offsetbox.AnchoredOffsetbox):
             line = Line2D([0, size], [0, 0], **linekw)
             vline1 = Line2D([0, 0], [-extent / 2., extent / 2.], **linekw)
             vline2 = Line2D([size, size], [-extent / 2., extent / 2.], **linekw)
-            text = Text(size / 2, extent + 0.01, str(int(size / 1000)) + ' km', horizontalalignment='center',
+            text = Text(size / 2, extent + 0.01, str(int(size / 1000)), horizontalalignment='center',
                         **textprops)
             size_bar.add_artist(line)
             size_bar.add_artist(vline1)
@@ -73,7 +73,6 @@ class ScaleBar(matplotlib.offsetbox.AnchoredOffsetbox):
             text1 = Text(0, extent + 0.01, 0, horizontalalignment='center', **textprops)
             text2 = Text(size / 2, extent + 0.01, str(int(size / 2000)), horizontalalignment='center', **textprops)
             text3 = Text(size, extent + 0.01, str(int(size / 1000)), horizontalalignment='center', **textprops)
-            text4 = Text(0, 0, 'km', horizontalalignment='center', **textprops)
             size_bar.add_artist(line)
             size_bar.add_artist(vline1)
             size_bar.add_artist(vline2)
@@ -81,7 +80,8 @@ class ScaleBar(matplotlib.offsetbox.AnchoredOffsetbox):
             size_bar.add_artist(text1)
             size_bar.add_artist(text2)
             size_bar.add_artist(text3)
-            size_units.add_artist(text4)
+        text4 = Text(0, 0, 'km', horizontalalignment='center', **textprops)
+        size_units.add_artist(text4)
 
         self.vpac = matplotlib.offsetbox.HPacker(children=[size_bar, size_units],
                                                  align="center", pad=0, sep=sep)
