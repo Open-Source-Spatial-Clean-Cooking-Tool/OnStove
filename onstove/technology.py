@@ -119,150 +119,14 @@ class Technology:
                 self[paf + s] = 0
         self.discounted_fuel_cost = 0
         self.discounted_investments = 0
+        self.benefits = None
+        self.net_benefit = None
 
     def __setitem__(self, idx, value):
-        if idx == 'name':
-            self.name = value
-        elif idx == 'energy_content':
-            self.energy_content = value
-        elif idx == 'carbon_intensity':
-            self.carbon_intensity = value
-        elif idx.lower() == 'co2_intensity':
-            self.co2_intensity = value
-        elif idx.lower() == 'ch4_intensity':
-            self.ch4_intensity = value
-        elif idx.lower() == 'n2o_intensity':
-            self.n2o_intensity = value
-        elif idx.lower() == 'co_intensity':
-            self.co_intensity = value
-        elif idx.lower() == 'bc_intensity':
-            self.bc_intensity = value
-        elif idx.lower() == 'oc_intensity':
-            self.oc_intensity = value
-        elif idx == 'fuel_cost':
-            self.fuel_cost = value
-        elif idx == 'tech_life':
-            self.tech_life = value
-        elif idx == 'inv_cost':
-            self.inv_cost = value
-        elif idx == 'om_cost':
-            self.om_cost = value
-        elif idx == 'time_of_cooking':
-            self.time_of_cooking = value
-        elif idx == 'efficiency':
-            self.efficiency = value
-        elif idx == 'pm25':
-            self.pm25 = value
-        elif idx == 'time_of_collection':
-            self.time_of_collection = value
-        elif idx == 'fuel_use':
-            self.fuel_use = value
-        elif idx == 'is_base':
-            self.is_base = value
-        elif idx == 'diesel_cost':
-            self.diesel_cost = value
-        elif idx == 'carbon':
-            self.carbon = value
-        elif idx == 'current_share_urban':
-            self.current_share_urban = value
-        elif idx == 'current_share_rural':
-            self.current_share_rural = value
-        elif idx == 'paf_alri_r':
-            self.paf_alri_r = value
-        elif idx == 'paf_copd_r':
-            self.paf_copd_r = value
-        elif idx == 'paf_ihd_r':
-            self.paf_ihd_r = value
-        elif idx == 'paf_lc_r':
-            self.paf_lc_r = value
-        elif idx == 'paf_stroke_r':
-            self.paf_stroke_r = value
-        elif idx == 'paf_alri_u':
-            self.paf_alri_u = value
-        elif idx == 'paf_copd_u':
-            self.paf_copd_u = value
-        elif idx == 'paf_ihd_u':
-            self.paf_ihd_u = value
-        elif idx == 'paf_lc_u':
-            self.paf_lc_u = value
-        elif idx == 'paf_stroke_u':
-            self.paf_stroke_u = value
-        elif idx == 'epsilon':
-            self.epsilon = value
-        else:
-            raise KeyError(idx)
+        self.__dict__[idx] = value
 
     def __getitem__(self, idx):
-        if idx == 'name':
-            return self.name
-        elif idx == 'energy_content':
-            return self.energy_content
-        elif idx == 'carbon_intensity':
-            return self.carbon_intensity
-        elif idx.lower() == 'co2_intensity':
-            return self.co2_intensity
-        elif idx.lower() == 'ch4_intensity':
-            return self.ch4_intensity
-        elif idx.lower() == 'n2o_intensity':
-            return self.n2o_intensity
-        elif idx.lower() == 'co_intensity':
-            return self.co_intensity
-        elif idx.lower() == 'bc_intensity':
-            return self.bc_intensity
-        elif idx.lower() == 'oc_intensity':
-            return self.oc_intensity
-        elif idx == 'fuel_cost':
-            return self.fuel_cost
-        elif idx == 'tech_life':
-            return self.tech_life
-        elif idx == 'inv_cost':
-            return self.inv_cost
-        elif idx == 'om_cost':
-            return self.om_cost
-        elif idx == 'time_of_cooking':
-            return self.time_of_cooking
-        elif idx == 'efficiency':
-            return self.efficiency
-        elif idx == 'pm25':
-            return self.pm25
-        elif idx == 'time_of_collection':
-            return self.time_of_collection
-        elif idx == 'fuel_use':
-            return self.fuel_use
-        elif idx == 'is_base':
-            return self.is_base
-        elif idx == 'diesel_cost':
-            return self.diesel_cost
-        elif idx == 'carbon':
-            return self.carbon
-        elif idx == 'current_share_urban':
-            return self.current_share_urban
-        elif idx == 'current_share_rural':
-            return self.current_share_rural
-        elif idx == 'paf_alri_r':
-            return self.paf_alri_r
-        elif idx == 'paf_copd_r':
-            return self.paf_copd_r
-        elif idx == 'paf_ihd_r':
-            return self.paf_ihd_r
-        elif idx == 'paf_lc_r':
-            return self.paf_lc_r
-        elif idx == 'paf_stroke_r':
-            return self.paf_stroke_r
-        elif idx == 'paf_alri_u':
-            return self.paf_alri_u
-        elif idx == 'paf_copd_u':
-            return self.paf_copd_u
-        elif idx == 'paf_ihd_u':
-            return self.paf_ihd_u
-        elif idx == 'paf_lc_u':
-            return self.paf_lc_u
-        elif idx == 'paf_stroke_u':
-            return self.paf_stroke_u
-        elif idx == 'epsilon':
-            return self.epsilon
-        else:
-            raise KeyError(idx)
+        return self.__dict__[idx]
 
     def adjusted_pm25(self):
         """Adjusts the PM25 value of each stove based on the adjusment factor. This is to take into account the
@@ -798,6 +662,7 @@ class Technology:
         self.benefits = w_health * (self.distributed_morbidity + self.distributed_mortality) + \
                         w_spillovers * (self.distributed_spillovers_morb + self.distributed_spillovers_mort) + \
                         w_environment * self.decreased_carbon_costs + w_time * self.time_value
+        self.net_benefit = self.benefits - w_costs * self.costs
         model.gdf["costs_{}".format(self.name)] = self.costs
         model.gdf["benefits_{}".format(self.name)] = self.benefits
         model.gdf["net_benefit_{}".format(self.name)] = self.benefits - w_costs * self.costs
