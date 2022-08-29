@@ -51,7 +51,7 @@ The net-benefit equation uses includes four benefits (reduced morbidity, reduced
 
 .. math::
 
-   net-benefit = (Morb + Mort + Time + Carb) - (Cap + Fuel + OM)                    \tag{1}
+   \mbox{net-benefit } = (Morb + Mort + Time + Carb) - (Cap + Fuel + OM)                    \tag{1}
 
 Where; *Morb* is the value of the decrease in morbidity experienced when switching stoves, *Mort* is the value of the decrease in mortality experienced when switching stoves, *Time* is the value of time saved by switching stoves, *Carb* is the value of the decrease in carbon emissions by switching, *Cap* is the capital costs of the stove, *Fuel* is the fuel cost and *OM* is the operation and maintenance cost of the stove. This is a modified version of a prior net-benefit specification by Jeuland et al. [1]_ Each one of the parameters in equation 1 are explained in their respective sub-heading here. 
 
@@ -166,7 +166,7 @@ Where; Where :math:`\gamma_{(i,j)}` is the emission factor of pollutant :math:`j
 
 **Biomass**
 
-The carbon emissions caused by the use of woody biomass is dependent by the fraction of Non-Renewable Biomass (fNRB) [13]_. fNRB is defined as the demand of fuelwood that exceeds regrowth in a given area. In the case of biomass equation 10 is modified as outlined in equation 11:
+The carbon emissions caused by the use of woody biomass is dependent by the fraction of Non-Renewable Biomass (fNRB) [12]_. fNRB is defined as the demand of fuelwood that exceeds regrowth in a given area. In the case of biomass equation 10 is modified as outlined in equation 11:
 
 .. math::
     
@@ -175,7 +175,7 @@ The carbon emissions caused by the use of woody biomass is dependent by the frac
 
 **Charcoal**
 
-Similar to the case of biomass equation 10 is modified as described in equation 11 when the fuel assessed is charcoal. In addition to this emissions coupled with the production of charcoal are also added to the total emissions. Each kg of charcoal produced is assumed to produce 1,626 g of CO\ :sub:`2`, 255 g of CO, 39.6 g CH\ :sub:`4`, 0.02 g of black carbon and 0.74 g OC [14]_. These values are included in the charcoal class, to change these values refer to the `class <https://onstove-documentation.readthedocs.io/en/latest/generated/onstove.technology.Charcoal.production_emissions.html>`_.
+Similar to the case of biomass equation 10 is modified as described in equation 11 when the fuel assessed is charcoal. In addition to this emissions coupled with the production of charcoal are also added to the total emissions. Each kg of charcoal produced is assumed to produce 1,626 g of CO\ :sub:`2`, 255 g of CO, 39.6 g CH\ :sub:`4`, 0.02 g of black carbon and 0.74 g OC [13]_. These values are included in the charcoal class, to change these values refer to the `class <https://onstove-documentation.readthedocs.io/en/latest/generated/onstove.technology.Charcoal.production_emissions.html>`_.
 
 **LPG**
 
@@ -232,7 +232,7 @@ Charcoal and pellets are assumed to have a fixed cost which is entered in the te
 
 **LPG**
 
-The cost of LPG is diversified based on settlement and dependent on the traveltime. In order to estimate the traveltime for LPG to each settlement, OnStove enables two different approaches: 1) to use either LPG vendors or 2) traveltime map directly. For approach 1, a least-cost path between every vendor and settlement is determined. As cost in this case a map visualizing the friction for motorized vehicles is given (see the `GIS data section <https://onstove-documentation.readthedocs.io/en/latest/inputs.html#gis-datasets>`_).  Using the least-cost paths and the vendors a traveltime map for the study area with the vendors as starting points is then calculated. If vendors are not available, approach 2 can be used. Once the traveltime is determined the cost of transporting LPG is determined using an approach similar to described by Szabó et al., [15]_ see equation 15:
+The cost of LPG is diversified based on settlement and dependent on the traveltime. In order to estimate the traveltime for LPG to each settlement, OnStove enables two different approaches: 1) to use either LPG vendors or 2) traveltime map directly. For approach 1, a least-cost path between every vendor and settlement is determined. As cost in this case a map visualizing the friction for motorized vehicles is given (see the `GIS data section <https://onstove-documentation.readthedocs.io/en/latest/inputs.html#gis-datasets>`_).  Using the least-cost paths and the vendors a traveltime map for the study area with the vendors as starting points is then calculated. If vendors are not available, approach 2 can be used. Once the traveltime is determined the cost of transporting LPG is determined using an approach similar to described by Szabó et al., [14]_ see equation 15:
 
 .. math::
 
@@ -299,8 +299,8 @@ References
 
 .. [11] Nerini, F. F., Ray, C. & Boulkaid, Y. The cost of cooking a meal. The case of Nyeri County, Kenya. Environ. Res. Lett. 12, 065007 (2017).
 
-.. [13] Bailis, R., Drigo, R., Ghilardi, A. & Masera, O. The carbon footprint of traditional woodfuels. Nature Clim Change 5, 266–272 (2015).
+.. [12] Bailis, R., Drigo, R., Ghilardi, A. & Masera, O. The carbon footprint of traditional woodfuels. Nature Clim Change 5, 266–272 (2015).
 
-.. [14] Akagi, S. K. et al. Emission factors for open and domestic biomass burning for use in atmospheric models. https://acp.copernicus.org/preprints/10/27523/2010/acpd-10-27523-2010.pdf (2010) doi:10.5194/acpd-10-27523-2010.
+.. [13] Akagi, S. K. et al. Emission factors for open and domestic biomass burning for use in atmospheric models. https://acp.copernicus.org/preprints/10/27523/2010/acpd-10-27523-2010.pdf (2010) doi:10.5194/acpd-10-27523-2010.
 
-.. [15] Szabó, S., Bódis, K., Huld, T. & Moner-Girona, M. Energy solutions in rural Africa: mapping electrification costs of distributed solar and diesel generation versus grid extension. Environ. Res. Lett. 6, 034002 (2011).
+.. [14] Szabó, S., Bódis, K., Huld, T. & Moner-Girona, M. Energy solutions in rural Africa: mapping electrification costs of distributed solar and diesel generation versus grid extension. Environ. Res. Lett. 6, 034002 (2011).
