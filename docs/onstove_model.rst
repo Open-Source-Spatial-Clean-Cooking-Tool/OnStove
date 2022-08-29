@@ -122,20 +122,20 @@ Where; CL is the cessation lag (as function of disease k and time t), COI is the
 
 Time saved
 ----------
-Each stove has an associated cooking time and an associated collection time. The cooking time and collection times are both entered in the techno-economic specification file (see the `input data section <https://onstove-documentation.readthedocs.io/en/latest/inputs.html#techno-economic-data>`_). The change in time is monetized using the minimum wage in the study area and a geospatial representation of wealth (this can be either a relative wealth index or a poverty layer see the `GIS data section <https://onstove-documentation.readthedocs.io/en/latest/inputs.html#gis-datasets>`_). Similar to the health-benefits, the time-benefits are relative to the baseline. The fuels used for the biomass and biogas stoves are assumed to be collected by the end-users themselves (functions for this are included in OnStove).
+Each stove has an associated cooking time and an associated collection time. The cooking and collection times are both entered in the techno-economic specification file (see the `input data section <https://onstove-documentation.readthedocs.io/en/latest/inputs.html#techno-economic-data>`_). The change in time is monetized using the minimum wage in the study area and a geospatial representation of wealth (this can be either a relative wealth index or a poverty layer see the `GIS data section <https://onstove-documentation.readthedocs.io/en/latest/inputs.html#gis-datasets>`_). Similar to the health-benefits, the time-benefits are relative to the baseline. The fuels used for the biomass and biogas stoves are assumed to be collected by the end-users themselves (functions for this are included in OnStove).
 
 **Biomass**
 
-The biomass stoves (both traditional and improved) rely on biomass collected by the end-users themselves. In the first studies using OnStove it has been assumed that the biomass used is firewood. Therefore, a spatial representation of forest cover is used to estimate the time needed to collect fuel (see the `GIS data section <https://onstove-documentation.readthedocs.io/en/latest/inputs.html#gis-datasets>`_). In addition to the forest layer a walking-only friction layer is used. The friction layer describes the time it takes to travel 1 m by foot through each square kilometer [8]_. A spatial least-cost path (in terms of time) is calculated between each settlement and biomass supply sites. The total time spent collecting biomass for cooking would therefore be the traveltime to the site in addition to time needed at the site for the actual collection as outlined in equation 8 (entered in the techno-economic specs file).
+The biomass stoves (both traditional and improved) rely on biomass collected by the end-users themselves. In the first studies using OnStove it has been assumed that the biomass used is firewood. Therefore, a spatial representation of forest cover is used to estimate the time needed to collect fuel (see the `GIS data section <https://onstove-documentation.readthedocs.io/en/latest/inputs.html#gis-datasets>`_). In addition to the forest layer a walking-only friction layer is used. The friction layer describes the time it takes to travel 1 m by foot through each square kilometer [8]_. A spatial least-cost path (in terms of time) is calculated between each settlement and biomass supply sites. The total time spent collecting biomass for cooking would therefore be the traveltime to the site in addition to time needed at the site for the actual collection (actual collection time is entered in the techno-economic specs file by the user).
 
 **Biogas**
 
-The calculations used for biogas is similar to those for biomass. Biogas is assumed to be produced at a household level by the end-users themselves, who are also the ones collecting the neccesary fuels for its production. In the current version of OnStove manure is assumed to be used to produce biogas. The manure is collected by the households themselves within the square kilometer in which they live. The amount of manure available is estimated with the help of the spatial distribution of livestock (see the `GIS data section <https://onstove-documentation.readthedocs.io/en/latest/inputs.html#gis-datasets>`_), estimates on who much manure each type of animal produces and how much of it can be used for conversion to biogas [9]_. The time needed to collect a sufficient amount of manure is estimated using a walking-only friction layer describing the time it takes to travel 1 m by foot through each square kilometer [8]_. See more information in the documentation for the `biogas class <https://onstove-documentation.readthedocs.io/en/latest/generated/onstove.technology.Biogas.html>`_. 
+The calculations used for biogas are similar to those for biomass. Biogas is assumed to be produced at a household level by the end-users themselves, who are also the ones collecting the necessary material for its production. In the current version of OnStove manure is assumed to be used to produce biogas. The manure is collected by the households themselves within the square kilometer in which they live. The amount of manure available is estimated with the help of the spatial distribution of livestock (see the `GIS data section <https://onstove-documentation.readthedocs.io/en/latest/inputs.html#gis-datasets>`_), estimates on who much manure each type of animal produces and how much of it can be used for conversion to biogas [9]_. The time needed to collect a sufficient amount of manure is estimated using a walking-only friction layer describing the time it takes to travel 1 m by foot through each square kilometer [8]_. See more information in the documentation of the `biogas class <https://onstove-documentation.readthedocs.io/en/latest/generated/onstove.technology.Biogas.html>`_. 
 
 Emissions avoided
 -----------------
 
-The *Carb* parameter in the net-benefit equation (equation 1), refers to the environmental benefits of reducing greenhouse gas (GHG) emissions. Each stove is assumed to have emissions coupled with its use, and in some cases in the transport or production of its fuel. The value of emissions avoided is calculated using equation 8:
+The *Carb* parameter in the net-benefit equation (equation 1), refers to the environmental benefits of reducing greenhouse gas (GHG) emissions. Each fuel is assumed to have emissions coupled with its use, and in some cases, its transport and/or production. The value of emissions avoided is calculated using equation 8:
 
 .. math::
     
@@ -143,7 +143,7 @@ The *Carb* parameter in the net-benefit equation (equation 1), refers to the env
 
 Where; :math:`c^{CO_2}` is the social cost of carbon (USD/tonne) (example source [10]_), :math:`fueluse` is the amount of fuel used for cooking (kWh for electricity, kg for the rest), :math:`\mu` is the energy content of the fuel (MJ/kWh for electricity, MJ/kg for the rest), :math:`\epsilon` is the fuel efficiency of the stove (%), :math:`\gamma` is the carbon intensity of the fuel (kg/GWh for electricity, kg/GJ for the rest) for which five different pollutants (carbon dioxide, methane, carbon monoxide, black carbon and organic carbon) in combination with their 100-year Global Warming Potential (GWP) are used. Subscript :math:`0` denotes the baseline stove combination and, :math:`i` the new stove.
 
-The energy needed to cook a meal is used to estimate :math:`fueluse` for each stove. It is assumed in the current version of OnStove that 3.64 MJ is used to cook a standard meal as outlined by Fuso Nerini et al. [11]_ This value can be changed in onstove.py by changing `self.energy_per_meal`. Using this value, :math:`fueluse` can then be calculated as outlined by equation 9:
+The energy needed to cook a meal is used to estimate :math:`fueluse` for each stove. It is assumed in the current version of OnStove that 3.64 MJ is used to cook a standard meal as outlined by Fuso Nerini et al. [11]_ This value can be changed in onstove.py by changing *self.energy_per_meal* parameter. Using this value, :math:`fueluse` can then be calculated as outlined by equation 9:
 
 .. math::
 
@@ -164,7 +164,7 @@ Where; Where :math:`\gamma_{(i,j)}` is the emission factor of pollutant :math:`j
 
 **Biomass**
 
-The carbon emissions caused by the use of woody biomass is dependent by the fraction of Non-Renewable Biomass (fNRB) [12]_. fNRB is defined as the demand of fuelwood that exceeds regrowth in a given area. In the case of biomass equation 10 is modified as outlined in equation 11:
+The carbon emissions caused by the use of woody biomass is dependent on the fraction of Non-Renewable Biomass (fNRB) [12]_. fNRB is defined as the demand of fuelwood that exceeds regrowth in a given area. In the case of biomass equation 10 is modified as outlined in equation 11:
 
 .. math::
     
@@ -177,7 +177,7 @@ Similar to the case of biomass equation 10 is modified as described in equation 
 
 **LPG**
 
-In addition to stove emissions coupled with LPG-stoves, the transportation of LPG is also assumed to produce emissions. These emissions are dependent on the traveltime needed to transport emissions. The time needed to transport LPG to different settlements is coupled with the assumed emissions of light-commercial vehicles (14 l/h) in order to estimate the total diesel consumption needed for transportation. Each kg of diesel used is assumed to produce 1.52 g of PM (black carbon fraction of PM is assumed to be 0.55 and the OC fraction of black carbon is assumed to be 0.7), 3.169 g of CO\ :sub:`2`, 7.4 g of CO and 0.056 g of N\ :sub:`2`\O. To change these values (as well as the diesel consumption per hour) see the `LPG class <https://onstove-documentation.readthedocs.io/en/latest/generated/onstove.technology.LPG.transport_emissions.html>`_.
+In addition to stove-emissions coupled with LPG-stoves, the transport of LPG is also assumed to produce emissions. These emissions are dependent on the traveltime needed to transport LPG. The time needed to transport LPG to different settlements is coupled with the assumed emissions of light-commercial vehicles (14 l/h) in order to estimate the total diesel consumption needed for transportation. Each kg of diesel used is assumed to produce 1.52 g of PM (black carbon fraction of PM is assumed to be 0.55 and the OC fraction of black carbon is assumed to be 0.7), 3.169 g of CO\ :sub:`2`, 7.4 g of CO and 0.056 g of N\ :sub:`2`\O. To change these values (as well as the diesel consumption per hour) see the `LPG class <https://onstove-documentation.readthedocs.io/en/latest/generated/onstove.technology.LPG.transport_emissions.html>`_.
 
 **Electricity**
 
@@ -192,16 +192,21 @@ Where; :math:`\gamma_{grid}` is the CO\ :sub:`2`-equivalent intensity of the gri
 The user is required to enter the installed capacity and power generated by the different powerplants feeding the grid of the study area in order for this calculation to be possible. The emission factors of different powerplants are given in the `Electricity class <https://onstove-documentation.readthedocs.io/en/latest/generated/onstove.technology.Electricity.html>`_.
 
 
+.. note::
+
+    For electricity new power plants can be added in the techno-economic specification file. Beware that you then need to add one line for capacity and one for generation (as capacity_X and generation_X, where X is the new powerplant name e.g. capacity_wind and generation_wind). Then, in the electricity class, the dictionary called *carbon_intensities*, * grid_capacity_costs* and * grid_techs_life* need to be added for the new technology. Capacity cost is the cost of adding one kW to the grid with a powerplant of type X and grid_tech_life is powerplants X’s lifetime.
+
+
 Capital cost
 ------------
 
-The capital cost represents an upfront cost that a user has to pay in order to use a specific stove. The capital cost used in OnStove is investment cost needed for the stove netting out the salvage cost as described in equaton 13.
+The capital cost represents an upfront cost that a user has to pay in order to use a specific stove. The capital cost used in OnStove is investment cost needed for the stove netting out the salvage cost as described in equation 13.
 
 .. math::
 
     \mbox{Capital cost } = \mbox{ Investment cost } - \mbox{ Salvage cost} \tag{13}
 
-The salvage cost is assumes a straight-line deprecation as described in equation 14.
+The salvage cost assumes a straight-line deprecation of the stove value as described in equation 14.
 
 .. math::
 
@@ -209,20 +214,24 @@ The salvage cost is assumes a straight-line deprecation as described in equation
 
 .. note::
 
-    Values of life times and costs of stoves can be found in various sources e.g. [2]_ [3]_
+    Values of life times and costs of stoves can be found in various sources e.g. [2]_ [3]_ and are entered in the techno-economic specification file.
 
 **LPG**
 
-The cost of buying a refillable LPG-cylinder is added to the investment cost of first time LPG users. Each cylinder is assumed to cost 2.78 USD per kg LPG capacity and the default capacity of the cylinder is assumed to be 12.5 kg of LPG. In addition to this each cylinder is assumed to have a lifetime of 15 years which is taken into account through a salvage cost. These parameters can be changed from the `LPG class <https://onstove-documentation.readthedocs.io/en/latest/generated/onstove.technology.LPG.html>`_.
+The cost of buying a refillable LPG-cylinder is added to the investment cost of first-time LPG-users. Each cylinder is assumed to cost 2.78 USD per kg LPG capacity and the default capacity of the cylinder is assumed to be 12.5 kg of LPG. In addition to this each cylinder is assumed to have a lifetime of 15 years which is taken into account through a salvage cost. These parameters can be changed from the `LPG class <https://onstove-documentation.readthedocs.io/en/latest/generated/onstove.technology.LPG.html>`_.
 
 **Electricity**
 
-To accomodate for additional capacity needed for electrical cooking it is assumed that the cost of added capacity (as well as its salvage cost) is added to the total capital cost of electricity. The current capacities should be entered in the techno-economic specification file and the life times of technologies in the `Electricity class <https://onstove-documentation.readthedocs.io/en/latest/generated/onstove.technology.Electricity.html>`_.
+To accommodate for additional capacity needed for electrical cooking it is assumed that the cost of added capacity (as well as its salvage cost) is added to the total capital cost of electricity. The current capacities should be entered in the techno-economic specification file and the life times of technologies in the `Electricity class <https://onstove-documentation.readthedocs.io/en/latest/generated/onstove.technology.Electricity.html>`_.
+
+.. note::
+
+    For electricity new power plants can be added in the techno-economic specification file. Beware that you then need to add one line for capacity and one for generation (as capacity_X and generation_X, where X is the new powerplant name e.g. capacity_wind and generation_wind). Then, in the electricity class, the dictionary called *carbon_intensities*, * grid_capacity_costs* and * grid_techs_life* need to be added for the new technology. Capacity cost is the cost of adding one kW to the grid with a powerplant of type X and grid_tech_life is powerplants X’s lifetime.
 
 Fuel cost
 ---------
 
-Cost of fuel is important for all stove not assumed to be collected by the end-users themselves. The cost of fuel is divirsified by fuel and the base cost is always entered in the techno-economic specification file.
+Cost of fuel is important for all fuels not assumed to be collected by the end-users themselves. The cost of fuel is divirsified by fuel and the base cost is always entered in the techno-economic specification file.
 
 **Charcoal and pellets**
 
@@ -230,13 +239,13 @@ Charcoal and pellets are assumed to have a fixed cost which is entered in the te
 
 **LPG**
 
-The cost of LPG is diversified based on settlement and dependent on the traveltime. In order to estimate the traveltime for LPG to each settlement, OnStove enables two different approaches: 1) to use either LPG vendors or 2) traveltime map directly. For approach 1, a least-cost path between every vendor and settlement is determined. As cost in this case a map visualizing the friction for motorized vehicles is given (see the `GIS data section <https://onstove-documentation.readthedocs.io/en/latest/inputs.html#gis-datasets>`_).  Using the least-cost paths and the vendors a traveltime map for the study area with the vendors as starting points is then calculated. If vendors are not available, approach 2 can be used. Once the traveltime is determined the cost of transporting LPG is determined using an approach similar to described by Szabó et al., [14]_ see equation 15:
+The cost of LPG is diversified based on settlement and dependent on the traveltime. In order to estimate the traveltime for LPG to each settlement, OnStove enables two different approaches: 1) to use either LPG vendors or 2) a traveltime map directly. For approach 1, a least-cost path between every vendor and settlement is determined. As cost in this case, a map visualizing the friction for motorized vehicles is given (see the `GIS data section <https://onstove-documentation.readthedocs.io/en/latest/inputs.html#gis-datasets>`_).  Using the least-cost paths and the vendors, a traveltime map for the study area with the vendors as starting points is produced. If vendors are not available, approach 2 can be used. Once the traveltime is determined the cost of transporting LPG is determined using an approach similar to what was described by Szabó et al., [14]_ see equation 15:
 
 .. math::
 
     \mbox{total costs } = \mbox{LPG costs } + \frac{2 * \mbox{ diesel consumption per h } * \mbox{ LPG costs } * \mbox{ travel time }}{\mbox{Transported LPG}}  \tag{15}
 
-Where; LPG cost is the base cost of LPG. For more information on this calculation refer to `LPG class <https://onstove-documentation.readthedocs.io/en/latest/generated/onstove.technology.LPG.html>`_. 
+Where; LPG cost is the base cost of LPG. For more information on this calculation refer to the `LPG class <https://onstove-documentation.readthedocs.io/en/latest/generated/onstove.technology.LPG.html>`_. 
 
 **Electricity**
 
