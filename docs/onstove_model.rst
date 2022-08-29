@@ -1,11 +1,10 @@
 The OnStove Model
 =================
-The OnStove determines the net-benefit of different stoves relative to a stated base-line. Net-benefit is in this case defined as all the benefits minus all the costs. The benefits include: reduced morbidity, reduced mortality, reduced emissions and time saved. The costs include: capital costs, fuel costs as well as operational and maintenance costs. The tool has four distinct modules, GIS-processing, baseline calibration, net-benefit calculation and visualization. Each one of these modules are described below in more detail.
+OnStove determines the net-benefit of different stoves relative to a stated base-line. Net-benefit is in this case defined as all the benefits minus all the costs. The benefits include: reduced morbidity, reduced mortality, reduced emissions and time saved. The costs include: capital costs, fuel costs as well as operational and maintenance (O&M) costs. The tool has four distinct modules, GIS-processing, baseline calibration, net-benefit calculation and visualization. Each one of these modules are described in more detail below.
 
 GIS data processing
 *******************
-All the GIS-processing needed for OnStove is conducted in the tool it-self. This part of the algorithm only has to be ran once i.e., if you chose to run several scenarios but keep the GIS-data static, this part does not need to be reran. The tools included in the GIS-processing module of OnStove range from simple geoprocessing tools such as clipping and reprojecting, to more complex tools such as least-cost path algorithms. The tools here are developed to accommodate the necessary OnStove workflows and it should not be viewed as a general GIS-processing tool.
-
+All the GIS-processing needed for OnStove is conducted in the tool itself. This part of the tool only has to be ran once i.e., if you chose to run several scenarios but keep the GIS-data the same, this part does not need to be reran. The tools included in the GIS-processing module of OnStove range from simple geoprocessing tools such as clipping and reprojecting, to more complex tools such as least-cost path algorithms. The tools here are developed to accommodate the necessary OnStove workflows and it should not be viewed as a general GIS-processing tool.
 
 .. note::
 
@@ -13,11 +12,11 @@ All the GIS-processing needed for OnStove is conducted in the tool it-self. This
 
 Baseline calibration
 ********************
-The baseline calibration is a very important step as all of the stoves included in the analysis are compared relative to the baseline, both with regards to costs and benefits. The baseline calibration does four things: calibrates urban and rural population, calibrates population, calibrates the current stove shares in urban and rural areas and calibrates the electrified population.
+The baseline calibration is a very important step as all of the stoves included in the analysis are compared relative to the baseline, both with regards to costs and benefits. The baseline calibration does four things: calibrates urban and rural population, calibrates total population, calibrates the current stove shares in urban and rural areas and calibrates the electrified population.
 
 **Urban-Rural calibration**
 
-To estimate which areas are urban and which are rural is an important step, as these areas in many industrializing countries tend to have different electrification and clean cooking rates. This step can be done in two ways in OnStove. The user can either create their own urban-rural calibration based on population density or use an external dataset classifying areas into either urban or rural and use that directly.   
+To estimate which areas are urban and which are rural is an important step, as these areas in many industrializing countries tend to have different electrification and clean cooking rates. This step can be done in two ways in OnStove. The user can either create their own urban-rural calibration based on population density or use an external dataset classifying areas into either urban or rural and use that directly (for this prupose OnStove currently supports the use of the `GHS SMOD dataset <https://ghsl.jrc.ec.europa.eu/download.php?ds=smod>`_.   
 
 .. note::
 
@@ -26,7 +25,7 @@ To estimate which areas are urban and which are rural is an important step, as t
 
 **Population calibration**
 
-The population calibration is important as in many instances the geospatial population datasets are outdated. The calibration is carried out across the entire region in order to make sure that the population in the study area matches the value given in the socio-economic file. Furthermore, the calibration ensures that the urban ratio entered in the socio-economic file is also respected. 
+The population calibration is important as in many instances the geospatial population datasets do not match the total current population. The calibration is carried out across the entire region in order to ensure that the population in the study area matches the value given in the socio-economic file.
 
 .. note::
 
@@ -34,7 +33,7 @@ The population calibration is important as in many instances the geospatial popu
 
 **Current stove share calibration**
 
-All benefits and costs are relative to the baseline stove calibration. In the technical specs the user enters the urban and rural shares of all stoves that are included in the baseline. The calibration ensures that the urban and rural shares entered in the techno-economic file are respected. All stoves that you wish to include in the calibration need to have the parameters “current_share_rural” and “current_share_urban”. If these two parameters do not exist for a stove it will not be included in the baseline. Note that you do not need to include a stove in the baseline in order to have it as an option in the net-benefit equation. Each stove can also has an “is_base” parameter. This parameter is set to “False” as default, but if it is added in the techno-economic specs as “True” for any stove, everyone in the baseline will cook with this one type of stove (in both urban and rural).
+All benefits and costs are relative to the baseline stove calibration. In the technical specs the user enters the urban and rural shares of all stoves that are included in the baseline. All stoves that you wish to include in the calibration need to have the parameters “current_share_rural” and “current_share_urban”. If these two parameters do not exist for a stove it will not be included in the baseline (they will be assumed to have a share of 0). Note that you do not need to include a stove in the baseline in order to have it as an option in the net-benefit equation (i.e., you can still model e.g., biogas stoves without having any biogas stoves in currently in the baseline). Each stove can also have an “is_base” parameter. This parameter is set to “False” as default, but if it is added in the techno-economic specs as “True” for any stove, everyone in the baseline will cook with this one type of stove (in both urban and rural settlements).
 
 .. note::
 
@@ -43,26 +42,21 @@ All benefits and costs are relative to the baseline stove calibration. In the te
 
 **Current electrification calibration**
 
-The current electrification rate is calibrated using a Multi-Criteria Analysis. The criteria used is population density, nighttime light intensity and proximity to electricity related infrastructure. The electricity infrastructure used is firstly transformers if available, then medium-voltage lines and lastly high-voltage lines. The default is to use equal weights for the three factors included in the calibration, but this can be altered using the socio-economic specification file (using pop_weight, NTL_weight and infra_weight). The electrification calibration is done to ensure that national, urban and rural electrification rates match the values as entered by the user in the socio-economic file. The electrification calibration results in fully, partly, and non electrified settlements. Note that OnStove does not assume an expansion of electricity access i.e., whoever has electricity access currently can cook with electricity and whoever does not, can not. In cases where electrical stoves are the stove with the highest net-benefit in areas without electricity access, the stove with the second highest net-benefit will be chosen.     
+The current electrification rate is calibrated using a Multi-Criteria Analysis (MCA). The criteria used is population density, nighttime light intensity and proximity to electricity related infrastructure. The electricity infrastructure used is firstly transformers if available, then medium-voltage lines and lastly high-voltage lines. The default is to use equal weights for the three factors included in the calibration, but this can be altered using the socio-economic specification file (using pop_weight, NTL_weight and infra_weight respectively). The electrification calibration is done to ensure that national, urban and rural electrification rates match the values as entered by the user in the socio-economic file. The electrification calibration results in fully, partly, and non-electrified settlements. Note that OnStove does not assume an expansion of electricity access i.e., whoever has electricity access currently can cook with electricity and whoever does not, can not. In cases where electrical stoves are the stove with the highest net-benefit in areas without electricity access, the stove with the second highest net-benefit will be chosen.     
 
 Net-benefit calculation
 ***********************
-The net-benefit equation uses includes four benefits (reduced morbidity, reduced mortality, time saved and avoided emissions) as well as three costs (capital cost, fuel cost and Operation and Maintenance (OM) costs). All benefits are monetized in order to be compared to the costs. The net-benefit is defined as all benefits minus all the costs as outlined in equation 1
+The net-benefit equation uses four benefits (reduced morbidity, reduced mortality, time saved and avoided emissions) as well as three costs (capital cost, fuel cost and Operation and Maintenance (O&M) costs). All benefits are monetized in order to be compared to the costs. The net-benefit is defined as all benefits minus all the costs as outlined in equation 1
 
 .. math::
 
-   net-benefit = (Morb + Mort + Time + Carb) - (Cap + Fuel + OM)                    \tag{1}
+   \mbox{net-benefit } = (Morb + Mort + Time + Carb) - (Cap + Fuel + O\mbox{&}M)                    \tag{1}
 
-Where; *Morb* is the value of the decrease in morbidity experienced when switching stoves, *Mort* is the value of the decrease in mortality experienced when switching stoves, *Time* is the value of time saved by switching stoves, *Carb* is the value of the decrease in carbon emissions by switching, *Cap* is the capital costs of the stove, *Fuel* is the fuel cost and *OM* is the operation and maintenance cost of the stove. This is a modified version of a prior net-benefit specification by Jeuland et al. [1]_ Each one of the parameters in equation 1 are explained in their respective sub-heading here. 
-
- .. note::
-
-    The information provided below is first given in general terms. In order to see specific fuel-calculations scroll down to their respective sections
+Where; *Morb* is the value of the decrease in morbidity experienced when switching stoves, *Mort* is the value of the decrease in mortality experienced when switching stoves, *Time* is the value of time saved by switching stoves, *Carb* is the value of the decrease in carbon emissions by switching, *Cap* is the capital costs of the stove, *Fuel* is the fuel cost and *O&M* is the operation and maintenance cost of the stove. This is a modified version of a prior net-benefit specification by Jeuland et al. [1]_ Each one of the parameters in equation 1 are explained in their respective sub-sections here. 
 
 Morbidity and Mortality
 -----------------------
-The morbidity and mortality terms described the reduced risk of disease and death from four diseases connected to Household Air Pollution (HAP). These diseases are lung cancer (LC), acute lower respiratory infection (ARLI), ischemic heart disease (IHD), chronic obstructive pulmonary disease (COPD) and stroke. The HAP is described in terms of 24-h PM\ :sub:`2.5`\-emissions (measured in µg/m\ :sup:`3`\). Values of PM\ :sub:`2.5`\ can be found in various different sources. [2]_ [3]_ In OnStove each stove's 24-h PM\ :sub:`2.5`\-emissions is multiplied by an exposure adjustment factor (:math:`\epsilon`). This factor is meant to capture the fact that people tend to change behaviour when acquiring a new stove. The exposure adjusment factor is 0.71 in OnStove as default, this value is typically used for every stove in the analysis except for traditional biomass (in the first application of OnStove a value of 0.51 was used for traditional biomass). This is in line with the work conducted by Das et al. [2]_ Using the adjusted 24-h PM\ :sub:`2.5`\-emissions of each stove the Relative Risk (RR) of contracting LC, ALRI, IHD, COPD and stroke is calculated based on the relation suggested by Burnett et al. [4]_ based on equation 2: 
-
+The morbidity and mortality parameters describe the reduced risk of disease and death from five diseases connected to Household Air Pollution (HAP). These diseases are Lung Cancer (LC), Acute Lower Respiratory Infection (ARLI), Ischemic Heart Disease (IHD), Chronic Obstructive Pulmonary Disease (COPD) and stroke. The HAP is described in terms of 24-h PM\ :sub:`2.5`\-emissions (measured in :math:`\mu` g/m\ :sup:`3`\). Values of PM\ :sub:`2.5`\ can be found in various different sources [2]_ [3]_. In OnStove each stove's 24-h PM\ :sub:`2.5`\-emissions is multiplied by an exposure adjustment factor (:math:`\epsilon`). This factor is meant to capture the fact that people tend to change behaviour when acquiring a new stove. The exposure adjusment factor is 0.71 in OnStove as default, this value is typically used for every stove in the analysis except for traditional biomass (in the first application of OnStove a value of 0.51 was used for traditional biomass). This is in line with the work conducted by Das et al. [2]_ Using the adjusted 24-h PM\ :sub:`2.5`\-emissions of each stove the Relative Risk (RR) of contracting LC, ALRI, IHD, COPD and stroke is calculated based on the relation suggested by Burnett et al. [4]_ (equation 2): 
 
 .. math::
     
@@ -71,13 +65,17 @@ The morbidity and mortality terms described the reduced risk of disease and deat
         \\ 1 + \alpha * (1 - \exp(-\beta*(\mbox{24-h } PM_{2.5}\mbox{-emissions}*\epsilon - z_{rf})^\delta)) , & \mbox{24-h } PM_{2.5}\mbox{-emissions}*\epsilon \geq z_{rf}
         \end{cases}
 
-Where; RR is the relative risk associated with each disease studied (LC, IHD, COPD, ALRI and stroke), and α, β, δ and z\ :sub:`rf`\ are disease-specific constants determined experimentally. Note that the equation system indicates that when 24-h PM\ :sub:`2.5`\-emissions are under a certain threshold (z\ :sub:`rf`\) there is no increased risk of disease. The constants α, β, δ and z\ :sub:`rf`\ where determined for each disease by conducting 1,000 runs per disease. For more information on these constants, see Burnett et al. [4]_ and the `data <http://ghdx.healthdata.org/sites/default/files/record-attached-files/IHME_CRCurve_parameters.csv>`_ (clicking the link will download a csv-file). 
+Where; RR is the relative risk associated with each disease studied (LC, IHD, COPD, ALRI and stroke), and :math:`\alpha, \beta, \delta` and z\ :sub:`rf`\ are disease-specific constants determined experimentally. Note that the equation system indicates that when 24-h PM\ :sub:`2.5`\-emissions are under a certain threshold (z\ :sub:`rf`\) there is no increased risk of disease. The constants :math:`\alpha, \beta, \delta` and z\ :sub:`rf`\ were determined for each disease by conducting 1,000 runs per disease. For more information on these constants, see Burnett et al. [4]_ and their `data <http://ghdx.healthdata.org/sites/default/files/record-attached-files/IHME_CRCurve_parameters.csv>`_ (clicking the link will download a csv-file). 
 
-Once the RR is determined, the Population Attributable Fraction (PAF) is calculated based on equation 3. PAF is used to express the reduced assess the public health impact when a portion of the population is exposed to a specific risk.
+.. note:: 
+    The values of :math:`\alpha, \beta, \delta` and z\ :sub:`rf`\ for each disease are hardcoded in OnStove as the averages of the 1,000 runs conducted by Burnett et al. [4]_. See the `relative risk function <https://onstove-documentation.readthedocs.io/en/latest/generated/onstove.technology.Technology.relative_risk.html>`_.
+
+
+Once the RR is determined, the Population Attributable Fraction (PAF) is calculated based on equation 3. PAF is often used to assess the public health impacts resulting from a population’s exposure to a risk.
 
 .. math::
     
-    \frac{(sfu*(RR_k - 1))}{(sfu*(RR_k - 1) + 1)} = PAF_k \tag{3}
+    \frac{sfu*(RR_k - 1)}{sfu*(RR_k - 1) + 1} = PAF_k \tag{3}
 
 
 Where; sfu (solid-fuel users) is the share of population not using clean cooking currently and RR\ :sub:`k` is the disease-specific RR determined using equation 2. sfu can be found from e.g. the `IEA website <https://www.iea.org/reports/sdg7-data-and-projections/access-to-clean-cooking>`_, tracking SDG 7 [5]_ or Stoner et al. [6]_ 
@@ -90,7 +88,7 @@ Using the PAF calculated with equation 3 the reduced number of cases and deaths 
     Mort_k = Population * (PAF_0 - PAF_i) * MR_k \tag{5}
 
 
-Where; Population is the total population, MR\ :sub:`k` is the mortality rate associated with the disease and IR\ :sub:`k` is the incidence rate associated with the disease, PAF\ :sub:`0` is the PAF-value for the baseline and PAF\ :sub:`i` is the PAF-value of the new stove. Since PAF\ :sub:`0` and PAF\ :sub:`i` are diversified between urban and rural settlements, so is Morb\ :sub:`k` and Mort\ :sub:`k`. Note that since OnStove is a raster-based geospatial tool the :math:`population` is on a cell-basis. The MR\ :sub:`k` and IR\ :sub:`k` can be diversified by country for each disease (an example source is GBD database [7]_).
+Where; Population is the total population, MR\ :sub:`k` is the mortality rate associated with the disease and IR\ :sub:`k` is the incidence rate associated with the disease, PAF\ :sub:`0` is the PAF-value for the baseline and PAF\ :sub:`i` is the PAF-value of the new stove. Since PAF\ :sub:`0` and PAF\ :sub:`i` are diversified between urban and rural settlements (sfu tends to be different in urban and rural settings), so is Morb\ :sub:`k` and Mort\ :sub:`k`. Note that since OnStove is a raster-based geospatial tool the :math:`population` is on a cell-basis. The MR\ :sub:`k` and IR\ :sub:`k` can be diversified by country for each disease (an example source is the GBD database [7]_).
 
 The number of cases and deaths avoided are translated to monetary value using the Cost of Illness (COI) and Value of Statistical Life (VSL) (see equations 6 and 7). In cost-benefit analysis, the COI is used to quantify the economic consequences of disease or accidents and the VSL is an important valuation concept in cost-benefit studies, as it is often used as a measure for mortality risk reduction. The equations also include a factor for Cessation Lag for each disease (CL\ :sub:`k`). CL\ :sub:`k` is used to capture the fact that the full health-benefit of switching does not appear instantaneously after a stove-switch. 
 
@@ -124,20 +122,20 @@ Where; CL is the cessation lag (as function of disease k and time t), COI is the
 
 Time saved
 ----------
-Each stove has an associated cooking time and an associated collection time. The cooking time and collection times are both entered in the techno-economic specification file (see the `input data section <https://onstove-documentation.readthedocs.io/en/latest/inputs.html#techno-economic-data>`_). The change in time is monetized using the minimum wage in the study area and a geospatial representation of wealth (this can be either a relative wealth index or a poverty layer see the `GIS data section <https://onstove-documentation.readthedocs.io/en/latest/inputs.html#gis-datasets>`_). Similar to the health-benefits, the time-benefits are relative to the baseline. The fuels used for the biomass and biogas stoves are assumed to be collected by the end-users themselves (functions for this are included in OnStove).
+Each stove has an associated cooking time and an associated collection time. The cooking and collection times are both entered in the techno-economic specification file (see the `input data section <https://onstove-documentation.readthedocs.io/en/latest/inputs.html#techno-economic-data>`_). The change in time is monetized using the minimum wage in the study area and a geospatial representation of wealth (this can be either a relative wealth index or a poverty layer see the `GIS data section <https://onstove-documentation.readthedocs.io/en/latest/inputs.html#gis-datasets>`_). Similar to the health-benefits, the time-benefits are relative to the baseline. The fuels used for the biomass and biogas stoves are assumed to be collected by the end-users themselves (functions for this are included in OnStove).
 
 **Biomass**
 
-The biomass stoves (both traditional and improved) rely on biomass collected by the end-users themselves. In the first studies using OnStove it has been assumed that the biomass used is firewood. Therefore, a spatial representation of forest cover is used to estimate the time needed to collect fuel (see the `GIS data section <https://onstove-documentation.readthedocs.io/en/latest/inputs.html#gis-datasets>`_). In addition to the forest layer a walking-only friction layer is used. The friction layer describes the time it takes to travel 1 m by foot through each square kilometer [8]_. A spatial least-cost path (in terms of time) is calculated between each settlement and biomass supply sites. The total time spent collecting biomass for cooking would therefore be the traveltime to the site in addition to time needed at the site for the actual collection as outlined in equation 8 (entered in the techno-economic specs file).
+The biomass stoves (both traditional and improved) rely on biomass collected by the end-users themselves. In the first studies using OnStove it has been assumed that the biomass used is firewood. Therefore, a spatial representation of forest cover is used to estimate the time needed to collect fuel (see the `GIS data section <https://onstove-documentation.readthedocs.io/en/latest/inputs.html#gis-datasets>`_). In addition to the forest layer a walking-only friction layer is used. The friction layer describes the time it takes to travel 1 m by foot through each square kilometer [8]_. A spatial least-cost path (in terms of time) is calculated between each settlement and biomass supply sites. The total time spent collecting biomass for cooking would therefore be the traveltime to the site in addition to time needed at the site for the actual collection (actual collection time is entered in the techno-economic specs file by the user).
 
 **Biogas**
 
-The calculations used for biogas is similar to those for biomass. Biogas is assumed to be produced at a household level by the end-users themselves, who are also the ones collecting the neccesary fuels for its production. In the current version of OnStove manure is assumed to be used to produce biogas. The manure is collected by the households themselves within the square kilometer in which they live. The amount of manure available is estimated with the help of the spatial distribution of livestock (see the `GIS data section <https://onstove-documentation.readthedocs.io/en/latest/inputs.html#gis-datasets>`_), estimates on who much manure each type of animal produces and how much of it can be used for conversion to biogas [9]_. The time needed to collect a sufficient amount of manure is estimated using a walking-only friction layer describing the time it takes to travel 1 m by foot through each square kilometer [8]_. See more information in the documentation for the `biogas class <https://onstove-documentation.readthedocs.io/en/latest/generated/onstove.technology.Biogas.html>`_. 
+The calculations used for biogas are similar to those for biomass. Biogas is assumed to be produced at a household level by the end-users themselves, who are also the ones collecting the necessary material for its production. In the current version of OnStove manure is assumed to be used to produce biogas. The manure is collected by the households themselves within the square kilometer in which they live. The amount of manure available is estimated with the help of the spatial distribution of livestock (see the `GIS data section <https://onstove-documentation.readthedocs.io/en/latest/inputs.html#gis-datasets>`_), estimates on who much manure each type of animal produces and how much of it can be used for conversion to biogas [9]_. The time needed to collect a sufficient amount of manure is estimated using a walking-only friction layer describing the time it takes to travel 1 m by foot through each square kilometer [8]_. See more information in the documentation of the `biogas class <https://onstove-documentation.readthedocs.io/en/latest/generated/onstove.technology.Biogas.html>`_. 
 
 Emissions avoided
 -----------------
 
-The *Carb* parameter in the net-benefit equation (equation 1), refers to the environmental benefits of reducing greenhouse gas (GHG) emissions. Each stove is assumed to have emissions coupled with its use, and in some cases in the transport or production of its fuel. The value of emissions avoided is calculated using equation 8:
+The *Carb* parameter in the net-benefit equation (equation 1), refers to the environmental benefits of reducing greenhouse gas (GHG) emissions. Each fuel is assumed to have emissions coupled with its use, and in some cases, its transport and/or production. The value of emissions avoided is calculated using equation 8:
 
 .. math::
     
@@ -145,7 +143,7 @@ The *Carb* parameter in the net-benefit equation (equation 1), refers to the env
 
 Where; :math:`c^{CO_2}` is the social cost of carbon (USD/tonne) (example source [10]_), :math:`fueluse` is the amount of fuel used for cooking (kWh for electricity, kg for the rest), :math:`\mu` is the energy content of the fuel (MJ/kWh for electricity, MJ/kg for the rest), :math:`\epsilon` is the fuel efficiency of the stove (%), :math:`\gamma` is the carbon intensity of the fuel (kg/GWh for electricity, kg/GJ for the rest) for which five different pollutants (carbon dioxide, methane, carbon monoxide, black carbon and organic carbon) in combination with their 100-year Global Warming Potential (GWP) are used. Subscript :math:`0` denotes the baseline stove combination and, :math:`i` the new stove.
 
-The energy needed to cook a meal is used to estimate :math:`fueluse` for each stove. It is assumed in the current version of OnStove that 3.64 MJ is used to cook a standard meal as outlined by Fuso Nerini et al. [11]_ This value can be changed in onstove.py by changing `self.energy_per_meal`. Using this value, :math:`fueluse` can then be calculated as outlined by equation 9:
+The energy needed to cook a meal is used to estimate :math:`fueluse` for each stove. It is assumed in the current version of OnStove that 3.64 MJ is used to cook a standard meal as outlined by Fuso Nerini et al. [11]_ This value can be changed in onstove.py by changing *self.energy_per_meal* parameter. Using this value, :math:`fueluse` can then be calculated as outlined by equation 9:
 
 .. math::
 
@@ -166,7 +164,7 @@ Where; Where :math:`\gamma_{(i,j)}` is the emission factor of pollutant :math:`j
 
 **Biomass**
 
-The carbon emissions caused by the use of woody biomass is dependent by the fraction of Non-Renewable Biomass (fNRB) [13]_. fNRB is defined as the demand of fuelwood that exceeds regrowth in a given area. In the case of biomass equation 10 is modified as outlined in equation 11:
+The carbon emissions caused by the use of woody biomass is dependent on the fraction of Non-Renewable Biomass (fNRB) [12]_. fNRB is defined as the demand of fuelwood that exceeds regrowth in a given area. In the case of biomass equation 10 is modified as outlined in equation 11:
 
 .. math::
     
@@ -175,11 +173,11 @@ The carbon emissions caused by the use of woody biomass is dependent by the frac
 
 **Charcoal**
 
-Similar to the case of biomass equation 10 is modified as described in equation 11 when the fuel assessed is charcoal. In addition to this emissions coupled with the production of charcoal are also added to the total emissions. Each kg of charcoal produced is assumed to produce 1,626 g of CO\ :sub:`2`, 255 g of CO, 39.6 g CH\ :sub:`4`, 0.02 g of black carbon and 0.74 g OC [14]_. These values are included in the charcoal class, to change these values refer to the `class <https://onstove-documentation.readthedocs.io/en/latest/generated/onstove.technology.Charcoal.production_emissions.html>`_.
+Similar to the case of biomass equation 10 is modified as described in equation 11 when the fuel assessed is charcoal. In addition to this emissions coupled with the production of charcoal are also added to the total emissions. Each kg of charcoal produced is assumed to produce 1,626 g of CO\ :sub:`2`, 255 g of CO, 39.6 g CH\ :sub:`4`, 0.02 g of black carbon and 0.74 g OC [13]_. These values are included in the charcoal class, to change these values refer to the `class <https://onstove-documentation.readthedocs.io/en/latest/generated/onstove.technology.Charcoal.production_emissions.html>`_.
 
 **LPG**
 
-In addition to stove emissions coupled with LPG-stoves, the transportation of LPG is also assumed to produce emissions. These emissions are dependent on the traveltime needed to transport emissions. The time needed to transport LPG to different settlements is coupled with the assumed emissions of light-commercial vehicles (14 l/h) in order to estimate the total diesel consumption needed for transportation. Each kg of diesel used is assumed to produce 1.52 g of PM (black carbon fraction of PM is assumed to be 0.55 and the OC fraction of black carbon is assumed to be 0.7), 3.169 g of CO\ :sub:`2`, 7.4 g of CO and 0.056 g of N\ :sub:`2`\O. To change these values (as well as the diesel consumption per hour) see the `LPG class <https://onstove-documentation.readthedocs.io/en/latest/generated/onstove.technology.LPG.transport_emissions.html>`_.
+In addition to stove-emissions coupled with LPG-stoves, the transport of LPG is also assumed to produce emissions. These emissions are dependent on the traveltime needed to transport LPG. The time needed to transport LPG to different settlements is coupled with the assumed emissions of light-commercial vehicles (14 l/h) in order to estimate the total diesel consumption needed for transportation. Each kg of diesel used is assumed to produce 1.52 g of PM (black carbon fraction of PM is assumed to be 0.55 and the OC fraction of black carbon is assumed to be 0.7), 3.169 g of CO\ :sub:`2`, 7.4 g of CO and 0.056 g of N\ :sub:`2`\O. To change these values (as well as the diesel consumption per hour) see the `LPG class <https://onstove-documentation.readthedocs.io/en/latest/generated/onstove.technology.LPG.transport_emissions.html>`_.
 
 **Electricity**
 
@@ -194,16 +192,21 @@ Where; :math:`\gamma_{grid}` is the CO\ :sub:`2`-equivalent intensity of the gri
 The user is required to enter the installed capacity and power generated by the different powerplants feeding the grid of the study area in order for this calculation to be possible. The emission factors of different powerplants are given in the `Electricity class <https://onstove-documentation.readthedocs.io/en/latest/generated/onstove.technology.Electricity.html>`_.
 
 
+.. note::
+
+    For electricity new power plants can be added in the techno-economic specification file. Beware that you then need to add one line for capacity and one for generation (as capacity_X and generation_X, where X is the new powerplant name e.g. capacity_wind and generation_wind). Then, in the electricity class, the dictionary called *carbon_intensities*, * grid_capacity_costs* and * grid_techs_life* need to be added for the new technology. Capacity cost is the cost of adding one kW to the grid with a powerplant of type X and grid_tech_life is powerplants X’s lifetime.
+
+
 Capital cost
 ------------
 
-The capital cost represents an upfront cost that a user has to pay in order to use a specific stove. The capital cost used in OnStove is investment cost needed for the stove netting out the salvage cost as described in equaton 13.
+The capital cost represents an upfront cost that a user has to pay in order to use a specific stove. The capital cost used in OnStove is investment cost needed for the stove netting out the salvage cost as described in equation 13.
 
 .. math::
 
     \mbox{Capital cost } = \mbox{ Investment cost } - \mbox{ Salvage cost} \tag{13}
 
-The salvage cost is assumes a straight-line deprecation as described in equation 14.
+The salvage cost assumes a straight-line deprecation of the stove value as described in equation 14.
 
 .. math::
 
@@ -211,20 +214,24 @@ The salvage cost is assumes a straight-line deprecation as described in equation
 
 .. note::
 
-    Values of life times and costs of stoves can be found in various sources e.g. [2]_ [3]_
+    Values of life times and costs of stoves can be found in various sources e.g. [2]_ [3]_ and are entered in the techno-economic specification file.
 
 **LPG**
 
-The cost of buying a refillable LPG-cylinder is added to the investment cost of first time LPG users. Each cylinder is assumed to cost 2.78 USD per kg LPG capacity and the default capacity of the cylinder is assumed to be 12.5 kg of LPG. In addition to this each cylinder is assumed to have a lifetime of 15 years which is taken into account through a salvage cost. These parameters can be changed from the `LPG class <https://onstove-documentation.readthedocs.io/en/latest/generated/onstove.technology.LPG.html>`_.
+The cost of buying a refillable LPG-cylinder is added to the investment cost of first-time LPG-users. Each cylinder is assumed to cost 2.78 USD per kg LPG capacity and the default capacity of the cylinder is assumed to be 12.5 kg of LPG. In addition to this each cylinder is assumed to have a lifetime of 15 years which is taken into account through a salvage cost. These parameters can be changed from the `LPG class <https://onstove-documentation.readthedocs.io/en/latest/generated/onstove.technology.LPG.html>`_.
 
 **Electricity**
 
-To accomodate for additional capacity needed for electrical cooking it is assumed that the cost of added capacity (as well as its salvage cost) is added to the total capital cost of electricity. The current capacities should be entered in the techno-economic specification file and the life times of technologies in the `Electricity class <https://onstove-documentation.readthedocs.io/en/latest/generated/onstove.technology.Electricity.html>`_.
+To accommodate for additional capacity needed for electrical cooking it is assumed that the cost of added capacity (as well as its salvage cost) is added to the total capital cost of electricity. The current capacities should be entered in the techno-economic specification file and the life times of technologies in the `Electricity class <https://onstove-documentation.readthedocs.io/en/latest/generated/onstove.technology.Electricity.html>`_.
+
+.. note::
+
+    For electricity new power plants can be added in the techno-economic specification file. Beware that you then need to add one line for capacity and one for generation (as capacity_X and generation_X, where X is the new powerplant name e.g. capacity_wind and generation_wind). Then, in the electricity class, the dictionary called *carbon_intensities*, * grid_capacity_costs* and * grid_techs_life* need to be added for the new technology. Capacity cost is the cost of adding one kW to the grid with a powerplant of type X and grid_tech_life is powerplants X’s lifetime.
 
 Fuel cost
 ---------
 
-Cost of fuel is important for all stove not assumed to be collected by the end-users themselves. The cost of fuel is divirsified by fuel and the base cost is always entered in the techno-economic specification file.
+Cost of fuel is important for all fuels not assumed to be collected by the end-users themselves. The cost of fuel is divirsified by fuel and the base cost is always entered in the techno-economic specification file.
 
 **Charcoal and pellets**
 
@@ -232,13 +239,13 @@ Charcoal and pellets are assumed to have a fixed cost which is entered in the te
 
 **LPG**
 
-The cost of LPG is diversified based on settlement and dependent on the traveltime. In order to estimate the traveltime for LPG to each settlement, OnStove enables two different approaches: 1) to use either LPG vendors or 2) traveltime map directly. For approach 1, a least-cost path between every vendor and settlement is determined. As cost in this case a map visualizing the friction for motorized vehicles is given (see the `GIS data section <https://onstove-documentation.readthedocs.io/en/latest/inputs.html#gis-datasets>`_).  Using the least-cost paths and the vendors a traveltime map for the study area with the vendors as starting points is then calculated. If vendors are not available, approach 2 can be used. Once the traveltime is determined the cost of transporting LPG is determined using an approach similar to described by Szabó et al., [15]_ see equation 15:
+The cost of LPG is diversified based on settlement and dependent on the traveltime. In order to estimate the traveltime for LPG to each settlement, OnStove enables two different approaches: 1) to use either LPG vendors or 2) a traveltime map directly. For approach 1, a least-cost path between every vendor and settlement is determined. As cost in this case, a map visualizing the friction for motorized vehicles is given (see the `GIS data section <https://onstove-documentation.readthedocs.io/en/latest/inputs.html#gis-datasets>`_).  Using the least-cost paths and the vendors, a traveltime map for the study area with the vendors as starting points is produced. If vendors are not available, approach 2 can be used. Once the traveltime is determined the cost of transporting LPG is determined using an approach similar to what was described by Szabó et al., [14]_ see equation 15:
 
 .. math::
 
     \mbox{total costs } = \mbox{LPG costs } + \frac{2 * \mbox{ diesel consumption per h } * \mbox{ LPG costs } * \mbox{ travel time }}{\mbox{Transported LPG}}  \tag{15}
 
-Where; LPG cost is the base cost of LPG. For more information on this calculation refer to `LPG class <https://onstove-documentation.readthedocs.io/en/latest/generated/onstove.technology.LPG.html>`_. 
+Where; LPG cost is the base cost of LPG. For more information on this calculation refer to the `LPG class <https://onstove-documentation.readthedocs.io/en/latest/generated/onstove.technology.LPG.html>`_. 
 
 **Electricity**
 
@@ -299,8 +306,8 @@ References
 
 .. [11] Nerini, F. F., Ray, C. & Boulkaid, Y. The cost of cooking a meal. The case of Nyeri County, Kenya. Environ. Res. Lett. 12, 065007 (2017).
 
-.. [13] Bailis, R., Drigo, R., Ghilardi, A. & Masera, O. The carbon footprint of traditional woodfuels. Nature Clim Change 5, 266–272 (2015).
+.. [12] Bailis, R., Drigo, R., Ghilardi, A. & Masera, O. The carbon footprint of traditional woodfuels. Nature Clim Change 5, 266–272 (2015).
 
-.. [14] Akagi, S. K. et al. Emission factors for open and domestic biomass burning for use in atmospheric models. https://acp.copernicus.org/preprints/10/27523/2010/acpd-10-27523-2010.pdf (2010) doi:10.5194/acpd-10-27523-2010.
+.. [13] Akagi, S. K. et al. Emission factors for open and domestic biomass burning for use in atmospheric models. https://acp.copernicus.org/preprints/10/27523/2010/acpd-10-27523-2010.pdf (2010) doi:10.5194/acpd-10-27523-2010.
 
-.. [15] Szabó, S., Bódis, K., Huld, T. & Moner-Girona, M. Energy solutions in rural Africa: mapping electrification costs of distributed solar and diesel generation versus grid extension. Environ. Res. Lett. 6, 034002 (2011).
+.. [14] Szabó, S., Bódis, K., Huld, T. & Moner-Girona, M. Energy solutions in rural Africa: mapping electrification costs of distributed solar and diesel generation versus grid extension. Environ. Res. Lett. 6, 034002 (2011).
