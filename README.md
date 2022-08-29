@@ -15,8 +15,8 @@ Through the environment.yml using [Anaconda](https://www.anaconda.com/distributi
 ```
 > conda install git
 > git clone https://github.com/Open-Source-Spatial-Clean-Cooking-Tool/OnStove.git
-> cd ..\OnStove
-> conda env create --name onstove --file environment.yml
+> cd ..\OnStove\envs
+> conda env create --name onstove --file jupyter_env.yml
 > conda activate onstove
 ```
 
