@@ -1269,12 +1269,49 @@ class RasterLayer(_Layer):
         layer[layer < min_val] = min_val
         return layer
 
-    def get_quantiles(self, quantiles):
+    def get_quantiles(self, quantiles: tuple[float]) -> np.ndarray:
+        """Gets the values of th specified quantiles.
+
+        It uses the :doc:`numpy:/reference/generated/numpy.quantile` function to return the quantiles of
+        the raster array.
+
+        Parameters
+        ----------
+        quantiles: array_like of float
+            Quantile or sequence of quantiles to compute, which must be between 0 and 1 inclusive.
+
+        Returns
+        -------
+        np.ndarray
+            Quantile values of the raster array.
+
+        Notes
+        -----
+        Refer to :doc:`numpy:/reference/generated/numpy.quantile` for more information.
+        """
         x = self.data.flat
         x = x[~np.isnan(x)].copy()
         return np.quantile(x, quantiles)
 
-    def quantiles(self, quantiles):
+    def quantiles(self, quantiles: tuple[float]) -> np.ndarray:
+        """Computes an array based on the desired quantiles of the raster array.
+
+        It creates an array with the quantile categories of the raster array. Uses the :meth:`get_quantiles` method.
+
+        Parameters
+        ----------
+        quantiles: array_like of float
+            Quantile or sequence of quantiles to compute, which must be between 0 and 1 inclusive.
+
+        Returns
+        -------
+        np.ndarray
+            Categorized array based on the quantile values of the raster array.
+
+        See also
+        --------
+        get_quantiles
+        """
         qs = self.get_quantiles(quantiles)
         layer = self.data.copy()
         i = 0
@@ -1294,6 +1331,18 @@ class RasterLayer(_Layer):
     @staticmethod
     def category_legend(im, categories, legend_position=(1.05, 1), title='', legend_cols=1,
                         legend_prop={'title': {'size': 12, 'weight': 'bold'}, 'size': 12}):
+        """Creates a category legend for the current plot.
+
+        Parameters
+        ----------
+        im
+        categories
+        legend_position
+        title
+        legend_cols
+        legend_prop
+        """
+
         values = list(categories.values())
         titles = list(categories.keys())
 
@@ -1315,6 +1364,36 @@ class RasterLayer(_Layer):
              legend_prop={'title': {'size': 12, 'weight': 'bold'}, 'size': 12},
              rasterized=True, colorbar=True, return_image=False, figsize=(6.4, 4.8),
              scale_bar=None, north_arrow=None):
+        """Plots a map of the current raster layer.
+
+        Parameters
+        ----------
+        cmap
+        ticks
+        tick_labels
+        cumulative_count
+        quantiles
+        categories
+        legend_position
+        admin_layer
+        title
+        ax
+        dpi
+        legend
+        legend_title
+        legend_cols
+        legend_prop
+        rasterized
+        colorbar
+        return_image
+        fig_size
+        scale_bar
+        north_arrow
+
+        Returns
+        -------
+        matplotlib image
+        """
 
         extent = [self.bounds[0], self.bounds[2],
                   self.bounds[1], self.bounds[3]]  # [left, right, bottom, top]
@@ -1397,6 +1476,8 @@ class RasterLayer(_Layer):
                    admin_layer=None, title=None, ax=None, dpi=300, quantiles=None,
                    legend_prop={'title': {'size': 12, 'weight': 'bold'}, 'size': 12},
                    legend=True, legend_title='', legend_cols=1, rasterized=True, scale_bar=None, north_arrow=None):
+        """Saves the raster as an image map in the specified format.
+        """
         os.makedirs(output_path, exist_ok=True)
         output_file = os.path.join(output_path,
                                    self.name + f'.{type}')
@@ -1411,6 +1492,7 @@ class RasterLayer(_Layer):
 
     def save_style(self, output_path, cmap='magma', quantiles=None,
                    categories=None, classes=5):
+        """Saves the colormap used for the raster as a sld style."""
         if categories is not None:
             colors = cmap
         else:
