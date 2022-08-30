@@ -56,8 +56,5 @@ References
 
    onstove_tool
    quickstart
-   references
-   changelog
-   contact
-   license
+   resources_and_license
    modules
