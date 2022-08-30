@@ -75,6 +75,8 @@ intersphinx_mapping = {
 #
 html_theme = 'pydata_sphinx_theme'
 
+
+
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
@@ -96,3 +98,7 @@ html_theme_options = {
 }
 html_favicon = "_static/OnStove_favicon.svg"
 html_css_files = ["onstove.css"]
+html_sidebars = {
+   '**': ['globaltoc.html', 'searchbox.html'],
+   'using/windows': ['windowssidebar.html', 'searchbox.html'],
+}

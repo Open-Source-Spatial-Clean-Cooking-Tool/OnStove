@@ -18,6 +18,13 @@ Welcome to OnStove's documentation!
   :align: center
   :class: only-dark
 
+.. image:: https://readthedocs.org/projects/onstove-documentation/badge/?version=latest
+    :target: https://onstove-documentation.readthedocs.io/en/latest/?badge=latest
+    :alt: Documentation Status
+
+.. image:: https://mybinder.org/badge_logo.svg
+    :target: https://mybinder.org/v2/gh/Open-Source-Spatial-Clean-Cooking-Tool/OnStove/main?labpath=example%2FOnStove_notebook.ipynb
+
 Universal access to clean cooking
 *********************************
 
