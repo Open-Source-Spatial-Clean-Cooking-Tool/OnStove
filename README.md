@@ -4,7 +4,9 @@
 
 This repository contains the general code for the geospatial cost-benefit clean cooking tool, OnStove. OnStove calculates the net-benefits of different stove options in a given geography and compares all stoves to one another with regards to their net-benefit.
 
-**Documentation**:
+**Documentation**: 
+
+OnStove is developed by the division of Energy Systems at KTH together with partners. The tool is a geospatial, raster-based tool determining the net-benefit of different cooking solutions selected by the user for raster grid cell of a given study area. The tool takes into account four benefits of adopting clean cooking: reduced morbidity, mortality, emissions and time saved, as well as three costs: capital, fuel as well as operation and maintenance (O&M) costs. In each grid cell of the study area the stove with the highest net-benefit is chosen.
 
 **Requirements**: [contextily](https://contextily.readthedocs.io/en/latest/), [dill](https://dill.readthedocs.io/en/latest/dill.html), [geopandas](https://geopandas.org/en/stable/), [json](https://docs.python.org/3/library/json.html), [jupyterlab](https://jupyterlab.readthedocs.io/en/stable/), [matplotlib](https://matplotlib.org/), [pandas](https://pandas.pydata.org/), [plotnine](https://plotnine.readthedocs.io/en/stable/), [psycopg2](https://www.psycopg.org/docs/), [psutil](https://psutil.readthedocs.io/en/latest/), [python-decouple](https://pypi.org/project/python-decouple/), [rasterio](https://rasterio.readthedocs.io/en/latest/), [rasterstats](https://pythonhosted.org/rasterstats/manual.html), [scikit-learn](https://scikit-learn.org/stable/) and [scikit-image](https://scikit-image.org/)
 
