@@ -54,10 +54,8 @@ References
    :caption: Contents:
    :hidden:
 
-   onstove_model
-   installation
-   inputs
-   examples
+   onstove_tool
+   quickstart
    references
    changelog
    contact
