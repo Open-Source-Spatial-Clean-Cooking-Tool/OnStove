@@ -1,4 +1,5 @@
-[![Documentation Status](https://readthedocs.org/projects/onstove-documentation/badge/?version=latest)](https://onstove-documentation.readthedocs.io/en/latest/?badge=latest)
+[![Documentation Status](https://readthedocs.org/projects/onstove-documentation/badge/?version=latest)](https://onstove-documentation.readthedocs.io/en/latest/?badge=latest) 
+[![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/Open-Source-Spatial-Clean-Cooking-Tool/OnStove/master?labpath=https%3A%2F%2Fgithub.com%2FOpen-Source-Spatial-Clean-Cooking-Tool%2FOnStove%2Fblob%2Fmain%2Fexample%2FOnStove_notebook.ipynb)
 
 # <img src="https://user-images.githubusercontent.com/12953752/178504166-47821216-ea94-4241-8b4c-5c6f19a460ec.svg" alt="drawing" style="width:200px"/>
 
