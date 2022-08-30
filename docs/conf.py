@@ -59,7 +59,7 @@ exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 
 intersphinx_mapping = {
     'geopandas': ('https://geopandas.org/en/stable/', None),
-    'pandas' : ('https://pandas.pydata.org/docs/', None),
+    'pandas': ('https://pandas.pydata.org/docs/', None),
     'rasterio': ('https://rasterio.readthedocs.io/en/latest/', None),
     'numpy': ('https://numpy.org/doc/stable/', None),
     'matplotlib': ('https://matplotlib.org/stable', None),
@@ -73,6 +73,8 @@ intersphinx_mapping = {
 # a list of builtin themes.
 #
 html_theme = 'pydata_sphinx_theme'
+
+
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
@@ -95,3 +97,7 @@ html_theme_options = {
 }
 html_favicon = "_static/OnStove_favicon.svg"
 html_css_files = ["onstove.css"]
+html_sidebars = {
+   '**': ['globaltoc.html', 'searchbox.html'],
+   'using/windows': ['windowssidebar.html', 'searchbox.html'],
+}

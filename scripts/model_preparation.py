@@ -4,8 +4,7 @@ from decouple import config
 onstove_path = config('ONSTOVE').format(os.getlogin())
 sys.path.append(onstove_path)
 
-from onstove.layer import VectorLayer, RasterLayer
-from onstove.onstove import OnStove
+from onstove import VectorLayer, RasterLayer, OnStove
 
 # 1. Create an OnSSTOVE model
 output_directory = snakemake.params.output_directory

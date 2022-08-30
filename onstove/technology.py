@@ -7,7 +7,6 @@ from typing import Optional, Callable
 from math import exp
 
 from onstove.layer import VectorLayer, RasterLayer
-import onstove.onstove
 
 
 class Technology:
@@ -240,7 +239,7 @@ class Technology:
 
         return discount_factor, proj_life
 
-    def required_energy(self, model: 'onstove.onstove.OnStove'):
+    def required_energy(self, model: 'onstove.OnStove'):
         """ Calculates the annual energy needed for cooking in MJ/yr. This is dependent on the number of meals cooked
         and the efficiency of the stove.
 
@@ -248,24 +247,24 @@ class Technology:
         ----------
         model: OnStove model
             Instance of the OnStove model containing the main data of the study case. See
-            :class:`onstove.onstove.OnStove`.
+            :class:`onstove.OnStove`.
         """
 
         self.energy = model.specs["Meals_per_day"] * 365 * model.energy_per_meal / self.efficiency
 
-    def get_carbon_intensity(self, model: 'onstove.onstove.OnStove'):
+    def get_carbon_intensity(self, model: 'onstove.OnStove'):
         """Calculates the carbon intensity of the associated stove.
 
         Parameters
         ----------
         model: OnStove model
             Instance of the OnStove model containing the main data of the study case. See
-            :class:`onstove.onstove.OnStove`.
+            :class:`onstove.OnStove`.
         """
         pollutants = ['co2', 'ch4', 'n2o', 'co', 'bc', 'oc']
         self.carbon_intensity = sum([self[f'{pollutant}_intensity'] * model.gwp[pollutant] for pollutant in pollutants])
 
-    def carb(self, model: 'onstove.onstove.OnStove'):
+    def carb(self, model: 'onstove.OnStove'):
         """Checks if carbon_emission is given in the socio-economic specification file. If it is given this is read
         directly, otherwise the get_carbon_intensity function is called
 
@@ -273,7 +272,7 @@ class Technology:
         ----------
         model: OnStove model
             Instance of the OnStove model containing the main data of the study case. See
-            :class:`onstove.onstove.OnStove`.
+            :class:`onstove.OnStove`.
 
         See also
         --------
@@ -286,14 +285,14 @@ class Technology:
         self.carbon = pd.Series([(self.energy * self.carbon_intensity) / 1000] * model.gdf.shape[0],
                                 index=model.gdf.index)
 
-    def carbon_emissions(self, model: 'onstove.onstove.OnStove'):
+    def carbon_emissions(self, model: 'onstove.OnStove'):
         """Calculates the reduced emissions and the costs avoided by reducing these emissions.
 
         Parameters
         ----------
         model: OnStove model
             Instance of the OnStove model containing the main data of the study case. See
-            :class:`onstove.onstove.OnStove`.
+            :class:`onstove.OnStove`.
 
         See also
         --------
@@ -307,7 +306,7 @@ class Technology:
         self.decreased_carbon_emissions = model.base_fuel.carbon - self.carbon
         self.decreased_carbon_costs = carbon
 
-    def health_parameters(self, model: 'onstove.onstove.OnStove'):
+    def health_parameters(self, model: 'onstove.OnStove'):
         """Calculates the population attributable fraction for ALRI, COPD, IHD, lung cancer or stroke for urban and
         rural settlements of the area of interest.
 
@@ -315,7 +314,7 @@ class Technology:
         ----------
         model: OnStove model
             Instance of the OnStove model containing the main data of the study case. See
-            :class:`onstove.onstove.OnStove`.
+            :class:`onstove.OnStove`.
 
         See also
         --------
@@ -334,7 +333,7 @@ class Technology:
         self.paf_lc_u = self.paf(rr_lc, 1 - model.clean_cooking_access_u)
         self.paf_stroke_u = self.paf(rr_stroke, 1 - model.clean_cooking_access_u)
 
-    def mort_morb(self, model: 'onstove.onstove.OnStove', parameter: str = 'Mort', dr: str ='Discount_rate') -> tuple[float, float]:
+    def mort_morb(self, model: 'onstove.OnStove', parameter: str = 'Mort', dr: str ='Discount_rate') -> tuple[float, float]:
         """
         Calculates mortality or morbidity rate per fuel. These two calculations are very similar in nature and are
         therefore combined in one function. In order to indicate if morbidity or mortality should be calculated, the
@@ -344,7 +343,7 @@ class Technology:
         ----------
         model: OnStove model
             Instance of the OnStove model containing the main data of the study case. See
-            :class:`onstove.onstove.OnStove`.
+            :class:`onstove.OnStove`.
         parameter: str, default 'Mort'
             Parameter to calculate. For mortality enter 'Mort' and for morbidity enter 'Morb'
         dr: str, default 'Discount_rate'
@@ -409,7 +408,7 @@ class Technology:
 
         return distributed_cost, cases_avoided
 
-    def mortality(self, model: 'onstove.onstove.OnStove'):
+    def mortality(self, model: 'onstove.OnStove'):
         """
         Distributes the total mortality across the study area per fuel.
 
@@ -417,7 +416,7 @@ class Technology:
         ----------
         model: OnStove model
             Instance of the OnStove model containing the main data of the study case. See
-            :class:`onstove.onstove.OnStove`.
+            :class:`onstove.OnStove`.
 
         See also
         --------
@@ -434,7 +433,7 @@ class Technology:
         else:
             self.distributed_spillovers_mort = pd.Series(0, index=model.gdf.index, dtype='float64')
 
-    def morbidity(self, model: 'onstove.onstove.OnStove'):
+    def morbidity(self, model: 'onstove.OnStove'):
         """
         Distributes the total morbidity across the study area per fuel.
 
@@ -442,7 +441,7 @@ class Technology:
         ----------
         model: OnStove model
             Instance of the OnStove model containing the main data of the study case. See
-            :class:`onstove.onstove.OnStove`.
+            :class:`onstove.OnStove`.
 
         See also
         --------
@@ -458,7 +457,7 @@ class Technology:
         else:
             self.distributed_spillovers_morb = pd.Series(0, index=model.gdf.index, dtype='float64')
 
-    def salvage(self, model: 'onstove.onstove.OnStove'):
+    def salvage(self, model: 'onstove.OnStove'):
         """
         Calls discount_factor function and calculates discounted salvage cost for each stove assuming a straight-line depreciation.
 
@@ -466,7 +465,7 @@ class Technology:
         ----------
         model: OnStove model
             Instance of the OnStove model containing the main data of the study case. See
-            :class:`onstove.onstove.OnStove`.
+            :class:`onstove.OnStove`.
 
         See also
         --------
@@ -485,7 +484,7 @@ class Technology:
 
         self.discounted_salvage_cost = discounted_salvage
 
-    def discounted_om(self,  model: 'onstove.onstove.OnStove'):
+    def discounted_om(self,  model: 'onstove.OnStove'):
         """
         Calls discount_factor function and calculates discounted operation and maintenance cost for each stove.
 
@@ -493,7 +492,7 @@ class Technology:
         ----------
         model: OnStove model
             Instance of the OnStove model containing the main data of the study case. See
-            :class:`onstove.onstove.OnStove`.
+            :class:`onstove.OnStove`.
 
 
         See also
@@ -507,7 +506,7 @@ class Technology:
                                   x in model.base_fuel.om_cost])
         self.discounted_om_costs = pd.Series(discounted_om, index=model.gdf.index)
 
-    def discounted_inv(self, model: 'onstove.onstove.OnStove', relative: bool = True):
+    def discounted_inv(self, model: 'onstove.OnStove', relative: bool = True):
         """
         Calls discount_factor function and calculates discounted investment cost. Uses proj_life and tech_life to determine
         number of necessary re-investments
@@ -516,7 +515,7 @@ class Technology:
         ----------
         model: OnStove model
             Instance of the OnStove model containing the main data of the study case. See
-            :class:`onstove.onstove.OnStove`.
+            :class:`onstove.OnStove`.
         relative: bool, default True
             Boolean parameter to indicate if the discounted investments will be calculated relative to the `base_fuel`
             or not.
@@ -549,7 +548,7 @@ class Technology:
         self.discounted_investments = pd.Series(investments_discounted, index=model.gdf.index) + self.inv_cost - \
                                       discounted_base_investments
 
-    def discount_fuel_cost(self, model: 'onstove.onstove.OnStove', relative: bool = True):
+    def discount_fuel_cost(self, model: 'onstove.OnStove', relative: bool = True):
         """
         Calls discount_factor function and calculates discounted fuel costs.
 
@@ -557,7 +556,7 @@ class Technology:
         ----------
         model: OnStove model
             Instance of the OnStove model containing the main data of the study case. See
-            :class:`onstove.onstove.OnStove`.
+            :class:`onstove.OnStove`.
         relative: bool, default True
             Boolean parameter to indicate if the discounted fuel cost will be calculated relative to the `base_fuel`
             or not.
@@ -582,7 +581,7 @@ class Technology:
 
         self.discounted_fuel_cost = pd.Series(fuel_cost_discounted, index=model.gdf.index) - discounted_base_fuel_cost
 
-    def total_time(self, model: 'onstove.onstove.OnStove'):
+    def total_time(self, model: 'onstove.OnStove'):
         """
         Calculates total time used per year by taking into account time of cooking and time of fuel collection (if relevant)
 
@@ -590,11 +589,11 @@ class Technology:
         ----------
         model: OnStove model
             Instance of the OnStove model containing the main data of the study case. See
-            :class:`onstove.onstove.OnStove`.
+            :class:`onstove.OnStove`.
         """
         self.total_time_yr = (self.time_of_cooking + self.time_of_collection) * 365
 
-    def time_saved(self, model: 'onstove.onstove.OnStove'):
+    def time_saved(self, model: 'onstove.OnStove'):
         """
         Calculates time saved per year by adopting a new stove.
 
@@ -602,7 +601,7 @@ class Technology:
         ----------
         model: OnStove model
             Instance of the OnStove model containing the main data of the study case. See
-            :class:`onstove.onstove.OnStove`.
+            :class:`onstove.OnStove`.
 
         """
 
@@ -621,7 +620,7 @@ class Technology:
         ----------
         model: OnStove model
             Instance of the OnStove model containing the main data of the study case. See
-            :class:`onstove.onstove.OnStove`.
+            :class:`onstove.OnStove`.
 
         See also
         --------
@@ -630,7 +629,7 @@ class Technology:
         self.costs = (self.discounted_fuel_cost + self.discounted_investments +  # - self.time_value +
                       self.discounted_om_costs - self.discounted_salvage_cost)
 
-    def net_benefit(self, model: 'onstove.onstove.OnStove', w_health: int = 1, w_spillovers: int = 1,
+    def net_benefit(self, model: 'onstove.OnStove', w_health: int = 1, w_spillovers: int = 1,
                     w_environment: int = 1, w_time: int = 1, w_costs: int = 1):
         """This method combines all costs and benefits as specified by the user using the weights parameters
 
@@ -638,7 +637,7 @@ class Technology:
          ----------
          model: OnStove model
              Instance of the OnStove model containing the main data of the study case. See
-             :class:`onstove.onstove.OnStove`.
+             :class:`onstove.OnStove`.
          w_health: int, default 1
              Determines whether health parameters (reduced morbidity and mortality)
              should be considered in the net-benefit equation.
@@ -775,7 +774,7 @@ class LPG(Technology):
         self.cylinder_cost = cylinder_cost
         self.cylinder_life = cylinder_life
 
-    def add_travel_time(self, model: 'onstove.onstove.OnStove', lpg_path: Optional[str] = None,
+    def add_travel_time(self, model: 'onstove.OnStove', lpg_path: Optional[str] = None,
                         friction_path: Optional[str] = None, align: bool = False):
         """This method calculates the travel time needed to transport LPG.
 
@@ -791,7 +790,7 @@ class LPG(Technology):
             cell using motorized transport.
         model: OnStove model
             Instance of the OnStove model containing the main data of the study case. See
-            :class:`onstove.onstove.OnStove`.
+            :class:`onstove.OnStove`.
         align: bool, default False
             Boolean parameter to indicate if the friction layer need to be align with the population
             data in the `model`.
@@ -825,7 +824,7 @@ class LPG(Technology):
                                                          nodata=lpg.distance_raster.meta['nodata'],
                                                          fill_nodata='interpolate', method='read')
 
-    def transportation_cost(self, model: 'onstove.onstove.OnStove'):
+    def transportation_cost(self, model: 'onstove.OnStove'):
         """The cost of transporting LPG.
 
         Transportation cost = (2 * diesel consumption per h * national diesel price * travel time)/transported LPG
@@ -849,7 +848,7 @@ class LPG(Technology):
         ----------
         model: OnStove model
             Instance of the OnStove model containing the main data of the study case. See
-            :class:`onstove.onstove.OnStove`.
+            :class:`onstove.OnStove`.
         """
 
         transport_cost = (self.diesel_per_hour * self.diesel_cost * self.travel_time) / self.truck_capacity
@@ -859,7 +858,7 @@ class LPG(Technology):
         transport_cost[transport_cost < 0] = np.nan
         self.transport_cost = transport_cost
 
-    def discount_fuel_cost(self, model: 'onstove.onstove.OnStove', relative: bool = True):
+    def discount_fuel_cost(self, model: 'onstove.OnStove', relative: bool = True):
         """This method expands :meth:`discount_fuel_cost` when LPG is the stove assessed in order to ensure that the
          transportation costs are included
 
@@ -867,7 +866,7 @@ class LPG(Technology):
         ----------
         model: OnStove model
             Instance of the OnStove model containing the main data of the study case. See
-            :class:`onstove.onstove.OnStove`.
+            :class:`onstove.OnStove`.
         relative: bool, default True
             Boolean parameter to indicate if the discounted investments will be calculated relative to the `base_fuel`
             or not.
@@ -880,7 +879,7 @@ class LPG(Technology):
         self.transportation_cost(model)
         super().discount_fuel_cost(model, relative)
 
-    def transport_emissions(self, model: 'onstove.onstove.OnStove'):
+    def transport_emissions(self, model: 'onstove.OnStove'):
         """Calculates the emissions caused by the transportation of LPG. This is dependent on the diesel consumption of
          the truck. Diesel consumption is assumed to be 14 l/h (14 l/100km). Each truck is assumed to transport 2,000
          kg LPG
@@ -900,7 +899,7 @@ class LPG(Technology):
         ----------
         model: OnStove model
             Instance of the OnStove model containing the main data of the study case. See
-            :class:`onstove.onstove.OnStove`.
+            :class:`onstove.OnStove`.
 
         Returns
         -------
@@ -918,7 +917,7 @@ class LPG(Technology):
                             pollutant, ef in diesel_ef.items()])  # in gCO2eq per yr
         return hh_emissions / 1000  # in kgCO2eq per yr
 
-    def carb(self, model: 'onstove.onstove.OnStove'):
+    def carb(self, model: 'onstove.OnStove'):
         """This method expands :meth:`Technology.carbon` when LPG is the stove assessed in order to ensure that the
          emissions caused by the transportation is included.
 
@@ -926,7 +925,7 @@ class LPG(Technology):
         ----------
         model: OnStove model
             Instance of the OnStove model containing the main data of the study case. See
-            :class:`onstove.onstove.OnStove`.
+            :class:`onstove.OnStove`.
 
         See also
         --------
@@ -935,7 +934,7 @@ class LPG(Technology):
         super().carb(model)
         self.carbon += self.transport_emissions(model)
 
-    def infrastructure_cost(self, model: 'onstove.onstove.OnStove'):
+    def infrastructure_cost(self, model: 'onstove.OnStove'):
         """Calculates cost of cylinders for first-time LPG users. It is assumed that the cylinder contains 12.5 kg of
         LPG. The function calls ``infrastructure_salvage``.
 
@@ -945,7 +944,7 @@ class LPG(Technology):
         ----------
         model: OnStove model
             Instance of the OnStove model containing the main data of the study case. See
-            :class:`onstove.onstove.OnStove`.
+            :class:`onstove.OnStove`.
 
         See also
         --------
@@ -955,14 +954,14 @@ class LPG(Technology):
         salvage = self.infrastructure_salvage(model, cost, self.cylinder_life)
         self.discounted_infra_cost = (cost - salvage)
 
-    def infrastructure_salvage(self, model: 'onstove.onstove.OnStove', cost: float, life: int):
+    def infrastructure_salvage(self, model: 'onstove.OnStove', cost: float, life: int):
         """Calculates the salvaged cylinder cost. The function calls ``discount_factor``.
 
         Parameters
         ----------
         model: OnStove model
             Instance of the OnStove model containing the main data of the study case. See
-            :class:`onstove.onstove.OnStove`.
+            :class:`onstove.OnStove`.
         cost: float
             The cost of buying an LPG-cylinder.
         life: int
@@ -981,7 +980,7 @@ class LPG(Technology):
         salvage = cost * (1 - used_life / life)
         return salvage / discount_rate[0]
 
-    def discounted_inv(self, model: 'onstove.onstove.OnStove', relative: bool = True):
+    def discounted_inv(self, model: 'onstove.OnStove', relative: bool = True):
         """This method expands :meth:`Technology.discounted_inv` by adding the cylinder cost for households currently
         not using LPG.
 
@@ -989,7 +988,7 @@ class LPG(Technology):
         ----------
         model: OnStove model
             Instance of the OnStove model containing the main data of the study case. See
-            :class:`onstove.onstove.OnStove`.
+            :class:`onstove.OnStove`.
         relative: bool, default True
             Boolean parameter to indicate if the discounted investments will be calculated relative to the `base_fuel`
             or not.
@@ -1022,7 +1021,7 @@ class Biomass(Technology):
     ----------
     forest: object of type RasterLayer, optional
         This is the forest cover raster dataset read from the ``forest_path`` parameter. See the
-        :class:`onstove.layer.RasterLayer` class for more information.
+        :class:`onstove.RasterLayer` class for more information.
     friction: str, optional
         This is the forest cover raster dataset read from the ``friction_path``.
     trips_per_yr: float
@@ -1074,8 +1073,8 @@ class Biomass(Technology):
         population point. It is calculated using the forest cover, friction layer and population density layer.
 
         .. seealso::
-           :meth:`transportation_time<onstove.technology.Biomass.transportation_time>` and
-           :meth:`total_time<onstove.technology.Biomass.total_time>`
+           :meth:`transportation_time<onstove.Biomass.transportation_time>` and
+           :meth:`total_time<onstove.Biomass.total_time>`
 
     collection_capacity: float, default 25
         Average wood collection capacity per person in kg/trip.
@@ -1098,27 +1097,27 @@ class Biomass(Technology):
     Examples
     --------
     An OnStove Biomass class can be created by providing the technology input data on an `csv` file and calling the
-    :meth:`read_tech_data<onstove.onstove.OnStove.read_tech_data>` method of the
-    :class:`OnStove<onstove.onstove.OnStove>` class, or by passing all technology information in the script.
+    :meth:`read_tech_data<onstove.read_tech_data>` method of the
+    :class:`onstove.OnStove>` class, or by passing all technology information in the script.
 
     Creating the technologies from a `csv` configuration file (see *link to examples or mendeley* for a example of the
     configuration file):
 
-    >>> from onstove.onstove import OnStove
+    >>> from onstove import OnStove
     ... model = OnStove(output_directory='output_directory')
     ... mode.read_tech_data(path_to_config='path_to_csv_file', delimiter=',')
     ... model.techs
-    {'Biomass': {'Biomass': <onstove.technology.Biomass at 0x2478e85ee80>}}
+    {'Biomass': {'Biomass': <onstove.Biomass at 0x2478e85ee80>}}
 
     Creating a Biomass technology in the script:
 
-    >>> from onstove.onstove import OnStove
-    ... from onstove.technology import Biomass
+    >>> from onstove import OnStove
+    ... from onstove import Biomass
     ... model = OnStove(output_directory='output_directory')
     ... biomass = Biomass(name='Biomass')  # we define the name and leave all other parameters with the default values
     ... model.techs['Biomass'] = biomass
     ... model.techs
-    {'Biomass': {'Biomass': <onstove.technology.Biomass at 0x2478e85ee80>}}
+    {'Biomass': {'Biomass': <onstove.Biomass at 0x2478e85ee80>}}
     """
 
     forest: Optional[RasterLayer] = None
@@ -1171,7 +1170,7 @@ class Biomass(Technology):
     def __setitem__(self, idx, value):
         self.__dict__[idx] = value
 
-    def transportation_time(self, friction_path: str, forest_path: str, model: 'onstove.onstove.OnStove', align: bool = False):
+    def transportation_time(self, friction_path: str, forest_path: str, model: 'onstove.OnStove', align: bool = False):
         """This method calculates the travel time needed to gather biomass.
 
         The travel time is calculated as the time needed (in hours) to reach the closest forest cover point from each
@@ -1186,7 +1185,7 @@ class Biomass(Technology):
             Path to the forest cover raster file.
         model: OnStove model
             Instance of the OnStove model containing the main data of the study case. See
-            :class:`onstove.onstove.OnStove`.
+            :class:`onstove.OnStove`.
         align: bool, default False
             Boolean parameter to indicate if the forest cover and friction layers need to be align with the population
             data in the `model`.
@@ -1207,7 +1206,7 @@ class Biomass(Technology):
         travel_time[travel_time > 7] = 7  # cap to max travel time based on literature
         self.travel_time = travel_time
 
-    def total_time(self, model: 'onstove.onstove.OnStove'):
+    def total_time(self, model: 'onstove.OnStove'):
         """This method expands :meth:`Technology.total_time` when biomass is collected.
 
         It calculates the time needed for collecting biomass, based on the ``collection_capacity`` the
@@ -1218,7 +1217,7 @@ class Biomass(Technology):
         ----------
         model: OnStove model
             Instance of the OnStove model containing the main data of the study case. See
-            :class:`onstove.onstove.OnStove`.
+            :class:`onstove.OnStove`.
         """
         if self.collected_fuel:
             self.transportation_time(self.friction_path, self.forest_path, model)
@@ -1229,7 +1228,7 @@ class Biomass(Technology):
             self.time_of_collection = 0
             super().total_time(model)
 
-    def get_carbon_intensity(self, model: 'onstove.onstove.OnStove'):
+    def get_carbon_intensity(self, model: 'onstove.OnStove'):
         """This method expands :meth:`Technology.get_carbon_intensity`.
 
         It excludes the CO2 emissions from the share of firewood that is sustainably harvested (i.e. it does not affect
@@ -1239,7 +1238,7 @@ class Biomass(Technology):
         ----------
         model: OnStove model
             Instance of the OnStove model containing the main data of the study case. See
-            :class:`onstove.onstove.OnStove`.
+            :class:`onstove.OnStove`.
 
         Notes
         -----
@@ -1255,7 +1254,7 @@ class Biomass(Technology):
         super().get_carbon_intensity(model)
         self['co2_intensity'] = intensity
 
-    def solar_panel_investment(self, model: 'onstove.onstove.OnStove'):
+    def solar_panel_investment(self, model: 'onstove.OnStove'):
         """This method adds the cost of a solar panel to unelectrified areas.
 
         The stove can be modelled a ICS with natural draft or forced draft. This is achieved by specifying the
@@ -1267,7 +1266,7 @@ class Biomass(Technology):
         ----------
         model: OnStove model
             Instance of the OnStove model containing the main data of the study case. See
-            :class:`onstove.onstove.OnStove`.
+            :class:`onstove.OnStove`.
         """
         if not self.solar_panel_adjusted:
             solar_panel_cost = 7.5  # Based on a cost of 1.25 USD per watt
@@ -1277,14 +1276,14 @@ class Biomass(Technology):
             self.inv_cost = inv_cost
             self.solar_panel_adjusted = True  # This is to prevent to adjust the capital cost more than once
 
-    def discounted_inv(self, model: 'onstove.onstove.OnStove', relative: bool = True):
+    def discounted_inv(self, model: 'onstove.OnStove', relative: bool = True):
         """This method expands :meth:`Technology.discounted_inv` by adding the solar panel cost in unlectrified areas.
 
         Parameters
         ----------
         model: OnStove model
             Instance of the OnStove model containing the main data of the study case. See
-            :class:`onstove.onstove.OnStove`.
+            :class:`onstove.OnStove`.
         relative: bool, default True
             Boolean parameter to indicate if the discounted investments will be calculated relative to the `base_fuel`
             or not.
@@ -1364,7 +1363,7 @@ class Charcoal(Technology):
                          inv_cost, fuel_cost, time_of_cooking,
                          om_cost, efficiency, pm25, is_clean=False)
 
-    def get_carbon_intensity(self, model: 'onstove.onstove.OnStove'):
+    def get_carbon_intensity(self, model: 'onstove.OnStove'):
         """This method expands :meth:`Technology.get_carbon_intensity`.
 
         It excludes the CO2 emissions from the share of firewood that is sustainably harvested (i.e. it does not affect
@@ -1374,7 +1373,7 @@ class Charcoal(Technology):
         ----------
         model: OnStove model
             Instance of the OnStove model containing the main data of the study case. See
-            :class:`onstove.onstove.OnStove`.
+            :class:`onstove.OnStove`.
 
         Notes
         -----
@@ -1390,7 +1389,7 @@ class Charcoal(Technology):
         super().get_carbon_intensity(model)
         self['co2_intensity'] = intensity
 
-    def production_emissions(self, model: 'onstove.onstove.OnStove'):
+    def production_emissions(self, model: 'onstove.OnStove'):
         """Calculates the emissions caused by the production of Charcoal. The function uses emission factors with regards
         to CO2, CO, CH4, BC and OC as well as the ``energy`` and ``energy_content`` attributes of te model.
         Emissions factors for the production of charcoal are taken from [1]_.
@@ -1407,7 +1406,7 @@ class Charcoal(Technology):
         ----------
         model: OnStove model
             Instance of the OnStove model containing the main data of the study case. See
-            :class:`onstove.onstove.OnStove`.
+            :class:`onstove.OnStove`.
 
         Returns
         -------
@@ -1421,7 +1420,7 @@ class Charcoal(Technology):
                             emission_factors.items()])  # gCO2eq/yr
         return hh_emissions / 1000  # kgCO2/yr
 
-    def carb(self, model: 'onstove.onstove.OnStove'):
+    def carb(self, model: 'onstove.OnStove'):
         """This method expands :meth:`Technology.carbon` when Charcoal is the fuel used (both traditional stoves and ICS)
          in order to ensure that the emissions caused by the production and transportation is included in the total emissions.
 
@@ -1429,7 +1428,7 @@ class Charcoal(Technology):
         ----------
         model: OnStove model
             Instance of the OnStove model containing the main data of the study case. See
-            :class:`onstove.onstove.OnStove`.
+            :class:`onstove.OnStove`.
 
         See also
         --------
@@ -1540,7 +1539,7 @@ class Electricity(Technology):
         else:
             super().__setitem__(idx, value)
 
-    def get_capacity_cost(self, model: 'onstove.onstove.OnStove'):
+    def get_capacity_cost(self, model: 'onstove.OnStove'):
         """This method determines the cost of electricity for each added unit of capacity (kW). The added capacity is
         assumed to be the same shares as the current installed capacity (i.e. if a country uses 10% coal powered power
         plants and 90% natural gas, the added capacity will consist of 10% coal and 90% natural gas)
@@ -1549,7 +1548,7 @@ class Electricity(Technology):
         ----------
         model: OnStove model
             Instance of the OnStove model containing the main data of the study case. See
-            :class:`onstove.onstove.OnStove`.
+            :class:`onstove.OnStove`.
 
         """
         self.required_energy(model)
@@ -1569,7 +1568,7 @@ class Electricity(Technology):
         self.capacity = self.energy * add_capacity / (3.6 * self.time_of_cooking * 365)
         self.capacity_cost = self.capacity * (self.grid_capacity_cost - salvage)
 
-    def get_carbon_intensity(self, model: 'onstove.onstove.OnStove'):
+    def get_carbon_intensity(self, model: 'onstove.OnStove'):
         """This function determines the carbon intensity of generated electricity based on the power plant mix in the
         area of interest.
 
@@ -1577,7 +1576,7 @@ class Electricity(Technology):
         ----------
         model: OnStove model
             Instance of the OnStove model containing the main data of the study case. See
-            :class:`onstove.onstove.OnStove`.
+            :class:`onstove.OnStove`.
 
         """
         grid_emissions = sum([gen * self.carbon_intensities[fuel] for fuel, gen in self.generation.items()])
@@ -1590,14 +1589,14 @@ class Electricity(Technology):
             [self.grid_capacity_costs[fuel] * (cap / sum(self.capacities.values())) for fuel, cap in
              self.capacities.items()])
 
-    def grid_salvage(self, model: 'onstove.onstove.OnStove', single: bool = False):
+    def grid_salvage(self, model: 'onstove.OnStove', single: bool = False):
         """This method determines the salvage cost of the grid connected power plants.
 
         Parameters
         ----------
         model: OnStove model
             Instance of the OnStove model containing the main data of the study case. See
-            :class:`onstove.onstove.OnStove`.
+            :class:`onstove.OnStove`.
         single: bool, default True
             Boolean parameter to indicate if there is only one grid_capacity_cost or several.
         """
@@ -1617,7 +1616,7 @@ class Electricity(Technology):
 
         return salvage / discount_rate[0]
 
-    def carb(self,  model: 'onstove.onstove.OnStove'):
+    def carb(self,  model: 'onstove.OnStove'):
         """This method expands :meth:`Technology.carbon` when electricity is the fuel used
 
 
@@ -1625,7 +1624,7 @@ class Electricity(Technology):
          ----------
          model: OnStove model
              Instance of the OnStove model containing the main data of the study case. See
-             :class:`onstove.onstove.OnStove`.
+             :class:`onstove.OnStove`.
 
          See also
          --------
@@ -1635,14 +1634,14 @@ class Electricity(Technology):
             self.get_carbon_intensity(model)
         super().carb(model)
 
-    def discounted_inv(self, model: 'onstove.onstove.OnStove', relative: bool = True):
+    def discounted_inv(self, model: 'onstove.OnStove', relative: bool = True):
         """This method expands :meth:`Technology.discounted_inv` by adding connection and added capacity costs.
 
         Parameters
         ----------
         model: OnStove model
             Instance of the OnStove model containing the main data of the study case. See
-            :class:`onstove.onstove.OnStove`.
+            :class:`onstove.OnStove`.
         relative: bool, default True
             Boolean parameter to indicate if the discounted investments will be calculated relative to the `base_fuel`
             or not.
@@ -1657,7 +1656,7 @@ class Electricity(Technology):
             share[model.gdf['IsUrban'] < 20] *= self.current_share_rural
             self.discounted_investments += (self.connection_cost + self.capacity_cost * (1 - share))
 
-    def net_benefit(self, model: 'onstove.onstove.OnStove', w_health: int = 1, w_spillovers: int = 1,
+    def net_benefit(self, model: 'onstove.OnStove', w_health: int = 1, w_spillovers: int = 1,
                     w_environment: int = 1, w_time: int = 1, w_costs: int = 1):
         """This method expands :meth:`Technology.net_benefit` by taking into account electricity availability
          in the calculations.
@@ -1666,7 +1665,7 @@ class Electricity(Technology):
          ----------
          model: OnStove model
              Instance of the OnStove model containing the main data of the study case. See
-             :class:`onstove.onstove.OnStove`.
+             :class:`onstove.OnStove`.
          w_health: int, default 1
              Determines whether health parameters (reduced morbidity and mortality)
              should be considered in the net-benefit equation.
@@ -1787,7 +1786,7 @@ class Biogas(Technology):
         self.water = None
         self.temperature = None
 
-    def read_friction(self, model: 'onstove.onstove.OnStove', friction_path: str):
+    def read_friction(self, model: 'onstove.OnStove', friction_path: str):
         """Reads a friction layer in min per meter (walking time per meter) and returns a pandas series with the values
         for each populated grid cell in hours per meter
 
@@ -1795,7 +1794,7 @@ class Biogas(Technology):
         ----------
         model: OnStove model
             Instance of the OnStove model containing the main data of the study case. See
-            :class:`onstove.onstove.OnStove`.
+            :class:`onstove.OnStove`.
         friction_path: str
             Path to where the friction layer is stored.
 
@@ -1808,14 +1807,14 @@ class Biogas(Technology):
                                          fill_nodata='interpolate', method='read')
         return data / 60
 
-    def required_energy_hh(self, model: 'onstove.onstove.OnStove'):
+    def required_energy_hh(self, model: 'onstove.OnStove'):
         """Determines the required annual energy needed for cooking taking into account the stove efficiency.
 
         Parameters
         ----------
         model: OnStove model
             Instance of the OnStove model containing the main data of the study case. See
-            :class:`onstove.onstove.OnStove`.
+            :class:`onstove.OnStove`.
 
         Returns
         -------
@@ -1825,7 +1824,7 @@ class Biogas(Technology):
         self.required_energy(model)
         return self.energy / self.digestor_eff
 
-    def get_collection_time(self, model: 'onstove.onstove.OnStove'):
+    def get_collection_time(self, model: 'onstove.OnStove'):
         """Caluclates the daily time of collection based on friction (hour/meter), the available biogas energy from
         each cell (MJ/yr/meter, 1000000 represents meters per km2) and the required energy per household (MJ/yr)
 
@@ -1833,7 +1832,7 @@ class Biogas(Technology):
         ----------
         model: OnStove model
             Instance of the OnStove model containing the main data of the study case. See
-            :class:`onstove.onstove.OnStove`.
+            :class:`onstove.OnStove`.
 
         """
         self.available_biogas(model)
@@ -1847,7 +1846,7 @@ class Biogas(Technology):
         time_of_collection[time_of_collection.isna()] = mean_value
         self.time_of_collection = time_of_collection
 
-    def available_biogas(self, model: 'onstove.onstove.OnStove'):
+    def available_biogas(self, model: 'onstove.OnStove'):
         """Caluclates the biogas production potential in liters per day. It currently takes into account 6 categories
         of livestock (cattle, buffalo, sheep, goat, pig and poultry). The biogas potential for each category is determined
         following the methodology outlined by Lohani et al.[1]_ This function also applies a restriction to biogas
@@ -1866,7 +1865,7 @@ class Biogas(Technology):
         ----------
         model: OnStove model
             Instance of the OnStove model containing the main data of the study case. See
-            :class:`onstove.onstove.OnStove`.
+            :class:`onstove.OnStove`.
 
         """
 
@@ -1902,7 +1901,7 @@ class Biogas(Technology):
         # Available biogas energy per year in MJ (energy content in MJ/m3)
         model.gdf["biogas_energy"] = model.gdf["available_biogas"] * self.energy_content
 
-    def recalibrate_livestock(self, model: 'onstove.onstove.OnStove', buffaloes: str, cattles: str, poultry: str,
+    def recalibrate_livestock(self, model: 'onstove.OnStove', buffaloes: str, cattles: str, poultry: str,
                               goats: str, pigs: str, sheeps: str):
         """Recalibrates the livestock maps and adds them to the main dataframe. It currently takes into account 6 categories
         of livestock (cattle, buffalo, sheep, goat, pig and poultry).
@@ -1911,7 +1910,7 @@ class Biogas(Technology):
         ----------
         model: OnStove model
             Instance of the OnStove model containing the main data of the study case. See
-            :class:`onstove.onstove.OnStove`.
+            :class:`onstove.OnStove`.
         buffaloes: str
             Path to the buffalo dataset.
         cattles: str
@@ -1939,14 +1938,14 @@ class Biogas(Technology):
             model.raster_to_dataframe(layer.data, name=name, method='read',
                                       nodata=layer.meta['nodata'], fill_nodata='interpolate')
 
-    def total_time(self, model: 'onstove.onstove.OnStove'):
+    def total_time(self, model: 'onstove.OnStove'):
         """This method expands :meth:`Technology.total_time` by adding the biogas collection time
 
         Parameters
         ----------
         model: OnStove model
             Instance of the OnStove model containing the main data of the study case. See
-            :class:`onstove.onstove.OnStove`.
+            :class:`onstove.OnStove`.
 
         See also
         --------
@@ -1955,7 +1954,7 @@ class Biogas(Technology):
         self.get_collection_time(model)
         super().total_time(model)
 
-    def net_benefit(self, model: 'onstove.onstove.OnStove', w_health: int = 1, w_spillovers: int = 1,
+    def net_benefit(self, model: 'onstove.OnStove', w_health: int = 1, w_spillovers: int = 1,
                     w_environment: int = 1, w_time: int = 1, w_costs: int = 1):
         """This method expands :meth:`Technology.net_benefit` by taking into account biogas availability
         in the calculations.
@@ -1964,7 +1963,7 @@ class Biogas(Technology):
         ----------
         model: OnStove model
             Instance of the OnStove model containing the main data of the study case. See
-            :class:`onstove.onstove.OnStove`.
+            :class:`onstove.OnStove`.
         w_health: int, default 1
             Determines whether health parameters (reduced morbidity and mortality)
             should be considered in the net-benefit equation.

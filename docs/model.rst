@@ -1,10 +1,11 @@
 The model objects
 -----------------
 
-.. currentmodule:: onstove.onstove
+.. currentmodule:: onstove
 
 .. autosummary::
    :toctree: generated/
    
    DataProcessor
+   MCA
    OnStove

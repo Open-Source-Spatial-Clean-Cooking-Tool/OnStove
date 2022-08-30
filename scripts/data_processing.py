@@ -5,8 +5,7 @@ onstove_path = config('ONSTOVE').format(os.getlogin())
 sys.path.append(onstove_path)
 import numpy as np
 
-from onstove.onstove import DataProcessor
-from onstove.layer import VectorLayer
+from onstove import DataProcessor, VectorLayer
 
 # 1. Create a data processor
 output_directory = snakemake.params.output_directory

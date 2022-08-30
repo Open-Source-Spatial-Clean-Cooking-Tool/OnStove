@@ -5,7 +5,7 @@ import os
 onstove_path = config('ONSTOVE').format(os.getlogin())
 sys.path.append(onstove_path)
 
-from onstove.onstove import OnStove
+from onstove import OnStove
 
 # 1. Read the OnSSTOVE model
 country = snakemake.params.country

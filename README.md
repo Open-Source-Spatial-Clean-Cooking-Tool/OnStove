@@ -1,4 +1,5 @@
-[![Documentation Status](https://readthedocs.org/projects/onstove-documentation/badge/?version=latest)](https://onstove-documentation.readthedocs.io/en/latest/?badge=latest)
+[![Documentation Status](https://readthedocs.org/projects/onstove-documentation/badge/?version=latest)](https://onstove-documentation.readthedocs.io/en/latest/?badge=latest) 
+[![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/Open-Source-Spatial-Clean-Cooking-Tool/OnStove/main?labpath=example%2FOnStove_notebook.ipynb)
 
 # <img src="https://user-images.githubusercontent.com/12953752/178504166-47821216-ea94-4241-8b4c-5c6f19a460ec.svg" alt="drawing" style="width:200px"/>
 
@@ -49,6 +50,7 @@ Through the jupyter_env.yaml in the env-folder using [Anaconda](https://www.anac
 ## How to cite
 
 ### Add when publication is out
+
 
 ## Credits
 
