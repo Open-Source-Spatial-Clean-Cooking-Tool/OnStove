@@ -4,9 +4,9 @@ import os
 onstove_path = config('ONSTOVE').format(os.getlogin())
 sys.path.append(onstove_path)
 import rasterio
+
 from onstove.raster import merge_rasters
-from onstove.layer import VectorLayer
-from onstove.layer import RasterLayer
+from onstove import VectorLayer, RasterLayer
 
 country = snakemake.params.country
 

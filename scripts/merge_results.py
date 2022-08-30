@@ -6,9 +6,7 @@ from decouple import config
 onstove_path = config('ONSTOVE').format(os.getlogin())
 sys.path.append(onstove_path)
 
-from onstove.layer import VectorLayer
-from onstove.onstove import OnStove
-from onstove.technology import Biomass, Electricity, Charcoal, LPG, Biogas, Technology
+from onstove import VectorLayer, OnStove, Biomass, Electricity, Charcoal, LPG, Biogas, Technology
 
 cmap = {"Biomass ICS (ND)": '#6F4070', "LPG": '#66C5CC', "Biomass": '#FFB6C1',
         "Biomass ICS (FD)": '#af04b3', "Pellets ICS (FD)": '#ef02f5',

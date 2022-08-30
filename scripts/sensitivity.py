@@ -6,7 +6,7 @@ import pandas as pd
 onstove_path = config('ONSTOVE').format(os.getlogin())
 sys.path.append(onstove_path)
 
-from onstove.onstove import OnStove
+from onstove import OnStove
 
 def run_model(country, model_file, sensitivity_file, tech_file, output_directory, file_name):
 	# 1. Read the OnSSTOVE model

@@ -16,9 +16,10 @@ from matplotlib.colors import ListedColormap, to_rgb, to_hex
 from scipy import ndimage
 from typing import Optional, Callable, Union
 
-from onstove import scale_bar as scale_bar_func
-from onstove import north_arrow as north_arrow_func
+from onstove.plotting_utils import scale_bar as scale_bar_func
+from onstove.plotting_utils import north_arrow as north_arrow_func
 from .raster import *
+
 
 def try_import():
     try:
@@ -96,7 +97,7 @@ class VectorLayer(_Layer):
     It uses a :doc:`GeoDataFrame<geopandas:docs/reference/geodataframe>` object  to store the georeferenced data in a
     tabular format. It also stores metadata as ``category`` and `name` of the layer, ``normalization`` and ``distance``
     algorithms to use among others. This data structure is used in both the ``MCA`` and the
-    :class:`OnStove<onstove.onstove.OnStove>` models and the :class:`onstove.onstove.DataProcessor` object.
+    :class:`OnStove<onstove.OnStove>` models and the :class:`onstove.DataProcessor` object.
 
     Parameters
     ----------
@@ -114,7 +115,7 @@ class VectorLayer(_Layer):
         :doc:`geopandas:docs/reference/api/geopandas.read_postgis`.
 
         .. seealso::
-            :meth:`read_layer` and :meth:`onstove.onstove.DataProcessor.set_postgres`
+            :meth:`read_layer` and :meth:`onstove.DataProcessor.set_postgres`
 
     query: str, optional
         A query string to filter the data. For more information refer to
@@ -126,10 +127,10 @@ class VectorLayer(_Layer):
     normalization: str, default 'MinMax'
         Sets the default normalization method to use when calling the :meth:`RasterLayer.normalize` for any
         associated :class:`RasterLayer` (for example a distance raster). This is relevant to calculate the
-        :attr:`demand_index<onstove.onstove.DataProcessor.demand_index>`,
-        :attr:`supply_index<onstove.onstove.DataProcessor.supply_index>`,
-        :attr:`clean_cooking_index<onstove.onstove.DataProcessor.clean_cooking_index>` and
-        :attr:`assistance_need_index<onstove.onstove.DataProcessor.assistance_need_index>` of the ``MCA`` model.
+        :attr:`demand_index<onstove.DataProcessor.demand_index>`,
+        :attr:`supply_index<onstove.DataProcessor.supply_index>`,
+        :attr:`clean_cooking_index<onstove.DataProcessor.clean_cooking_index>` and
+        :attr:`assistance_need_index<onstove.DataProcessor.assistance_need_index>` of the ``MCA`` model.
     inverse: str, optional
         Sets the default mode for the normalization algorithm (see :meth:`RasterLayer.normalize`).
     distance_method: str, default 'proximity'
@@ -619,7 +620,7 @@ class RasterLayer(_Layer):
     :class:`numpy.ndarray<numpy:reference/arrays.ndarray>` under the ``layer`` attribute, and the metadata of the layer
     in the ``meta`` attribute. It also stores additional metadata as ``category`` and ``name`` of the layer,
     ``normalization`` and ``distance`` algorithms to use among others. This data structure is used in both the ``MCA``
-    and the :class:`OnStove<onstove.onstove.OnStove>` models and the :class:`onstove.onstove.DataProcessor` object.
+    and the :class:`OnStove<onstove.OnStove>` models and the :class:`onstove.DataProcessor` object.
 
     Parameters
     ----------
@@ -636,7 +637,7 @@ class RasterLayer(_Layer):
         PostgreSQL connection if the layer needs to be read from a database.
 
         .. seealso::
-            :meth:`read_layer` and :meth:`onstove.onstove.DataProcessor.set_postgres`
+            :meth:`read_layer` and :meth:`onstove.DataProcessor.set_postgres`
 
         .. warning::
             The PostgreSQL database connection is under development for the :class:`RasterLayer` class and it will be
@@ -645,10 +646,10 @@ class RasterLayer(_Layer):
     normalization: str, default 'MinMax'
         Sets the default normalization method to use when calling the :meth:`RasterLayer.normalize`. This is relevant
         to calculate the
-        :attr:`demand_index<onstove.onstove.DataProcessor.demand_index>`,
-        :attr:`supply_index<onstove.onstove.DataProcessor.supply_index>`,
-        :attr:`clean_cooking_index<onstove.onstove.DataProcessor.clean_cooking_index>` and
-        :attr:`assistance_need_index<onstove.onstove.DataProcessor.assistance_need_index>` of the ``MCA`` model.
+        :attr:`demand_index<onstove.DataProcessor.demand_index>`,
+        :attr:`supply_index<onstove.DataProcessor.supply_index>`,
+        :attr:`clean_cooking_index<onstove.DataProcessor.clean_cooking_index>` and
+        :attr:`assistance_need_index<onstove.DataProcessor.assistance_need_index>` of the ``MCA`` model.
     inverse: str, optional
         Sets the default mode for the normalization algorithm (see :meth:`RasterLayer.normalize`).
     distance_method: str, default 'proximity'
@@ -1272,7 +1273,7 @@ class RasterLayer(_Layer):
     def get_quantiles(self, quantiles: tuple[float]) -> np.ndarray:
         """Gets the values of th specified quantiles.
 
-        It uses the :doc:`numpy:/reference/generated/numpy.quantile` function to return the quantiles of
+        It uses the :doc:`numpy:reference/generated/numpy.quantile` function to return the quantiles of
         the raster array.
 
         Parameters
@@ -1287,7 +1288,7 @@ class RasterLayer(_Layer):
 
         Notes
         -----
-        Refer to :doc:`numpy:/reference/generated/numpy.quantile` for more information.
+        Refer to :doc:`numpy:reference/generated/numpy.quantile` for more information.
         """
         x = self.data.flat
         x = x[~np.isnan(x)].copy()

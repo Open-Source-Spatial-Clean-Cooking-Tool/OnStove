@@ -1,6 +1,7 @@
 The OnStove technology classes
 ------------------------------
-.. currentmodule:: onstove.technology
+
+.. currentmodule:: onstove
 
 .. autosummary::
    :toctree: generated/
