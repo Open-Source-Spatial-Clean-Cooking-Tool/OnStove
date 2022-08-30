@@ -5,18 +5,18 @@ channels:
   - conda-forge
   - defaults
 dependencies:
-  - contextily==1.2.0
-  - dill==0.3.5.1
+  - contextily
+  - dill
   - geopandas
-  - jupyterlab==3.4.5
-  - matplotlib==3.5.3
+  - jupyterlab
+  - matplotlib
   - plotnine
-  - psutil==5.9.1
-  - psycopg2==2.9.3
-  - python-decouple==3.6
+  - psutil
+  - psycopg2
+  - python-decouple
   - rasterio
-  - rasterstats==0.17.0
-  - scikit-image==0.19.3
+  - rasterstats
+  - scikit-image
   - scikit-learn
-  - svgpathtools==1.5.1
-  - svgpath2mpl==1.0.0
+  - svgpathtools
+  - svgpath2mpl
