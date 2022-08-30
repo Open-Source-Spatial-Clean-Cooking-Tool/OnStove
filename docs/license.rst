@@ -1,4 +1,0 @@
-OnStove license
-===============
-
-.. include:: ../LICENSE
