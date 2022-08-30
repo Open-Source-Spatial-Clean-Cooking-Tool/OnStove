@@ -1,0 +1,15 @@
+contextily
+dill
+geopandas
+jupyterlab
+matplotlib
+plotnine
+psutil
+psycopg2
+python-decouple
+rasterio
+rasterstats
+scikit-image
+scikit-learn
+svgpathtools
+svgpath2mpl
