@@ -7,4 +7,5 @@ The model objects
    :toctree: generated/
    
    DataProcessor
+   MCA
    OnStove
