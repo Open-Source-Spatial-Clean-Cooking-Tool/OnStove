@@ -24,7 +24,7 @@ model.mask_layer = mask_layer
 
 # 4. Add a population base layer
 path = snakemake.input.population
-model.add_layer(category='Demographics', name='Population', layer_path=path, layer_type='raster', base_layer=True)
+model.add_layer(category='Demographics', name='Population', path=path, layer_type='raster', base_layer=True)
 model.population_to_dataframe()
 
 # 5. Calibrate population and urban/rural split

@@ -63,7 +63,8 @@ intersphinx_mapping = {
     'rasterio': ('https://rasterio.readthedocs.io/en/latest/', None),
     'numpy': ('https://numpy.org/doc/stable/', None),
     'matplotlib': ('https://matplotlib.org/stable', None),
-    'skimage': ('https://scikit-image.org/docs/stable/', None)
+    'skimage': ('https://scikit-image.org/docs/stable/', None),
+    'psycopg2': ('https://www.psycopg.org/docs/', None)
 }
 
 

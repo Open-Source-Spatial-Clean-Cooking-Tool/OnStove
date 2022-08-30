@@ -35,8 +35,7 @@ MCP_Geometric = try_import()
 
 
 class _Layer:
-    """
-    Template Layer initializing all common needed attributes.
+    """Template Layer initializing all common needed attributes.
     """
 
     def __init__(self, category: Optional[str] = None, name: Optional[str] = None,
@@ -91,8 +90,7 @@ class _Layer:
 
 
 class VectorLayer(_Layer):
-    """
-    A ``VectorLayer`` is an object used to read, manipulate and visualize GIS vector data.
+    """A ``VectorLayer`` is an object used to read, manipulate and visualize GIS vector data.
 
     It uses a :doc:`GeoDataFrame<geopandas:docs/reference/geodataframe>` object  to store the georeferenced data in a
     tabular format. It also stores metadata as ``category`` and `name` of the layer, ``normalization`` and ``distance``
@@ -115,14 +113,14 @@ class VectorLayer(_Layer):
         :doc:`geopandas:docs/reference/api/geopandas.read_postgis`.
 
         .. seealso::
-            :meth:`read_layer` and :meth:`onstove.DataProcessor.set_postgres`
+           :meth:`read_layer` and :meth:`onstove.DataProcessor.set_postgres`
 
     query: str, optional
         A query string to filter the data. For more information refer to
         :doc:`pandas:reference/api/pandas.DataFrame.query`.
 
         .. seealso::
-            :meth:`read_layer`
+           :meth:`read_layer`
 
     normalization: str, default 'MinMax'
         Sets the default normalization method to use when calling the :meth:`RasterLayer.normalize` for any
@@ -613,8 +611,7 @@ class VectorLayer(_Layer):
 
 
 class RasterLayer(_Layer):
-    """
-    A ``RasterLayer`` is an object used to read, manipulate and visualize GIS raster data.
+    """A ``RasterLayer`` is an object used to read, manipulate and visualize GIS raster data.
 
     It uses :doc:`rasterio<rasterio:index>` to read GIS raster data, and stores the output in a
     :class:`numpy.ndarray<numpy:reference/arrays.ndarray>` under the ``layer`` attribute, and the metadata of the layer
@@ -637,20 +634,20 @@ class RasterLayer(_Layer):
         PostgreSQL connection if the layer needs to be read from a database.
 
         .. seealso::
-            :meth:`read_layer` and :meth:`onstove.DataProcessor.set_postgres`
+           :meth:`read_layer` and :meth:`onstove.DataProcessor.set_postgres`
 
         .. warning::
-            The PostgreSQL database connection is under development for the :class:`RasterLayer` class and it will be
-            available in future releases.
+           The PostgreSQL database connection is under development for the :class:`RasterLayer` class and it will be
+           available in future releases.
 
     normalization: str, default 'MinMax'
         Sets the default normalization method to use when calling the :meth:`RasterLayer.normalize`. This is relevant
         to calculate the
-        :attr:`demand_index<onstove.DataProcessor.demand_index>`,
-        :attr:`supply_index<onstove.DataProcessor.supply_index>`,
-        :attr:`clean_cooking_index<onstove.DataProcessor.clean_cooking_index>` and
-        :attr:`assistance_need_index<onstove.DataProcessor.assistance_need_index>` of the ``MCA`` model.
-    inverse: str, optional
+        :attr:`demand_index<onstove.MCA.demand_index>`,
+        :attr:`supply_index<onstove.MCA.supply_index>`,
+        :attr:`clean_cooking_index<onstove.MCA.clean_cooking_index>` and
+        :attr:`assistance_need_index<onstove.MCA.assistance_need_index>` of the ``MCA`` model.
+    inverse: bool, default False
         Sets the default mode for the normalization algorithm (see :meth:`RasterLayer.normalize`).
     distance_method: str, default 'proximity'
         Sets the default distance algorithm to use when calling the :meth:`get_distance_raster` method.
@@ -669,7 +666,7 @@ class RasterLayer(_Layer):
         accepted methods refer to :doc:`rasterio.enums.Resampling<rasterio:api/rasterio.enums>`.
 
         .. seealso::
-            :meth:`reproject`
+           :meth:`reproject`
 
     window: instance of rasterio.windows.Window
         A :doc:`Window<rasterio:api/rasterio.windows>` is a view from a rectangular subset of a raster. It is used to
@@ -678,7 +675,7 @@ class RasterLayer(_Layer):
         raster layer.
 
         .. seealso::
-            :meth:`read_layer`
+           :meth:`read_layer`
 
     rescale: bool, default False
         Sets the default value for the ``rescale`` attribute. This attribute is used in the :meth:`align` method to
@@ -698,7 +695,7 @@ class RasterLayer(_Layer):
         List of :class:`RasterLayer` or :class:`VectorLayer` used to restrict areas from the distance calculations.
 
         .. warning::
-            The use of restrictions is under development and it will be available in future releases.
+           The use of restrictions is under development and it will be available in future releases.
 
     weight
         Value to weigh the layer's "importance" on the ``MCA`` model. It is initialized with a default value of 1.
@@ -707,7 +704,8 @@ class RasterLayer(_Layer):
         Contains the default style parameters for visualizing the layer.
 
         .. seealso:
-            :meth:`plot`
+           :meth:`plot`
+
     data
         :class:`numpy.ndarray<numpy:reference/arrays.ndarray> containing the data of the raster layer.
     """

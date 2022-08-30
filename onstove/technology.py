@@ -836,13 +836,11 @@ class LPG(Technology):
         The function uses the following attributes of model: ``diesel_per_hour``, ``diesel_cost``, ``travel_time``,
         ``truck_capacity``, ``efficiency`` and ``energy_content``.
 
-
         References
         ----------
         .. [1] Szabó, S., Bódis, K., Huld, T. & Moner-Girona, M. Energy solutions in rural Africa: mapping
-        electrification costs of distributed solar and diesel generation versus grid extension.
-        Environ. Res. Lett. 6, 034002 (2011).
-
+           electrification costs of distributed solar and diesel generation versus grid extension.
+           Environ. Res. Lett. 6, 034002 (2011).
 
         Parameters
         ----------
@@ -860,7 +858,7 @@ class LPG(Technology):
 
     def discount_fuel_cost(self, model: 'onstove.OnStove', relative: bool = True):
         """This method expands :meth:`discount_fuel_cost` when LPG is the stove assessed in order to ensure that the
-         transportation costs are included
+        transportation costs are included
 
         Parameters
         ----------
@@ -881,8 +879,8 @@ class LPG(Technology):
 
     def transport_emissions(self, model: 'onstove.OnStove'):
         """Calculates the emissions caused by the transportation of LPG. This is dependent on the diesel consumption of
-         the truck. Diesel consumption is assumed to be 14 l/h (14 l/100km). Each truck is assumed to transport 2,000
-         kg LPG
+        the truck. Diesel consumption is assumed to be 14 l/h (14 l/100km). Each truck is assumed to transport 2,000
+        kg LPG
 
         Emissions intensities and diesel density are taken from [1]_.
 
@@ -892,8 +890,8 @@ class LPG(Technology):
         References
         ----------
         .. [1] Ntziachristos, L. and Z. Samaras (2018), “1.A.3.b.i, 1.A.3.b.ii, 1.A.3.b.iii, 1.A.3.b.iv Passenger cars,
-        light commercial trucks, heavy-duty vehicles including buses and motor cycles”, in EMEP/EEA air pollutant
-        emission inventory guidebook 2016 – Update Jul. 2018
+           light commercial trucks, heavy-duty vehicles including buses and motor cycles”, in EMEP/EEA air pollutant
+           emission inventory guidebook 2016 – Update Jul. 2018
 
         Parameters
         ----------
@@ -1247,7 +1245,7 @@ class Biomass(Technology):
         References
         ----------
         .. [1] R. Bailis, R. Drigo, A. Ghilardi, O. Masera, The carbon footprint of traditional woodfuels,
-        Nature Clim Change. 5 (2015) 266–272. https://doi.org/10.1038/nclimate2491.
+           Nature Clim Change. 5 (2015) 266–272. https://doi.org/10.1038/nclimate2491.
         """
         intensity = self['co2_intensity']
         self['co2_intensity'] *= model.specs['fnrb']
@@ -1382,7 +1380,7 @@ class Charcoal(Technology):
         References
         ----------
         .. [1] R. Bailis, R. Drigo, A. Ghilardi, O. Masera, The carbon footprint of traditional woodfuels,
-        Nature Clim Change. 5 (2015) 266–272. https://doi.org/10.1038/nclimate2491.
+           Nature Clim Change. 5 (2015) 266–272. https://doi.org/10.1038/nclimate2491.
         """
         intensity = self['co2_intensity']
         self['co2_intensity'] *= model.specs['fnrb']

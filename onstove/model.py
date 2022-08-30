@@ -1,7 +1,7 @@
 """This module contains the model classes of OnStove."""
 
 import os
-from typing import Optional, Union
+from typing import Optional, Union, Callable
 
 import dill
 import pandas as pd
@@ -58,8 +58,7 @@ def timeit(func):
 
 
 class DataProcessor:
-    """
-    Class containing the methods to process the GIS datasets required for the :class:`MCA` and the :class:`OnStove`
+    """Class containing the methods to process the GIS datasets required for the :class:`MCA` and the :class:`OnStove`
     models.
 
     Parameters
@@ -67,18 +66,30 @@ class DataProcessor:
     project_crs: pyproj.CRS or int, optional
         The coordinate system of the project. The value can be anything accepted by
         :doc:`geopandas:docs/reference/api/geopandas.GeoDataFrame.to_crs`, such as an authority string (eg “EPSG:4326”),
-         a WKT string or an EPSG int. If defined all datasets added to the ``DataProcessor`` will be reprojected to
-         this crs when calling the :meth:`reproject_layers` method. If not defined then the ``crs`` of the
-         :attr:`base_layer` will be used.
+        a WKT string or an EPSG int. If defined all datasets added to the ``DataProcessor`` will be reprojected to
+        this crs when calling the :meth:`reproject_layers` method. If not defined then the ``crs`` of the
+        :attr:`base_layer` will be used.
     cell_size: float, optional
         The desired cell size of the raster layers. It should be defined in the units of the used ``crs``. If defined,
         it will be used to rescale all datasets when calling the :meth:`align` method. If not defined, the
         ``cell_size`` of the :attr:`base_layer` will be used.
     output_directory: str, default 'output'
         A folder path where to save the output datasets.
+
+    Attributes
+    ----------
+    layers: dict[str, dict[str, 'RasterLayer']]
+        All layers added to the ``DataProcessor`` using the :meth:`add_layer` method.
+    mask_layer: VectorLayer
+        Layer used to mask all datasets when calling the :meth:`mask_layers` method. It is set with the
+        :meth:`add_mask_layer` method.
+    conn: psycopg2.connect
+        Connection to a PostgreSQL database, set with the :meth:`set_postgres` method.
+    base_layer:
+        RasterLayer to use as template for all raster based data processes. For example, the :meth:`align_layers` uses
+        the grid cell of this raster to align all other rasters.
     """
-    conn = None
-    base_layer = None
+
 
     def __init__(self, project_crs: Optional[Union['pyproj.CRS', int]] = None,
                  cell_size: float = None, output_directory: str = 'output'):
@@ -90,8 +101,22 @@ class DataProcessor:
         self.cell_size = cell_size
         self.output_directory = output_directory
         self.mask_layer = None
+        self.conn = None
+        self.base_layer = None
 
-    def get_layers(self, layers):
+    def _get_layers(self, layers: dict[str, list[str]]) -> dict[str, dict[str, 'RasterLayer']]:
+        """Gets the ``dict(category: dict(name: layer))`` dictionary from the :attr:`layers` attribute.
+
+        Parameters
+        ----------
+        layers: dict
+            Dictionary of ``category``-``list of layer names`` pairs to extract from the :attr:`layers` attribute.
+
+        Returns
+        -------
+        dict[str, dict[str, 'RasterLayer']]
+            Dictionary with the ``category``, ``name``, ``layer`` pairs.
+        """
         if layers == 'all':
             _layers = self.layers
         else:
@@ -102,56 +127,129 @@ class DataProcessor:
                     _layers[category][name] = self.layers[category][name]
         return _layers
 
-    def set_postgres(self, db, POSTGRES_USER, POSTGRES_KEY):
+    def set_postgres(self, dbname: str, user: str, password: str):
         """
-        Sets a conecion to a PostgreSQL database
+        Wrapper function to set a connection to a PostgreSQL database using the :doc:`psycopg2.connect<psycopg2:module>`
+        class.
+
+        It stores the connection into the :attr:`conn` attribute, which can be used to read layers directly from the
+        database.
+
+        .. warning::
+           The PostgreSQL database connection is only functional for vector layers. Compatibility with raster layers
+           will be available in future releases.
 
         Parameters
         ----------
-        arg1 :
+        dbname: str
+            name of the database.
+        user: str
+            User name of the postgres connection.
+        password: str
+            Password to authenticate the user.
         """
-        self.conn = psycopg2.connect(database=db,
-                                     user=POSTGRES_USER,
-                                     password=POSTGRES_KEY)
+        self.conn = psycopg2.connect(dbname=dbname,
+                                     user=user,
+                                     password=password)
 
-    def add_layer(self, category, name, layer_path, layer_type, query=None,
-                  postgres=False, base_layer=False, resample='nearest',
-                  normalization=None, inverse=False, distance=None,
-                  distance_limit=float('inf'), window=False, rescale=False):
+    def add_layer(self, category: str, name: str, path: str, layer_type: str, query: str = None,
+                  postgres: bool = False, base_layer: bool = False, resample: str = 'nearest',
+                  normalization: str = 'MinMax', inverse: bool = False, distance_method: str = 'proximity',
+                  distance_limit: Optional[Callable[[np.ndarray], np.ndarray]] = None,
+                  window: Optional['rasterio.windows.Window'] = None, rescale: bool = False):
         """
         Adds a new layer (type VectorLayer or RasterLayer) to the MCA class
 
         Parameters
         ----------
-        arg1 :
-        """
+        category: str
+            Category of the layer. This parameter is useful to group the data into logical categories such as
+            "Demographics", "Resources" and "Infrastructure" or "Demand", "Supply" and "Others". This categories are
+            particularly relevant for the ``MCA`` analysis.
+        name: str
+            Name of the dataset.
+        path: str
+            Path to the layer.
+        layer_type: str
+            Layer type, `vector` or `raster`.
+        query: str, optional
+            A query string to filter the data. For more information refer to
+            :doc:`pandas:reference/api/pandas.DataFrame.query`.
 
+            .. note::
+               Only applicable for the `vector` ``layer_type``.
+
+        postgres: bool, default False
+            Whether to use a PostgreSQL database connection to read the layer from. The connection needs be already
+            created and stored in the :attr:`conn` attribute using the :meth:`set_postgres` method.
+        base_layer: bool, default False
+            Whether the layer should be used as a :attr:`base_layer` for the data processing.
+        resample: str, default 'nearest'
+            Sets the default method to use when resampling the dataset. Resampling occurs when changing the grid cell size
+            of the raster, thus the values of the cells need to be readjusted to reflect the new cell size. Several
+            sampling methods can be used, and which one to use is dependent on the nature of the data. For a list of the
+            accepted methods refer to :doc:`rasterio.enums.Resampling<rasterio:api/rasterio.enums>`.
+
+            .. seealso::
+               :class:`RasterLayer`
+
+        normalization: str, 'MinMax'
+            Sets the default normalization method to use when calling the :meth:`RasterLayer.normalize`. This is relevant
+            to calculate the
+            :attr:`demand_index<onstove.MCA.demand_index>`,
+            :attr:`supply_index<onstove.MCA.supply_index>`,
+            :attr:`clean_cooking_index<onstove.MCA.clean_cooking_index>` and
+            :attr:`assistance_need_index<onstove.MCA.assistance_need_index>` of the ``MCA`` model.
+
+            .. note::
+               If the ``layer_type`` is `vector`, this parameters will be passed to any raster dataset created from
+               the vector layer, for example see :attr:`VectorLayer.distance_raster`.
+
+        inverse: bool, default False
+            Sets the default mode for the normalization algorithm (see :meth:`RasterLayer.normalize`).
+
+            .. note::
+               If the ``layer_type`` is `vector`, this parameters will be passed to any raster dataset created from
+               the vector layer, for example see :attr:`VectorLayer.distance_raster`.
+
+        distance_method: str, default 'proximity'
+            Sets the default distance algorithm to use when calling the :meth:`get_distance_raster` method for the
+            layer, see :class:`VectorLayer` and :class:`RasterLayer`.
+        distance_limit: Callable object (function or lambda function) with a numpy array as input, optional
+            Defines a distance limit or range to consider when calculating the distance raster, see
+            :class:`VectorLayer` and :class:`RasterLayer`.
+        window: rasterio.windows.Window or gpd.GeoDataFrame
+            A window or bounding box to read in the data if ``layer_type`` is `raster` or `vector` respectively.
+            See the ``window`` parameter of :class:`RasterLayer` and the ``bbox`` parameter of :class:`VectorLayer`.
+        rescale: bool, default False
+            Sets the default value for the ``rescale`` attribute. See the ``rescale`` parameter of :class:`RasterLayer`.
+        """
         if layer_type == 'vector':
             if postgres:
-                layer = VectorLayer(category, name, layer_path, conn=self.conn,
+                layer = VectorLayer(category, name, path, conn=self.conn,
                                     normalization=normalization,
-                                    distance_method=distance,
+                                    distance_method=distance_method,
                                     distance_limit=distance_limit,
                                     inverse=inverse, query=query)
             else:
                 if window:
                     window = self.mask_layer.data
-                layer = VectorLayer(category, name, layer_path,
+                layer = VectorLayer(category, name, path,
                                     normalization=normalization,
-                                    distance_method=distance,
+                                    distance_method=distance_method,
                                     distance_limit=distance_limit,
                                     inverse=inverse, query=query, bbox=window)
 
         elif layer_type == 'raster':
             if window:
-                with rasterio.open(layer_path) as src:
+                with rasterio.open(path) as src:
                     src_crs = src.meta['crs']
                 if src_crs != self.mask_layer.data.crs:
                     bounds = transform_bounds(self.mask_layer.data.crs, src_crs, *self.mask_layer.bounds())
                 window = bounds
-            layer = RasterLayer(category, name, layer_path,
+            layer = RasterLayer(category, name, path,
                                 normalization=normalization, inverse=inverse,
-                                distance_method=distance, resample=resample,
+                                distance_method=distance_method, resample=resample,
                                 window=window, rescale=rescale)
 
             if base_layer:
@@ -178,27 +276,44 @@ class DataProcessor:
         else:
             self.layers[category] = {name: layer}
 
-    def add_mask_layer(self, category, name, layer_path, postgres=False, query=None):
+    def add_mask_layer(self, category: str, name: str, path: str,
+                       query: str = None, postgres: bool = False):
         """
         Adds a vector layer to self.mask_layer, which will be used to mask all
         other layers into is boundaries
+
+        Parameters
+        ----------
+        category: str
+            Category name of the dataset.
+        name: str
+            name of the dataset.
+        path: str
+            The relative path to the datafile. This file can be of any type that is accepted by
+            :doc:`geopandas:docs/reference/api/geopandas.read_file`.
+        query: str, optional
+            A query string to filter the data. For more information refer to
+            :doc:`pandas:reference/api/pandas.DataFrame.query`.
+        postgres: bool, default False
+            Whether to use a PostgreSQL database connection to read the layer from. The connection needs be already
+            created and stored in the :attr:`conn` attribute using the :meth:`set_postgres` method.
         """
         if postgres:
-            self.mask_layer = VectorLayer(category, name, layer_path, self.conn, query)
+            self.mask_layer = VectorLayer(category, name, path, self.conn, query)
         else:
-            self.mask_layer = VectorLayer(category, name, layer_path, query=query)
+            self.mask_layer = VectorLayer(category, name, path, query=query)
 
         if self.mask_layer.data.crs != self.project_crs:
             output_path = os.path.join(self.output_directory, category, name)
             self.mask_layer.reproject(self.project_crs, output_path)
 
-    def mask_layers(self, datasets: str ='all'):
+    def mask_layers(self, datasets: dict[str, list[str]] = 'all'):
         """
-        Uses the a mask layer in self.mask_layer to mask all other layers to its boundaries
+        Uses the a mask layer in ``self.mask_layer`` to mask all other layers to its boundaries.
 
         Parameters
         ----------
-        datasets: str, default 'all'
+        datasets: dictionary of ``category``-``list of layer names`` pairs, default 'all'
             Specifies which dataset(s) to clip.
 
         See also
@@ -208,7 +323,7 @@ class DataProcessor:
         if not isinstance(self.mask_layer, VectorLayer):
             raise Exception('The `mask_layer` attribute is empty, please first ' + \
                             'add a mask layer using the `.add_mask_layer` method.')
-        datasets = self.get_layers(datasets)
+        datasets = self._get_layers(datasets)
         for category, layers in datasets.items():
             for name, layer in layers.items():
                 output_path = os.path.join(self.output_directory,
@@ -224,21 +339,21 @@ class DataProcessor:
                 if isinstance(layer.distance_raster, RasterLayer):
                     layer.distance_raster.mask(self.mask_layer.data, output_path)
 
-    def align_layers(self, datasets: str ='all'):
+    def align_layers(self, datasets: dict[str, list[str]] = 'all'):
         """
-        Ensures that the coordinate sysmtem and resolution of the raster is the same as the base layer
+        Ensures that the coordinate system and resolution of the raster is the same as the base layer
 
         Parameters
         ----------
-        datasets: str, default 'all'
-            Specifies which dataset(s) to allign.
+        datasets: dictionary of ``category``-``list of layer names`` pairs, default 'all'
+            Specifies which dataset(s) to align.
 
         See also
         ----------
         add_layer
         """
 
-        datasets = self.get_layers(datasets)
+        datasets = self._get_layers(datasets)
         for category, layers in datasets.items():
             for name, layer in layers.items():
                 output_path = os.path.join(self.output_directory,
@@ -253,20 +368,21 @@ class DataProcessor:
                     if isinstance(layer.friction, RasterLayer):
                         layer.friction.align(self.base_layer.path, output_path)
 
-    def reproject_layers(self, datasets: str = 'all'):
+    def reproject_layers(self, datasets: dict[str, list[str]] = 'all'):
         """
-        Repreojects the layers specified by the user.
+        Reprojects the layers specified by the user.
 
         Parameters
-        ----------
-        datasets: str, default 'all'
+        ---------
+        datasets: dictionary of ``category``-``list of layer names`` pairs, default 'all'
             Specifies which dataset(s) to reproject.
 
         See also
         ----------
-        layer.reproject,
+        RasterLayer.reproject
+        VectorLayer.reproject
         """
-        datasets = self.get_layers(datasets)
+        datasets = self._get_layers(datasets)
         for category, layers in datasets.items():
             for name, layer in layers.items():
                 output_path = os.path.join(self.output_directory,
@@ -280,7 +396,7 @@ class DataProcessor:
         """
         Goes through all layer and call their `.distance_raster` method
         """
-        datasets = self.get_layers(datasets)
+        datasets = self._get_layers(datasets)
         for category, layers in datasets.items():
             for name, layer in layers.items():
                 output_path = os.path.join(self.output_directory,
@@ -292,11 +408,22 @@ class DataProcessor:
                 #     layer.friction.get_distance_raster(self.base_layer.path,
                 #                                        output_path, self.mask_layer.layer)
 
+    def normalize_rasters(self, datasets='all', buffer=False):
+        """
+        Goes through all layer and call their `.normalize` method
+        """
+        datasets = self._get_layers(datasets)
+        for category, layers in datasets.items():
+            for name, layer in layers.items():
+                output_path = os.path.join(self.output_directory,
+                                           category, name)
+                layer.distance_raster.normalize(output_path, self.mask_layer.data, buffer=buffer)
+
     def save_datasets(self, datasets='all'):
         """
         Saves all layers that have not been previously saved
         """
-        datasets = self.get_layers(datasets)
+        datasets = self._get_layers(datasets)
         for category, layers in datasets.items():
             for name, layer in layers.items():
                 output_path = os.path.join(self.output_directory,
@@ -304,12 +431,14 @@ class DataProcessor:
                 layer.save(output_path)
 
     def to_pickle(self, name):
+        """Saves the model as a pickle."""
         self.conn = None
         with open(os.path.join(self.output_directory, name), "wb") as f:
             dill.dump(self, f)
 
     @classmethod
     def read_model(cls, path):
+        """Reads a model from a pickle"""
         with open(path, "rb") as f:
             model = dill.load(f)
         return model
@@ -324,6 +453,11 @@ class MCA(DataProcessor):
     clean cooking technologies can be expanded or areas in need of financial assistance or lack of infrastructure.
     In brief, it identifies priority areas of action from the user perspective.
 
+    Parameters
+    ----------
+    **kwargs: dict of parameters
+        Parameters from the :class:`DataProcessor` parent class.
+
     Attributes
     ----------
     demand_index
@@ -332,37 +466,12 @@ class MCA(DataProcessor):
     assistance_need_index
     """
 
-    supply_index = None
-    clean_cooking_index = None
-    assistance_need_index = None
-
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.demand_index = None
-
-    def normalize_rasters(self, datasets='all', buffer=False):
-        """
-        Goes through all layer and call their `.normalize` method
-        """
-        datasets = self.get_layers(datasets)
-        for category, layers in datasets.items():
-            for name, layer in layers.items():
-                output_path = os.path.join(self.output_directory,
-                                           category, name)
-                layer.distance_raster.normalize(output_path, self.mask_layer.data, buffer=buffer)
-
-    @staticmethod
-    def index(layers):
-        data = {}
-        for k, i in layers.items():
-            data.update(i)
-        weights = []
-        rasters = []
-        for name, layer in data.items():
-            rasters.append(layer.weight * layer.distance_raster.normalized.data)
-            weights.append(layer.weight)
-
-        return sum(rasters) / sum(weights)
+        self.supply_index = None
+        self.clean_cooking_index = None
+        self.assistance_need_index = None
 
     @property
     def demand_index(self):
@@ -449,9 +558,9 @@ class MCA(DataProcessor):
         get_assistance_need_index
         """
         if self._clean_cooking_index is None:
-            raise ValueError('No `clean_cooking_index` was found, please calculate a supply index by calling the '
-                             '`get_clean_cooking_index()` method with the relevant list of `datasets`.')
-        return self.clean_cooking_index
+            raise ValueError('No `clean_cooking_index` was found, please calculate a clean cooking index by calling '
+                             'the `get_clean_cooking_index()` method with the relevant list of `datasets`.')
+        return self._clean_cooking_index
 
     @clean_cooking_index.setter
     def clean_cooking_index(self, raster):
@@ -460,11 +569,56 @@ class MCA(DataProcessor):
         if raster is None:
             self._clean_cooking_index = None
         else:
-            raise ValueError('The supply index needs to be of class `RasterLayer`.')
+            raise ValueError('The clean cooking index needs to be of class `RasterLayer`.')
+
+    @property
+    def assistance_need_index(self):
+        """The Clean Cooking Index measures where demand and supply are simultaneously higher.
+
+        This index is generated by calling the :meth:`get_clean_cooking_index` method, which produces an aggregated
+        measure of the :attr:`demand_index` and the :attr:`supply_index`. Areas with high demand and high supply get
+        a higher clean cooking index.
+
+        See also
+        --------
+        get_clean_cooking_index
+        demand_index
+        get_demand_index
+        supply_index
+        get_supply_index
+        assistance_need_index
+        get_assistance_need_index
+        """
+        if self._assistance_need_index is None:
+            raise ValueError('No `assistance_need_index` was found, please calculate an assistance need index by '
+                             'calling the `get_assistance_need_index()` method with the relevant list of `datasets`.')
+        return self._assistance_need_index
+
+    @assistance_need_index.setter
+    def assistance_need_index(self, raster):
+        if isinstance(raster, RasterLayer):
+            self._assistance_need_index = raster
+        if raster is None:
+            self._assistance_need_index = None
+        else:
+            raise ValueError('The assistance need index needs to be of class `RasterLayer`.')
+
+    @staticmethod
+    def index(layers):
+        data = {}
+        for k, i in layers.items():
+            data.update(i)
+        weights = []
+        rasters = []
+        for name, layer in data.items():
+            rasters.append(layer.weight * layer.distance_raster.normalized.data)
+            weights.append(layer.weight)
+
+        return sum(rasters) / sum(weights)
 
     def get_demand_index(self, datasets='all', buffer=False):
         self.normalize_rasters(datasets=datasets, buffer=buffer)
-        datasets = self.get_layers(datasets)
+        datasets = self._get_layers(datasets)
         layer = RasterLayer('Indexes', 'Demand_index', normalization='MinMax')
         layer.data = self.index(datasets)
         layer.meta = self.base_layer.meta
@@ -477,7 +631,7 @@ class MCA(DataProcessor):
 
     def get_supply_index(self, datasets='all', buffer=False):
         self.normalize_rasters(datasets=datasets, buffer=buffer)
-        datasets = self.get_layers(datasets)
+        datasets = self._get_layers(datasets)
         layer = RasterLayer('Indexes', 'Supply index', normalization='MinMax')
         layer.data = self.index(datasets)
         layer.meta = self.base_layer.meta
@@ -502,7 +656,7 @@ class MCA(DataProcessor):
 
     def get_assistance_need_index(self, datasets='all', buffer=False):
         self.normalize_rasters(datasets=datasets, buffer=buffer)
-        datasets = self.get_layers(datasets)
+        datasets = self._get_layers(datasets)
         layer = RasterLayer('Indexes', 'Assistance need index', normalization='MinMax')
         layer.data = self.index(datasets)
         layer.meta = self.base_layer.meta
@@ -567,15 +721,45 @@ class MCA(DataProcessor):
 
 class OnStove(DataProcessor):
     """
-    Class containing the methods to perform a geospatial max-benefit analysis
-    on clean cooking access
+    The ``OnStove`` class is used to perform a geospatial cost-benefit analysis on clean cooking access.
+
+    OnStove determines the net-benefits of cooking with different stoves across an area with regards to capital, fuel,
+    and operation and maintenance costs, as well as benefits from reduced morbidity, reduced mortality, time saved and
+    emissions avoided. The model identifies the stove that can provide cooking in each settlement achieving the highest
+    net-benefit.
+
+    .. note::
+       The ``OnStove`` class inherits all functionalities from the :class:`DataProcessor` class.
+
+    Parameters
+    ----------
+    project_crs: pyproj.CRS or int, optional
+        See the :class:`DataProcessor` class for details.
+    cell_size: float, optional
+        See the :class:`DataProcessor` class for details.
+    output_directory: str, default 'output'
+        A folder path where to save the output datasets.
+
+    Attributes
+    ----------
+    rows
+    cols
+    specs
+    techs
+    base_fuel
+    energy_per_meal
+    gwp
+    clean_cooking_access_u
+    clean_cooking_access_r
+    combined_weight
     """
     conn = None
     base_layer = None
 
     population = 'path_to_file'
 
-    def __init__(self, project_crs=None, cell_size=None, output_directory='output'):
+    def __init__(self, project_crs: Optional[Union['pyproj.CRS', int]] = None,
+                 cell_size: float = None, output_directory: str = 'output'):
         """
         Initializes the class and sets an empty layers dictionaries.
         """
@@ -589,26 +773,9 @@ class OnStove(DataProcessor):
         self.energy_per_meal = 3.64  # MJ
         # TODO: remove from here and make it an input in the specs file
         self.gwp = {'co2': 1, 'ch4': 25, 'n2o': 298, 'co': 2, 'bc': 900, 'oc': -46}
-
-    def get_layers(self, layers):
-        if layers == 'all':
-            layers = self.layers
-        else:
-            layers = {category: {name: self.layers[category][name]} for category, names in layers.items() for name in
-                      names}
-        return layers
-
-    def set_postgres(self, db, POSTGRES_USER, POSTGRES_KEY):
-        """
-        Sets a conecion to a PostgreSQL database
-
-        Parameters
-        ----------
-        arg1 : 
-        """
-        self.conn = psycopg2.connect(database=db,
-                                     user=POSTGRES_USER,
-                                     password=POSTGRES_KEY)
+        self.clean_cooking_access_u = None
+        self.clean_cooking_access_r = None
+        self.combined_weight = 0
 
     def read_scenario_data(self, path_to_config: str, delimiter=','):
         """Reads the scenario data into a dictionary
@@ -633,7 +800,7 @@ class OnStove(DataProcessor):
             self.specs = config
         else:
             self.specs.update(config)
-    
+
     def techshare_sumtoone(self):
         """This function checks if the sum of shares in the technology dictionary is 1.0.
 
@@ -653,14 +820,13 @@ class OnStove(DataProcessor):
 
         if sharesumrural != 1:
             for item in self.techs.values():
-                item.current_share_rural = item.current_share_rural/sharesumrural
+                item.current_share_rural = item.current_share_rural / sharesumrural
 
         sharesumurban = sum(item['current_share_urban'] for item in self.techs.values())
-        
+
         if sharesumurban != 1:
             for item in self.techs.values():
-                item.current_share_urban = item.current_share_urban/sharesumurban
-       
+                item.current_share_urban = item.current_share_urban / sharesumurban
 
     def set_base_fuel(self, techs: list = None):
         """
@@ -1102,7 +1268,7 @@ class OnStove(DataProcessor):
 
         for benefit, net in zip(benefits_cols, net_benefit_cols):
             self.gdf[net + '_temp'] = self.gdf[net]
-            if restriction in [True, 'yes', 'y','Y', 'Yes', 'PositiveBenefits', 'Positive_Benefits']:
+            if restriction in [True, 'yes', 'y', 'Y', 'Yes', 'PositiveBenefits', 'Positive_Benefits']:
                 self.gdf.loc[self.gdf[benefit] < 0, net + '_temp'] = np.nan
 
         temps = [col for col in self.gdf if '_temp' in col]
@@ -1385,7 +1551,7 @@ class OnStove(DataProcessor):
             if isinstance(labels, dict):
                 dff = self.re_name(dff, labels, variable)
             codes = {tech: i for i, tech in enumerate(dff[variable].unique())}
-			
+
             if isinstance(cmap, dict):
                 cmap = {i: cmap[tech] for i, tech in enumerate(dff[variable].unique())}
 
@@ -1416,7 +1582,7 @@ class OnStove(DataProcessor):
                 meta = self.base_layer.meta
             else:
                 layer, meta = self.points_to_raster(dff, variable, dtype='float32',
-                                                            nodata=np.nan)
+                                                    nodata=np.nan)
             variable = variable + '_' + metric
         if name is not None:
             variable = name
@@ -1672,7 +1838,7 @@ class OnStove(DataProcessor):
             tech = self.techs[name]
             total_hh = tech.households[settlement].sum()
             inv = np.nansum((tech.discounted_investments[settlement] -
-                       tech.discounted_salvage_cost[settlement]) * tech.households[settlement]) / total_hh
+                             tech.discounted_salvage_cost[settlement]) * tech.households[settlement]) / total_hh
             fuel = np.nansum(tech.discounted_fuel_cost[settlement] * tech.households[settlement]) / total_hh
             om = np.nansum(tech.discounted_om_costs[settlement] * tech.households[settlement]) / total_hh
             health = np.nansum((tech.distributed_morbidity[settlement] +
@@ -1699,8 +1865,6 @@ class OnStove(DataProcessor):
             cmap = {'Health costs avoided': '#542788', 'Investment costs': '#b35806',
                     'Fuel costs': '#f1a340', 'Emissions costs saved': '#998ec3',
                     'O&M costs': '#fee0b6', 'Opportunity cost gained': '#d8daeb'}
-
-
 
         value_vars = ['Health costs avoided',
                       'Emissions costs saved',
@@ -1733,7 +1897,7 @@ class OnStove(DataProcessor):
              + labs(x='', y='USD', fill='Cost / Benefit')
              + facet_wrap('Settlement',
                           nrow=2,
-                          #scales='free'
+                          # scales='free'
                           )
              )
 
@@ -1786,7 +1950,7 @@ class OnStove(DataProcessor):
                     tech_list = []
                     for name, tech in self.techs.items():
                         if tech.benefits is not None:
-                        # if 'net_benefit' in tech.__dict__.keys():
+                            # if 'net_benefit' in tech.__dict__.keys():
                             tech_list.append(name)
                     x = 'tech'
                     if variable == 'net_benefit':
