@@ -1,3 +1,4 @@
+name: onstovejupyter
 channels:
   - bioconda
   - jmcmurray
