@@ -10,7 +10,22 @@ OnStove is developed by the division of Energy Systems at KTH together with part
 
 OnStove produces scenarios depicting the “true” cost of clean cooking. The scenarios benefits and costs of produced by the tool are to be interpreted as the benefits and costs one could expect if the clean cooking transition was to happen now (overnight change). Results from OnStove are to be interpreted as an upper bound of net-benefits following a switch to cleaner stoves. OnStove can be used by planners and policy makers to identify whether various combinations of interventions in their settings would be worth the potential benefits that could be captured
 
-**Requirements**: [contextily](https://contextily.readthedocs.io/en/latest/), [dill](https://dill.readthedocs.io/en/latest/dill.html), [geopandas](https://geopandas.org/en/stable/), [json](https://docs.python.org/3/library/json.html), [jupyterlab](https://jupyterlab.readthedocs.io/en/stable/), [matplotlib](https://matplotlib.org/), [pandas](https://pandas.pydata.org/), [plotnine](https://plotnine.readthedocs.io/en/stable/), [psycopg2](https://www.psycopg.org/docs/), [psutil](https://psutil.readthedocs.io/en/latest/), [python-decouple](https://pypi.org/project/python-decouple/), [rasterio](https://rasterio.readthedocs.io/en/latest/), [rasterstats](https://pythonhosted.org/rasterstats/manual.html), [scikit-learn](https://scikit-learn.org/stable/) and [scikit-image](https://scikit-image.org/)
+**Requirements**: 
+* [contextily](https://contextily.readthedocs.io/en/latest/)
+* [dill](https://dill.readthedocs.io/en/latest/dill.html)
+* [geopandas](https://geopandas.org/en/stable/)
+* [json](https://docs.python.org/3/library/json.html)
+* [jupyterlab](https://jupyterlab.readthedocs.io/en/stable/)
+* [matplotlib](https://matplotlib.org/)
+* [pandas](https://pandas.pydata.org/)
+* [plotnine](https://plotnine.readthedocs.io/en/stable/)
+* [psycopg2](https://www.psycopg.org/docs/)
+* [psutil](https://psutil.readthedocs.io/en/latest/)
+* [python-decouple](https://pypi.org/project/python-decouple/)
+* [rasterio](https://rasterio.readthedocs.io/en/latest/)
+* [rasterstats](https://pythonhosted.org/rasterstats/manual.html)
+* [scikit-learn](https://scikit-learn.org/stable/)
+* [scikit-image](https://scikit-image.org/)
 
 **Installation** 
 
