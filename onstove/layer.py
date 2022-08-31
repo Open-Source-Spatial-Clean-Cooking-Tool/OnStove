@@ -35,8 +35,7 @@ MCP_Geometric = try_import()
 
 
 class _Layer:
-    """
-    Template Layer initializing all common needed attributes.
+    """Template Layer initializing all common needed attributes.
     """
 
     def __init__(self, category: Optional[str] = None, name: Optional[str] = None,
@@ -91,8 +90,7 @@ class _Layer:
 
 
 class VectorLayer(_Layer):
-    """
-    A ``VectorLayer`` is an object used to read, manipulate and visualize GIS vector data.
+    """A ``VectorLayer`` is an object used to read, manipulate and visualize GIS vector data.
 
     It uses a :doc:`GeoDataFrame<geopandas:docs/reference/geodataframe>` object  to store the georeferenced data in a
     tabular format. It also stores metadata as ``category`` and `name` of the layer, ``normalization`` and ``distance``
@@ -115,14 +113,14 @@ class VectorLayer(_Layer):
         :doc:`geopandas:docs/reference/api/geopandas.read_postgis`.
 
         .. seealso::
-            :meth:`read_layer` and :meth:`onstove.DataProcessor.set_postgres`
+           :meth:`read_layer` and :meth:`onstove.DataProcessor.set_postgres`
 
     query: str, optional
         A query string to filter the data. For more information refer to
         :doc:`pandas:reference/api/pandas.DataFrame.query`.
 
         .. seealso::
-            :meth:`read_layer`
+           :meth:`read_layer`
 
     normalization: str, default 'MinMax'
         Sets the default normalization method to use when calling the :meth:`RasterLayer.normalize` for any
@@ -258,7 +256,7 @@ class VectorLayer(_Layer):
         output_path: str, optional
             A folder path where to save the output dataset. If not defined then the clipped dataset is not saved.
         """
-        self.data = gpd.clip(self.data, mask_layer.to_crs(self.data.crs))
+        self.data = gpd.clip(self.data, mask_layer.data.to_crs(self.data.crs))
         if isinstance(output_path, str):
             self.save(output_path)
 
@@ -324,13 +322,14 @@ class VectorLayer(_Layer):
                              'must be either a raster file path or a '
                              f'RasterLayer object. {type(base_layer)} was given instead.')
 
-        data, meta = self.rasterize(value=1, width=width, height=height,
+        rasterized = self.rasterize(value=1, width=width, height=height,
                                     transform=transform)
 
-        data = ndimage.distance_transform_edt(1 - data.astype(int),
-                                              sampling=[meta['transform'][0], -meta['transform'][4]])
+        data = ndimage.distance_transform_edt(1 - rasterized.data.astype(int),
+                                              sampling=[rasterized.meta['transform'][0],
+                                                        -rasterized.meta['transform'][4]])
 
-        meta.update(nodata=np.nan, dtype='float32')
+        rasterized.meta.update(nodata=np.nan, dtype='float32')
 
         distance_raster = RasterLayer(self.category,
                                       self.name + '_dist',
@@ -338,8 +337,7 @@ class VectorLayer(_Layer):
                                       inverse=self.inverse,
                                       normalization=self.normalization)
         distance_raster.data = data
-        distance_raster.meta = meta
-        distance_raster.bounds = bounds
+        distance_raster.meta = rasterized.meta
 
         if output_path:
             distance_raster.save(output_path)
@@ -487,7 +485,7 @@ class VectorLayer(_Layer):
             if (width is None) or (height is None):
                 height, width = RasterLayer.shape_from_cell(bounds, cell_height, cell_width)
             transform = rasterio.transform.from_bounds(*bounds, width, height)
-        else:
+        elif width is None or height is None:
             height, width = RasterLayer.shape_from_cell(bounds, transform[0], -transform[4])
 
         if attribute:
@@ -511,7 +509,7 @@ class VectorLayer(_Layer):
                     height=height,
                     transform=transform,
                     nodata=nodata)
-        raster = RasterLayer()
+        raster = RasterLayer(name=self.name)
         raster.data = rasterized
         raster.meta = meta
         # raster.bounds = bounds
@@ -613,8 +611,7 @@ class VectorLayer(_Layer):
 
 
 class RasterLayer(_Layer):
-    """
-    A ``RasterLayer`` is an object used to read, manipulate and visualize GIS raster data.
+    """A ``RasterLayer`` is an object used to read, manipulate and visualize GIS raster data.
 
     It uses :doc:`rasterio<rasterio:index>` to read GIS raster data, and stores the output in a
     :class:`numpy.ndarray<numpy:reference/arrays.ndarray>` under the ``layer`` attribute, and the metadata of the layer
@@ -637,20 +634,20 @@ class RasterLayer(_Layer):
         PostgreSQL connection if the layer needs to be read from a database.
 
         .. seealso::
-            :meth:`read_layer` and :meth:`onstove.DataProcessor.set_postgres`
+           :meth:`read_layer` and :meth:`onstove.DataProcessor.set_postgres`
 
         .. warning::
-            The PostgreSQL database connection is under development for the :class:`RasterLayer` class and it will be
-            available in future releases.
+           The PostgreSQL database connection is under development for the :class:`RasterLayer` class and it will be
+           available in future releases.
 
     normalization: str, default 'MinMax'
         Sets the default normalization method to use when calling the :meth:`RasterLayer.normalize`. This is relevant
         to calculate the
-        :attr:`demand_index<onstove.DataProcessor.demand_index>`,
-        :attr:`supply_index<onstove.DataProcessor.supply_index>`,
-        :attr:`clean_cooking_index<onstove.DataProcessor.clean_cooking_index>` and
-        :attr:`assistance_need_index<onstove.DataProcessor.assistance_need_index>` of the ``MCA`` model.
-    inverse: str, optional
+        :attr:`demand_index<onstove.MCA.demand_index>`,
+        :attr:`supply_index<onstove.MCA.supply_index>`,
+        :attr:`clean_cooking_index<onstove.MCA.clean_cooking_index>` and
+        :attr:`assistance_need_index<onstove.MCA.assistance_need_index>` of the ``MCA`` model.
+    inverse: bool, default False
         Sets the default mode for the normalization algorithm (see :meth:`RasterLayer.normalize`).
     distance_method: str, default 'proximity'
         Sets the default distance algorithm to use when calling the :meth:`get_distance_raster` method.
@@ -669,7 +666,7 @@ class RasterLayer(_Layer):
         accepted methods refer to :doc:`rasterio.enums.Resampling<rasterio:api/rasterio.enums>`.
 
         .. seealso::
-            :meth:`reproject`
+           :meth:`reproject`
 
     window: instance of rasterio.windows.Window
         A :doc:`Window<rasterio:api/rasterio.windows>` is a view from a rectangular subset of a raster. It is used to
@@ -678,7 +675,7 @@ class RasterLayer(_Layer):
         raster layer.
 
         .. seealso::
-            :meth:`read_layer`
+           :meth:`read_layer`
 
     rescale: bool, default False
         Sets the default value for the ``rescale`` attribute. This attribute is used in the :meth:`align` method to
@@ -698,7 +695,7 @@ class RasterLayer(_Layer):
         List of :class:`RasterLayer` or :class:`VectorLayer` used to restrict areas from the distance calculations.
 
         .. warning::
-            The use of restrictions is under development and it will be available in future releases.
+           The use of restrictions is under development and it will be available in future releases.
 
     weight
         Value to weigh the layer's "importance" on the ``MCA`` model. It is initialized with a default value of 1.
@@ -707,7 +704,8 @@ class RasterLayer(_Layer):
         Contains the default style parameters for visualizing the layer.
 
         .. seealso:
-            :meth:`plot`
+           :meth:`plot`
+
     data
         :class:`numpy.ndarray<numpy:reference/arrays.ndarray> containing the data of the raster layer.
     """
@@ -812,7 +810,7 @@ class RasterLayer(_Layer):
         return height, width
 
     def mask(self, mask_layer: VectorLayer, output_path: Optional[str] = None,
-             crop: bool = True, all_touched: bool = True):
+             crop: bool = False, all_touched: bool = False):
         """Creates a masked version of the layer, based on an input shape given by a :class:`VectorLayer`.
 
         It uses the :doc:`rasterio.mas.mask<rasterio:api/rasterio.mask>` function to create a masked version of the
@@ -831,11 +829,11 @@ class RasterLayer(_Layer):
              Include a pixel in the mask if it touches any of the shapes. If False, include a pixel only if its center
              is within one of the shapes, or if it is selected by Bresenham’s line algorithm.
         """
-        shape_mask, meta = mask_layer.rasterize(value=1, transform=self.meta['transform'],
-                                                width=self.meta['width'], height=self.meta['height'],
-                                                nodata=0, all_touched=all_touched)
+        rasterized_mask = mask_layer.rasterize(value=1, transform=self.meta['transform'],
+                                               width=self.meta['width'], height=self.meta['height'],
+                                               nodata=0, all_touched=all_touched)
 
-        self.data[shape_mask == 0] = self.meta['nodata']
+        self.data[rasterized_mask.data == 0] = self.meta['nodata']
 
         if crop:
             total_bounds = mask_layer.data['geometry'].total_bounds
@@ -1229,8 +1227,7 @@ class RasterLayer(_Layer):
             meta['nodata'] = np.nan
             factor = (cell_size ** 2) / (transform[0] ** 2)
             data *= factor
-
-        if output_path:
+        if output_path is not None:
             self.save(output_path)
         if inplace:
             self.data = data

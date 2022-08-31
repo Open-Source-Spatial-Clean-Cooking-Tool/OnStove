@@ -92,7 +92,7 @@ index = {str(g): i for i, g in enumerate(africa.gdf['geometry'].unique())}
 africa.gdf['index'] = [index[str(i)] for i in africa.gdf['geometry']]
 
 print('Creating base layer...')
-africa.base_layer_from_bounds(africa.mask_layer.bounds, 1000, 1000)
+africa._base_layer_from_bounds(africa.mask_layer.bounds, 1000, 1000)
 
 print('Saving graphs...')
 africa.plot_split(cmap=cmap, labels=labels, save=True, height=1.5, width=3.5)

@@ -1,7 +1,7 @@
 """This module contains the model classes of OnStove."""
 
 import os
-from typing import Optional, Union
+from typing import Optional, Union, Callable
 
 import dill
 import pandas as pd
@@ -58,8 +58,7 @@ def timeit(func):
 
 
 class DataProcessor:
-    """
-    Class containing the methods to process the GIS datasets required for the :class:`MCA` and the :class:`OnStove`
+    """Class containing the methods to process the GIS datasets required for the :class:`MCA` and the :class:`OnStove`
     models.
 
     Parameters
@@ -67,21 +66,32 @@ class DataProcessor:
     project_crs: pyproj.CRS or int, optional
         The coordinate system of the project. The value can be anything accepted by
         :doc:`geopandas:docs/reference/api/geopandas.GeoDataFrame.to_crs`, such as an authority string (eg “EPSG:4326”),
-         a WKT string or an EPSG int. If defined all datasets added to the ``DataProcessor`` will be reprojected to
-         this crs when calling the :meth:`reproject_layers` method. If not defined then the ``crs`` of the
-         :attr:`base_layer` will be used.
-    cell_size: float, optional
+        a WKT string or an EPSG int. If defined all datasets added to the ``DataProcessor`` will be reprojected to
+        this crs when calling the :meth:`reproject_layers` method. If not defined then the ``crs`` of the
+        :attr:`base_layer` will be used.
+    cell_size: tuple of float (width, height), optional
         The desired cell size of the raster layers. It should be defined in the units of the used ``crs``. If defined,
         it will be used to rescale all datasets when calling the :meth:`align` method. If not defined, the
         ``cell_size`` of the :attr:`base_layer` will be used.
     output_directory: str, default 'output'
         A folder path where to save the output datasets.
+
+    Attributes
+    ----------
+    layers: dict[str, dict[str, 'RasterLayer']]
+        All layers added to the ``DataProcessor`` using the :meth:`add_layer` method.
+    mask_layer: VectorLayer
+        Layer used to mask all datasets when calling the :meth:`mask_layers` method. It is set with the
+        :meth:`add_mask_layer` method.
+    conn: psycopg2.connect
+        Connection to a PostgreSQL database, set with the :meth:`set_postgres` method.
+    base_layer:
+        RasterLayer to use as template for all raster based data processes. For example, the :meth:`align_layers` uses
+        the grid cell of this raster to align all other rasters.
     """
-    conn = None
-    base_layer = None
 
     def __init__(self, project_crs: Optional[Union['pyproj.CRS', int]] = None,
-                 cell_size: float = None, output_directory: str = 'output'):
+                 cell_size: tuple[float] = None, output_directory: str = 'output'):
         """
         Initializes the class and sets an empty layers dictionaries.
         """
@@ -90,8 +100,22 @@ class DataProcessor:
         self.cell_size = cell_size
         self.output_directory = output_directory
         self.mask_layer = None
+        self.conn = None
+        self.base_layer = None
 
-    def get_layers(self, layers):
+    def _get_layers(self, layers: dict[str, list[str]]) -> dict[str, dict[str, 'RasterLayer']]:
+        """Gets the ``dict(category: dict(name: layer))`` dictionary from the :attr:`layers` attribute.
+
+        Parameters
+        ----------
+        layers: dict
+            Dictionary of ``category``-``list of layer names`` pairs to extract from the :attr:`layers` attribute.
+
+        Returns
+        -------
+        dict[str, dict[str, 'RasterLayer']]
+            Dictionary with the ``category``, ``name``, ``layer`` pairs.
+        """
         if layers == 'all':
             _layers = self.layers
         else:
@@ -102,56 +126,129 @@ class DataProcessor:
                     _layers[category][name] = self.layers[category][name]
         return _layers
 
-    def set_postgres(self, db, POSTGRES_USER, POSTGRES_KEY):
+    def set_postgres(self, dbname: str, user: str, password: str):
         """
-        Sets a conecion to a PostgreSQL database
+        Wrapper function to set a connection to a PostgreSQL database using the :doc:`psycopg2.connect<psycopg2:module>`
+        class.
+
+        It stores the connection into the :attr:`conn` attribute, which can be used to read layers directly from the
+        database.
+
+        .. warning::
+           The PostgreSQL database connection is only functional for vector layers. Compatibility with raster layers
+           will be available in future releases.
 
         Parameters
         ----------
-        arg1 :
+        dbname: str
+            name of the database.
+        user: str
+            User name of the postgres connection.
+        password: str
+            Password to authenticate the user.
         """
-        self.conn = psycopg2.connect(database=db,
-                                     user=POSTGRES_USER,
-                                     password=POSTGRES_KEY)
+        self.conn = psycopg2.connect(dbname=dbname,
+                                     user=user,
+                                     password=password)
 
-    def add_layer(self, category, name, layer_path, layer_type, query=None,
-                  postgres=False, base_layer=False, resample='nearest',
-                  normalization=None, inverse=False, distance=None,
-                  distance_limit=float('inf'), window=False, rescale=False):
+    def add_layer(self, category: str, name: str, path: str, layer_type: str, query: str = None,
+                  postgres: bool = False, base_layer: bool = False, resample: str = 'nearest',
+                  normalization: str = 'MinMax', inverse: bool = False, distance_method: str = 'proximity',
+                  distance_limit: Optional[Callable[[np.ndarray], np.ndarray]] = None,
+                  window: Optional['rasterio.windows.Window'] = None, rescale: bool = False):
         """
         Adds a new layer (type VectorLayer or RasterLayer) to the MCA class
 
         Parameters
         ----------
-        arg1 :
-        """
+        category: str
+            Category of the layer. This parameter is useful to group the data into logical categories such as
+            "Demographics", "Resources" and "Infrastructure" or "Demand", "Supply" and "Others". This categories are
+            particularly relevant for the ``MCA`` analysis.
+        name: str
+            Name of the dataset.
+        path: str
+            Path to the layer.
+        layer_type: str
+            Layer type, `vector` or `raster`.
+        query: str, optional
+            A query string to filter the data. For more information refer to
+            :doc:`pandas:reference/api/pandas.DataFrame.query`.
 
+            .. note::
+               Only applicable for the `vector` ``layer_type``.
+
+        postgres: bool, default False
+            Whether to use a PostgreSQL database connection to read the layer from. The connection needs be already
+            created and stored in the :attr:`conn` attribute using the :meth:`set_postgres` method.
+        base_layer: bool, default False
+            Whether the layer should be used as a :attr:`base_layer` for the data processing.
+        resample: str, default 'nearest'
+            Sets the default method to use when resampling the dataset. Resampling occurs when changing the grid cell size
+            of the raster, thus the values of the cells need to be readjusted to reflect the new cell size. Several
+            sampling methods can be used, and which one to use is dependent on the nature of the data. For a list of the
+            accepted methods refer to :doc:`rasterio.enums.Resampling<rasterio:api/rasterio.enums>`.
+
+            .. seealso::
+               :class:`RasterLayer`
+
+        normalization: str, 'MinMax'
+            Sets the default normalization method to use when calling the :meth:`RasterLayer.normalize`. This is relevant
+            to calculate the
+            :attr:`demand_index<onstove.MCA.demand_index>`,
+            :attr:`supply_index<onstove.MCA.supply_index>`,
+            :attr:`clean_cooking_index<onstove.MCA.clean_cooking_index>` and
+            :attr:`assistance_need_index<onstove.MCA.assistance_need_index>` of the ``MCA`` model.
+
+            .. note::
+               If the ``layer_type`` is `vector`, this parameters will be passed to any raster dataset created from
+               the vector layer, for example see :attr:`VectorLayer.distance_raster`.
+
+        inverse: bool, default False
+            Sets the default mode for the normalization algorithm (see :meth:`RasterLayer.normalize`).
+
+            .. note::
+               If the ``layer_type`` is `vector`, this parameters will be passed to any raster dataset created from
+               the vector layer, for example see :attr:`VectorLayer.distance_raster`.
+
+        distance_method: str, default 'proximity'
+            Sets the default distance algorithm to use when calling the :meth:`get_distance_raster` method for the
+            layer, see :class:`VectorLayer` and :class:`RasterLayer`.
+        distance_limit: Callable object (function or lambda function) with a numpy array as input, optional
+            Defines a distance limit or range to consider when calculating the distance raster, see
+            :class:`VectorLayer` and :class:`RasterLayer`.
+        window: rasterio.windows.Window or gpd.GeoDataFrame
+            A window or bounding box to read in the data if ``layer_type`` is `raster` or `vector` respectively.
+            See the ``window`` parameter of :class:`RasterLayer` and the ``bbox`` parameter of :class:`VectorLayer`.
+        rescale: bool, default False
+            Sets the default value for the ``rescale`` attribute. See the ``rescale`` parameter of :class:`RasterLayer`.
+        """
         if layer_type == 'vector':
             if postgres:
-                layer = VectorLayer(category, name, layer_path, conn=self.conn,
+                layer = VectorLayer(category, name, path, conn=self.conn,
                                     normalization=normalization,
-                                    distance_method=distance,
+                                    distance_method=distance_method,
                                     distance_limit=distance_limit,
                                     inverse=inverse, query=query)
             else:
                 if window:
                     window = self.mask_layer.data
-                layer = VectorLayer(category, name, layer_path,
+                layer = VectorLayer(category, name, path,
                                     normalization=normalization,
-                                    distance_method=distance,
+                                    distance_method=distance_method,
                                     distance_limit=distance_limit,
                                     inverse=inverse, query=query, bbox=window)
 
         elif layer_type == 'raster':
             if window:
-                with rasterio.open(layer_path) as src:
+                with rasterio.open(path) as src:
                     src_crs = src.meta['crs']
                 if src_crs != self.mask_layer.data.crs:
-                    bounds = transform_bounds(self.mask_layer.data.crs, src_crs, *self.mask_layer.bounds())
+                    bounds = transform_bounds(self.mask_layer.data.crs, src_crs, *self.mask_layer.bounds)
                 window = bounds
-            layer = RasterLayer(category, name, layer_path,
+            layer = RasterLayer(category, name, path,
                                 normalization=normalization, inverse=inverse,
-                                distance_method=distance, resample=resample,
+                                distance_method=distance_method, resample=resample,
                                 window=window, rescale=rescale)
 
             if base_layer:
@@ -178,27 +275,46 @@ class DataProcessor:
         else:
             self.layers[category] = {name: layer}
 
-    def add_mask_layer(self, category, name, layer_path, postgres=False, query=None):
+    def add_mask_layer(self, category: str, name: str, path: str,
+                       query: str = None, postgres: bool = False):
         """
         Adds a vector layer to self.mask_layer, which will be used to mask all
         other layers into is boundaries
+
+        Parameters
+        ----------
+        category: str
+            Category name of the dataset.
+        name: str
+            name of the dataset.
+        path: str
+            The relative path to the datafile. This file can be of any type that is accepted by
+            :doc:`geopandas:docs/reference/api/geopandas.read_file`.
+        query: str, optional
+            A query string to filter the data. For more information refer to
+            :doc:`pandas:reference/api/pandas.DataFrame.query`.
+        postgres: bool, default False
+            Whether to use a PostgreSQL database connection to read the layer from. The connection needs be already
+            created and stored in the :attr:`conn` attribute using the :meth:`set_postgres` method.
         """
         if postgres:
-            self.mask_layer = VectorLayer(category, name, layer_path, self.conn, query)
+            self.mask_layer = VectorLayer(category, name, path, self.conn, query)
         else:
-            self.mask_layer = VectorLayer(category, name, layer_path, query=query)
+            self.mask_layer = VectorLayer(category, name, path, query=query)
 
         if self.mask_layer.data.crs != self.project_crs:
             output_path = os.path.join(self.output_directory, category, name)
             self.mask_layer.reproject(self.project_crs, output_path)
 
-    def mask_layers(self, datasets: str ='all'):
+        self.mask_layer.save(os.path.join(self.output_directory, self.mask_layer.category, self.mask_layer.name))
+
+    def mask_layers(self, datasets: dict[str, list[str]] = 'all'):
         """
-        Uses the a mask layer in self.mask_layer to mask all other layers to its boundaries
+        Uses the a mask layer in ``self.mask_layer`` to mask all other layers to its boundaries.
 
         Parameters
         ----------
-        datasets: str, default 'all'
+        datasets: dictionary of ``category``-``list of layer names`` pairs, default 'all'
             Specifies which dataset(s) to clip.
 
         See also
@@ -208,7 +324,7 @@ class DataProcessor:
         if not isinstance(self.mask_layer, VectorLayer):
             raise Exception('The `mask_layer` attribute is empty, please first ' + \
                             'add a mask layer using the `.add_mask_layer` method.')
-        datasets = self.get_layers(datasets)
+        datasets = self._get_layers(datasets)
         for category, layers in datasets.items():
             for name, layer in layers.items():
                 output_path = os.path.join(self.output_directory,
@@ -218,27 +334,31 @@ class DataProcessor:
                     all_touched = True
                 else:
                     all_touched = False
-                layer.mask(self.mask_layer.data, output_path, all_touched=all_touched)
-                if isinstance(layer.friction, RasterLayer):
-                    layer.friction.mask(self.mask_layer.data, output_path)
-                if isinstance(layer.distance_raster, RasterLayer):
-                    layer.distance_raster.mask(self.mask_layer.data, output_path)
+                if isinstance(layer, RasterLayer):
+                    layer.mask(self.mask_layer, output_path, all_touched=all_touched)
+                elif isinstance(layer, VectorLayer):
+                    layer.mask(self.mask_layer, output_path)
 
-    def align_layers(self, datasets: str ='all'):
+                if isinstance(layer.friction, RasterLayer):
+                    layer.friction.mask(self.mask_layer, output_path)
+                if isinstance(layer.distance_raster, RasterLayer):
+                    layer.distance_raster.mask(self.mask_layer, output_path)
+
+    def align_layers(self, datasets: dict[str, list[str]] = 'all'):
         """
-        Ensures that the coordinate sysmtem and resolution of the raster is the same as the base layer
+        Ensures that the coordinate system and resolution of the raster is the same as the base layer
 
         Parameters
         ----------
-        datasets: str, default 'all'
-            Specifies which dataset(s) to allign.
+        datasets: dictionary of ``category``-``list of layer names`` pairs, default 'all'
+            Specifies which dataset(s) to align.
 
         See also
         ----------
         add_layer
         """
 
-        datasets = self.get_layers(datasets)
+        datasets = self._get_layers(datasets)
         for category, layers in datasets.items():
             for name, layer in layers.items():
                 output_path = os.path.join(self.output_directory,
@@ -246,27 +366,28 @@ class DataProcessor:
                 os.makedirs(output_path, exist_ok=True)
                 if isinstance(layer, VectorLayer):
                     if isinstance(layer.friction, RasterLayer):
-                        layer.friction.align(self.base_layer.path, output_path)
+                        layer.friction.align(base_layer=self.base_layer, output_path=output_path)
                 else:
                     if name != self.base_layer.name:
-                        layer.align(self.base_layer.path, output_path)
+                        layer.align(base_layer=self.base_layer, output_path=output_path)
                     if isinstance(layer.friction, RasterLayer):
-                        layer.friction.align(self.base_layer.path, output_path)
+                        layer.friction.align(base_layer=self.base_layer, output_path=output_path)
 
-    def reproject_layers(self, datasets: str = 'all'):
+    def reproject_layers(self, datasets: dict[str, list[str]] = 'all'):
         """
-        Repreojects the layers specified by the user.
+        Reprojects the layers specified by the user.
 
         Parameters
         ----------
-        datasets: str, default 'all'
+        datasets: dictionary of ``category``-``list of layer names`` pairs, default 'all'
             Specifies which dataset(s) to reproject.
 
         See also
-        ----------
-        layer.reproject,
+        --------
+        RasterLayer.reproject
+        VectorLayer.reproject
         """
-        datasets = self.get_layers(datasets)
+        datasets = self._get_layers(datasets)
         for category, layers in datasets.items():
             for name, layer in layers.items():
                 output_path = os.path.join(self.output_directory,
@@ -280,7 +401,7 @@ class DataProcessor:
         """
         Goes through all layer and call their `.distance_raster` method
         """
-        datasets = self.get_layers(datasets)
+        datasets = self._get_layers(datasets)
         for category, layers in datasets.items():
             for name, layer in layers.items():
                 output_path = os.path.join(self.output_directory,
@@ -292,11 +413,22 @@ class DataProcessor:
                 #     layer.friction.get_distance_raster(self.base_layer.path,
                 #                                        output_path, self.mask_layer.layer)
 
+    def normalize_rasters(self, datasets='all', buffer=False):
+        """
+        Goes through all layer and call their `.normalize` method
+        """
+        datasets = self._get_layers(datasets)
+        for category, layers in datasets.items():
+            for name, layer in layers.items():
+                output_path = os.path.join(self.output_directory,
+                                           category, name)
+                layer.distance_raster.normalize(output_path, self.mask_layer.data, buffer=buffer)
+
     def save_datasets(self, datasets='all'):
         """
         Saves all layers that have not been previously saved
         """
-        datasets = self.get_layers(datasets)
+        datasets = self._get_layers(datasets)
         for category, layers in datasets.items():
             for name, layer in layers.items():
                 output_path = os.path.join(self.output_directory,
@@ -304,12 +436,14 @@ class DataProcessor:
                 layer.save(output_path)
 
     def to_pickle(self, name):
+        """Saves the model as a pickle."""
         self.conn = None
         with open(os.path.join(self.output_directory, name), "wb") as f:
             dill.dump(self, f)
 
     @classmethod
     def read_model(cls, path):
+        """Reads a model from a pickle"""
         with open(path, "rb") as f:
             model = dill.load(f)
         return model
@@ -324,6 +458,14 @@ class MCA(DataProcessor):
     clean cooking technologies can be expanded or areas in need of financial assistance or lack of infrastructure.
     In brief, it identifies priority areas of action from the user perspective.
 
+    .. note::
+       The ``OnStove`` class inherits all functionalities from the :class:`DataProcessor` class.
+
+    Parameters
+    ----------
+    **kwargs: dict of parameters
+        Parameters from the :class:`DataProcessor` parent class.
+
     Attributes
     ----------
     demand_index
@@ -332,37 +474,12 @@ class MCA(DataProcessor):
     assistance_need_index
     """
 
-    supply_index = None
-    clean_cooking_index = None
-    assistance_need_index = None
-
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.demand_index = None
-
-    def normalize_rasters(self, datasets='all', buffer=False):
-        """
-        Goes through all layer and call their `.normalize` method
-        """
-        datasets = self.get_layers(datasets)
-        for category, layers in datasets.items():
-            for name, layer in layers.items():
-                output_path = os.path.join(self.output_directory,
-                                           category, name)
-                layer.distance_raster.normalize(output_path, self.mask_layer.data, buffer=buffer)
-
-    @staticmethod
-    def index(layers):
-        data = {}
-        for k, i in layers.items():
-            data.update(i)
-        weights = []
-        rasters = []
-        for name, layer in data.items():
-            rasters.append(layer.weight * layer.distance_raster.normalized.data)
-            weights.append(layer.weight)
-
-        return sum(rasters) / sum(weights)
+        self.supply_index = None
+        self.clean_cooking_index = None
+        self.assistance_need_index = None
 
     @property
     def demand_index(self):
@@ -449,9 +566,9 @@ class MCA(DataProcessor):
         get_assistance_need_index
         """
         if self._clean_cooking_index is None:
-            raise ValueError('No `clean_cooking_index` was found, please calculate a supply index by calling the '
-                             '`get_clean_cooking_index()` method with the relevant list of `datasets`.')
-        return self.clean_cooking_index
+            raise ValueError('No `clean_cooking_index` was found, please calculate a clean cooking index by calling '
+                             'the `get_clean_cooking_index()` method with the relevant list of `datasets`.')
+        return self._clean_cooking_index
 
     @clean_cooking_index.setter
     def clean_cooking_index(self, raster):
@@ -460,11 +577,56 @@ class MCA(DataProcessor):
         if raster is None:
             self._clean_cooking_index = None
         else:
-            raise ValueError('The supply index needs to be of class `RasterLayer`.')
+            raise ValueError('The clean cooking index needs to be of class `RasterLayer`.')
+
+    @property
+    def assistance_need_index(self):
+        """The Clean Cooking Index measures where demand and supply are simultaneously higher.
+
+        This index is generated by calling the :meth:`get_clean_cooking_index` method, which produces an aggregated
+        measure of the :attr:`demand_index` and the :attr:`supply_index`. Areas with high demand and high supply get
+        a higher clean cooking index.
+
+        See also
+        --------
+        get_clean_cooking_index
+        demand_index
+        get_demand_index
+        supply_index
+        get_supply_index
+        assistance_need_index
+        get_assistance_need_index
+        """
+        if self._assistance_need_index is None:
+            raise ValueError('No `assistance_need_index` was found, please calculate an assistance need index by '
+                             'calling the `get_assistance_need_index()` method with the relevant list of `datasets`.')
+        return self._assistance_need_index
+
+    @assistance_need_index.setter
+    def assistance_need_index(self, raster):
+        if isinstance(raster, RasterLayer):
+            self._assistance_need_index = raster
+        if raster is None:
+            self._assistance_need_index = None
+        else:
+            raise ValueError('The assistance need index needs to be of class `RasterLayer`.')
+
+    @staticmethod
+    def index(layers):
+        data = {}
+        for k, i in layers.items():
+            data.update(i)
+        weights = []
+        rasters = []
+        for name, layer in data.items():
+            rasters.append(layer.weight * layer.distance_raster.normalized.data)
+            weights.append(layer.weight)
+
+        return sum(rasters) / sum(weights)
 
     def get_demand_index(self, datasets='all', buffer=False):
         self.normalize_rasters(datasets=datasets, buffer=buffer)
-        datasets = self.get_layers(datasets)
+        datasets = self._get_layers(datasets)
         layer = RasterLayer('Indexes', 'Demand_index', normalization='MinMax')
         layer.data = self.index(datasets)
         layer.meta = self.base_layer.meta
@@ -477,7 +639,7 @@ class MCA(DataProcessor):
 
     def get_supply_index(self, datasets='all', buffer=False):
         self.normalize_rasters(datasets=datasets, buffer=buffer)
-        datasets = self.get_layers(datasets)
+        datasets = self._get_layers(datasets)
         layer = RasterLayer('Indexes', 'Supply index', normalization='MinMax')
         layer.data = self.index(datasets)
         layer.meta = self.base_layer.meta
@@ -502,7 +664,7 @@ class MCA(DataProcessor):
 
     def get_assistance_need_index(self, datasets='all', buffer=False):
         self.normalize_rasters(datasets=datasets, buffer=buffer)
-        datasets = self.get_layers(datasets)
+        datasets = self._get_layers(datasets)
         layer = RasterLayer('Indexes', 'Assistance need index', normalization='MinMax')
         layer.data = self.index(datasets)
         layer.meta = self.base_layer.meta
@@ -566,16 +728,41 @@ class MCA(DataProcessor):
 
 
 class OnStove(DataProcessor):
-    """
-    Class containing the methods to perform a geospatial max-benefit analysis
-    on clean cooking access
-    """
-    conn = None
-    base_layer = None
+    """The ``OnStove`` class is used to perform a geospatial cost-benefit analysis on clean cooking access.
 
-    population = 'path_to_file'
+    OnStove determines the net-benefits of cooking with different stoves across an area with regards to capital, fuel,
+    and operation and maintenance costs, as well as benefits from reduced morbidity, reduced mortality, time saved and
+    emissions avoided. The model identifies the stove that can provide cooking in each settlement achieving the highest
+    net-benefit.
 
-    def __init__(self, project_crs=None, cell_size=None, output_directory='output'):
+    .. note::
+       The ``OnStove`` class inherits all functionalities from the :class:`DataProcessor` class.
+
+    Parameters
+    ----------
+    project_crs: pyproj.CRS or int, optional
+        See the :class:`DataProcessor` class for details.
+    cell_size: float, optional
+        See the :class:`DataProcessor` class for details.
+    output_directory: str, default 'output'
+        A folder path where to save the output datasets.
+
+    Attributes
+    ----------
+    rows
+    cols
+    specs
+    techs
+    base_fuel
+    energy_per_meal
+    gwp
+    clean_cooking_access_u
+    clean_cooking_access_r
+    electrified_weight
+    """
+
+    def __init__(self, project_crs: Optional[Union['pyproj.CRS', int]] = None,
+                 cell_size: float = None, output_directory: str = 'output'):
         """
         Initializes the class and sets an empty layers dictionaries.
         """
@@ -589,26 +776,9 @@ class OnStove(DataProcessor):
         self.energy_per_meal = 3.64  # MJ
         # TODO: remove from here and make it an input in the specs file
         self.gwp = {'co2': 1, 'ch4': 25, 'n2o': 298, 'co': 2, 'bc': 900, 'oc': -46}
-
-    def get_layers(self, layers):
-        if layers == 'all':
-            layers = self.layers
-        else:
-            layers = {category: {name: self.layers[category][name]} for category, names in layers.items() for name in
-                      names}
-        return layers
-
-    def set_postgres(self, db, POSTGRES_USER, POSTGRES_KEY):
-        """
-        Sets a conecion to a PostgreSQL database
-
-        Parameters
-        ----------
-        arg1 : 
-        """
-        self.conn = psycopg2.connect(database=db,
-                                     user=POSTGRES_USER,
-                                     password=POSTGRES_KEY)
+        self.clean_cooking_access_u = None
+        self.clean_cooking_access_r = None
+        self.electrified_weight = None
 
     def read_scenario_data(self, path_to_config: str, delimiter=','):
         """Reads the scenario data into a dictionary
@@ -633,7 +803,7 @@ class OnStove(DataProcessor):
             self.specs = config
         else:
             self.specs.update(config)
-    
+
     def techshare_sumtoone(self):
         """This function checks if the sum of shares in the technology dictionary is 1.0.
 
@@ -653,14 +823,13 @@ class OnStove(DataProcessor):
 
         if sharesumrural != 1:
             for item in self.techs.values():
-                item.current_share_rural = item.current_share_rural/sharesumrural
+                item.current_share_rural = item.current_share_rural / sharesumrural
 
         sharesumurban = sum(item['current_share_urban'] for item in self.techs.values())
-        
+
         if sharesumurban != 1:
             for item in self.techs.values():
-                item.current_share_urban = item.current_share_urban/sharesumurban
-       
+                item.current_share_urban = item.current_share_urban / sharesumurban
 
     def set_base_fuel(self, techs: list = None):
         """
@@ -771,6 +940,21 @@ class OnStove(DataProcessor):
         self.techs = techs
 
     def get_clean_cooking_access(self):
+        """Calculates the clean cooking access in rural and urban settlements.
+
+        It uses the :attr:`Technology.current_share_urban` and :attr:`Technology.current_share_rural` attributes,
+        from each technology class, in combination with the :attr:`Technology.is_clean` attribute to get the current
+        clean cooking access as a percentage.
+
+        Returns
+        -------
+        clean_cooking_access_u: float
+            Stores the clean cooking access percentage in urban settlements in the :attr:`clean_cooking_access_u`
+            attribute.
+        clean_cooking_access_r: float
+            Stores the clean cooking access percentage in rural settlements in the :attr:`clean_cooking_access_r`
+            attribute.
+        """
         clean_cooking_access_u = 0
         clean_cooking_access_r = 0
         for tech in self.techs.values():
@@ -780,8 +964,21 @@ class OnStove(DataProcessor):
         self.clean_cooking_access_u = clean_cooking_access_u
         self.clean_cooking_access_r = clean_cooking_access_r
 
-    def normalize(self, column, inverse=False):
+    def normalize(self, column: str, inverse: bool = False):
+        """Uses the MinMax method to normalize the data from a column of the :attr:`gdf` GeoDataFrame.
 
+        Parameters
+        ----------
+        column: str
+            Name of the column of the :attr:`gdf` to create the normalized data from.
+        inverse: bool, default False
+            Whether to invert the range in the normalized data.
+
+        Returns
+        -------
+        pd.Series
+            The normalized pd.Series.
+        """
         if inverse:
             normalized = (self.gdf[column].max() - self.gdf[column]) / (self.gdf[column].max() - self.gdf[column].min())
         else:
@@ -789,26 +986,57 @@ class OnStove(DataProcessor):
 
         return normalized
 
-    def normalize_for_electricity(self):
+    @property
+    def electrified_weight(self):
+        """Spatial weighted average factor used to calibrate the current electrified population.
 
-        if "Transformers_dist" in self.gdf.columns:
-            self.gdf["Elec_dist"] = self.gdf["Transformers_dist"]
-        elif "MV_lines_dist" in self.gdf.columns:
-            self.gdf["Elec_dist"] = self.gdf["MV_lines_dist"]
-        else:
-            self.gdf["Elec_dist"] = self.gdf["HV_lines_dist"]
+        It uses the night time lights, population count and distance to electricity infrastructure (this can be either
+        transformers, medium voltage lines or high voltage lines in that order of preference) in combination with
+        user-defined weights to calculate the factor. This factor serves to provide a "probability" for each settlement
+        to be electrified, which will be used in the calibration of electrified population.
 
-        elec_dist = self.normalize("Elec_dist", inverse=True)
-        ntl = self.normalize("Night_lights")
-        pop = self.normalize("Calibrated_pop")
+        See also
+        --------
+        current_elec
+        final_elec
+        """
+        if self._electrified_weight is None:
+            if "Transformers_dist" in self.gdf.columns:
+                self.gdf["Elec_dist"] = self.gdf["Transformers_dist"]
+            elif "MV_lines_dist" in self.gdf.columns:
+                self.gdf["Elec_dist"] = self.gdf["MV_lines_dist"]
+            else:
+                self.gdf["Elec_dist"] = self.gdf["HV_lines_dist"]
 
-        self.combined_weight = (elec_dist * self.specs["infra_weight"] + pop * self.specs["pop_weight"] +
-                                ntl * self.specs["NTL_weight"]) / (
-                                       self.specs["infra_weight"] + self.specs["pop_weight"] +
-                                       self.specs["NTL_weight"])
+            elec_dist = self.normalize("Elec_dist", inverse=True)
+            ntl = self.normalize("Night_lights")
+            pop = self.normalize("Calibrated_pop")
+
+            weight_sum = elec_dist * self.specs["infra_weight"] + pop * self.specs["pop_weight"] + \
+                         ntl * self.specs["NTL_weight"]
+            weights = self.specs["infra_weight"] + self.specs["pop_weight"] + self.specs["NTL_weight"]
+
+            self.electrified_weight = weight_sum / weights
+        return self._electrified_weight
+
+    @electrified_weight.setter
+    def electrified_weight(self, value):
+        self._electrified_weight = value
 
     def current_elec(self):
-        self.normalize_for_electricity()
+        """Calculates a binary variable that defines which settlements are at least partially electrified.
+
+        It uses the electrification rate provided by the user in the :attr:`specs` file (named as ``Elec_rate``) and
+        the :attr:`electrified_weight` to make the calibration. The binary variable is saved as a column of the
+        GeoDataFrame :attr:`gdf` with the name of ``Current_elec``.
+
+        See also
+        --------
+        electrified_weight
+        final_elec
+        read_scenario_data
+        specs
+        """
         elec_rate = self.specs["Elec_rate"]
 
         self.gdf["Current_elec"] = 0
@@ -818,7 +1046,7 @@ class OnStove(DataProcessor):
         total_pop = self.gdf["Calibrated_pop"].sum()
 
         while elec_pop <= total_pop * elec_rate:
-            bool = (self.combined_weight >= i)
+            bool = (self.electrified_weight >= i)
             elec_pop = self.gdf.loc[bool, "Calibrated_pop"].sum()
 
             self.gdf.loc[bool, "Current_elec"] = 1
@@ -827,7 +1055,20 @@ class OnStove(DataProcessor):
         self.i = i
 
     def final_elec(self):
+        """Calibrates the electrified population within each cell.
 
+        This is a "fine-tuning" of the electrified population. It uses the ``Current_elec`` column of the :attr:`gdf`
+        GeoDataFrame (calculated using the :meth:`current_elec` method) and the ``Calibrated_pop`` column (calculated
+        using the :meth:`calibrate_current_pop` method) to get the population that is electrified within each
+        electrified settlement, according to the ``Elec_rate`` provided by the user (stored in :attr:`specs`).
+
+        See also
+        --------
+        electrified_weight
+        current_elec
+        read_scenario_data
+        specs
+        """
         elec_rate = self.specs["Elec_rate"]
 
         self.gdf["Elec_pop_calib"] = self.gdf["Calibrated_pop"]
@@ -840,7 +1081,7 @@ class OnStove(DataProcessor):
 
         while elec_pop > total_pop * elec_rate:
 
-            new_bool = (self.i <= self.combined_weight) & (self.combined_weight <= i)
+            new_bool = (self.i <= self.electrified_weight) & (self.electrified_weight <= i)
 
             self.gdf.loc[new_bool, "Elec_pop_calib"] -= factor
             self.gdf.loc[self.gdf["Elec_pop_calib"] < 0, "Elec_pop_calib"] = 0
@@ -856,17 +1097,40 @@ class OnStove(DataProcessor):
         self.gdf.loc[self.gdf["Current_elec"] == 0, "Elec_pop_calib"] = 0
 
     def calibrate_current_pop(self):
+        """Calibrates the spatial population in each cell according to the user defined population in the start year
+        (``Population_start_year`` in the :attr:`specs` dictionary) and saves it in the ``Calibrated_pop`` column of
+        the main GeoDataFrame (:attr:`gdf`).
 
+        See also
+        --------
+        read_scenario_data
+        specs
+        gdf
+        """
         total_gis_pop = self.gdf["Pop"].sum()
         calibration_factor = self.specs["Population_start_year"] / total_gis_pop
 
         self.gdf["Calibrated_pop"] = self.gdf["Pop"] * calibration_factor
 
-    def distance_to_electricity(self, hv_lines=None, mv_lines=None, transformers=None):
-        """
-        Cals the get_distance_raster method for the HV. MV and Transformers
-        layers (if available) and converts the output to a column in the
-        main gdf
+    def distance_to_electricity(self, hv_lines: VectorLayer = None, mv_lines: VectorLayer = None,
+                                transformers: VectorLayer = None):
+        """ Calculates the distance to electricity infrastructure.
+
+        It calls the :meth:`VectorLayer.get_distance_raster` method for the high voltage, medium voltage and
+        transformers datasets (if available) and converts the output to a column in the main GeoDataFrame (:attr:`gdf`).
+
+        .. warning::
+           The ``name`` attribute of the input datasets must be `HV_lines`, `MV_lines` and `Transformers`. This
+           naming convention may change in future releases.
+
+        Parameters
+        ----------
+        hv_lines: VectorLayer
+            High voltage lines dataset.
+        mv_lines: VectorLayer
+            Medium voltage lines dataset.
+        transformers: VectorLayer
+            Transformers dataset.
         """
         if (not hv_lines) and (not mv_lines) and (not transformers):
             raise ValueError("You MUST provide at least one of the following datasets: hv_lines, mv_lines or "
@@ -874,29 +1138,27 @@ class OnStove(DataProcessor):
 
         for layer in [hv_lines, mv_lines, transformers]:
             if layer:
-                # TODO: test that this works!!!
-                # output_path = os.path.join(self.output_directory,
-                #                            layer.category,
-                #                            layer.name)
-                data, meta = layer.get_distance_raster(self.base_layer.path,
-                                                       create_raster=False,
-                                                       # output_path,
-                                                       # self.mask_layer.layer
-                                                       )
-                data /= 1000  # to convert from meters to km
-                self.raster_to_dataframe(data,
+                layer.get_distance_raster(raster=self.base_layer)
+                layer.distance_raster.data /= 1000  # to convert from meters to km
+                self.raster_to_dataframe(layer.distance_raster,
                                          name=layer.name + '_dist',
                                          method='read')
 
     def population_to_dataframe(self, layer: Optional[RasterLayer] = None):
         """
-        Takes a population `RasterLayer` as input and extracts the populated points to a GeoDataFrame that is
-        saved in `OnSSTOVE.gdf`.
+        Takes a population `RasterLayer` as input and extracts the populated points to the main GeoDataFrame saved in
+        the :attr:`gdf` attribute.
+
+        Parameters
+        ----------
+        layer: RasterLayer
+            The raster layer containing the population count data. If not defined, then the :attr:`base_layer` dataset
+            will be used. If ``layer`` is not provided and :attr:`base_layer` is None, then an error will be raised.
         """
 
         if isinstance(layer, RasterLayer):
-            data = RasterLayer.data.copy()
-            meta = RasterLayer.meta
+            data = layer.data.copy()
+            meta = layer.meta
         else:
             if self.base_layer:
                 data = self.base_layer.data.copy()
@@ -913,15 +1175,41 @@ class OnStove(DataProcessor):
                                      offset='center')
 
         self.gdf = gpd.GeoDataFrame({'geometry': gpd.points_from_xy(x, y),
-                                     'Pop': layer[self.rows, self.cols]})
+                                     'Pop': data[self.rows, self.cols]})
         self.gdf.crs = self.project_crs
 
-    def raster_to_dataframe(self, layer, name=None, method='sample',
-                            nodata=np.nan, fill_nodata=None, fill_default_value=0):
+    def raster_to_dataframe(self, layer: Union[RasterLayer, str], name: Optional[str] = None, method: str = 'sample',
+                            fill_nodata_method: Optional[str] = None,
+                            fill_default_value: Union[float, int] = 0):
         """
-        Takes a RasterLayer and a method (sample or read), gets the values from the raster layer using the population points previously extracted and saves the values in a new column of OnSSTOVE.gdf
+        Takes a :class:`RasterLayer` and a method (``sample`` or ``read``) and extracts the values from the raster
+        layer to the main GeoDataFrame (:attr:`gdf`).
+
+        It uses the coordinates of the population points (previously extracted with the :meth:`population_to_dataframe`
+        method) to either sample the values from the dataset (if ``sample`` is used) or read the :attr:`rows` and
+        :attr:`cols` from the array (if ``read`` is used). The further requires that the raster dataset is aligned with
+        the used population layer.
+
+        Parameters
+        ----------
+        layer: RasterLayer or path to the raster
+            Raster layer to extract values from. If the method ``sample`` is used, the layer must be provided as the
+            path to the raster file.
+        name: str, optional
+            Name to use for the column of the extracted data in the :attr:`gdf`.
+        method: str, default 'sample'
+            Method to use when extracting the data. If ``sample``, the values will be sampled using the coordinates of
+            the point of the GeoDataFrame (:attr:`gdf`), which have been previously defined by the population layer. if
+            ``read``, the values are extracted using the the :attr:`rows` and :attr:`cols` attributes, which have been
+            previously extracted using the population layer.
+        fill_nodata_method: str, optional
+            Method to use to fill the no data. Currently only ``interpolate`` is available.
+        fill_default_value: float or int, default 0
+            Default value to use to fill in the no data. This will be used for cells that fall outside the search
+            radius (currently of 100) if the ``interpolate`` method is selected, and for all the nodata values if
+            ``None`` is used as method.
         """
-        layer = layer.copy()
+        data = None
         if method == 'sample':
             with rasterio.open(layer) as src:
                 if src.meta['crs'] != self.gdf.crs:
@@ -929,30 +1217,47 @@ class OnStove(DataProcessor):
                 else:
                     data = sample_raster(layer, self.gdf)
         elif method == 'read':
-            if fill_nodata:
-                if fill_nodata == 'interpolate':
-                    mask = layer.copy()
-                    mask[mask == nodata] = np.nan
-                    if np.isnan(mask[self.rows, self.cols]).sum() > 0:
-                        mask[~np.isnan(mask)] = 1
-                        base = self.base_layer.data.copy()
-                        base[base == self.base_layer.meta['nodata']] = np.nan
-                        rows, cols = np.where(np.isnan(mask) & ~np.isnan(base))
-                        mask[rows, cols] = 0
+            if 'nodata' in layer.meta.keys():
+                nodata = layer.meta['nodata']
+            else:
+                nodata = np.nan
+            layer = layer.data.copy()
+            if fill_nodata_method:
+                mask = layer.copy()
+                mask[mask == nodata] = np.nan
+                if np.isnan(mask[self.rows, self.cols]).sum() > 0:
+                    mask[~np.isnan(mask)] = 1
+                    base = self.base_layer.data.copy()
+                    base[base == self.base_layer.meta['nodata']] = np.nan
+                    rows, cols = np.where(np.isnan(mask) & ~np.isnan(base))
+                    mask[rows, cols] = 0
+                    if fill_nodata_method == 'interpolate':
                         layer = fillnodata(layer, mask=mask,
                                            max_search_distance=100)
-                        layer[(mask == 0) & (np.isnan(layer))] = fill_default_value
-                else:
-                    raise ValueError('fill_nodata can only be None or "interpolate"')
+                    elif fill_nodata_method is not None:
+                        raise ValueError('fill_nodata can only be None or "interpolate"')
+                    layer[(mask == 0) & (np.isnan(layer))] = fill_default_value
 
             data = layer[self.rows, self.cols]
         if name:
             self.gdf[name] = data
         else:
-            # TODO: check if changing this to pandas series
             return data
 
-    def calibrate_urban_current_and_future_GHS(self, GHS_path):
+    def calibrate_urban_rural_split(self, GHS_path: str):
+        """Calibrates the urban rural split using spatial data from the
+        `GHS SMOD dataset <https://ghsl.jrc.ec.europa.eu/download.php?ds=smod>`_.
+
+        The GHS dataset is used to determine which settlements are urban and which are rural in the analysis. Areas
+        that have coding of either 30, 23 or 22 are considered urban, while the rest are rural. It saves the
+        binary (1 for urban, 0 for rural) classification as a column in the main GeoDataFrame (:attr:`gdf`) with the
+        name of ``IsUrban``.
+
+        Parameters
+        ----------
+        GHS_path: str
+            Path to the GHS dataset
+        """
         self.raster_to_dataframe(GHS_path, name="IsUrban", method='sample')
 
         if self.specs["End_year"] > self.specs["Start_year"]:
@@ -973,7 +1278,12 @@ class OnStove(DataProcessor):
         self.number_of_households()
 
     def calibrate_urban_manual(self):
+        """Calibrates the urban rural split based on population density.
 
+        It uses the ``Calibrated_pop`` column of the main GeoDataFrame (:attr:`gdf`) and the current national urban
+        split defined in :attr:`specs`, to classify the settlements until the total urban population sum matches the
+        defined split.
+        """
         urban_modelled = 2
         factor = 1
         pop_tot = self.specs["Population_start_year"]
@@ -1001,7 +1311,19 @@ class OnStove(DataProcessor):
                 break
 
     def number_of_households(self):
+        """Calculates the number of households withing each cell based on their urban/rural classification and a
+        defined household size.
 
+        It uses the ``IsUrban`` and ``Calibrated_pop`` columns of the main GeoDataFrame (:attr:`gdf`) and the
+        ``Rural_HHsize`` and ``Urban_HHsize`` values from the :attr:`specs` dictionary.
+
+        See also
+        --------
+        calibrate_urban_rural_split
+        calibrate_urban_manual
+        calibrate_current_pop
+        read_scenario_data
+        """
         self.gdf.loc[self.gdf["IsUrban"] < 20, 'Households'] = self.gdf.loc[
                                                                    self.gdf["IsUrban"] < 20, 'Calibrated_pop'] / \
                                                                self.specs["Rural_HHsize"]
@@ -1011,10 +1333,12 @@ class OnStove(DataProcessor):
 
     def get_value_of_time(self):
         """
-        Calculates teh value of time based on the minimum wage ($/h) and a
-        GIS raster map as wealth index, poverty or GDP
-        ----
-        0.5 is the upper limit for minimum wage and 0.2 the lower limit
+        Calculates the value of time based on the minimum wage ($/h) and a spatial representation of wealth.
+
+        Time is monetized using the minimum wage in the study area, defined in the :attr:`specs` dictionary, and a
+        geospatial representation of wealth, which can be either a relative wealth index or a poverty layer (see the
+        :meth:`extract_wealth_index` method). The minimum wage value is then distributed spatially using an upper limit
+        of 0.5 times the minimung wage in the wealthier regions and an lower limit of 0.2 in the poorest regions.
         """
         min_value = np.nanmin(self.gdf['relative_wealth'])
         max_value = np.nanmax(self.gdf['relative_wealth'])
@@ -1026,7 +1350,43 @@ class OnStove(DataProcessor):
         self.gdf['value_of_time'] = norm_layer * self.specs[
             'Minimum_wage'] / 30 / 8  # convert $/months to $/h (8 working hours per day)
 
-    def run(self, technologies='all', restriction=True):
+    def run(self, technologies: Union[list[str], str] = 'all', restriction: bool = True):
+        """Runs the model using the defined ``technologies`` as options to cook with.
+
+        It loops through the ``technologies`` and calculates all costs, benefit and the net-benefit of cooking with
+        such technology relative to the current situation in every grid cell of the study area. Then, it calls the
+        :meth:`maximum_net_benefit` method to get the technology with highest net-benefit in each cell (and saves it
+        in the ``max_benefit_tech`` column of the :attr:`gdf`). Finally, it extracts indicators such as lives saved,
+        time saved, avoided emissions, health costs saved, opportunity cost gained, investment costs, fuel costs, and
+        O&M costs.
+
+        Parameters
+        ----------
+        technologies: str or list of str, default 'all'
+            List of technologies to use for the analysis. If 'all' all technologies inside the :attr:`techs` attribute
+            would be used. If a list of technology names is passed, then those technologies only will be used.
+
+            .. Note::
+               All technology names passed need to match the names of technologies in the :attr:`techs` dictionary.
+
+        restriction: bool, default True
+            Whether to have the restriction to only select technologies that produce a positive benefit compared to the
+            baseline.
+
+        See also
+        -----
+        maximum_net_benefit
+        extract_lives_saved
+        extract_health_costs_saved
+        extract_time_saved
+        extract_opportunity_cost
+        extract_reduced_emissions
+        extract_emissions_costs_saved
+        extract_investment_costs
+        extract_fuel_costs
+        extract_om_costs
+        extract_salvage
+        """
         print(f'[{self.specs["Country_name"]}] Calculating clean cooking access')
         self.get_clean_cooking_access()
         if self.base_fuel is None:
@@ -1089,6 +1449,7 @@ class OnStove(DataProcessor):
         self.extract_salvage()
         print('Done')
 
+    # TODO: check if this function is still needed
     def _get_column_functs(self):
         columns_dict = {column: 'first' for column in self.gdf.columns}
         for column in self.gdf.columns[self.gdf.columns.str.contains('cost|benefit|pop|Pop|Households')]:
@@ -1096,13 +1457,31 @@ class OnStove(DataProcessor):
         columns_dict['max_benefit_tech'] = 'first'
         return columns_dict
 
-    def maximum_net_benefit(self, techs, restriction=True):
+    def maximum_net_benefit(self, techs: list['Technology'], restriction: bool = True):
+        """Extracts the technology or technology combinations producing the highest net-benefit in each cell.
+
+        It saves the technology with highest net-benefit in the ``max_benefi_tech`` column of the :attr:`gdf`
+        GeoDataframe.
+
+        Parameters
+        ----------
+        techs: list of Technology like objects
+            Technologies to compare and select the one, or combination of two, that produces the highest net-benefit in
+            each cell.
+        restriction: bool, default True
+            Whether to have the restriction to only select technologies that produce a positive benefit compared to the
+            baseline.
+
+        See also
+        --------
+        run
+        """
         net_benefit_cols = [col for col in self.gdf if 'net_benefit_' in col]
         benefits_cols = [col for col in self.gdf if 'benefits_' in col]
 
         for benefit, net in zip(benefits_cols, net_benefit_cols):
             self.gdf[net + '_temp'] = self.gdf[net]
-            if restriction in [True, 'yes', 'y','Y', 'Yes', 'PositiveBenefits', 'Positive_Benefits']:
+            if restriction in [True, 'yes', 'y', 'Y', 'Yes', 'PositiveBenefits', 'Positive_Benefits']:
                 self.gdf.loc[self.gdf[benefit] < 0, net + '_temp'] = np.nan
 
         temps = [col for col in self.gdf if '_temp' in col]
@@ -1168,8 +1547,8 @@ class OnStove(DataProcessor):
         self.gdf['max_benefit_tech'] = self.gdf['max_benefit_tech'].str.replace("_temp", "")
         self.gdf.loc[isna, "maximum_net_benefit"] = self.gdf.loc[isna, temps].max(axis=1)
 
-    def add_admin_names(self, admin, column_name):
-
+    # TODO: check if we ned this method
+    def _add_admin_names(self, admin, column_name):
         if isinstance(admin, str):
             admin = gpd.read_file(admin)
 
@@ -1180,12 +1559,19 @@ class OnStove(DataProcessor):
         self.gdf.sort_index(inplace=True)
 
     def extract_lives_saved(self):
+        """Extracts the number of deaths avoided from adopting each stove type selected across the study area and saves
+        the data in the ``deaths_avoided`` column of the :attr:`gdf`.
+        """
         for tech in self.gdf['max_benefit_tech'].unique():
             is_tech = self.gdf['max_benefit_tech'] == tech
             index = self.gdf.loc[is_tech].index
             self.gdf.loc[is_tech, "deaths_avoided"] = self.techs[tech].deaths_avoided[index]
 
     def extract_health_costs_saved(self):
+        """
+        Extracts the healh costs avoded from adopting each stove type selected across the study area. The health costs
+        includes costs of avoided deaths, sickness and spillovers.
+        """
         for tech in self.gdf['max_benefit_tech'].unique():
             is_tech = self.gdf['max_benefit_tech'] == tech
             index = self.gdf.loc[is_tech].index
@@ -1195,48 +1581,72 @@ class OnStove(DataProcessor):
                                                             self.techs[tech].distributed_spillovers_mort[index]
 
     def extract_time_saved(self):
+        """
+        Extracts the total time saved from adopting each stove type selected across the study area.
+        """
         for tech in self.gdf['max_benefit_tech'].unique():
             is_tech = self.gdf['max_benefit_tech'] == tech
             index = self.gdf.loc[is_tech].index
             self.gdf.loc[is_tech, "time_saved"] = self.techs[tech].total_time_saved[index]
 
     def extract_opportunity_cost(self):
+        """
+        Extracts the opportunity cost of adopting each stove type selected across the study area.
+        """
         for tech in self.gdf['max_benefit_tech'].unique():
             is_tech = self.gdf['max_benefit_tech'] == tech
             index = self.gdf.loc[is_tech].index
             self.gdf.loc[is_tech, "opportunity_cost_gained"] = self.techs[tech].time_value[index]
 
     def extract_reduced_emissions(self):
+        """
+        Extracts the reduced emissions achieved by adopting each stove type selected across the study area.
+        """
         for tech in self.gdf['max_benefit_tech'].unique():
             is_tech = self.gdf['max_benefit_tech'] == tech
             index = self.gdf.loc[is_tech].index
             self.gdf.loc[is_tech, "reduced_emissions"] = self.techs[tech].decreased_carbon_emissions[index]
 
     def extract_investment_costs(self):
+        """
+        Extracts the total investment costs needed in order to adopt each stove type across the study area.
+        """
         for tech in self.gdf['max_benefit_tech'].unique():
             is_tech = self.gdf['max_benefit_tech'] == tech
             index = self.gdf.loc[is_tech].index
             self.gdf.loc[is_tech, "investment_costs"] = self.techs[tech].discounted_investments[index]
 
     def extract_om_costs(self):
+        """
+        Extracts the total operation and maintenance costs needed in order to adopt each stove type across the study area.
+        """
         for tech in self.gdf['max_benefit_tech'].unique():
             is_tech = self.gdf['max_benefit_tech'] == tech
             index = self.gdf.loc[is_tech].index
             self.gdf.loc[is_tech, "om_costs"] = self.techs[tech].discounted_om_costs[index]
 
     def extract_fuel_costs(self):
+        """
+        Extracts the total fuel costs needed in order to adopt each stove type across the study area.
+        """
         for tech in self.gdf['max_benefit_tech'].unique():
             is_tech = self.gdf['max_benefit_tech'] == tech
             index = self.gdf.loc[is_tech].index
             self.gdf.loc[is_tech, "fuel_costs"] = self.techs[tech].discounted_fuel_cost[index]
 
     def extract_salvage(self):
+        """
+        Extracts the total salvage costs in order to adopt each stove type across the study area.
+        """
         for tech in self.gdf['max_benefit_tech'].unique():
             is_tech = self.gdf['max_benefit_tech'] == tech
             index = self.gdf.loc[is_tech].index
             self.gdf.loc[is_tech, "salvage_value"] = self.techs[tech].discounted_salvage_cost[index]
 
     def extract_emissions_costs_saved(self):
+        """
+        Extracts the economic value of the emissions by adopt each stove type across the study area.
+        """
         for tech in self.gdf['max_benefit_tech'].unique():
             is_tech = self.gdf['max_benefit_tech'] == tech
             index = self.gdf.loc[is_tech].index
@@ -1302,21 +1712,21 @@ class OnStove(DataProcessor):
 
             layer.align(self.base_layer.path)
 
-            self.raster_to_dataframe(layer.data, name="relative_wealth", method='read',
-                                     nodata=layer.meta['nodata'], fill_nodata='interpolate')
+            self.raster_to_dataframe(layer, name="relative_wealth", method='read',
+                                     fill_nodata_method='interpolate')
         else:
             raise ValueError("file_type needs to be either csv, raster, polygon or point.")
 
     @staticmethod
-    def re_name(df, labels, variable):
+    def _re_name(df, labels, variable):
         if labels is not None:
             for value, label in labels.items():
                 df[variable] = df[variable].str.replace('_', ' ')
                 df.loc[df[variable] == value, variable] = label
             return df
 
-    def points_to_raster(self, dff, variable, cell_width=1000, cell_height=1000,
-                         dtype=rasterio.uint8, nodata=111):
+    def _points_to_raster(self, dff, variable, cell_width=1000, cell_height=1000,
+                          dtype=rasterio.uint8, nodata=111):
         bounds = self.mask_layer.bounds
         height, width = RasterLayer.shape_from_cell(bounds, cell_height, cell_width)
         transform = rasterio.transform.from_bounds(*bounds, width, height)
@@ -1339,7 +1749,7 @@ class OnStove(DataProcessor):
         return rasterized, meta
 
     @staticmethod
-    def empty_raster_from_shape(crs, transform, height, width):
+    def _empty_raster_from_shape(crs, transform, height, width):
         array = np.empty((height, width))
         array[:] = np.nan
         raster = RasterLayer()
@@ -1352,7 +1762,7 @@ class OnStove(DataProcessor):
                            transform=transform)
         return raster
 
-    def base_layer_from_bounds(self, bounds, cell_height, cell_width):
+    def _base_layer_from_bounds(self, bounds, cell_height, cell_width):
         if 'index' not in self.gdf.columns:
             dff = self.gdf.copy().reset_index(drop=False)
         else:
@@ -1364,7 +1774,7 @@ class OnStove(DataProcessor):
         rows, cols = rasterio.transform.rowcol(transform, gdf['geometry'].x, gdf['geometry'].y)
         self.rows = np.array(rows)
         self.cols = np.array(cols)
-        self.base_layer = self.empty_raster_from_shape(self.gdf.crs, transform, height, width)
+        self.base_layer = self._empty_raster_from_shape(self.gdf.crs, transform, height, width)
 
     def create_layer(self, variable, name=None, labels=None, cmap=None, metric='mean'):
         codes = None
@@ -1378,14 +1788,14 @@ class OnStove(DataProcessor):
 
         if isinstance(self.gdf[variable].iloc[0], str):
             if isinstance(labels, dict):
-                dff = self.re_name(dff, labels, variable)
+                dff = self._re_name(dff, labels, variable)
             dff[variable] += ' and '
             dff = dff.groupby('index').agg({variable: 'sum', 'geometry': 'first'})
             dff[variable] = [s[0:len(s) - 5] for s in dff[variable]]
             if isinstance(labels, dict):
-                dff = self.re_name(dff, labels, variable)
+                dff = self._re_name(dff, labels, variable)
             codes = {tech: i for i, tech in enumerate(dff[variable].unique())}
-			
+
             if isinstance(cmap, dict):
                 cmap = {i: cmap[tech] for i, tech in enumerate(dff[variable].unique())}
 
@@ -1394,7 +1804,7 @@ class OnStove(DataProcessor):
                 meta = self.base_layer.meta
             else:
                 dff['codes'] = [codes[tech] for tech in dff[variable]]
-                layer, meta = self.points_to_raster(dff, 'codes')
+                layer, meta = self._points_to_raster(dff, 'codes')
         else:
             if metric == 'total':
                 dff[variable] = dff[variable] * dff['Households']
@@ -1415,8 +1825,8 @@ class OnStove(DataProcessor):
                 layer[self.rows, self.cols] = dff[variable]
                 meta = self.base_layer.meta
             else:
-                layer, meta = self.points_to_raster(dff, variable, dtype='float32',
-                                                            nodata=np.nan)
+                layer, meta = self._points_to_raster(dff, variable, dtype='float32',
+                                                     nodata=np.nan)
             variable = variable + '_' + metric
         if name is not None:
             variable = name
@@ -1451,11 +1861,11 @@ class OnStove(DataProcessor):
         elif not admin_layer:
             admin_layer = self.mask_layer.data
 
-        if not ax:
+        if ax is None:
             fig, ax = plt.subplots(1, 1, figsize=figsize, dpi=dpi)
 
         if stats:
-            self.add_statistics(ax, stats_position, stats_fontsize)
+            self._add_statistics(ax, stats_position, stats_fontsize)
 
         raster.plot(cmap=cmap, cumulative_count=cumulative_count,
                     quantiles=quantiles,
@@ -1474,7 +1884,7 @@ class OnStove(DataProcessor):
                               cmap=cmap, quantiles=quantiles, categories=categories,
                               classes=classes)
 
-    def add_statistics(self, ax, stats_position, fontsize=12):
+    def _add_statistics(self, ax, stats_position, fontsize=12):
         summary = self.summary(total=True, pretty=False)
         deaths = TextArea("Deaths avoided", textprops=dict(fontsize=fontsize, color='black'))
         health = TextArea("Health costs avoided", textprops=dict(fontsize=fontsize, color='black'))
@@ -1520,7 +1930,7 @@ class OnStove(DataProcessor):
 
         if stats:
             fig, ax = plt.subplots(1, 1, figsize=figsize, dpi=dpi)
-            self.add_statistics(ax, stats_position, stats_fontsize)
+            self._add_statistics(ax, stats_position, stats_fontsize)
         else:
             ax = None
 
@@ -1530,17 +1940,12 @@ class OnStove(DataProcessor):
                           legend=legend, legend_title=legend_title, legend_cols=legend_cols, rasterized=rasterized,
                           scale_bar=scale_bar, north_arrow=north_arrow, legend_prop=legend_prop)
 
-    def to_json(self, name):
-        self.gdf.to_file(os.path.join(self.output_directory, name), driver='GeoJSON')
-
-    def read_data(self, path):
-        self.gdf = gpd.read_file(path)
 
     # TODO: make this a property
     def summary(self, total=True, pretty=True, labels=None):
         dff = self.gdf.copy()
         if labels is not None:
-            dff = self.re_name(dff, labels, 'max_benefit_tech')
+            dff = self._re_name(dff, labels, 'max_benefit_tech')
         for attribute in ['maximum_net_benefit', 'deaths_avoided', 'health_costs_avoided', 'time_saved',
                           'opportunity_cost_gained', 'reduced_emissions', 'emissions_costs_saved',
                           'investment_costs', 'fuel_costs', 'om_costs', 'salvage_value']:
@@ -1612,7 +2017,7 @@ class OnStove(DataProcessor):
         else:
             return p
 
-    def plot_costs_benefits(self, cmap=None, labels=None, save=False, height=1.5, width=2.5):
+    def plot_costs_benefits(self, cmap=None, labels=None, save_as=None, height=1.5, width=2.5):
         df = self.summary(total=False, pretty=False, labels=labels)
         df['investment_costs'] -= df['salvage_value']
         df['fuel_costs'] *= -1
@@ -1650,98 +2055,97 @@ class OnStove(DataProcessor):
              + labs(x='', y='Billion USD', fill='Cost / Benefit')
              )
 
-        if save:
-            file = os.path.join(self.output_directory, 'benefits_costs.pdf')
+        if save_as is not None:
+            file = os.path.join(self.output_directory, f'{save_as}.pdf')
             p.save(file, height=height, width=width)
         else:
             return p
 
-    def plot_costs_benefits_unit(self, technologies, area='urban', cmap=None, save=False, height=1.5, width=2.5):
-        df = pd.DataFrame({'Settlement': [], 'Technology': [], 'investment_costs': [], 'fuel_costs': [],
-                           'om_costs': [], 'health_costs_avoided': [],
-                           'emissions_costs_saved': [], 'opportunity_cost_gained': []})
-
-        if area.lower() == 'urban':
-            settlement = self.gdf.reset_index().groupby('index').agg({'IsUrban': 'first'})['IsUrban'] > 20
-            set_type = 'Urban'
-        elif area.lower() == 'rural':
-            settlement = self.gdf.reset_index().groupby('index').agg({'IsUrban': 'first'})['IsUrban'] < 20
-            set_type = 'Rural'
-
-        for name in technologies:
-            tech = self.techs[name]
-            total_hh = tech.households[settlement].sum()
-            inv = np.nansum((tech.discounted_investments[settlement] -
-                       tech.discounted_salvage_cost[settlement]) * tech.households[settlement]) / total_hh
-            fuel = np.nansum(tech.discounted_fuel_cost[settlement] * tech.households[settlement]) / total_hh
-            om = np.nansum(tech.discounted_om_costs[settlement] * tech.households[settlement]) / total_hh
-            health = np.nansum((tech.distributed_morbidity[settlement] +
-                                tech.distributed_mortality[settlement] +
-                                tech.distributed_spillovers_morb[settlement] +
-                                tech.distributed_spillovers_mort[settlement]) * tech.households[settlement]) / total_hh
-            ghg = np.nansum(tech.decreased_carbon_costs[settlement] * tech.households[settlement]) / total_hh
-            time = np.nansum(tech.time_value[settlement] * tech.households[settlement]) / total_hh
-
-            df = pd.concat([df, pd.DataFrame({'Settlement': [set_type],
-                                              'Technology': [name],
-                                              'Investment costs': [inv],
-                                              'Fuel costs': [fuel],
-                                              'O&M costs': [om],
-                                              'Health costs avoided': [health],
-                                              'Emissions costs saved': [ghg],
-                                              'Opportunity cost gained': [time]})])
-
-        df['Fuel costs'] *= -1
-        df['Investment costs'] *= -1
-        df['O&M costs'] *= -1
-
-        if cmap is None:
-            cmap = {'Health costs avoided': '#542788', 'Investment costs': '#b35806',
-                    'Fuel costs': '#f1a340', 'Emissions costs saved': '#998ec3',
-                    'O&M costs': '#fee0b6', 'Opportunity cost gained': '#d8daeb'}
-
-
-
-        value_vars = ['Health costs avoided',
-                      'Emissions costs saved',
-                      'Opportunity cost gained',
-                      'Investment costs',
-                      'Fuel costs',
-                      'O&M costs']
-
-        df['net_benefit'] = df['Health costs avoided'] + df['Emissions costs saved'] + df['Opportunity cost gained'] + \
-                            df['Investment costs'] + df['Fuel costs'] + df['O&M costs']
-        dff = df.melt(id_vars=['Technology', 'Settlement', 'net_benefit'], value_vars=value_vars)
-
-        tech_list = list(dict.fromkeys(dff.sort_values(['Settlement', 'net_benefit'])['Technology'].tolist()))
-        dff['Technology_cat'] = pd.Categorical(dff['Technology'], categories=tech_list)
-        cat_order = ['Health costs avoided',
-                     'Emissions costs saved',
-                     'Opportunity cost gained',
-                     'Investment costs',
-                     'Fuel costs',
-                     'O&M costs']
-
-        dff['variable'] = pd.Categorical(dff['variable'], categories=cat_order, ordered=True)
-
-        p = (ggplot(dff)
-             + geom_col(aes(x='Technology_cat', y='value', fill='variable'))
-             + geom_point(aes(x='Technology_cat', y='net_benefit'), fill='white', color='grey', shape='D')
-             + scale_fill_manual(cmap)
-             + coord_flip()
-             + theme_minimal()
-             + labs(x='', y='USD', fill='Cost / Benefit')
-             + facet_wrap('Settlement',
-                          nrow=2,
-                          #scales='free'
-                          )
-             )
-
-        if save:
-            file = os.path.join(self.output_directory, 'benefits_costs.pdf')
-            p.save(file, height=height, width=width)
-        else:
-            return p
+    # TODO: test this method
+    # def plot_costs_benefits_unit(self, technologies, area='urban', cmap=None, save=False, height=1.5, width=2.5):
+    #     df = pd.DataFrame({'Settlement': [], 'Technology': [], 'investment_costs': [], 'fuel_costs': [],
+    #                        'om_costs': [], 'health_costs_avoided': [],
+    #                        'emissions_costs_saved': [], 'opportunity_cost_gained': []})
+    #
+    #     if area.lower() == 'urban':
+    #         settlement = self.gdf.reset_index().groupby('index').agg({'IsUrban': 'first'})['IsUrban'] > 20
+    #         set_type = 'Urban'
+    #     elif area.lower() == 'rural':
+    #         settlement = self.gdf.reset_index().groupby('index').agg({'IsUrban': 'first'})['IsUrban'] < 20
+    #         set_type = 'Rural'
+    #
+    #     for name in technologies:
+    #         tech = self.techs[name]
+    #         total_hh = tech.households[settlement].sum()
+    #         inv = np.nansum((tech.discounted_investments[settlement] -
+    #                          tech.discounted_salvage_cost[settlement]) * tech.households[settlement]) / total_hh
+    #         fuel = np.nansum(tech.discounted_fuel_cost[settlement] * tech.households[settlement]) / total_hh
+    #         om = np.nansum(tech.discounted_om_costs[settlement] * tech.households[settlement]) / total_hh
+    #         health = np.nansum((tech.distributed_morbidity[settlement] +
+    #                             tech.distributed_mortality[settlement] +
+    #                             tech.distributed_spillovers_morb[settlement] +
+    #                             tech.distributed_spillovers_mort[settlement]) * tech.households[settlement]) / total_hh
+    #         ghg = np.nansum(tech.decreased_carbon_costs[settlement] * tech.households[settlement]) / total_hh
+    #         time = np.nansum(tech.time_value[settlement] * tech.households[settlement]) / total_hh
+    #
+    #         df = pd.concat([df, pd.DataFrame({'Settlement': [set_type],
+    #                                           'Technology': [name],
+    #                                           'Investment costs': [inv],
+    #                                           'Fuel costs': [fuel],
+    #                                           'O&M costs': [om],
+    #                                           'Health costs avoided': [health],
+    #                                           'Emissions costs saved': [ghg],
+    #                                           'Opportunity cost gained': [time]})])
+    #
+    #     df['Fuel costs'] *= -1
+    #     df['Investment costs'] *= -1
+    #     df['O&M costs'] *= -1
+    #
+    #     if cmap is None:
+    #         cmap = {'Health costs avoided': '#542788', 'Investment costs': '#b35806',
+    #                 'Fuel costs': '#f1a340', 'Emissions costs saved': '#998ec3',
+    #                 'O&M costs': '#fee0b6', 'Opportunity cost gained': '#d8daeb'}
+    #
+    #     value_vars = ['Health costs avoided',
+    #                   'Emissions costs saved',
+    #                   'Opportunity cost gained',
+    #                   'Investment costs',
+    #                   'Fuel costs',
+    #                   'O&M costs']
+    #
+    #     df['net_benefit'] = df['Health costs avoided'] + df['Emissions costs saved'] + df['Opportunity cost gained'] + \
+    #                         df['Investment costs'] + df['Fuel costs'] + df['O&M costs']
+    #     dff = df.melt(id_vars=['Technology', 'Settlement', 'net_benefit'], value_vars=value_vars)
+    #
+    #     tech_list = list(dict.fromkeys(dff.sort_values(['Settlement', 'net_benefit'])['Technology'].tolist()))
+    #     dff['Technology_cat'] = pd.Categorical(dff['Technology'], categories=tech_list)
+    #     cat_order = ['Health costs avoided',
+    #                  'Emissions costs saved',
+    #                  'Opportunity cost gained',
+    #                  'Investment costs',
+    #                  'Fuel costs',
+    #                  'O&M costs']
+    #
+    #     dff['variable'] = pd.Categorical(dff['variable'], categories=cat_order, ordered=True)
+    #
+    #     p = (ggplot(dff)
+    #          + geom_col(aes(x='Technology_cat', y='value', fill='variable'))
+    #          + geom_point(aes(x='Technology_cat', y='net_benefit'), fill='white', color='grey', shape='D')
+    #          + scale_fill_manual(cmap)
+    #          + coord_flip()
+    #          + theme_minimal()
+    #          + labs(x='', y='USD', fill='Cost / Benefit')
+    #          + facet_wrap('Settlement',
+    #                       nrow=2,
+    #                       # scales='free'
+    #                       )
+    #          )
+    #
+    #     if save:
+    #         file = os.path.join(self.output_directory, 'benefits_costs.pdf')
+    #         p.save(file, height=height, width=width)
+    #     else:
+    #         return p
 
     def plot_benefit_distribution(self, type='box', groupby='None', variable='net_benefit', best_mix=True,
                                   cmap=None, labels=None, save_as=None, height=1.5, width=2.5):
@@ -1757,20 +2161,20 @@ class OnStove(DataProcessor):
                                                                         'Households',
                                                                         'Calibrated_pop']].sum()
                 df.reset_index(inplace=True)
-                df = self.re_name(df, labels, 'max_benefit_tech')
+                df = self._re_name(df, labels, 'max_benefit_tech')
                 tech_list = df.groupby('max_benefit_tech')[['Calibrated_pop']].sum()
                 tech_list = tech_list.reset_index().sort_values('Calibrated_pop')['max_benefit_tech'].tolist()
                 x = 'max_benefit_tech'
             elif groupby.lower() == 'urbanrural':
                 df = self.gdf.copy()
-                df = self.re_name(df, labels, 'max_benefit_tech')
+                df = self._re_name(df, labels, 'max_benefit_tech')
                 df['Urban'] = df['IsUrban'] > 20
                 df['Urban'].replace({True: 'Urban', False: 'Rural'}, inplace=True)
                 x = 'Urban'
             else:
                 if best_mix:
                     df = self.gdf.copy()
-                    df = self.re_name(df, labels, 'max_benefit_tech')
+                    df = self._re_name(df, labels, 'max_benefit_tech')
                     tech_list = df.groupby('max_benefit_tech')[['Calibrated_pop']].sum()
                     tech_list = tech_list.reset_index().sort_values('Calibrated_pop')['max_benefit_tech'].tolist()
                     x = 'max_benefit_tech'
@@ -1786,7 +2190,7 @@ class OnStove(DataProcessor):
                     tech_list = []
                     for name, tech in self.techs.items():
                         if tech.benefits is not None:
-                        # if 'net_benefit' in tech.__dict__.keys():
+                            # if 'net_benefit' in tech.__dict__.keys():
                             tech_list.append(name)
                     x = 'tech'
                     if variable == 'net_benefit':
@@ -1800,7 +2204,7 @@ class OnStove(DataProcessor):
                     for tech in tech_list:
                         df = pd.concat([df, pd.DataFrame({x: [tech] * self.techs[tech][y].shape[0],
                                                           y: self.techs[tech][y]})], axis=0)
-                    df = self.re_name(df, labels, x)
+                    df = self._re_name(df, labels, x)
                     tech_list = df.groupby(x)[[y]].mean()
                     tech_list = tech_list.reset_index().sort_values(y)[x].tolist()
 
@@ -1835,7 +2239,7 @@ class OnStove(DataProcessor):
                                                                     'Households',
                                                                     'Calibrated_pop']].sum()
             df.reset_index(inplace=True)
-            df = self.re_name(df, labels, 'max_benefit_tech')
+            df = self._re_name(df, labels, 'max_benefit_tech')
             p = (ggplot(df)
                  + geom_density(aes(
                         x='(health_costs_avoided + opportunity_cost_gained + emissions_costs_saved' +

@@ -119,7 +119,7 @@ class Technology:
         self.discounted_fuel_cost = 0
         self.discounted_investments = 0
         self.benefits = None
-        self.net_benefit = None
+        self.net_benefits = None
 
     def __setitem__(self, idx, value):
         self.__dict__[idx] = value
@@ -661,7 +661,7 @@ class Technology:
         self.benefits = w_health * (self.distributed_morbidity + self.distributed_mortality) + \
                         w_spillovers * (self.distributed_spillovers_morb + self.distributed_spillovers_mort) + \
                         w_environment * self.decreased_carbon_costs + w_time * self.time_value
-        self.net_benefit = self.benefits - w_costs * self.costs
+        self.net_benefits = self.benefits - w_costs * self.costs
         model.gdf["costs_{}".format(self.name)] = self.costs
         model.gdf["benefits_{}".format(self.name)] = self.benefits
         model.gdf["net_benefit_{}".format(self.name)] = self.benefits - w_costs * self.costs
@@ -819,10 +819,9 @@ class LPG(Technology):
             friction.align(model.base_layer.path, os.path.join(model.output_directory, self.name, 'Friction'))
 
         lpg.friction = friction
-        lpg.travel_time(os.path.join(model.output_directory, self.name))
-        self.travel_time = 2 * model.raster_to_dataframe(lpg.distance_raster.data,
-                                                         nodata=lpg.distance_raster.meta['nodata'],
-                                                         fill_nodata='interpolate', method='read')
+        lpg.travel_time(create_raster=True)
+        self.travel_time = 2 * model.raster_to_dataframe(lpg.distance_raster,
+                                                         fill_nodata_method='interpolate', method='read')
 
     def transportation_cost(self, model: 'onstove.OnStove'):
         """The cost of transporting LPG.
@@ -836,13 +835,11 @@ class LPG(Technology):
         The function uses the following attributes of model: ``diesel_per_hour``, ``diesel_cost``, ``travel_time``,
         ``truck_capacity``, ``efficiency`` and ``energy_content``.
 
-
         References
         ----------
         .. [1] Szabó, S., Bódis, K., Huld, T. & Moner-Girona, M. Energy solutions in rural Africa: mapping
-        electrification costs of distributed solar and diesel generation versus grid extension.
-        Environ. Res. Lett. 6, 034002 (2011).
-
+           electrification costs of distributed solar and diesel generation versus grid extension.
+           Environ. Res. Lett. 6, 034002 (2011).
 
         Parameters
         ----------
@@ -860,7 +857,7 @@ class LPG(Technology):
 
     def discount_fuel_cost(self, model: 'onstove.OnStove', relative: bool = True):
         """This method expands :meth:`discount_fuel_cost` when LPG is the stove assessed in order to ensure that the
-         transportation costs are included
+        transportation costs are included
 
         Parameters
         ----------
@@ -881,8 +878,8 @@ class LPG(Technology):
 
     def transport_emissions(self, model: 'onstove.OnStove'):
         """Calculates the emissions caused by the transportation of LPG. This is dependent on the diesel consumption of
-         the truck. Diesel consumption is assumed to be 14 l/h (14 l/100km). Each truck is assumed to transport 2,000
-         kg LPG
+        the truck. Diesel consumption is assumed to be 14 l/h (14 l/100km). Each truck is assumed to transport 2,000
+        kg LPG
 
         Emissions intensities and diesel density are taken from [1]_.
 
@@ -892,8 +889,8 @@ class LPG(Technology):
         References
         ----------
         .. [1] Ntziachristos, L. and Z. Samaras (2018), “1.A.3.b.i, 1.A.3.b.ii, 1.A.3.b.iii, 1.A.3.b.iv Passenger cars,
-        light commercial trucks, heavy-duty vehicles including buses and motor cycles”, in EMEP/EEA air pollutant
-        emission inventory guidebook 2016 – Update Jul. 2018
+           light commercial trucks, heavy-duty vehicles including buses and motor cycles”, in EMEP/EEA air pollutant
+           emission inventory guidebook 2016 – Update Jul. 2018
 
         Parameters
         ----------
@@ -1193,16 +1190,12 @@ class Biomass(Technology):
         self.forest = RasterLayer(self.name, 'Forest', path=forest_path, resample='mode')
         self.friction = RasterLayer(self.name, 'Friction', path=friction_path, resample='average')
 
-        if align:
-            self.forest.align(model.base_layer.path, os.path.join(model.output_directory, self.name, 'Forest'))
-            self.friction.align(model.base_layer.path, os.path.join(model.output_directory, self.name, 'Friction'))
-
         self.forest.friction = self.friction
-        self.forest.travel_time(condition=self.forest_condition)
+        rows, cols = self.forest.start_points(condition=self.forest_condition)
+        self.forest.travel_time(rows=rows, cols=cols, create_raster=True)
 
-        travel_time = 2 * model.raster_to_dataframe(self.forest.distance_raster.data,
-                                                    nodata=self.forest.distance_raster.meta['nodata'],
-                                                    fill_nodata='interpolate', method='read')
+        travel_time = 2 * model.raster_to_dataframe(self.forest.distance_raster,
+                                                    fill_nodata_method='interpolate', method='read')
         travel_time[travel_time > 7] = 7  # cap to max travel time based on literature
         self.travel_time = travel_time
 
@@ -1247,7 +1240,7 @@ class Biomass(Technology):
         References
         ----------
         .. [1] R. Bailis, R. Drigo, A. Ghilardi, O. Masera, The carbon footprint of traditional woodfuels,
-        Nature Clim Change. 5 (2015) 266–272. https://doi.org/10.1038/nclimate2491.
+           Nature Clim Change. 5 (2015) 266–272. https://doi.org/10.1038/nclimate2491.
         """
         intensity = self['co2_intensity']
         self['co2_intensity'] *= model.specs['fnrb']
@@ -1382,7 +1375,7 @@ class Charcoal(Technology):
         References
         ----------
         .. [1] R. Bailis, R. Drigo, A. Ghilardi, O. Masera, The carbon footprint of traditional woodfuels,
-        Nature Clim Change. 5 (2015) 266–272. https://doi.org/10.1038/nclimate2491.
+           Nature Clim Change. 5 (2015) 266–272. https://doi.org/10.1038/nclimate2491.
         """
         intensity = self['co2_intensity']
         self['co2_intensity'] *= model.specs['fnrb']
@@ -1659,32 +1652,32 @@ class Electricity(Technology):
     def net_benefit(self, model: 'onstove.OnStove', w_health: int = 1, w_spillovers: int = 1,
                     w_environment: int = 1, w_time: int = 1, w_costs: int = 1):
         """This method expands :meth:`Technology.net_benefit` by taking into account electricity availability
-         in the calculations.
+        in the calculations.
 
-         Parameters
-         ----------
-         model: OnStove model
-             Instance of the OnStove model containing the main data of the study case. See
-             :class:`onstove.OnStove`.
-         w_health: int, default 1
-             Determines whether health parameters (reduced morbidity and mortality)
-             should be considered in the net-benefit equation.
-         w_spillovers: int, default 1
-             Determines whether spillover effects from cooking with traditional fuels
-             should be considered in the net-benefit equation.
-         w_environment: int, default 1
-             Determines whether environmental effects (reduced emissions) should be considered in the net-benefit
-             equation.
-         w_time: int, default 1
-             Determines whether opportunity cost (reduced time spent) should be considered in the net-benefit
-             equation.
-         w_costs: int, default 1
-             Determines whether costs should be considered in the net-benefit equation.
+        Parameters
+        ----------
+        model: OnStove model
+         Instance of the OnStove model containing the main data of the study case. See
+         :class:`onstove.OnStove`.
+        w_health: int, default 1
+         Determines whether health parameters (reduced morbidity and mortality)
+         should be considered in the net-benefit equation.
+        w_spillovers: int, default 1
+         Determines whether spillover effects from cooking with traditional fuels
+         should be considered in the net-benefit equation.
+        w_environment: int, default 1
+         Determines whether environmental effects (reduced emissions) should be considered in the net-benefit
+         equation.
+        w_time: int, default 1
+         Determines whether opportunity cost (reduced time spent) should be considered in the net-benefit
+         equation.
+        w_costs: int, default 1
+         Determines whether costs should be considered in the net-benefit equation.
 
-         See also
-         --------
-         net_benefit
-         """
+        See also
+        --------
+        net_benefit
+        """
         super().net_benefit(model, w_health, w_spillovers, w_environment, w_time, w_costs)
         model.gdf.loc[model.gdf['Current_elec'] == 0, "net_benefit_{}".format(self.name)] = np.nan
         factor = model.gdf['Elec_pop_calib'] / model.gdf['Calibrated_pop']
@@ -1803,8 +1796,7 @@ class Biogas(Technology):
         A pandas series with the values for each populated grid cell in hours per meter
         """
         friction = RasterLayer(self.name, 'Friction', path=friction_path, resample='average')
-        data = model.raster_to_dataframe(friction.data, nodata=friction.meta['nodata'],
-                                         fill_nodata='interpolate', method='read')
+        data = model.raster_to_dataframe(friction, fill_nodata_method='interpolate', method='read')
         return data / 60
 
     def required_energy_hh(self, model: 'onstove.OnStove'):
@@ -1885,8 +1877,8 @@ class Biogas(Technology):
             if isinstance(self.temperature, str):
                 self.temperature = RasterLayer('Biogas', 'Temperature', self.temperature)
 
-            model.raster_to_dataframe(self.temperature.data, name="Temperature", method='read',
-                                      nodata=self.temperature.meta['nodata'], fill_nodata='interpolate')
+            model.raster_to_dataframe(self.temperature, name="Temperature", method='read',
+                                      fill_nodata_method='interpolate')
             model.gdf.loc[model.gdf["Temperature"] < 10, "available_biogas"] = 0
             model.gdf.loc[(model.gdf["IsUrban"] > 20), "available_biogas"] = 0
 
@@ -1894,8 +1886,8 @@ class Biogas(Technology):
         if self.water is not None:
             if isinstance(self.water, str):
                 self.water = VectorLayer('Biogas', 'Water scarcity', self.water, bbox=model.mask_layer.data)
-            model.raster_to_dataframe(self.water.data, name="Water",
-                                      fill_nodata='interpolate', method='read')
+            model.raster_to_dataframe(self.water, name="Water",
+                                      fill_nodata_method='interpolate', method='read')
             model.gdf.loc[model.gdf["Water"] == 0, "available_biogas"] = 0
 
         # Available biogas energy per year in MJ (energy content in MJ/m3)
@@ -1935,8 +1927,8 @@ class Biogas(Technology):
         for name, path in paths.items():
             layer = RasterLayer('Livestock', name,
                                 path=path)
-            model.raster_to_dataframe(layer.data, name=name, method='read',
-                                      nodata=layer.meta['nodata'], fill_nodata='interpolate')
+            model.raster_to_dataframe(layer, name=name, method='read',
+                                      fill_nodata_method='interpolate')
 
     def total_time(self, model: 'onstove.OnStove'):
         """This method expands :meth:`Technology.total_time` by adding the biogas collection time

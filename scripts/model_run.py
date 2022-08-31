@@ -75,12 +75,9 @@ model.to_image('max_benefit_tech', cmap=cmap, legend_position=(1, 0.75),
                type='pdf', dpi=300, stats=True, stats_position=(1, 0.8),
                labels=labels, legend=True, legend_title='Maximum benefit\ncooking technology', rasterized=True)
 
-model.plot_split(cmap=cmap, labels=labels, save=True, height=1.5, width=3.5)
-model.plot_costs_benefits(labels=labels, save=True, height=1.5, width=2)
-model.plot_benefit_distribution(type='box', groupby='None', cmap=cmap, labels=labels, save=True, height=1.5, width=3.5)
-model.plot_benefit_distribution(type='box', groupby='UrbanRural', cmap=cmap, labels=labels, save=True, height=2.5,
-                                width=3.5)
-model.plot_benefit_distribution(type='density', cmap=cmap, labels=labels, save=True, height=1.5, width=3.5)
+model.plot_split(cmap=cmap, labels=labels, save_as='tech_split', height=1.5, width=3.5)
+model.plot_costs_benefits(labels=labels, save_as='benefits_costs', height=1.5, width=2)
+model.plot_benefit_distribution(type='box', groupby='None', cmap=cmap, labels=labels, save_as='max_benefits_box', height=1.5, width=3.5)
 
 print(f'[{country}] Saving the results')
 
