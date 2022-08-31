@@ -42,23 +42,14 @@ Through the jupyter_env.yaml in the env-folder using [Anaconda](https://www.anac
 ## Changelog
 **22-June-2022**: Original code base (v0.1.0) published
 
+**31-August-2022**: First stable OnStove version (v0.1.1) published
+
 ## Resources
 
-### Add journal articles as they appear
+### Will be added when journal articles are out
 
 ## How to cite
 
-### Add when publication is out
-
-
-## Credits
-
-**Conceptualization:** [Babak Khavari](https://github.com/babakkhavari), [Camilo Ramirez](https://github.com/orgs/Open-Source-Spatial-Clean-Cooking-Tool/people/camiloramirezgo), [Marc Jeuland](https://globalhealth.duke.edu/people/jeuland-marc) & [Francesco Fuso-Nerini](https://www.kth.se/profile/ffn) <br />
-**Methodology:** [Babak Khavari](https://github.com/babakkhavari), [Camilo Ramirez](https://github.com/orgs/Open-Source-Spatial-Clean-Cooking-Tool/people/camiloramirezgo), [Marc Jeuland](https://globalhealth.duke.edu/people/jeuland-marc) & [Francesco Fuso-Nerini](https://www.kth.se/profile/ffn) <br />
-**Software:** [Babak Khavari](https://github.com/babakkhavari) & [Camilo Ramirez](https://github.com/orgs/Open-Source-Spatial-Clean-Cooking-Tool/people/camiloramirezgo) <br />
-**Supervision and Advisory support:** [Marc Jeuland](https://globalhealth.duke.edu/people/jeuland-marc) & [Francesco Fuso-Nerini](https://www.kth.se/profile/ffn)<br />
-
-**Acknowledgements** <br />
-The work done at KTH with regards to this research was funded with support from the CCA. Furthermore, the authors would like to acknowledge Alicia Oberholzer (CCA), Anobha Gurung (CCA), Dimitrios Mentis (WRI) and Santiago Sinclair-Lecaros (WRI) for their valuable inputs and discussions. Note that none of these individuals, nor the CCA, should be held responsible for any erroneous facts or interpretations presented in this paper. These are solely the responsibility of the authors. 
+### Will be added when publications come
 
 
