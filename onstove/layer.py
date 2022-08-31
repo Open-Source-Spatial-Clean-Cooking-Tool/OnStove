@@ -509,7 +509,7 @@ class VectorLayer(_Layer):
                     height=height,
                     transform=transform,
                     nodata=nodata)
-        raster = RasterLayer()
+        raster = RasterLayer(name=self.name)
         raster.data = rasterized
         raster.meta = meta
         # raster.bounds = bounds

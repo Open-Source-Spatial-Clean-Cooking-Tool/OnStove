@@ -93,14 +93,14 @@ for key, path in {'buffaloes': buffaloes,
                    layer_type='raster', resample='nearest', window=True, rescale=True)
 
 print(f'[{country}] Adding water scarcity')
-water = VectorLayer('Biogas', 'Water scarcity', snakemake.input.water, bbox=data.mask_layer.data)
+water = VectorLayer(category='Biogas', name='Water scarcity', path=snakemake.input.water, bbox=data.mask_layer.data)
 water.data["class"] = 0
 water.data['class'] = np.where(water.data['bws_label'].isin(['Low (<10%)',
                                                                'Low - Medium (10-20%)']), 1, 0)
 water.data.to_crs(data.project_crs, inplace=True)
 out_folder = os.path.join(data.output_directory, "Biogas", "Water scarcity")
 water.rasterize(cell_height=data.cell_size[0], cell_width=data.cell_size[1],
-                attribute="class", output=out_folder, nodata=0)
+                attribute="class", output_path=out_folder, nodata=0)
 data.add_layer(category='Biogas', name='Water scarcity',
                path=os.path.join(out_folder, 'Water scarcity.tif'),
                layer_type='raster', resample='nearest')

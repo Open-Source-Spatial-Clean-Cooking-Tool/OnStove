@@ -244,7 +244,7 @@ class DataProcessor:
                 with rasterio.open(path) as src:
                     src_crs = src.meta['crs']
                 if src_crs != self.mask_layer.data.crs:
-                    bounds = transform_bounds(self.mask_layer.data.crs, src_crs, *self.mask_layer.bounds())
+                    bounds = transform_bounds(self.mask_layer.data.crs, src_crs, *self.mask_layer.bounds)
                 window = bounds
             layer = RasterLayer(category, name, path,
                                 normalization=normalization, inverse=inverse,
@@ -2017,7 +2017,7 @@ class OnStove(DataProcessor):
         else:
             return p
 
-    def plot_costs_benefits(self, cmap=None, labels=None, save=False, height=1.5, width=2.5):
+    def plot_costs_benefits(self, cmap=None, labels=None, save_as=None, height=1.5, width=2.5):
         df = self.summary(total=False, pretty=False, labels=labels)
         df['investment_costs'] -= df['salvage_value']
         df['fuel_costs'] *= -1
@@ -2055,8 +2055,8 @@ class OnStove(DataProcessor):
              + labs(x='', y='Billion USD', fill='Cost / Benefit')
              )
 
-        if save:
-            file = os.path.join(self.output_directory, 'benefits_costs.pdf')
+        if save_as is not None:
+            file = os.path.join(self.output_directory, f'{save_as}.pdf')
             p.save(file, height=height, width=width)
         else:
             return p
