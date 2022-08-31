@@ -1550,12 +1550,19 @@ class OnStove(DataProcessor):
         self.gdf.sort_index(inplace=True)
 
     def extract_lives_saved(self):
+        """
+        Extracts the number of deaths avoded from adopting each stove type selected across the study area.
+        """
         for tech in self.gdf['max_benefit_tech'].unique():
             is_tech = self.gdf['max_benefit_tech'] == tech
             index = self.gdf.loc[is_tech].index
             self.gdf.loc[is_tech, "deaths_avoided"] = self.techs[tech].deaths_avoided[index]
 
     def extract_health_costs_saved(self):
+        """
+        Extracts the healh costs avoded from adopting each stove type selected across the study area. The health costs
+        includes costs of avoided deaths, sickness and spillovers.
+        """
         for tech in self.gdf['max_benefit_tech'].unique():
             is_tech = self.gdf['max_benefit_tech'] == tech
             index = self.gdf.loc[is_tech].index
@@ -1565,48 +1572,72 @@ class OnStove(DataProcessor):
                                                             self.techs[tech].distributed_spillovers_mort[index]
 
     def extract_time_saved(self):
+        """
+        Extracts the total time saved from adopting each stove type selected across the study area.
+        """
         for tech in self.gdf['max_benefit_tech'].unique():
             is_tech = self.gdf['max_benefit_tech'] == tech
             index = self.gdf.loc[is_tech].index
             self.gdf.loc[is_tech, "time_saved"] = self.techs[tech].total_time_saved[index]
 
     def extract_opportunity_cost(self):
+        """
+        Extracts the opportunity cost of adopting each stove type selected across the study area.
+        """
         for tech in self.gdf['max_benefit_tech'].unique():
             is_tech = self.gdf['max_benefit_tech'] == tech
             index = self.gdf.loc[is_tech].index
             self.gdf.loc[is_tech, "opportunity_cost_gained"] = self.techs[tech].time_value[index]
 
     def extract_reduced_emissions(self):
+        """
+        Extracts the reduced emissions achieved by adopting each stove type selected across the study area.
+        """
         for tech in self.gdf['max_benefit_tech'].unique():
             is_tech = self.gdf['max_benefit_tech'] == tech
             index = self.gdf.loc[is_tech].index
             self.gdf.loc[is_tech, "reduced_emissions"] = self.techs[tech].decreased_carbon_emissions[index]
 
     def extract_investment_costs(self):
+        """
+        Extracts the total investment costs needed in order to adopt each stove type across the study area.
+        """
         for tech in self.gdf['max_benefit_tech'].unique():
             is_tech = self.gdf['max_benefit_tech'] == tech
             index = self.gdf.loc[is_tech].index
             self.gdf.loc[is_tech, "investment_costs"] = self.techs[tech].discounted_investments[index]
 
     def extract_om_costs(self):
+        """
+        Extracts the total operation and maintenance costs needed in order to adopt each stove type across the study area.
+        """
         for tech in self.gdf['max_benefit_tech'].unique():
             is_tech = self.gdf['max_benefit_tech'] == tech
             index = self.gdf.loc[is_tech].index
             self.gdf.loc[is_tech, "om_costs"] = self.techs[tech].discounted_om_costs[index]
 
     def extract_fuel_costs(self):
+        """
+        Extracts the total fuel costs needed in order to adopt each stove type across the study area.
+        """
         for tech in self.gdf['max_benefit_tech'].unique():
             is_tech = self.gdf['max_benefit_tech'] == tech
             index = self.gdf.loc[is_tech].index
             self.gdf.loc[is_tech, "fuel_costs"] = self.techs[tech].discounted_fuel_cost[index]
 
     def extract_salvage(self):
+        """
+        Extracts the total salvage costs needed in order to adopt each stove type across the study area.
+        """
         for tech in self.gdf['max_benefit_tech'].unique():
             is_tech = self.gdf['max_benefit_tech'] == tech
             index = self.gdf.loc[is_tech].index
             self.gdf.loc[is_tech, "salvage_value"] = self.techs[tech].discounted_salvage_cost[index]
 
     def extract_emissions_costs_saved(self):
+        """
+        Extracts the economic value of the emissions by adopt each stove type across the study area.
+        """
         for tech in self.gdf['max_benefit_tech'].unique():
             is_tech = self.gdf['max_benefit_tech'] == tech
             index = self.gdf.loc[is_tech].index
