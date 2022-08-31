@@ -1237,7 +1237,7 @@ class OnStove(DataProcessor):
 
     def calibrate_urban_rural_split(self, GHS_path: str):
         """Calibrates the urban rural split using spatial data from the
-        `GHS SMOD dataset<https://ghsl.jrc.ec.europa.eu/download.php?ds=smod>`_.
+        `GHS SMOD dataset <https://ghsl.jrc.ec.europa.eu/download.php?ds=smod>`_.
 
         The GHS dataset is used to determine which settlements are urban and which are rural in the analysis. Areas
         that have coding of either 30, 23 or 22 are considered urban, while the rest are rural. It saves the
@@ -1324,9 +1324,12 @@ class OnStove(DataProcessor):
 
     def get_value_of_time(self):
         """
-        Calculates teh value of time based on the minimum wage ($/h) and a raster layer as wealth index, poverty or GDP.
+        Calculates the value of time based on the minimum wage ($/h) and a spatial representation of wealth.
 
-        0.5 is the upper limit for minimum wage and 0.2 the lower limit
+        Time is monetized using the minimum wage in the study area, defined in the :attr:`specs` dictionary, and a
+        geospatial representation of wealth, which can be either a relative wealth index or a poverty layer (see the
+        :meth:`extract_wealth_index` method). The minimum wage value is then distributed spatially using an upper limit
+        of 0.5 times the minimung wage in the wealthier regions and an lower limit of 0.2 in the poorest regions.
         """
         min_value = np.nanmin(self.gdf['relative_wealth'])
         max_value = np.nanmax(self.gdf['relative_wealth'])
@@ -1338,7 +1341,43 @@ class OnStove(DataProcessor):
         self.gdf['value_of_time'] = norm_layer * self.specs[
             'Minimum_wage'] / 30 / 8  # convert $/months to $/h (8 working hours per day)
 
-    def run(self, technologies='all', restriction=True):
+    def run(self, technologies: Union[list[str], str] = 'all', restriction: bool = True):
+        """Runs the model using the defined ``technologies`` as options to cook with.
+
+        It loops through the ``technologies`` and calculates all costs, benefit and the net-benefit of cooking with
+        such technology relative to the current situation in every grid cell of the study area. Then, it calls the
+        :meth:`maximum_net_benefit` method to get the technology with highest net-benefit in each cell (and saves it
+        in the ``max_benefit_tech`` column of the :attr:`gdf`). Finally, it extracts indicators such as lives saved,
+        time saved, avoided emissions, health costs saved, opportunity cost gained, investment costs, fuel costs, and
+        O&M costs.
+
+        Parameters
+        ----------
+        technologies: str or list of str, default 'all'
+            List of technologies to use for the analysis. If 'all' all technologies inside the :attr:`techs` attribute
+            would be used. If a list of technology names is passed, then those technologies only will be used.
+
+            .. Note::
+               All technology names passed need to match the names of technologies in the :attr:`techs` dictionary.
+
+        restriction: bool, default True
+            Whether to have the restriction to only select technologies that produce a positive benefit compared to the
+            baseline.
+
+        See also
+        -----
+        maximum_net_benefit
+        extract_lives_saved
+        extract_health_costs_saved
+        extract_time_saved
+        extract_opportunity_cost
+        extract_reduced_emissions
+        extract_emissions_costs_saved
+        extract_investment_costs
+        extract_fuel_costs
+        extract_om_costs
+        extract_salvage
+        """
         print(f'[{self.specs["Country_name"]}] Calculating clean cooking access')
         self.get_clean_cooking_access()
         if self.base_fuel is None:
@@ -1401,6 +1440,7 @@ class OnStove(DataProcessor):
         self.extract_salvage()
         print('Done')
 
+    # TODO: check if this function is still needed
     def _get_column_functs(self):
         columns_dict = {column: 'first' for column in self.gdf.columns}
         for column in self.gdf.columns[self.gdf.columns.str.contains('cost|benefit|pop|Pop|Households')]:
@@ -1408,7 +1448,25 @@ class OnStove(DataProcessor):
         columns_dict['max_benefit_tech'] = 'first'
         return columns_dict
 
-    def maximum_net_benefit(self, techs, restriction=True):
+    def maximum_net_benefit(self, techs: list['Technology'], restriction: bool = True):
+        """Extracts the technology or technology combinations producing the highest net-benefit in each cell.
+
+        It saves the technology with highest net-benefit in the ``max_benefi_tech`` column of the :attr:`gdf`
+        GeoDataframe.
+
+        Parameters
+        ----------
+        techs: list of Technology like objects
+            Technologies to compare and select the one, or combination of two, that produces the highest net-benefit in
+            each cell.
+        restriction: bool, default True
+            Whether to have the restriction to only select technologies that produce a positive benefit compared to the
+            baseline.
+
+        See also
+        --------
+        run
+        """
         net_benefit_cols = [col for col in self.gdf if 'net_benefit_' in col]
         benefits_cols = [col for col in self.gdf if 'benefits_' in col]
 
@@ -1480,8 +1538,8 @@ class OnStove(DataProcessor):
         self.gdf['max_benefit_tech'] = self.gdf['max_benefit_tech'].str.replace("_temp", "")
         self.gdf.loc[isna, "maximum_net_benefit"] = self.gdf.loc[isna, temps].max(axis=1)
 
-    def add_admin_names(self, admin, column_name):
-
+    # TODO: check if we ned this method
+    def _add_admin_names(self, admin, column_name):
         if isinstance(admin, str):
             admin = gpd.read_file(admin)
 
