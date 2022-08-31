@@ -819,10 +819,9 @@ class LPG(Technology):
             friction.align(model.base_layer.path, os.path.join(model.output_directory, self.name, 'Friction'))
 
         lpg.friction = friction
-        lpg.travel_time(os.path.join(model.output_directory, self.name))
-        self.travel_time = 2 * model.raster_to_dataframe(lpg.distance_raster.data,
-                                                         nodata=lpg.distance_raster.meta['nodata'],
-                                                         fill_nodata='interpolate', method='read')
+        lpg.travel_time(create_raster=True)
+        self.travel_time = 2 * model.raster_to_dataframe(lpg.distance_raster,
+                                                         fill_nodata_method='interpolate', method='read')
 
     def transportation_cost(self, model: 'onstove.OnStove'):
         """The cost of transporting LPG.
@@ -1191,16 +1190,13 @@ class Biomass(Technology):
         self.forest = RasterLayer(self.name, 'Forest', path=forest_path, resample='mode')
         self.friction = RasterLayer(self.name, 'Friction', path=friction_path, resample='average')
 
-        if align:
-            self.forest.align(model.base_layer.path, os.path.join(model.output_directory, self.name, 'Forest'))
-            self.friction.align(model.base_layer.path, os.path.join(model.output_directory, self.name, 'Friction'))
-
         self.forest.friction = self.friction
-        self.forest.travel_time(condition=self.forest_condition)
+        rows, cols = self.forest.start_points(condition=self.forest.forest_condition)
+        self.forest.travel_time(rows=rows, cols=cols, create_raster=True)
 
-        travel_time = 2 * model.raster_to_dataframe(self.forest.distance_raster.data,
+        travel_time = 2 * model.raster_to_dataframe(self.forest.distance_raster,
                                                     nodata=self.forest.distance_raster.meta['nodata'],
-                                                    fill_nodata='interpolate', method='read')
+                                                    fill_nodata_method='interpolate', method='read')
         travel_time[travel_time > 7] = 7  # cap to max travel time based on literature
         self.travel_time = travel_time
 
@@ -1801,8 +1797,7 @@ class Biogas(Technology):
         A pandas series with the values for each populated grid cell in hours per meter
         """
         friction = RasterLayer(self.name, 'Friction', path=friction_path, resample='average')
-        data = model.raster_to_dataframe(friction.data, nodata=friction.meta['nodata'],
-                                         fill_nodata='interpolate', method='read')
+        data = model.raster_to_dataframe(friction, fill_nodata_method='interpolate', method='read')
         return data / 60
 
     def required_energy_hh(self, model: 'onstove.OnStove'):
@@ -1883,8 +1878,8 @@ class Biogas(Technology):
             if isinstance(self.temperature, str):
                 self.temperature = RasterLayer('Biogas', 'Temperature', self.temperature)
 
-            model.raster_to_dataframe(self.temperature.data, name="Temperature", method='read',
-                                      nodata=self.temperature.meta['nodata'], fill_nodata='interpolate')
+            model.raster_to_dataframe(self.temperature, name="Temperature", method='read',
+                                      fill_nodata_method='interpolate')
             model.gdf.loc[model.gdf["Temperature"] < 10, "available_biogas"] = 0
             model.gdf.loc[(model.gdf["IsUrban"] > 20), "available_biogas"] = 0
 
@@ -1892,8 +1887,8 @@ class Biogas(Technology):
         if self.water is not None:
             if isinstance(self.water, str):
                 self.water = VectorLayer('Biogas', 'Water scarcity', self.water, bbox=model.mask_layer.data)
-            model.raster_to_dataframe(self.water.data, name="Water",
-                                      fill_nodata='interpolate', method='read')
+            model.raster_to_dataframe(self.water, name="Water",
+                                      fill_nodata_method='interpolate', method='read')
             model.gdf.loc[model.gdf["Water"] == 0, "available_biogas"] = 0
 
         # Available biogas energy per year in MJ (energy content in MJ/m3)
@@ -1933,8 +1928,8 @@ class Biogas(Technology):
         for name, path in paths.items():
             layer = RasterLayer('Livestock', name,
                                 path=path)
-            model.raster_to_dataframe(layer.data, name=name, method='read',
-                                      nodata=layer.meta['nodata'], fill_nodata='interpolate')
+            model.raster_to_dataframe(layer, name=name, method='read',
+                                      fill_nodata_method='interpolate')
 
     def total_time(self, model: 'onstove.OnStove'):
         """This method expands :meth:`Technology.total_time` by adding the biogas collection time

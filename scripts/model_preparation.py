@@ -33,7 +33,7 @@ model.calibrate_current_pop()
 
 # path = os.path.join(output_directory, 'Demographics', 'Urban_rural_divide', 'Urban_rural_divide.tif')
 ghs_path = snakemake.input.ghs
-model.calibrate_urban_current_and_future_GHS(ghs_path)
+model.calibrate_urban_rural_split(ghs_path)
 
 # 6. Add wealth index GIS data
 print(f'[{country}] Adding wealth index')
@@ -62,8 +62,8 @@ model.distance_to_electricity(mv_lines=mv_lines)
 path = snakemake.input.ntl
 ntl = RasterLayer('Electricity', 'Night_time_lights', path=path)
 
-model.raster_to_dataframe(ntl.data, name='Night_lights', method='read',
-                          nodata=ntl.meta['nodata'], fill_nodata='interpolate')
+model.raster_to_dataframe(ntl, name='Night_lights', method='read',
+                          fill_nodata_method='interpolate')
 
 # 9. Calibrate current electrified population
 print(f'[{country}] Calibrating current electrified')
@@ -85,9 +85,8 @@ model.read_tech_data(path, delimiter=',')
 # 12. Reading GIS data for LPG supply
 print(f'[{country}] LPG data')
 travel_time = RasterLayer('LPG', 'Traveltime', snakemake.input.traveltime_cities)
-model.techs['LPG'].travel_time = model.raster_to_dataframe(travel_time.data,
-                                                           nodata=travel_time.meta['nodata'],
-                                                           fill_nodata='interpolate', method='read') * 2 / 60
+model.techs['LPG'].travel_time = model.raster_to_dataframe(travel_time,fill_nodata_method='interpolate',
+                                                           method='read') * 2 / 60
 
 # 13. Adding GIS data for Traditional Biomass
 print(f'[{country}] Traditional Biomass collected data')

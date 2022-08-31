@@ -337,7 +337,6 @@ class VectorLayer(_Layer):
                                       normalization=self.normalization)
         distance_raster.data = data
         distance_raster.meta = meta
-        distance_raster.bounds = bounds
 
         if output_path:
             distance_raster.save(output_path)

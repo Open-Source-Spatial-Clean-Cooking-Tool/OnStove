@@ -69,7 +69,7 @@ class DataProcessor:
         a WKT string or an EPSG int. If defined all datasets added to the ``DataProcessor`` will be reprojected to
         this crs when calling the :meth:`reproject_layers` method. If not defined then the ``crs`` of the
         :attr:`base_layer` will be used.
-    cell_size: float, optional
+    cell_size: tuple of float (width, height), optional
         The desired cell size of the raster layers. It should be defined in the units of the used ``crs``. If defined,
         it will be used to rescale all datasets when calling the :meth:`align` method. If not defined, the
         ``cell_size`` of the :attr:`base_layer` will be used.
@@ -90,9 +90,8 @@ class DataProcessor:
         the grid cell of this raster to align all other rasters.
     """
 
-
     def __init__(self, project_crs: Optional[Union['pyproj.CRS', int]] = None,
-                 cell_size: float = None, output_directory: str = 'output'):
+                 cell_size: tuple[float] = None, output_directory: str = 'output'):
         """
         Initializes the class and sets an empty layers dictionaries.
         """
@@ -453,6 +452,9 @@ class MCA(DataProcessor):
     clean cooking technologies can be expanded or areas in need of financial assistance or lack of infrastructure.
     In brief, it identifies priority areas of action from the user perspective.
 
+    .. note::
+       The ``OnStove`` class inherits all functionalities from the :class:`DataProcessor` class.
+
     Parameters
     ----------
     **kwargs: dict of parameters
@@ -720,8 +722,7 @@ class MCA(DataProcessor):
 
 
 class OnStove(DataProcessor):
-    """
-    The ``OnStove`` class is used to perform a geospatial cost-benefit analysis on clean cooking access.
+    """The ``OnStove`` class is used to perform a geospatial cost-benefit analysis on clean cooking access.
 
     OnStove determines the net-benefits of cooking with different stoves across an area with regards to capital, fuel,
     and operation and maintenance costs, as well as benefits from reduced morbidity, reduced mortality, time saved and
@@ -751,12 +752,8 @@ class OnStove(DataProcessor):
     gwp
     clean_cooking_access_u
     clean_cooking_access_r
-    combined_weight
+    electrified_weight
     """
-    conn = None
-    base_layer = None
-
-    population = 'path_to_file'
 
     def __init__(self, project_crs: Optional[Union['pyproj.CRS', int]] = None,
                  cell_size: float = None, output_directory: str = 'output'):
@@ -775,7 +772,7 @@ class OnStove(DataProcessor):
         self.gwp = {'co2': 1, 'ch4': 25, 'n2o': 298, 'co': 2, 'bc': 900, 'oc': -46}
         self.clean_cooking_access_u = None
         self.clean_cooking_access_r = None
-        self.combined_weight = 0
+        self.electrified_weight = None
 
     def read_scenario_data(self, path_to_config: str, delimiter=','):
         """Reads the scenario data into a dictionary
@@ -937,6 +934,21 @@ class OnStove(DataProcessor):
         self.techs = techs
 
     def get_clean_cooking_access(self):
+        """Calculates the clean cooking access in rural and urban settlements.
+
+        It uses the :attr:`Technology.current_share_urban` and :attr:`Technology.current_share_rural` attributes,
+        from each technology class, in combination with the :attr:`Technology.is_clean` attribute to get the current
+        clean cooking access as a percentage.
+
+        Returns
+        -------
+        clean_cooking_access_u: float
+            Stores the clean cooking access percentage in urban settlements in the :attr:`clean_cooking_access_u`
+            attribute.
+        clean_cooking_access_r: float
+            Stores the clean cooking access percentage in rural settlements in the :attr:`clean_cooking_access_r`
+            attribute.
+        """
         clean_cooking_access_u = 0
         clean_cooking_access_r = 0
         for tech in self.techs.values():
@@ -946,8 +958,21 @@ class OnStove(DataProcessor):
         self.clean_cooking_access_u = clean_cooking_access_u
         self.clean_cooking_access_r = clean_cooking_access_r
 
-    def normalize(self, column, inverse=False):
+    def normalize(self, column: str, inverse: bool = False):
+        """Uses the MinMax method to normalize the data from a column of the :attr:`gdf` GeoDataFrame.
 
+        Parameters
+        ----------
+        column: str
+            Name of the column of the :attr:`gdf` to create the normalized data from.
+        inverse: bool, default False
+            Whether to invert the range in the normalized data.
+
+        Returns
+        -------
+        pd.Series
+            The normalized pd.Series.
+        """
         if inverse:
             normalized = (self.gdf[column].max() - self.gdf[column]) / (self.gdf[column].max() - self.gdf[column].min())
         else:
@@ -955,26 +980,57 @@ class OnStove(DataProcessor):
 
         return normalized
 
-    def normalize_for_electricity(self):
+    @property
+    def electrified_weight(self):
+        """Spatial weighted average factor used to calibrate the current electrified population.
 
-        if "Transformers_dist" in self.gdf.columns:
-            self.gdf["Elec_dist"] = self.gdf["Transformers_dist"]
-        elif "MV_lines_dist" in self.gdf.columns:
-            self.gdf["Elec_dist"] = self.gdf["MV_lines_dist"]
-        else:
-            self.gdf["Elec_dist"] = self.gdf["HV_lines_dist"]
+        It uses the night time lights, population count and distance to electricity infrastructure (this can be either
+        transformers, medium voltage lines or high voltage lines in that order of preference) in combination with
+        user-defined weights to calculate the factor. This factor serves to provide a "probability" for each settlement
+        to be electrified, which will be used in the calibration of electrified population.
 
-        elec_dist = self.normalize("Elec_dist", inverse=True)
-        ntl = self.normalize("Night_lights")
-        pop = self.normalize("Calibrated_pop")
+        See also
+        --------
+        current_elec
+        final_elec
+        """
+        if self._electrified_weight is None:
+            if "Transformers_dist" in self.gdf.columns:
+                self.gdf["Elec_dist"] = self.gdf["Transformers_dist"]
+            elif "MV_lines_dist" in self.gdf.columns:
+                self.gdf["Elec_dist"] = self.gdf["MV_lines_dist"]
+            else:
+                self.gdf["Elec_dist"] = self.gdf["HV_lines_dist"]
 
-        self.combined_weight = (elec_dist * self.specs["infra_weight"] + pop * self.specs["pop_weight"] +
-                                ntl * self.specs["NTL_weight"]) / (
-                                       self.specs["infra_weight"] + self.specs["pop_weight"] +
-                                       self.specs["NTL_weight"])
+            elec_dist = self.normalize("Elec_dist", inverse=True)
+            ntl = self.normalize("Night_lights")
+            pop = self.normalize("Calibrated_pop")
+
+            weight_sum = elec_dist * self.specs["infra_weight"] + pop * self.specs["pop_weight"] + \
+                         ntl * self.specs["NTL_weight"]
+            weights = self.specs["infra_weight"] + self.specs["pop_weight"] + self.specs["NTL_weight"]
+
+            self.electrified_weight = weight_sum / weights
+        return self._electrified_weight
+
+    @electrified_weight.setter
+    def electrified_weight(self, value):
+        self._electrified_weight = value
 
     def current_elec(self):
-        self.normalize_for_electricity()
+        """Calculates a binary variable that defines which settlements are at least partially electrified.
+
+        It uses the electrification rate provided by the user in the :attr:`specs` file (named as ``Elec_rate``) and
+        the :attr:`electrified_weight` to make the calibration. The binary variable is saved as a column of the
+        GeoDataFrame :attr:`gdf` with the name of ``Current_elec``.
+
+        See also
+        --------
+        electrified_weight
+        final_elec
+        read_scenario_data
+        specs
+        """
         elec_rate = self.specs["Elec_rate"]
 
         self.gdf["Current_elec"] = 0
@@ -984,7 +1040,7 @@ class OnStove(DataProcessor):
         total_pop = self.gdf["Calibrated_pop"].sum()
 
         while elec_pop <= total_pop * elec_rate:
-            bool = (self.combined_weight >= i)
+            bool = (self.electrified_weight >= i)
             elec_pop = self.gdf.loc[bool, "Calibrated_pop"].sum()
 
             self.gdf.loc[bool, "Current_elec"] = 1
@@ -993,7 +1049,20 @@ class OnStove(DataProcessor):
         self.i = i
 
     def final_elec(self):
+        """Calibrates the electrified population within each cell.
 
+        This is a "fine-tuning" of the electrified population. It uses the ``Current_elec`` column of the :attr:`gdf`
+        GeoDataFrame (calculated using the :meth:`current_elec` method) and the ``Calibrated_pop`` column (calculated
+        using the :meth:`calibrate_current_pop` method) to get the population that is electrified within each
+        electrified settlement, according to the ``Elec_rate`` provided by the user (stored in :attr:`specs`).
+
+        See also
+        --------
+        electrified_weight
+        current_elec
+        read_scenario_data
+        specs
+        """
         elec_rate = self.specs["Elec_rate"]
 
         self.gdf["Elec_pop_calib"] = self.gdf["Calibrated_pop"]
@@ -1006,7 +1075,7 @@ class OnStove(DataProcessor):
 
         while elec_pop > total_pop * elec_rate:
 
-            new_bool = (self.i <= self.combined_weight) & (self.combined_weight <= i)
+            new_bool = (self.i <= self.electrified_weight) & (self.electrified_weight <= i)
 
             self.gdf.loc[new_bool, "Elec_pop_calib"] -= factor
             self.gdf.loc[self.gdf["Elec_pop_calib"] < 0, "Elec_pop_calib"] = 0
@@ -1022,17 +1091,40 @@ class OnStove(DataProcessor):
         self.gdf.loc[self.gdf["Current_elec"] == 0, "Elec_pop_calib"] = 0
 
     def calibrate_current_pop(self):
+        """Calibrates the spatial population in each cell according to the user defined population in the start year
+        (``Population_start_year`` in the :attr:`specs` dictionary) and saves it in the ``Calibrated_pop`` column of
+        the main GeoDataFrame (:attr:`gdf`).
 
+        See also
+        --------
+        read_scenario_data
+        specs
+        gdf
+        """
         total_gis_pop = self.gdf["Pop"].sum()
         calibration_factor = self.specs["Population_start_year"] / total_gis_pop
 
         self.gdf["Calibrated_pop"] = self.gdf["Pop"] * calibration_factor
 
-    def distance_to_electricity(self, hv_lines=None, mv_lines=None, transformers=None):
-        """
-        Cals the get_distance_raster method for the HV. MV and Transformers
-        layers (if available) and converts the output to a column in the
-        main gdf
+    def distance_to_electricity(self, hv_lines: VectorLayer = None, mv_lines: VectorLayer = None,
+                                transformers: VectorLayer = None):
+        """ Calculates the distance to electricity infrastructure.
+
+        It calls the :meth:`VectorLayer.get_distance_raster` method for the high voltage, medium voltage and
+        transformers datasets (if available) and converts the output to a column in the main GeoDataFrame (:attr:`gdf`).
+
+        .. warning::
+           The ``name`` attribute of the input datasets must be `HV_lines`, `MV_lines` and `Transformers`. This
+           naming convention may change in future releases.
+
+        Parameters
+        ----------
+        hv_lines: VectorLayer
+            High voltage lines dataset.
+        mv_lines: VectorLayer
+            Medium voltage lines dataset.
+        transformers: VectorLayer
+            Transformers dataset.
         """
         if (not hv_lines) and (not mv_lines) and (not transformers):
             raise ValueError("You MUST provide at least one of the following datasets: hv_lines, mv_lines or "
@@ -1040,29 +1132,27 @@ class OnStove(DataProcessor):
 
         for layer in [hv_lines, mv_lines, transformers]:
             if layer:
-                # TODO: test that this works!!!
-                # output_path = os.path.join(self.output_directory,
-                #                            layer.category,
-                #                            layer.name)
-                data, meta = layer.get_distance_raster(self.base_layer.path,
-                                                       create_raster=False,
-                                                       # output_path,
-                                                       # self.mask_layer.layer
-                                                       )
-                data /= 1000  # to convert from meters to km
-                self.raster_to_dataframe(data,
+                layer.get_distance_raster(raster=self.base_layer)
+                layer.distance_raster.data /= 1000  # to convert from meters to km
+                self.raster_to_dataframe(layer.distance_raster,
                                          name=layer.name + '_dist',
                                          method='read')
 
     def population_to_dataframe(self, layer: Optional[RasterLayer] = None):
         """
-        Takes a population `RasterLayer` as input and extracts the populated points to a GeoDataFrame that is
-        saved in `OnSSTOVE.gdf`.
+        Takes a population `RasterLayer` as input and extracts the populated points to the main GeoDataFrame saved in
+        the :attr:`gdf` attribute.
+
+        Parameters
+        ----------
+        layer: RasterLayer
+            The raster layer containing the population count data. If not defined, then the :attr:`base_layer` dataset
+            will be used. If ``layer`` is not provided and :attr:`base_layer` is None, then an error will be raised.
         """
 
         if isinstance(layer, RasterLayer):
-            data = RasterLayer.data.copy()
-            meta = RasterLayer.meta
+            data = layer.data.copy()
+            meta = layer.meta
         else:
             if self.base_layer:
                 data = self.base_layer.data.copy()
@@ -1079,15 +1169,41 @@ class OnStove(DataProcessor):
                                      offset='center')
 
         self.gdf = gpd.GeoDataFrame({'geometry': gpd.points_from_xy(x, y),
-                                     'Pop': layer[self.rows, self.cols]})
+                                     'Pop': data[self.rows, self.cols]})
         self.gdf.crs = self.project_crs
 
-    def raster_to_dataframe(self, layer, name=None, method='sample',
-                            nodata=np.nan, fill_nodata=None, fill_default_value=0):
+    def raster_to_dataframe(self, layer: Union[RasterLayer, str], name: Optional[str] = None, method: str = 'sample',
+                            fill_nodata_method: Optional[str] = None,
+                            fill_default_value: Union[float, int] = 0):
         """
-        Takes a RasterLayer and a method (sample or read), gets the values from the raster layer using the population points previously extracted and saves the values in a new column of OnSSTOVE.gdf
+        Takes a :class:`RasterLayer` and a method (``sample`` or ``read``) and extracts the values from the raster
+        layer to the main GeoDataFrame (:attr:`gdf`).
+
+        It uses the coordinates of the population points (previously extracted with the :meth:`population_to_dataframe`
+        method) to either sample the values from the dataset (if ``sample`` is used) or read the :attr:`rows` and
+        :attr:`cols` from the array (if ``read`` is used). The further requires that the raster dataset is aligned with
+        the used population layer.
+
+        Parameters
+        ----------
+        layer: RasterLayer or path to the raster
+            Raster layer to extract values from. If the method ``sample`` is used, the layer must be provided as the
+            path to the raster file.
+        name: str, optional
+            Name to use for the column of the extracted data in the :attr:`gdf`.
+        method: str, default 'sample'
+            Method to use when extracting the data. If ``sample``, the values will be sampled using the coordinates of
+            the point of the GeoDataFrame (:attr:`gdf`), which have been previously defined by the population layer. if
+            ``read``, the values are extracted using the the :attr:`rows` and :attr:`cols` attributes, which have been
+            previously extracted using the population layer.
+        fill_nodata_method: str, optional
+            Method to use to fill the no data. Currently only ``interpolate`` is available.
+        fill_default_value: float or int, default 0
+            Default value to use to fill in the no data. This will be used for cells that fall outside the search
+            radius (currently of 100) if the ``interpolate`` method is selected, and for all the nodata values if
+            ``None`` is used as method.
         """
-        layer = layer.copy()
+        data = None
         if method == 'sample':
             with rasterio.open(layer) as src:
                 if src.meta['crs'] != self.gdf.crs:
@@ -1095,30 +1211,44 @@ class OnStove(DataProcessor):
                 else:
                     data = sample_raster(layer, self.gdf)
         elif method == 'read':
-            if fill_nodata:
-                if fill_nodata == 'interpolate':
-                    mask = layer.copy()
-                    mask[mask == nodata] = np.nan
-                    if np.isnan(mask[self.rows, self.cols]).sum() > 0:
-                        mask[~np.isnan(mask)] = 1
-                        base = self.base_layer.data.copy()
-                        base[base == self.base_layer.meta['nodata']] = np.nan
-                        rows, cols = np.where(np.isnan(mask) & ~np.isnan(base))
-                        mask[rows, cols] = 0
+            layer = layer.data.copy()
+            nodata = layer.meta['nodata']
+            if fill_nodata_method:
+                mask = layer.copy()
+                mask[mask == nodata] = np.nan
+                if np.isnan(mask[self.rows, self.cols]).sum() > 0:
+                    mask[~np.isnan(mask)] = 1
+                    base = self.base_layer.data.copy()
+                    base[base == self.base_layer.meta['nodata']] = np.nan
+                    rows, cols = np.where(np.isnan(mask) & ~np.isnan(base))
+                    mask[rows, cols] = 0
+                    if fill_nodata_method == 'interpolate':
                         layer = fillnodata(layer, mask=mask,
                                            max_search_distance=100)
-                        layer[(mask == 0) & (np.isnan(layer))] = fill_default_value
-                else:
-                    raise ValueError('fill_nodata can only be None or "interpolate"')
+                    elif fill_nodata_method is not None:
+                        raise ValueError('fill_nodata can only be None or "interpolate"')
+                    layer[(mask == 0) & (np.isnan(layer))] = fill_default_value
 
             data = layer[self.rows, self.cols]
         if name:
             self.gdf[name] = data
         else:
-            # TODO: check if changing this to pandas series
             return data
 
-    def calibrate_urban_current_and_future_GHS(self, GHS_path):
+    def calibrate_urban_rural_split(self, GHS_path: str):
+        """Calibrates the urban rural split using spatial data from the
+        `GHS SMOD dataset<https://ghsl.jrc.ec.europa.eu/download.php?ds=smod>`_.
+
+        The GHS dataset is used to determine which settlements are urban and which are rural in the analysis. Areas
+        that have coding of either 30, 23 or 22 are considered urban, while the rest are rural. It saves the
+        binary (1 for urban, 0 for rural) classification as a column in the main GeoDataFrame (:attr:`gdf`) with the
+        name of ``IsUrban``.
+
+        Parameters
+        ----------
+        GHS_path: str
+            Path to the GHS dataset
+        """
         self.raster_to_dataframe(GHS_path, name="IsUrban", method='sample')
 
         if self.specs["End_year"] > self.specs["Start_year"]:
@@ -1139,7 +1269,12 @@ class OnStove(DataProcessor):
         self.number_of_households()
 
     def calibrate_urban_manual(self):
+        """Calibrates the urban rural split based on population density.
 
+        It uses the ``Calibrated_pop`` column of the main GeoDataFrame (:attr:`gdf`) and the current national urban
+        split defined in :attr:`specs`, to classify the settlements until the total urban population sum matches the
+        defined split.
+        """
         urban_modelled = 2
         factor = 1
         pop_tot = self.specs["Population_start_year"]
@@ -1167,7 +1302,19 @@ class OnStove(DataProcessor):
                 break
 
     def number_of_households(self):
+        """Calculates the number of households withing each cell based on their urban/rural classification and a
+        defined household size.
 
+        It uses the ``IsUrban`` and ``Calibrated_pop`` columns of the main GeoDataFrame (:attr:`gdf`) and the
+        ``Rural_HHsize`` and ``Urban_HHsize`` values from the :attr:`specs` dictionary.
+
+        See also
+        --------
+        calibrate_urban_rural_split
+        calibrate_urban_manual
+        calibrate_current_pop
+        read_scenario_data
+        """
         self.gdf.loc[self.gdf["IsUrban"] < 20, 'Households'] = self.gdf.loc[
                                                                    self.gdf["IsUrban"] < 20, 'Calibrated_pop'] / \
                                                                self.specs["Rural_HHsize"]
@@ -1177,9 +1324,8 @@ class OnStove(DataProcessor):
 
     def get_value_of_time(self):
         """
-        Calculates teh value of time based on the minimum wage ($/h) and a
-        GIS raster map as wealth index, poverty or GDP
-        ----
+        Calculates teh value of time based on the minimum wage ($/h) and a raster layer as wealth index, poverty or GDP.
+
         0.5 is the upper limit for minimum wage and 0.2 the lower limit
         """
         min_value = np.nanmin(self.gdf['relative_wealth'])
@@ -1468,8 +1614,8 @@ class OnStove(DataProcessor):
 
             layer.align(self.base_layer.path)
 
-            self.raster_to_dataframe(layer.data, name="relative_wealth", method='read',
-                                     nodata=layer.meta['nodata'], fill_nodata='interpolate')
+            self.raster_to_dataframe(layer, name="relative_wealth", method='read',
+                                     fill_nodata_method='interpolate')
         else:
             raise ValueError("file_type needs to be either csv, raster, polygon or point.")
 
