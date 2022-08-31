@@ -119,7 +119,7 @@ class Technology:
         self.discounted_fuel_cost = 0
         self.discounted_investments = 0
         self.benefits = None
-        self.net_benefit = None
+        self.net_benefits = None
 
     def __setitem__(self, idx, value):
         self.__dict__[idx] = value
@@ -661,7 +661,7 @@ class Technology:
         self.benefits = w_health * (self.distributed_morbidity + self.distributed_mortality) + \
                         w_spillovers * (self.distributed_spillovers_morb + self.distributed_spillovers_mort) + \
                         w_environment * self.decreased_carbon_costs + w_time * self.time_value
-        self.net_benefit = self.benefits - w_costs * self.costs
+        self.net_benefits = self.benefits - w_costs * self.costs
         model.gdf["costs_{}".format(self.name)] = self.costs
         model.gdf["benefits_{}".format(self.name)] = self.benefits
         model.gdf["net_benefit_{}".format(self.name)] = self.benefits - w_costs * self.costs
@@ -1191,11 +1191,10 @@ class Biomass(Technology):
         self.friction = RasterLayer(self.name, 'Friction', path=friction_path, resample='average')
 
         self.forest.friction = self.friction
-        rows, cols = self.forest.start_points(condition=self.forest.forest_condition)
+        rows, cols = self.forest.start_points(condition=self.forest_condition)
         self.forest.travel_time(rows=rows, cols=cols, create_raster=True)
 
         travel_time = 2 * model.raster_to_dataframe(self.forest.distance_raster,
-                                                    nodata=self.forest.distance_raster.meta['nodata'],
                                                     fill_nodata_method='interpolate', method='read')
         travel_time[travel_time > 7] = 7  # cap to max travel time based on literature
         self.travel_time = travel_time
@@ -1653,32 +1652,32 @@ class Electricity(Technology):
     def net_benefit(self, model: 'onstove.OnStove', w_health: int = 1, w_spillovers: int = 1,
                     w_environment: int = 1, w_time: int = 1, w_costs: int = 1):
         """This method expands :meth:`Technology.net_benefit` by taking into account electricity availability
-         in the calculations.
+        in the calculations.
 
-         Parameters
-         ----------
-         model: OnStove model
-             Instance of the OnStove model containing the main data of the study case. See
-             :class:`onstove.OnStove`.
-         w_health: int, default 1
-             Determines whether health parameters (reduced morbidity and mortality)
-             should be considered in the net-benefit equation.
-         w_spillovers: int, default 1
-             Determines whether spillover effects from cooking with traditional fuels
-             should be considered in the net-benefit equation.
-         w_environment: int, default 1
-             Determines whether environmental effects (reduced emissions) should be considered in the net-benefit
-             equation.
-         w_time: int, default 1
-             Determines whether opportunity cost (reduced time spent) should be considered in the net-benefit
-             equation.
-         w_costs: int, default 1
-             Determines whether costs should be considered in the net-benefit equation.
+        Parameters
+        ----------
+        model: OnStove model
+         Instance of the OnStove model containing the main data of the study case. See
+         :class:`onstove.OnStove`.
+        w_health: int, default 1
+         Determines whether health parameters (reduced morbidity and mortality)
+         should be considered in the net-benefit equation.
+        w_spillovers: int, default 1
+         Determines whether spillover effects from cooking with traditional fuels
+         should be considered in the net-benefit equation.
+        w_environment: int, default 1
+         Determines whether environmental effects (reduced emissions) should be considered in the net-benefit
+         equation.
+        w_time: int, default 1
+         Determines whether opportunity cost (reduced time spent) should be considered in the net-benefit
+         equation.
+        w_costs: int, default 1
+         Determines whether costs should be considered in the net-benefit equation.
 
-         See also
-         --------
-         net_benefit
-         """
+        See also
+        --------
+        net_benefit
+        """
         super().net_benefit(model, w_health, w_spillovers, w_environment, w_time, w_costs)
         model.gdf.loc[model.gdf['Current_elec'] == 0, "net_benefit_{}".format(self.name)] = np.nan
         factor = model.gdf['Elec_pop_calib'] / model.gdf['Calibrated_pop']

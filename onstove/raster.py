@@ -13,7 +13,6 @@ from rasterio.enums import Resampling as enumsResampling
 
 def align_raster(raster_1, raster_2, method='nearest', compression='DEFLATE'):
     raster_1_meta = raster_1.meta
-    raster_2 = raster_2.data
     raster_2_meta = raster_2.meta
 
     out_meta = raster_1_meta.copy()
@@ -25,7 +24,7 @@ def align_raster(raster_1, raster_2, method='nearest', compression='DEFLATE'):
     })
     destination = np.full((raster_1_meta['height'], raster_1_meta['width']), raster_2_meta['nodata'])
     reproject(
-        source=raster_2,
+        source=raster_2.data,
         destination=destination,
         src_transform=raster_2_meta['transform'],
         src_crs=raster_2_meta['crs'],

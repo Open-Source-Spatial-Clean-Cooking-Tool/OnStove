@@ -256,7 +256,7 @@ class VectorLayer(_Layer):
         output_path: str, optional
             A folder path where to save the output dataset. If not defined then the clipped dataset is not saved.
         """
-        self.data = gpd.clip(self.data, mask_layer.to_crs(self.data.crs))
+        self.data = gpd.clip(self.data, mask_layer.data.to_crs(self.data.crs))
         if isinstance(output_path, str):
             self.save(output_path)
 
@@ -322,13 +322,14 @@ class VectorLayer(_Layer):
                              'must be either a raster file path or a '
                              f'RasterLayer object. {type(base_layer)} was given instead.')
 
-        data, meta = self.rasterize(value=1, width=width, height=height,
+        rasterized = self.rasterize(value=1, width=width, height=height,
                                     transform=transform)
 
-        data = ndimage.distance_transform_edt(1 - data.astype(int),
-                                              sampling=[meta['transform'][0], -meta['transform'][4]])
+        data = ndimage.distance_transform_edt(1 - rasterized.data.astype(int),
+                                              sampling=[rasterized.meta['transform'][0],
+                                                        -rasterized.meta['transform'][4]])
 
-        meta.update(nodata=np.nan, dtype='float32')
+        rasterized.meta.update(nodata=np.nan, dtype='float32')
 
         distance_raster = RasterLayer(self.category,
                                       self.name + '_dist',
@@ -336,7 +337,7 @@ class VectorLayer(_Layer):
                                       inverse=self.inverse,
                                       normalization=self.normalization)
         distance_raster.data = data
-        distance_raster.meta = meta
+        distance_raster.meta = rasterized.meta
 
         if output_path:
             distance_raster.save(output_path)
@@ -484,7 +485,7 @@ class VectorLayer(_Layer):
             if (width is None) or (height is None):
                 height, width = RasterLayer.shape_from_cell(bounds, cell_height, cell_width)
             transform = rasterio.transform.from_bounds(*bounds, width, height)
-        else:
+        elif width is None or height is None:
             height, width = RasterLayer.shape_from_cell(bounds, transform[0], -transform[4])
 
         if attribute:
@@ -809,7 +810,7 @@ class RasterLayer(_Layer):
         return height, width
 
     def mask(self, mask_layer: VectorLayer, output_path: Optional[str] = None,
-             crop: bool = True, all_touched: bool = True):
+             crop: bool = False, all_touched: bool = False):
         """Creates a masked version of the layer, based on an input shape given by a :class:`VectorLayer`.
 
         It uses the :doc:`rasterio.mas.mask<rasterio:api/rasterio.mask>` function to create a masked version of the
@@ -828,11 +829,11 @@ class RasterLayer(_Layer):
              Include a pixel in the mask if it touches any of the shapes. If False, include a pixel only if its center
              is within one of the shapes, or if it is selected by Bresenham’s line algorithm.
         """
-        shape_mask, meta = mask_layer.rasterize(value=1, transform=self.meta['transform'],
-                                                width=self.meta['width'], height=self.meta['height'],
-                                                nodata=0, all_touched=all_touched)
+        rasterized_mask = mask_layer.rasterize(value=1, transform=self.meta['transform'],
+                                               width=self.meta['width'], height=self.meta['height'],
+                                               nodata=0, all_touched=all_touched)
 
-        self.data[shape_mask == 0] = self.meta['nodata']
+        self.data[rasterized_mask.data == 0] = self.meta['nodata']
 
         if crop:
             total_bounds = mask_layer.data['geometry'].total_bounds
@@ -1226,8 +1227,7 @@ class RasterLayer(_Layer):
             meta['nodata'] = np.nan
             factor = (cell_size ** 2) / (transform[0] ** 2)
             data *= factor
-
-        if output_path:
+        if output_path is not None:
             self.save(output_path)
         if inplace:
             self.data = data
