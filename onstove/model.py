@@ -157,7 +157,7 @@ class DataProcessor:
                   distance_limit: Optional[Callable[[np.ndarray], np.ndarray]] = None,
                   window: Optional['rasterio.windows.Window'] = None, rescale: bool = False):
         """
-        Adds a new layer (type VectorLayer or RasterLayer) to the MCA class
+        Adds a new layer (type VectorLayer or RasterLayer) to the DataProcessor class
 
         Parameters
         ----------
@@ -1374,7 +1374,7 @@ class OnStove(DataProcessor):
             baseline.
 
         See also
-        -----
+        --------
         maximum_net_benefit
         extract_lives_saved
         extract_health_costs_saved
@@ -1569,7 +1569,7 @@ class OnStove(DataProcessor):
 
     def extract_health_costs_saved(self):
         """
-        Extracts the healh costs avoded from adopting each stove type selected across the study area. The health costs
+        Extracts the health costs avoided from adopting each stove type selected across the study area. The health costs
         includes costs of avoided deaths, sickness and spillovers.
         """
         for tech in self.gdf['max_benefit_tech'].unique():
@@ -1651,18 +1651,6 @@ class OnStove(DataProcessor):
             is_tech = self.gdf['max_benefit_tech'] == tech
             index = self.gdf.loc[is_tech].index
             self.gdf.loc[is_tech, "emissions_costs_saved"] = self.techs[tech].decreased_carbon_costs[index]
-
-    def gdf_to_csv(self, scenario_name):
-
-        name = os.path.join(self.output_directory, scenario_name)
-
-        pt = self.gdf.to_crs({'init': 'EPSG:3395'})
-
-        pt["X"] = pt["geometry"].x
-        pt["Y"] = pt["geometry"].y
-
-        df = pd.DataFrame(pt.drop(columns='geometry'))
-        df.to_csv(name)
 
     def extract_wealth_index(self, wealth_index, file_type="csv", x_column="longitude", y_column="latitude",
                              wealth_column="rwi"):
@@ -1776,7 +1764,85 @@ class OnStove(DataProcessor):
         self.cols = np.array(cols)
         self.base_layer = self._empty_raster_from_shape(self.gdf.crs, transform, height, width)
 
-    def create_layer(self, variable, name=None, labels=None, cmap=None, metric='mean'):
+    def create_layer(self, variable: str, name: Optional[str] = None,
+                     labels: Optional[dict[str, str]] = None, cmap: Optional[dict[str, str]] = None,
+                     metric: str = 'mean') -> tuple[RasterLayer, dict[int, str], dict[int, str]]:
+        """Creates a :class:`RasterLayer` from a column of the main GeoDataFrame (:attr:`gdf`).
+
+        If the data is categorical, then a rasterized version of the data is created, using integers in asscending
+        order for the diffenrent unique categories found. A ``codes`` and a ``cmap`` dictionaries will be returned
+        containing the names and color equivalent of the numbered categories.
+
+        If the data is non-categorical, the source data will be rasterized into the :class:`RasterLayer` using one of
+        the available ``metrics``.
+
+        Parameters
+        ----------
+        variable: str
+            The column name from the :attr:`gdf` to use.
+        name: str, optional
+            The name to give to the :class:`RasterLayer`.
+        labels: dictionary of str key-value pairs, optional
+            Dictionary with the keys-value pairs to use for the data categories. It is only used for categorical data.
+
+            .. code-block:: python
+               :caption: Example of labels dictionary
+
+               >>> labels = {'Biogas and Electricity': 'Electricity and Biogas',
+               ...           'Collected Traditional Biomass': 'Biomass',
+               ...           'Collected Improved Biomass': 'Biomass ICS (ND)',
+               ...           'Traditional Charcoal': 'Charcoal',
+               ...           'Biomass Forced Draft': 'Biomass ICS (FD)',
+               ...           'Pellets Forced Draft': 'Pellets ICS (FD)'}
+
+        cmap: dictionary of str key-value pairs, optional
+            Dictionary with the colors to use for each data category. It is only used for categorical data.
+
+            .. code-block:: python
+               :caption: Example of cmap dictionary
+
+               >>> cmap = {'Biomass ICS (ND)': '#6F4070',
+               ...         'LPG': '#66C5CC',
+               ...         'Biomass': '#FFB6C1',
+               ...         'Biomass ICS (FD)': '#af04b3',
+               ...         'Pellets ICS (FD)': '#ef02f5',
+               ...         'Charcoal': '#364135',
+               ...         'Charcoal ICS': '#d4bdc5',
+               ...         'Biogas': '#73AF48',
+               ...         'Biogas and Biomass ICS (ND)': '#F6029E',
+               ...         'Biogas and Biomass ICS (FD)': '#F6029E',
+               ...         'Biogas and Pellets ICS (FD)': '#F6029E',
+               ...         'Biogas and LPG': '#0F8554',
+               ...         'Biogas and Biomass': '#266AA6',
+               ...         'Biogas and Charcoal': '#3B05DF',
+               ...         'Biogas and Charcoal ICS': '#3B59DF',
+               ...         'Electricity': '#CC503E',
+               ...         'Electricity and Biomass ICS (ND)': '#B497E7',
+               ...         'Electricity and Biomass ICS (FD)': '#B497E7',
+               ...         'Electricity and Pellets ICS (FD)': '#B497E7',
+               ...         'Electricity and LPG': '#E17C05',
+               ...         'Electricity and Biomass': '#FFC107',
+               ...         'Electricity and Charcoal ICS': '#660000',
+               ...         'Electricity and Biogas': '#f97b72',
+               ...         'Electricity and Charcoal': '#FF0000'}
+
+        metric: str, default 'mean'
+            Metric to use to aggregate data. It is only used for non-categorical data. Available metrics:
+
+            * ``mean``: average value between technologies used in the same cell.
+            * ``total``: the total value of the data accounting for all households in the cell.
+            * ``per_100k``: the values are calculated per 100 thousand population withing each cell.
+            * ``per_household``: average value per househol in each cell.
+
+        Returns
+        -------
+        raster: RasterLayer
+            The :class:RasterLayer object.
+        codes: dictionary of int-str pairs
+            Contains the name equivalent to therasterized data (used if the data is categorical).
+        cmap: dictionary of int-str pairs
+            A modified cmap containing the color s equivalent to the rasterized data (used if the data is categorical).
+        """
         codes = None
         if self.base_layer is not None:
             layer = np.empty(self.base_layer.data.shape)
@@ -1836,30 +1902,216 @@ class OnStove(DataProcessor):
 
         return raster, codes, cmap
 
-    def to_raster(self, variable, labels=None, cmap=None, metric='mean'):
+    def to_raster(self, variable: str,
+                  labels: Optional[dict[str, str]] = None,
+                  cmap: Optional[dict[str, str]] = None,
+                  metric: str = 'mean'):
+        """Creates a RasterLayer and saves it as a ``.tif`` file and a ``.clr`` colormap.
+
+        Parameters
+        ----------
+        variable: str
+            The column name from the :attr:`gdf` to use.
+        labels: dictionary of str key-value pairs, optional
+            Dictionary with the keys-value pairs to use for the data categories. It is only used for categorical data---
+            see :meth:`create_layer`.
+        cmap: dictionary of str key-value pairs, optional
+            Dictionary with the colors to use for each data category. It is only used for categorical data---see
+            :meth:`create_layer`.
+        metric: str, default 'mean'
+            Metric to use to aggregate data. It is only used for non-categorical data. For available metrics see
+            :meth:`create_layer`.
+        """
         raster, codes, cmap = self.create_layer(variable, labels=labels, cmap=cmap, metric=metric)
         raster.save(os.path.join(self.output_directory, 'Output'))
         print(f'Layer saved in {os.path.join(self.output_directory, "Output", variable + ".tif")}\n')
         if codes and cmap:
-            with open(os.path.join(self.output_directory, 'ColorMap.clr'), 'w') as f:
+            with open(os.path.join(self.output_directory, 'Output', f'{variable}ColorMap.clr'), 'w') as f:
                 for label, code in codes.items():
                     r = int(to_rgb(cmap[code])[0] * 255)
                     g = int(to_rgb(cmap[code])[1] * 255)
                     b = int(to_rgb(cmap[code])[2] * 255)
                     f.write(f'{code} {r} {g} {b} 255 {label}\n')
 
-    def plot(self, variable, cmap='viridis', cumulative_count=None, quantiles=None,
-             legend_position=(1.05, 1), dpi=150, figsize=(6.4, 4.8),
-             admin_layer=None, title=None, labels=None,
-             legend=True, legend_title='', legend_cols=1,
-             legend_prop={'title': {'size': 12, 'weight': 'bold'}, 'size': 12}, rasterized=True,
-             stats=False, stats_position=(1.05, 0.5), stats_fontsize=12, metric='mean',
-             save_style=False, classes=5, ax=None, scale_bar=None, north_arrow=None):
+    def plot(self, variable: str, metric='mean',
+             labels: Optional[dict[str, str]] = None,
+             cmap: Union[dict[str, str], str] = 'viridis',
+             cumulative_count: Optional[tuple[float, float]] = None,
+             quantiles: Optional[tuple[float]] = None,
+             admin_layer: Optional[Union[gpd.GeoDataFrame, VectorLayer]] = None,
+             title: Optional[str] = None,
+             legend: bool = True, legend_title: str = '', legend_cols: int = 1,
+             legend_position: tuple[float, float] = (1.05, 1),
+             legend_prop: dict = {'title': {'size': 12, 'weight': 'bold'}, 'size': 12},
+             stats: bool = False, stats_position: tuple[float, float] = (1.05, 0.5), stats_fontsize: int = 12,
+             scale_bar: Optional[dict] = None, north_arrow: Optional[dict] = None,
+             ax: Optional['matplotlib.axes.Axes'] = None,
+             figsize: tuple[float, float] = (6.4, 4.8),
+             rasterized: bool = True,
+             dpi: float = 150,
+             save_style: bool = False, style_classes: int = 5):
+        """Plots a map from a desired column ``variable`` from the :attr:`gdf`.
+
+        Parameters
+        ----------
+        variable: str
+            The column name from the :attr:`gdf` to use.
+        metric: str, default 'mean'
+            Metric to use to aggregate data. It is only used for non-categorical data. For available metrics see
+            :meth:`create_layer`.
+        labels: dictionary of str key-value pairs, optional
+            Dictionary with the keys-value pairs to use for the data categories. It is only used for categorical data---
+            see :meth:`create_layer`.
+        cmap: dictionary of str key-value pairs or str, default 'viridis'
+            Dictionary with the colors to use for each data category if the data is categorical---see
+            :meth:`create_layer`. If the data is continuous, then a name af a color scale accepted y
+            :doc:`matplotlib<matplotlib:tutorials/colors/colormaps>` should be passed.
+        cumulative_count: array-like of float, optional
+            List of lower and upper limits to consider for the cumulative count. If defined the map will be displayed
+            with the cumulative count representation of the data.
+
+            .. seealso::
+               :meth:`RasterLayer.cumulative_count`
+
+        quantiles: array-like of float, optional
+            Quantile or sequence of quantiles to compute, which must be between 0 and 1 inclusive. If defined the map
+            will be displayed with the quantiles representation of the data.
+
+            .. seealso::
+               :meth:`RasterLayer.quantiles`
+
+        admin_layer: gpd.GeoDataFrame or VectorLayer, optional
+            The administrative boundaries to plot as background. If no ``admin_layer`` is provided then the
+            :attr:``mask_layer`` will be used if available, if not then no boundaries will be ploted.
+
+        title: str, optional
+            The title of the plot.
+        legend: bool, default False
+            Whether to display a legend---only applicable for categorical data.
+        legend_title: str, default ''
+            Title of the legend.
+        legend_cols: int, default 1
+            Number of columns to divide the rows of the legend.
+        legend_position: array-like of float, default (1.05, 1)
+            Position of the upper-left corner of the legend measured in fraction of `x` and `y` axis.
+        legend_prop: dict
+            Dictionary with the font properties of the legend. It can contain any property accepted by the ``prop``
+            parameter from :doc:`matplotlib.pyplot.legend<matplotlib:api/_as_gen/matplotlib.pyplot.legend>`. It
+            defaults to ``{'title': {'size': 12, 'weight': 'bold'}, 'size': 12}``.
+        stats: bool, default False
+            Whether to display the statistics of the analysis in the map.
+        stats_position: array-like of float, default (1.05, 1)
+            Position of the upper-left corner of the statistics box measured in fraction of `x` and `y` axis.
+        stats_fontsize: int, default 12
+            The font size of the statistics text.
+        scale_bar: dict, optional
+            Dictionary with the parameters needed to create a :class:`ScaleBar`. If not defined, no scale bar will be
+            displayed.
+
+            .. code-block::
+               :caption: Scale bar dictionary example
+
+               dict(size=1000000, style='double', textprops=dict(size=8),
+                    linekw=dict(lw=1, color='black'), extent=0.01)
+
+            .. Note::
+               See :func:`onstove.scale_bar` for more details
+
+        north_arrow: dict, optional
+            Dictionary with the parameters needed to create a north arrow icon in the map. If not defined, the north
+            icon wont be displayed.
+
+            .. code-block::
+               :caption: North arrow dictionary example
+
+               dict(size=30, location=(0.92, 0.92), linewidth=0.5)
+
+            .. Note::
+               See :func:`onstove.north_arrow` for more details
+
+        ax: matplotlib.axes.Axes, optional
+            A matplotlib axes instance can be passed in order to overlay layers in the same axes.
+        figsize: tuple of floats, default (6.4, 4.8)
+            The size of the figure in inches.
+        rasterized: bool, default True
+            Whether to rasterize the output.It converts vector graphics into a raster image (pixels). It can speed up
+            rendering and produce smaller files for large data sets---see more at
+            :doc:`matplotlib:gallery/misc/rasterization_demo`.
+        dpi: int, default 150
+            The resolution of the figure in dots per inch.
+        save_style: bool, default False
+            Whether to save the style of the plot as a ``.sld`` file---see :meth:`onstove.RasterLayer.save_style`.
+        style_classes: int, default 5
+            number of classes to include in the ``.sld`` style.
+
+        Examples
+        --------
+        >>> africa = OnStove('results.pkl')
+        ...
+        >>> cmap = {'Biomass ICS (ND)': '#6F4070',
+        ...         'LPG': '#66C5CC',
+        ...         'Biomass': '#FFB6C1',
+        ...         'Biomass ICS (FD)': '#af04b3',
+        ...         'Pellets ICS (FD)': '#ef02f5',
+        ...         'Charcoal': '#364135',
+        ...         'Charcoal ICS': '#d4bdc5',
+        ...         'Biogas': '#73AF48',
+        ...         'Biogas and Biomass ICS (ND)': '#F6029E',
+        ...         'Biogas and Biomass ICS (FD)': '#F6029E',
+        ...         'Biogas and Pellets ICS (FD)': '#F6029E',
+        ...         'Biogas and LPG': '#0F8554',
+        ...         'Biogas and Biomass': '#266AA6',
+        ...         'Biogas and Charcoal': '#3B05DF',
+        ...         'Biogas and Charcoal ICS': '#3B59DF',
+        ...         'Electricity': '#CC503E',
+        ...         'Electricity and Biomass ICS (ND)': '#B497E7',
+        ...         'Electricity and Biomass ICS (FD)': '#B497E7',
+        ...         'Electricity and Pellets ICS (FD)': '#B497E7',
+        ...         'Electricity and LPG': '#E17C05',
+        ...         'Electricity and Biomass': '#FFC107',
+        ...         'Electricity and Charcoal ICS': '#660000',
+        ...         'Electricity and Biogas': '#f97b72',
+        ...         'Electricity and Charcoal': '#FF0000'}
+        ...
+        >>>   labels = {'Biogas and Electricity': 'Electricity and Biogas',
+        ...             'Collected Traditional Biomass': 'Biomass',
+        ...             'Collected Improved Biomass': 'Biomass ICS (ND)',
+        ...             'Traditional Charcoal': 'Charcoal',
+        ...             'Biomass Forced Draft': 'Biomass ICS (FD)',
+        ...             'Pellets Forced Draft': 'Pellets ICS (FD)'}
+        ...
+        >>> scale_bar_prop = dict(size=1000000, style='double', textprops=dict(size=8),
+        ...                       linekw=dict(lw=1, color='black'), extent=0.01)
+        >>> north_arow_prop = dict(size=30, location=(0.92, 0.92), linewidth=0.5)
+        ...
+        >>> africa.plot('max_benefit_tech', labels=labels, cmap=cmap,
+        ...             stats=True, stats_position=(-0.002, 0.61), stats_fontsize=10,
+        ...             legend=True, legend_position=(0.03, 0.47),
+        ...             legend_title='Maximum benefit cooking technology',
+        ...             legend_prop={'title': {'size': 10, 'weight': 'bold'}, 'size': 10},
+        ...             scale_bar=scale_bar_prop, north_arrow=north_arow_prop,
+        ...             figsize=(16, 9), dpi=300, rasterized=True)
+
+        .. figure:: ../images/max_benefit_tech.png
+           :width: 700
+           :alt: max benefit cooking technology over SSA created with OnStove
+           :align: center
+
+        See also
+        --------
+        create_layer
+        to_image
+        to_raster
+        RasterLayer.plot
+        VectorLayer.plot
+        """
         raster, codes, cmap = self.create_layer(variable, labels=labels, cmap=cmap, metric=metric)
         if isinstance(admin_layer, gpd.GeoDataFrame):
             admin_layer = admin_layer
-        elif not admin_layer:
+        elif isinstance(self.mask_layer, VectorLayer):
             admin_layer = self.mask_layer.data
+        else:
+            admin_layer = None
 
         if ax is None:
             fig, ax = plt.subplots(1, 1, figsize=figsize, dpi=dpi)
@@ -1882,7 +2134,7 @@ class OnStove(DataProcessor):
                 categories = False
             raster.save_style(os.path.join(self.output_directory, 'Output'),
                               cmap=cmap, quantiles=quantiles, categories=categories,
-                              classes=classes)
+                              classes=style_classes)
 
     def _add_statistics(self, ax, stats_position, fontsize=12):
         summary = self.summary(total=True, pretty=False)
@@ -1989,7 +2241,53 @@ class OnStove(DataProcessor):
 
         return summary
 
-    def plot_split(self, cmap=None, labels=None, save_as=None, height=1.5, width=2.5, x_variable='Calibrated_pop'):
+    def plot_split(self, labels: Optional[dict[str, str]] = None,
+                   cmap: Optional[dict[str, str]] = None,
+                   x_variable: str = 'Calibrated_pop',
+                   height: float = 1.5, width: float = 2.5,
+                   save_as: Optional[bool] = None):
+        """Displays a bar plot with the population or households share using the technologies with highest net-benefits
+        over the study area.
+
+        Parameters
+        ----------
+        labels: dictionary of str key-value pairs, optional
+            Dictionary with the keys-value pairs to use for the data categories.
+
+            .. code-block:: python
+               :caption: Example of labels dictionary
+
+               >>> labels = {'Collected Traditional Biomass': 'Biomass',
+               ...           'Collected Improved Biomass': 'Biomass ICS (ND)',
+               ...           'Traditional Charcoal': 'Charcoal',
+               ...           'Biomass Forced Draft': 'Biomass ICS (FD)',
+               ...           'Pellets Forced Draft': 'Pellets ICS (FD)'}
+
+        cmap: dictionary of str key-value pairs, optional
+            Dictionary with the colors to use for each technology.
+
+            .. code-block:: python
+               :caption: Example of cmap dictionary
+
+               >>> cmap = {'Biomass ICS (ND)': '#6F4070',
+               ...         'LPG': '#66C5CC',
+               ...         'Biomass': '#FFB6C1',
+               ...         'Biomass ICS (FD)': '#af04b3',
+               ...         'Pellets ICS (FD)': '#ef02f5',
+               ...         'Charcoal': '#364135',
+               ...         'Charcoal ICS': '#d4bdc5',
+               ...         'Biogas': '#73AF48'}
+
+        x_variable: str, default 'Calibrated_pop'
+            The variable to use in the x axis. Two options are available ``Calibrated_pop`` and ``Households``.
+        height: float, default 1.5
+            The heihg of the figure in inches.
+        width: float, default 2.5
+            The width of the figure in inches.
+        save_as: str, optional
+            If a string is passed, then the plot will be saved with that name as a ``pdf`` file in the
+            :attr:`output_directory`.
+        """
         df = self.summary(total=False, pretty=False, labels=labels)
 
         variables = {'Calibrated_pop': 'Population (Millions)', 'Households': 'Households (Millions)'}
@@ -2017,7 +2315,48 @@ class OnStove(DataProcessor):
         else:
             return p
 
-    def plot_costs_benefits(self, cmap=None, labels=None, save_as=None, height=1.5, width=2.5):
+    def plot_costs_benefits(self, labels: Optional[dict[str, str]] = None,
+                            cmap: Optional[dict[str, str]] = None,
+                            height: float = 1.5, width: float = 2.5,
+                            save_as: Optional[bool] = None):
+        """Displays a stacked bar plot with the aggregated total costs and benefits for the technologies with the
+        highest net-benefits over the study area.
+
+        Parameters
+        ----------
+        labels: dictionary of str key-value pairs, optional
+            Dictionary with the keys-value pairs to use for the technology categories.
+
+            .. code-block:: python
+               :caption: Example of labels dictionary
+
+               >>> labels = {'Collected Traditional Biomass': 'Biomass',
+               ...           'Collected Improved Biomass': 'Biomass ICS (ND)',
+               ...           'Traditional Charcoal': 'Charcoal',
+               ...           'Biomass Forced Draft': 'Biomass ICS (FD)',
+               ...           'Pellets Forced Draft': 'Pellets ICS (FD)'}
+
+        cmap: dictionary of str key-value pairs, optional
+            Dictionary with the colors to use for each cost/benefit category.
+
+            .. code-block:: python
+               :caption: Example of cmap dictionary
+
+               >>> cmap = {'Health costs avoided': '#542788',
+               ...         'Investment costs': '#b35806',
+               ...         'Fuel costs': '#f1a340',
+               ...         'Emissions costs saved': '#998ec3',
+               ...         'Om costs': '#fee0b6',
+               ...         'Opportunity cost gained': '#d8daeb'}
+
+        height: float, default 1.5
+            The heihg of the figure in inches.
+        width: float, default 2.5
+            The width of the figure in inches.
+        save_as: str, optional
+            If a string is passed, then the plot will be saved with that name as a ``pdf`` file in the
+            :attr:`output_directory`.
+        """
         df = self.summary(total=False, pretty=False, labels=labels)
         df['investment_costs'] -= df['salvage_value']
         df['fuel_costs'] *= -1
@@ -2147,8 +2486,60 @@ class OnStove(DataProcessor):
     #     else:
     #         return p
 
-    def plot_benefit_distribution(self, type='box', groupby='None', variable='net_benefit', best_mix=True,
-                                  cmap=None, labels=None, save_as=None, height=1.5, width=2.5):
+    def plot_benefit_distribution(self, type: str = 'box', groupby: str = 'None',
+                                  variable: str = 'net_benefit', best_mix: bool = True,
+                                  labels: Optional[dict[str, str]] = None,
+                                  cmap: Optional[dict[str, str]] = None,
+                                  height: float = 1.5, width: float = 2.5,
+                                  save_as: Optional[bool] = None):
+        """Displays a distribution plot with the net-benefits, benefits or costs for the technologies with the
+        highest net-benefits throughout the households of the study area.
+
+        Parameters
+        ----------
+        type: str, default 'box'
+            The type of distribution plot to use. Available options are ``box`` and ``density``.
+        groupby: str, default 'None'
+            Groups the results by urban/rural split. Available options are ``None``, ``isurban`` and ``urban-rural``.
+        variable: str, default 'net_benefit'
+            Variable to use for the distribution. Available options are ``net_benefit``, ``benefits`` and ``costs``.
+        best_mix: bool, default True
+            Whether to plot only results for the highest net-benefit technologies, or all technologies.
+        labels: dictionary of str key-value pairs, optional
+            Dictionary with the keys-value pairs to use for each technology.
+
+            .. code-block:: python
+               :caption: Example of labels dictionary
+
+               >>> labels = {'Collected Traditional Biomass': 'Biomass',
+               ...           'Collected Improved Biomass': 'Biomass ICS (ND)',
+               ...           'Traditional Charcoal': 'Charcoal',
+               ...           'Biomass Forced Draft': 'Biomass ICS (FD)',
+               ...           'Pellets Forced Draft': 'Pellets ICS (FD)'}
+
+        cmap: dictionary of str key-value pairs, optional
+            Dictionary with the colors to use for technology.
+
+            .. code-block:: python
+               :caption: Example of cmap dictionary
+
+               >>> cmap = {'Biomass ICS (ND)': '#6F4070',
+               ...         'LPG': '#66C5CC',
+               ...         'Biomass': '#FFB6C1',
+               ...         'Biomass ICS (FD)': '#af04b3',
+               ...         'Pellets ICS (FD)': '#ef02f5',
+               ...         'Charcoal': '#364135',
+               ...         'Charcoal ICS': '#d4bdc5',
+               ...         'Biogas': '#73AF48'}
+
+        height: float, default 1.5
+            The heihg of the figure in inches.
+        width: float, default 2.5
+            The width of the figure in inches.
+        save_as: str, optional
+            If a string is passed, then the plot will be saved with that name as a ``pdf`` file in the
+            :attr:`output_directory`.
+        """
         if type.lower() == 'box':
             if groupby.lower() == 'isurban':
                 df = self.gdf.groupby(['IsUrban', 'max_benefit_tech'])[['health_costs_avoided',
@@ -2165,7 +2556,7 @@ class OnStove(DataProcessor):
                 tech_list = df.groupby('max_benefit_tech')[['Calibrated_pop']].sum()
                 tech_list = tech_list.reset_index().sort_values('Calibrated_pop')['max_benefit_tech'].tolist()
                 x = 'max_benefit_tech'
-            elif groupby.lower() == 'urbanrural':
+            elif groupby.lower() == 'urban-rural':
                 df = self.gdf.copy()
                 df = self._re_name(df, labels, 'max_benefit_tech')
                 df['Urban'] = df['IsUrban'] > 20
@@ -2194,7 +2585,7 @@ class OnStove(DataProcessor):
                             tech_list.append(name)
                     x = 'tech'
                     if variable == 'net_benefit':
-                        y = 'net_benefit'
+                        y = 'net_benefits'
                         title = 'Net benefit per household (kUSD/yr)'
                     elif variable == 'costs':
                         y = 'costs'
@@ -2267,3 +2658,21 @@ class OnStove(DataProcessor):
             p.save(file, height=height, width=width, dpi=600)
         else:
             return p
+
+    def to_csv(self, name: str):
+        """Saves the main GeoDataFrame :attr:`gdf` as a ``.csv`` file into the :attr:`output_directory`.
+
+        Parameters
+        ----------
+        name: str
+            Name of the file.
+        """
+        name = os.path.join(self.output_directory, name + '.csv')
+
+        pt = self.gdf.copy()
+
+        pt["X"] = pt["geometry"].x
+        pt["Y"] = pt["geometry"].y
+
+        df = pd.DataFrame(pt.drop(columns='geometry'))
+        df.to_csv(name, index=False)

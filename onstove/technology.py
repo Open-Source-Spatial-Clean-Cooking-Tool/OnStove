@@ -1089,7 +1089,7 @@ class Biomass(Technology):
         .. code-block:: python
            :caption: **Example**: lambda function for canopy cover equal or over 30%
 
-           forest_condition = lambda  x: x >= 0.3
+           >>> forest_condition = lambda  x: x >= 0.3
 
     Examples
     --------

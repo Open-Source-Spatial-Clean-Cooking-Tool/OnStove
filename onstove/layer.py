@@ -139,7 +139,7 @@ class VectorLayer(_Layer):
         .. code-block:: python
            :caption: Example: lambda function for distance range between 1,000 and 10,000 meters
 
-           distance_limit = lambda  x: (x >= 1000) & (x <= 10000)
+           >>> distance_limit = lambda  x: (x >= 1000) & (x <= 10000)
 
     bbox: tuple, gpd.GeoDataFrame, gpd.GeoSeries or shapely Geometry, optional
         Filter features by given bounding box, GeoSeries, GeoDataFrame or a shapely geometry. For more information
@@ -657,7 +657,7 @@ class RasterLayer(_Layer):
         .. code-block:: python
            :caption: Example: lambda function for distance range between 1,000 and 10,000 meters
 
-           distance_limit = lambda  x: (x >= 1000) & (x <= 10000)
+           >>> distance_limit = lambda  x: (x >= 1000) & (x <= 10000)
 
     resample: str, default 'nearest'
         Sets the default method to use when resampling the dataset. Resampling occurs when changing the grid cell size
@@ -1298,7 +1298,7 @@ class RasterLayer(_Layer):
 
         Parameters
         ----------
-        quantiles: array_like of float
+        quantiles: array-like of float
             Quantile or sequence of quantiles to compute, which must be between 0 and 1 inclusive.
 
         Returns
