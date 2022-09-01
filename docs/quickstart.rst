@@ -79,7 +79,7 @@ Binder example
 Try the binder version of OnStove yourself in an online Jupyter notebook:
 
 .. image:: https://mybinder.org/badge_logo.svg
-   :target: https://mybinder.org/v2/gh/Open-Source-Spatial-Clean-Cooking-Tool/OnStove/bk/binder?labpath=%2Fexample%2FOnStove_notebook.ipynb
+    :target: https://mybinder.org/v2/gh/Open-Source-Spatial-Clean-Cooking-Tool/OnStove/main?labpath=%2Fexample%2FOnStove_notebook.ipynb
  
 
 
