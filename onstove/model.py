@@ -2241,7 +2241,53 @@ class OnStove(DataProcessor):
 
         return summary
 
-    def plot_split(self, cmap=None, labels=None, save_as=None, height=1.5, width=2.5, x_variable='Calibrated_pop'):
+    def plot_split(self, labels: Optional[dict[str, str]] = None,
+                   cmap: Optional[dict[str, str]] = None,
+                   x_variable: str = 'Calibrated_pop',
+                   height: float = 1.5, width: float = 2.5,
+                   save_as: Optional[bool] = None):
+        """Displays a bar plot with the population or households share using the technologies with highest net-benefits
+        over the study area.
+
+        Parameters
+        ----------
+        labels: dictionary of str key-value pairs, optional
+            Dictionary with the keys-value pairs to use for the data categories.
+
+            .. code-block:: python
+               :caption: Example of labels dictionary
+
+               >>> labels = {'Collected Traditional Biomass': 'Biomass',
+               ...           'Collected Improved Biomass': 'Biomass ICS (ND)',
+               ...           'Traditional Charcoal': 'Charcoal',
+               ...           'Biomass Forced Draft': 'Biomass ICS (FD)',
+               ...           'Pellets Forced Draft': 'Pellets ICS (FD)'}
+
+        cmap: dictionary of str key-value pairs, optional
+            Dictionary with the colors to use for each technology.
+
+            .. code-block:: python
+               :caption: Example of cmap dictionary
+
+               >>> cmap = {'Biomass ICS (ND)': '#6F4070',
+               ...         'LPG': '#66C5CC',
+               ...         'Biomass': '#FFB6C1',
+               ...         'Biomass ICS (FD)': '#af04b3',
+               ...         'Pellets ICS (FD)': '#ef02f5',
+               ...         'Charcoal': '#364135',
+               ...         'Charcoal ICS': '#d4bdc5',
+               ...         'Biogas': '#73AF48'}
+
+        x_variable: str, default 'Calibrated_pop'
+            The variable to use in the x axis. Two options are available ``Calibrated_pop`` and ``Households``.
+        height: float, default 1.5
+            The heihg of the figure in inches.
+        width: float, default 2.5
+            The width of the figure in inches.
+        save_as: str, optional
+            If a string is passed, then the plot will be saved with that name as a ``pdf`` file in the
+            :attr:`output_directory`.
+        """
         df = self.summary(total=False, pretty=False, labels=labels)
 
         variables = {'Calibrated_pop': 'Population (Millions)', 'Households': 'Households (Millions)'}
@@ -2269,7 +2315,48 @@ class OnStove(DataProcessor):
         else:
             return p
 
-    def plot_costs_benefits(self, cmap=None, labels=None, save_as=None, height=1.5, width=2.5):
+    def plot_costs_benefits(self, labels: Optional[dict[str, str]] = None,
+                            cmap: Optional[dict[str, str]] = None,
+                            height: float = 1.5, width: float = 2.5,
+                            save_as: Optional[bool] = None):
+        """Displays a stacked bar plot with the aggregated total costs and benefits for the technologies with the
+        highest net-benefits over the study area.
+
+        Parameters
+        ----------
+        labels: dictionary of str key-value pairs, optional
+            Dictionary with the keys-value pairs to use for the technology categories.
+
+            .. code-block:: python
+               :caption: Example of labels dictionary
+
+               >>> labels = {'Collected Traditional Biomass': 'Biomass',
+               ...           'Collected Improved Biomass': 'Biomass ICS (ND)',
+               ...           'Traditional Charcoal': 'Charcoal',
+               ...           'Biomass Forced Draft': 'Biomass ICS (FD)',
+               ...           'Pellets Forced Draft': 'Pellets ICS (FD)'}
+
+        cmap: dictionary of str key-value pairs, optional
+            Dictionary with the colors to use for each cost/benefit category.
+
+            .. code-block:: python
+               :caption: Example of cmap dictionary
+
+               >>> cmap = {'Health costs avoided': '#542788',
+               ...         'Investment costs': '#b35806',
+               ...         'Fuel costs': '#f1a340',
+               ...         'Emissions costs saved': '#998ec3',
+               ...         'Om costs': '#fee0b6',
+               ...         'Opportunity cost gained': '#d8daeb'}
+
+        height: float, default 1.5
+            The heihg of the figure in inches.
+        width: float, default 2.5
+            The width of the figure in inches.
+        save_as: str, optional
+            If a string is passed, then the plot will be saved with that name as a ``pdf`` file in the
+            :attr:`output_directory`.
+        """
         df = self.summary(total=False, pretty=False, labels=labels)
         df['investment_costs'] -= df['salvage_value']
         df['fuel_costs'] *= -1
@@ -2399,8 +2486,60 @@ class OnStove(DataProcessor):
     #     else:
     #         return p
 
-    def plot_benefit_distribution(self, type='box', groupby='None', variable='net_benefit', best_mix=True,
-                                  cmap=None, labels=None, save_as=None, height=1.5, width=2.5):
+    def plot_benefit_distribution(self, type: str = 'box', groupby: str = 'None',
+                                  variable: str = 'net_benefit', best_mix: bool = True,
+                                  labels: Optional[dict[str, str]] = None,
+                                  cmap: Optional[dict[str, str]] = None,
+                                  height: float = 1.5, width: float = 2.5,
+                                  save_as: Optional[bool] = None):
+        """Displays a distribution plot with the net-benefits, benefits or costs for the technologies with the
+        highest net-benefits throughout the households of the study area.
+
+        Parameters
+        ----------
+        type: str, default 'box'
+            The type of distribution plot to use. Available options are ``box`` and ``density``.
+        groupby: str, default 'None'
+            Groups the results by urban/rural split. Available options are ``None``, ``isurban`` and ``urban-rural``.
+        variable: str, default 'net_benefit'
+            Variable to use for the distribution. Available options are ``net_benefit``, ``benefits`` and ``costs``.
+        best_mix: bool, default True
+            Whether to plot only results for the highest net-benefit technologies, or all technologies.
+        labels: dictionary of str key-value pairs, optional
+            Dictionary with the keys-value pairs to use for each technology.
+
+            .. code-block:: python
+               :caption: Example of labels dictionary
+
+               >>> labels = {'Collected Traditional Biomass': 'Biomass',
+               ...           'Collected Improved Biomass': 'Biomass ICS (ND)',
+               ...           'Traditional Charcoal': 'Charcoal',
+               ...           'Biomass Forced Draft': 'Biomass ICS (FD)',
+               ...           'Pellets Forced Draft': 'Pellets ICS (FD)'}
+
+        cmap: dictionary of str key-value pairs, optional
+            Dictionary with the colors to use for technology.
+
+            .. code-block:: python
+               :caption: Example of cmap dictionary
+
+               >>> cmap = {'Biomass ICS (ND)': '#6F4070',
+               ...         'LPG': '#66C5CC',
+               ...         'Biomass': '#FFB6C1',
+               ...         'Biomass ICS (FD)': '#af04b3',
+               ...         'Pellets ICS (FD)': '#ef02f5',
+               ...         'Charcoal': '#364135',
+               ...         'Charcoal ICS': '#d4bdc5',
+               ...         'Biogas': '#73AF48'}
+
+        height: float, default 1.5
+            The heihg of the figure in inches.
+        width: float, default 2.5
+            The width of the figure in inches.
+        save_as: str, optional
+            If a string is passed, then the plot will be saved with that name as a ``pdf`` file in the
+            :attr:`output_directory`.
+        """
         if type.lower() == 'box':
             if groupby.lower() == 'isurban':
                 df = self.gdf.groupby(['IsUrban', 'max_benefit_tech'])[['health_costs_avoided',
@@ -2417,7 +2556,7 @@ class OnStove(DataProcessor):
                 tech_list = df.groupby('max_benefit_tech')[['Calibrated_pop']].sum()
                 tech_list = tech_list.reset_index().sort_values('Calibrated_pop')['max_benefit_tech'].tolist()
                 x = 'max_benefit_tech'
-            elif groupby.lower() == 'urbanrural':
+            elif groupby.lower() == 'urban-rural':
                 df = self.gdf.copy()
                 df = self._re_name(df, labels, 'max_benefit_tech')
                 df['Urban'] = df['IsUrban'] > 20
@@ -2446,7 +2585,7 @@ class OnStove(DataProcessor):
                             tech_list.append(name)
                     x = 'tech'
                     if variable == 'net_benefit':
-                        y = 'net_benefit'
+                        y = 'net_benefits'
                         title = 'Net benefit per household (kUSD/yr)'
                     elif variable == 'costs':
                         y = 'costs'
@@ -2520,14 +2659,20 @@ class OnStove(DataProcessor):
         else:
             return p
 
-    def gdf_to_csv(self, scenario_name):
+    def to_csv(self, name: str):
+        """Saves the main GeoDataFrame :attr:`gdf` as a ``.csv`` file into the :attr:`output_directory`.
 
-        name = os.path.join(self.output_directory, scenario_name)
+        Parameters
+        ----------
+        name: str
+            Name of the file.
+        """
+        name = os.path.join(self.output_directory, name + '.csv')
 
-        pt = self.gdf.to_crs({'init': 'EPSG:3395'})
+        pt = self.gdf.copy()
 
         pt["X"] = pt["geometry"].x
         pt["Y"] = pt["geometry"].y
 
         df = pd.DataFrame(pt.drop(columns='geometry'))
-        df.to_csv(name)
+        df.to_csv(name, index=False)
