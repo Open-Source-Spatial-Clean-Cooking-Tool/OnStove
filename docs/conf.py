@@ -31,22 +31,12 @@ release = 'v0.1.0'
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
 extensions = [
-    # 'sphinx.ext.viewcode',
+    'sphinx.ext.viewcode',
     'sphinx.ext.autodoc',
-    # 'sphinx.ext.napoleon',
     'numpydoc',
     'sphinx.ext.intersphinx',
-    # 'sphinx.ext.coverage',
-    # 'sphinx.ext.doctest',
     'sphinx.ext.autosummary',
-    # 'sphinx_autodoc_typehints',
-    # 'sphinx.ext.graphviz',
-    # 'sphinx.ext.ifconfig',
-    # 'matplotlib.sphinxext.plot_directive', maybe
-    # 'IPython.sphinxext.ipython_console_highlighting',
-    # 'IPython.sphinxext.ipython_directive',
-    # 'sphinx.ext.mathjax', maybe
-    # 'sphinx_panels', maybe
+    # 'sphinx.ext.linkcode' # to link functions to github source, requires a linkcode_resolve function
 ]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -99,6 +89,8 @@ html_theme_options = {
 html_favicon = "_static/OnStove_favicon.svg"
 html_css_files = ["onstove.css"]
 html_sidebars = {
-   '**': ['globaltoc.html', 'searchbox.html'],
-   'using/windows': ['windowssidebar.html', 'searchbox.html'],
+   'index': ['search-field.html', 'globaltoc.html', "sidebar-ethical-ads"],
+   'onstove_tool': ['search-field.html', 'globaltoc.html', "sidebar-ethical-ads"],
+   'quickstart': ['search-field.html', 'globaltoc.html', "sidebar-ethical-ads"],
+   'resources_and_license': ['search-field.html', 'globaltoc.html', "sidebar-ethical-ads"],
 }
