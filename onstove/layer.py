@@ -1298,7 +1298,7 @@ class RasterLayer(_Layer):
 
         Parameters
         ----------
-        quantiles: array_like of float
+        quantiles: array-like of float
             Quantile or sequence of quantiles to compute, which must be between 0 and 1 inclusive.
 
         Returns

@@ -1913,11 +1913,11 @@ class OnStove(DataProcessor):
         variable: str
             The column name from the :attr:`gdf` to use.
         labels: dictionary of str key-value pairs, optional
-            Dictionary with the keys-value pairs to use for the data categories. It is only used for categorical data
-            (see :meth:`create_layer`).
+            Dictionary with the keys-value pairs to use for the data categories. It is only used for categorical data---
+            see :meth:`create_layer`.
         cmap: dictionary of str key-value pairs, optional
-            Dictionary with the colors to use for each data category. It is only used for categorical data
-            (see :meth:`create_layer`).
+            Dictionary with the colors to use for each data category. It is only used for categorical data---see
+            :meth:`create_layer`.
         metric: str, default 'mean'
             Metric to use to aggregate data. It is only used for non-categorical data. For available metrics see
             :meth:`create_layer`.
@@ -1933,17 +1933,177 @@ class OnStove(DataProcessor):
                     b = int(to_rgb(cmap[code])[2] * 255)
                     f.write(f'{code} {r} {g} {b} 255 {label}\n')
 
-    def plot(self, variable: str, cmap: Union[dict[str, str], str] = 'viridis', cumulative_count=None, quantiles=None,
-             legend_position=(1.05, 1), dpi=150, figsize=(6.4, 4.8),
-             admin_layer=None, title=None, labels=None,
-             legend=True, legend_title='', legend_cols=1,
-             legend_prop={'title': {'size': 12, 'weight': 'bold'}, 'size': 12}, rasterized=True,
-             stats=False, stats_position=(1.05, 0.5), stats_fontsize=12, metric='mean',
-             save_style=False, classes=5, ax=None, scale_bar=None, north_arrow=None):
-        """Plots a map of a desired ``variable`` from the :attr:`gdf`.
+    def plot(self, variable: str, metric='mean',
+             labels: Optional[dict[str, str]] = None,
+             cmap: Union[dict[str, str], str] = 'viridis',
+             cumulative_count: Optional[tuple[float, float]] = None,
+             quantiles: Optional[tuple[float]] = None,
+             admin_layer: Optional[Union[gpd.GeoDataFrame, VectorLayer]] = None,
+             title: Optional[str] = None,
+             legend: bool = True, legend_title: str = '', legend_cols: int = 1,
+             legend_position: tuple[float, float] = (1.05, 1),
+             legend_prop: dict = {'title': {'size': 12, 'weight': 'bold'}, 'size': 12},
+             stats: bool = False, stats_position: tuple[float, float] = (1.05, 0.5), stats_fontsize: int = 12,
+             scale_bar: Optional[dict] = None, north_arrow: Optional[dict] = None,
+             ax: Optional['matplotlib.axes.Axes'] = None,
+             figsize: tuple[float, float] = (6.4, 4.8),
+             rasterized: bool = True,
+             dpi: float = 150,
+             save_style: bool = False, style_classes: int = 5):
+        """Plots a map from a desired column ``variable`` from the :attr:`gdf`.
 
         Parameters
         ----------
+        variable: str
+            The column name from the :attr:`gdf` to use.
+        metric: str, default 'mean'
+            Metric to use to aggregate data. It is only used for non-categorical data. For available metrics see
+            :meth:`create_layer`.
+        labels: dictionary of str key-value pairs, optional
+            Dictionary with the keys-value pairs to use for the data categories. It is only used for categorical data---
+            see :meth:`create_layer`.
+        cmap: dictionary of str key-value pairs or str, default 'viridis'
+            Dictionary with the colors to use for each data category if the data is categorical---see
+            :meth:`create_layer`. If the data is continuous, then a name af a color scale accepted y
+            :doc:`matplotlib<matplotlib:tutorials/colors/colormaps>` should be passed.
+        cumulative_count: array-like of float, optional
+            List of lower and upper limits to consider for the cumulative count. If defined the map will be displayed
+            with the cumulative count representation of the data.
+
+            .. seealso::
+               :meth:`RasterLayer.cumulative_count`
+
+        quantiles: array-like of float, optional
+            Quantile or sequence of quantiles to compute, which must be between 0 and 1 inclusive. If defined the map
+            will be displayed with the quantiles representation of the data.
+
+            .. seealso::
+               :meth:`RasterLayer.quantiles`
+
+        admin_layer: gpd.GeoDataFrame or VectorLayer, optional
+            The administrative boundaries to plot as background. If no ``admin_layer`` is provided then the
+            :attr:``mask_layer`` will be used if available, if not then no boundaries will be ploted.
+
+        title: str, optional
+            The title of the plot.
+        legend: bool, default False
+            Whether to display a legend---only applicable for categorical data.
+        legend_title: str, default ''
+            Title of the legend.
+        legend_cols: int, default 1
+            Number of columns to divide the rows of the legend.
+        legend_position: array-like of float, default (1.05, 1)
+            Position of the upper-left corner of the legend measured in fraction of `x` and `y` axis.
+        legend_prop: dict
+            Dictionary with the font properties of the legend. It can contain any property accepted by the ``prop``
+            parameter from :doc:`matplotlib.pyplot.legend<matplotlib:api/_as_gen/matplotlib.pyplot.legend>`. It
+            defaults to ``{'title': {'size': 12, 'weight': 'bold'}, 'size': 12}``.
+        stats: bool, default False
+            Whether to display the statistics of the analysis in the map.
+        stats_position: array-like of float, default (1.05, 1)
+            Position of the upper-left corner of the statistics box measured in fraction of `x` and `y` axis.
+        stats_fontsize: int, default 12
+            The font size of the statistics text.
+        scale_bar: dict, optional
+            Dictionary with the parameters needed to create a :class:`ScaleBar`. If not defined, no scale bar will be
+            displayed.
+
+            .. code-block::
+               :caption: Scale bar dictionary example
+
+               dict(size=1000000, style='double', textprops=dict(size=8),
+                    linekw=dict(lw=1, color='black'), extent=0.01)
+
+            .. Note::
+               See :func:`onstove.scale_bar` for more details
+
+        north_arrow: dict, optional
+            Dictionary with the parameters needed to create a north arrow icon in the map. If not defined, the north
+            icon wont be displayed.
+
+            .. code-block::
+               :caption: North arrow dictionary example
+
+               dict(size=30, location=(0.92, 0.92), linewidth=0.5)
+
+            .. Note::
+               See :func:`onstove.north_arrow` for more details
+
+        ax: matplotlib.axes.Axes, optional
+            A matplotlib axes instance can be passed in order to overlay layers in the same axes.
+        figsize: tuple of floats, default (6.4, 4.8)
+            The size of the figure in inches.
+        rasterized: bool, default True
+            Whether to rasterize the output.It converts vector graphics into a raster image (pixels). It can speed up
+            rendering and produce smaller files for large data sets---see more at
+            :doc:`matplotlib:gallery/misc/rasterization_demo`.
+        dpi: int, default 150
+            The resolution of the figure in dots per inch.
+        save_style: bool, default False
+            Whether to save the style of the plot as a ``.sld`` file---see :meth:`onstove.RasterLayer.save_style`.
+        style_classes: int, default 5
+            number of classes to include in the ``.sld`` style.
+
+        Examples
+        --------
+        >>> africa = OnStove('results.pkl')
+        ...
+        >>> cmap = {'Biomass ICS (ND)': '#6F4070',
+        ...         'LPG': '#66C5CC',
+        ...         'Biomass': '#FFB6C1',
+        ...         'Biomass ICS (FD)': '#af04b3',
+        ...         'Pellets ICS (FD)': '#ef02f5',
+        ...         'Charcoal': '#364135',
+        ...         'Charcoal ICS': '#d4bdc5',
+        ...         'Biogas': '#73AF48',
+        ...         'Biogas and Biomass ICS (ND)': '#F6029E',
+        ...         'Biogas and Biomass ICS (FD)': '#F6029E',
+        ...         'Biogas and Pellets ICS (FD)': '#F6029E',
+        ...         'Biogas and LPG': '#0F8554',
+        ...         'Biogas and Biomass': '#266AA6',
+        ...         'Biogas and Charcoal': '#3B05DF',
+        ...         'Biogas and Charcoal ICS': '#3B59DF',
+        ...         'Electricity': '#CC503E',
+        ...         'Electricity and Biomass ICS (ND)': '#B497E7',
+        ...         'Electricity and Biomass ICS (FD)': '#B497E7',
+        ...         'Electricity and Pellets ICS (FD)': '#B497E7',
+        ...         'Electricity and LPG': '#E17C05',
+        ...         'Electricity and Biomass': '#FFC107',
+        ...         'Electricity and Charcoal ICS': '#660000',
+        ...         'Electricity and Biogas': '#f97b72',
+        ...         'Electricity and Charcoal': '#FF0000'}
+        ...
+        >>>   labels = {'Biogas and Electricity': 'Electricity and Biogas',
+        ...             'Collected Traditional Biomass': 'Biomass',
+        ...             'Collected Improved Biomass': 'Biomass ICS (ND)',
+        ...             'Traditional Charcoal': 'Charcoal',
+        ...             'Biomass Forced Draft': 'Biomass ICS (FD)',
+        ...             'Pellets Forced Draft': 'Pellets ICS (FD)'}
+        ...
+        >>> scale_bar_prop = dict(size=1000000, style='double', textprops=dict(size=8),
+        ...                       linekw=dict(lw=1, color='black'), extent=0.01)
+        >>> north_arow_prop = dict(size=30, location=(0.92, 0.92), linewidth=0.5)
+        ...
+        >>> africa.plot('max_benefit_tech', labels=labels, cmap=cmap,
+        ...             stats=True, stats_position=(-0.002, 0.61), stats_fontsize=10,
+        ...             legend=True, legend_position=(0.03, 0.47),
+        ...             legend_title='Maximum benefit cooking technology',
+        ...             legend_prop={'title': {'size': 10, 'weight': 'bold'}, 'size': 10},
+        ...             scale_bar=scale_bar_prop, north_arrow=north_arow_prop,
+        ...             figsize=(16, 9), dpi=300, rasterized=True)
+
+        .. figure:: ../images/max_benefit_tech.png
+           :width: 700
+           :alt: max benefit cooking technology over SSA created with OnStove
+           :align: center
+
+        See also
+        --------
+        create_layer
+        to_image
+        to_raster
+        RasterLayer.plot
+        VectorLayer.plot
         """
         raster, codes, cmap = self.create_layer(variable, labels=labels, cmap=cmap, metric=metric)
         if isinstance(admin_layer, gpd.GeoDataFrame):
@@ -1974,7 +2134,7 @@ class OnStove(DataProcessor):
                 categories = False
             raster.save_style(os.path.join(self.output_directory, 'Output'),
                               cmap=cmap, quantiles=quantiles, categories=categories,
-                              classes=classes)
+                              classes=style_classes)
 
     def _add_statistics(self, ax, stats_position, fontsize=12):
         summary = self.summary(total=True, pretty=False)
