@@ -4,6 +4,7 @@ OnStove produces scenarios depicting the “true” cost of clean cooking. The s
 
 .. toctree::
    :maxdepth: 4
+   :hidden:
 
    model
    technologies
