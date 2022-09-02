@@ -175,3 +175,38 @@ example/Ghana/Traveltime/Traveltime.tif.aux.xml
 example/Ghana/Urban/Urban.tif
 example/Ghana/Urban/Urban.tif.aux.xml
 example/Ghana/Water scarcity/Water scarcity.gpkg
+example/gis_data.zip
+example/gis_data/Administrative/Country_boundaries/Country_boundaries.geojson
+example/gis_data/Forest/Forest.tif
+example/gis_data/Forest/Forest.tif.aux.xml
+example/gis_data/Friction/Friction.tif
+example/gis_data/Friction/Friction.tif.aux.xml
+example/gis_data/Livestock/buffaloes/buffaloes.tif
+example/gis_data/Livestock/buffaloes/buffaloes.tif.aux.xml
+example/gis_data/Livestock/cattles/cattles.tif
+example/gis_data/Livestock/cattles/cattles.tif.aux.xml
+example/gis_data/Livestock/goats/goats.tif
+example/gis_data/Livestock/goats/goats.tif.aux.xml
+example/gis_data/Livestock/pigs/pigs.tif
+example/gis_data/Livestock/pigs/pigs.tif.aux.xml
+example/gis_data/Livestock/poultry/poultry.tif
+example/gis_data/Livestock/poultry/poultry.tif.aux.xml
+example/gis_data/Livestock/sheeps/sheeps.tif
+example/gis_data/Livestock/sheeps/sheeps.tif.aux.xml
+example/gis_data/MV lines/MV_lines.geojson
+example/gis_data/Night time lights/Night_time_lights.tif
+example/gis_data/Night time lights/Night_time_lights.tif.aux.xml
+example/gis_data/Population/Population.tif
+example/gis_data/Population/Population.tif.aux.xml
+example/gis_data/Relative wealth index/GHA_relative_wealth_index.csv
+example/gis_data/Temperature/Temperature.tif
+example/gis_data/Temperature/Temperature.tif.aux.xml
+example/gis_data/Traveltime/Traveltime.tif
+example/gis_data/Traveltime/Traveltime.tif.aux.xml
+example/gis_data/Urban/Urban.tif
+example/gis_data/Urban/Urban.tif.aux.xml
+example/gis_data/Water scarcity/Water scarcity.gpkg
+example/soc_specs.csv
+example/tech_specs.csv
+example/results.pkl
+example/model_inputs.pkl

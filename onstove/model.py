@@ -1013,8 +1013,8 @@ class OnStove(DataProcessor):
             pop = self.normalize("Calibrated_pop")
 
             weight_sum = elec_dist * self.specs["infra_weight"] + pop * self.specs["pop_weight"] + \
-                         ntl * self.specs["NTL_weight"]
-            weights = self.specs["infra_weight"] + self.specs["pop_weight"] + self.specs["NTL_weight"]
+                         ntl * self.specs["ntl_weight"]
+            weights = self.specs["infra_weight"] + self.specs["pop_weight"] + self.specs["ntl_weight"]
 
             self.electrified_weight = weight_sum / weights
         return self._electrified_weight
@@ -1037,7 +1037,7 @@ class OnStove(DataProcessor):
         read_scenario_data
         specs
         """
-        elec_rate = self.specs["Elec_rate"]
+        elec_rate = self.specs["elec_rate"]
 
         self.gdf["Current_elec"] = 0
 
@@ -1069,7 +1069,7 @@ class OnStove(DataProcessor):
         read_scenario_data
         specs
         """
-        elec_rate = self.specs["Elec_rate"]
+        elec_rate = self.specs["elec_rate"]
 
         self.gdf["Elec_pop_calib"] = self.gdf["Calibrated_pop"]
 
@@ -1108,7 +1108,7 @@ class OnStove(DataProcessor):
         gdf
         """
         total_gis_pop = self.gdf["Pop"].sum()
-        calibration_factor = self.specs["Population_start_year"] / total_gis_pop
+        calibration_factor = self.specs["population_start_year"] / total_gis_pop
 
         self.gdf["Calibrated_pop"] = self.gdf["Pop"] * calibration_factor
 
@@ -1260,17 +1260,17 @@ class OnStove(DataProcessor):
         """
         self.raster_to_dataframe(GHS_path, name="IsUrban", method='sample')
 
-        if self.specs["End_year"] > self.specs["Start_year"]:
-            population_current = self.specs["Population_start_year"]
-            urban_current = self.specs["Urban_start"] * population_current
+        if self.specs["end_year"] > self.specs["start_year"]:
+            population_current = self.specs["population_start_year"]
+            urban_current = self.specs["urban_start"] * population_current
             rural_current = population_current - urban_current
 
-            population_future = self.specs["Population_end_year"]
-            urban_future = self.specs["Urban_end"] * population_future
+            population_future = self.specs["population_end_year"]
+            urban_future = self.specs["urban_end"] * population_future
             rural_future = population_future - urban_future
 
-            rural_growth = (rural_future - rural_current) / (self.specs["End_year"] - self.specs["Start_year"])
-            urban_growth = (urban_future - urban_current) / (self.specs["End_year"] - self.specs["Start_year"])
+            rural_growth = (rural_future - rural_current) / (self.specs["end_year"] - self.specs["start_year"])
+            urban_growth = (urban_future - urban_current) / (self.specs["end_year"] - self.specs["start_year"])
 
             self.gdf.loc[self.gdf['IsUrban'] > 20, 'Pop_future'] = self.gdf["Calibrated_pop"] * urban_growth
             self.gdf.loc[self.gdf['IsUrban'] < 20, 'Pop_future'] = self.gdf["Calibrated_pop"] * rural_growth
@@ -1286,8 +1286,8 @@ class OnStove(DataProcessor):
         """
         urban_modelled = 2
         factor = 1
-        pop_tot = self.specs["Population_start_year"]
-        urban_current = self.specs["Urban_start"]
+        pop_tot = self.specs["population_start_year"]
+        urban_current = self.specs["urban_start"]
 
         i = 0
         while abs(urban_modelled - urban_current) > 0.01:
@@ -1326,10 +1326,10 @@ class OnStove(DataProcessor):
         """
         self.gdf.loc[self.gdf["IsUrban"] < 20, 'Households'] = self.gdf.loc[
                                                                    self.gdf["IsUrban"] < 20, 'Calibrated_pop'] / \
-                                                               self.specs["Rural_HHsize"]
+                                                               self.specs["rural_hh_size"]
         self.gdf.loc[self.gdf["IsUrban"] > 20, 'Households'] = self.gdf.loc[
                                                                    self.gdf["IsUrban"] > 20, 'Calibrated_pop'] / \
-                                                               self.specs["Urban_HHsize"]
+                                                               self.specs["urban_hh_size"]
 
     def get_value_of_time(self):
         """
@@ -1348,7 +1348,7 @@ class OnStove(DataProcessor):
         norm_layer = (self.gdf['relative_wealth'] - min_value) / (max_value - min_value) * wage_range + \
                      self.specs['wage_range'][0]
         self.gdf['value_of_time'] = norm_layer * self.specs[
-            'Minimum_wage'] / 30 / 8  # convert $/months to $/h (8 working hours per day)
+            'minimum_wage'] / 30 / 8  # convert $/months to $/h (8 working hours per day)
 
     def run(self, technologies: Union[list[str], str] = 'all', restriction: bool = True):
         """Runs the model using the defined ``technologies`` as options to cook with.
@@ -1387,10 +1387,10 @@ class OnStove(DataProcessor):
         extract_om_costs
         extract_salvage
         """
-        print(f'[{self.specs["Country_name"]}] Calculating clean cooking access')
+        print(f'[{self.specs["country_name"]}] Calculating clean cooking access')
         self.get_clean_cooking_access()
         if self.base_fuel is None:
-            print(f'[{self.specs["Country_name"]}] Calculating base fuel properties')
+            print(f'[{self.specs["country_name"]}] Calculating base fuel properties')
 
             self.set_base_fuel(self.techs.values())
         if technologies == 'all':
@@ -1401,7 +1401,7 @@ class OnStove(DataProcessor):
             raise ValueError("technologies must be 'all' or a list of strings with the technology names to run.")
 
         # Based on wealth index, minimum wage and a lower an upper range for cost of oportunity
-        print(f'[{self.specs["Country_name"]}] Getting value of time')
+        print(f'[{self.specs["country_name"]}] Getting value of time')
         self.get_value_of_time()
         # Loop through each technology and calculate all benefits and costs
         for tech in techs:
