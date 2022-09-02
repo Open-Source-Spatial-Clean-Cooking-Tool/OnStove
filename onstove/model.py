@@ -804,6 +804,25 @@ class OnStove(DataProcessor):
         else:
             self.specs.update(config)
 
+        self.check_scenario_data()
+
+
+    def check_scenario_data(self):
+        """This function checks goes through all rows without default values needed in the socio-economic specification
+        file to check wether they are included or not. If they are included nothing happens, otherwise a ValueError will
+        be raised.
+        """
+
+        rows = ['country_name', 'country_code', 'population_start_year', 'population_end_year', 'urban_start',
+                'urban_end', 'elec_rate', 'rural_elec_rate', 'urban_elec_rate', 'mort_copd', 'mort_ihd', 'mort_lc',
+                'mort_alri', 'morb_copd','morb_ihd', 'morb_lc', 'morb_alri', 'rural_hh_size', 'urban_hh_size',
+                'mort_stroke', 'morb_stroke', 'fnrb','coi_alri', 'coi_copd', 'coi_ihd', 'coi_lc', 'coi_stroke',
+                'cost_of_carbon_emissions', 'minimum_wage', 'vsl']
+
+        for row in rows:
+            if row not in self.specs:
+                raise ValueError("The socio-economic file has to include the " + row + " row")
+
     def techshare_sumtoone(self):
         """This function checks if the sum of shares in the technology dictionary is 1.0.
 
