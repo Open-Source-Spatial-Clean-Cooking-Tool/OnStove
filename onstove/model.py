@@ -769,7 +769,6 @@ class OnStove(DataProcessor):
         super().__init__(project_crs, cell_size, output_directory)
         self.rows = None
         self.cols = None
-        self.specs = None
         self.techs = {}
         self.base_fuel = None
         self.i = {}
@@ -779,6 +778,15 @@ class OnStove(DataProcessor):
         self.clean_cooking_access_u = None
         self.clean_cooking_access_r = None
         self.electrified_weight = None
+
+        self.specs = {'start_year': 2020, 'end_year': 2030,
+                      'end_year_target': 1.0, 'meals_per_day': 3.0, 'infra_weight': 1.0,
+                      'ntl_weight': 1.0, 'pop_weight': 1.0,'discount_rate': 0.03,
+                      'health_spillover_parameter': 0.112,
+                      'w_costs': 1.0, 'w_environment': 1.0, 'w_health': 1.0,
+                      'w_spillover': 1.0, 'w_time': 1.0}
+
+
 
     def read_scenario_data(self, path_to_config: str, delimiter=','):
         """Reads the scenario data into a dictionary
@@ -799,10 +807,8 @@ class OnStove(DataProcessor):
                         config[row['Param']] = str(row['Value']).lower() in ['true', 't', 'yes', 'y', '1']
                     else:
                         raise ValueError("Config file data type not recognised.")
-        if self.specs is None:
-            self.specs = config
-        else:
-            self.specs.update(config)
+
+        self.specs.update(config)
 
     def techshare_sumtoone(self):
         """This function checks if the sum of shares in the technology dictionary is 1.0.
