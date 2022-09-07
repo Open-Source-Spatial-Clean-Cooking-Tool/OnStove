@@ -22,7 +22,6 @@ OnStove produces scenarios depicting the “true” cost of clean cooking. The s
 * [psutil](https://psutil.readthedocs.io/en/latest/)
 * [python-decouple](https://pypi.org/project/python-decouple/)
 * [rasterio](https://rasterio.readthedocs.io/en/latest/)
-* [scikit-learn](https://scikit-learn.org/stable/)
 * [scikit-image](https://scikit-image.org/)
 * [svgpathtools](https://pypi.org/project/svgpathtools/)
 * [svgpath2mpl](https://pypi.org/project/svgpath2mpl/)
