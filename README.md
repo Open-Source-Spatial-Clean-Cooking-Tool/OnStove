@@ -15,7 +15,6 @@ OnStove produces scenarios depicting the “true” cost of clean cooking. The s
 * [contextily](https://contextily.readthedocs.io/en/latest/)
 * [dill](https://dill.readthedocs.io/en/latest/dill.html)
 * [geopandas](https://geopandas.org/en/stable/)
-* [json](https://docs.python.org/3/library/json.html)
 * [jupyterlab](https://jupyterlab.readthedocs.io/en/stable/)
 * [matplotlib](https://matplotlib.org/)
 * [pandas](https://pandas.pydata.org/)
