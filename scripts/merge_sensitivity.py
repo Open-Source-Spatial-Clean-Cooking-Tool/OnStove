@@ -6,8 +6,7 @@ from decouple import config
 onstove_path = config('ONSTOVE').format(os.getlogin())
 sys.path.append(onstove_path)
 
-from onstove.layer import VectorLayer
-from onstove.onstove import OnStove
+from onstove import OnStove
 from sensitivity import run_model
 
 df = pd.DataFrame({'Households': [], 'max_benefit_tech': [], 'Calibrated_pop': [],

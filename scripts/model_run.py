@@ -5,7 +5,7 @@ import os
 onstove_path = config('ONSTOVE').format(os.getlogin())
 sys.path.append(onstove_path)
 
-from onstove.onstove import OnStove
+from onstove import OnStove
 
 # 1. Read the OnSSTOVE model
 country = snakemake.params.country
@@ -18,27 +18,31 @@ path = snakemake.input.scenario_file
 model.read_scenario_data(path, delimiter=',')
 model.output_directory = snakemake.params.output_directory
 
-if snakemake.wildcards.scenario in ['Social_private_benefits']:
-    model.techs['LPG'].diesel_cost = 1.04
+# if snakemake.wildcards.scenario in ['Social_private_benefits']:
+#     model.techs['LPG'].diesel_cost = 1.04
 
 model.techs['Electricity'].get_capacity_cost(model)
 
 # 3. Calculating benefits and costs of each technology and getting the max benefit technology for each cell
 model.run(technologies=['Electricity', 'LPG', 'Biogas',
                         'Collected_Improved_Biomass', 'Collected_Traditional_Biomass', 'Charcoal ICS',
-                        'Traditional_Charcoal'
+                        'Traditional_Charcoal', 'Biomass Forced Draft', 'Pellets Forced Draft'
                         ],
           restriction=snakemake.params.restriction)
 
 # 5. Saving data to raster files
-cmap = {"Biomass ICS": '#6F4070', "LPG": '#66C5CC', "Biomass": '#FFB6C1',
+cmap = {"Biomass ICS (ND)": '#6F4070', "LPG": '#66C5CC', "Biomass": '#FFB6C1',
+        "Biomass ICS (FD)": '#af04b3', "Pellets ICS (FD)": '#ef02f5',
         "Charcoal": '#364135', "Charcoal ICS": '#d4bdc5',
-        "Biogas": '#73AF48', "Biogas and Biomass ICS": "#F6029E",
+        "Biogas": '#73AF48', "Biogas and Biomass ICS (ND)": "#F6029E",
+        "Biogas and Biomass ICS (FD)": "#F6029E",
+        "Biogas and Pellets ICS (FD)": "#F6029E",
         "Biogas and LPG": "#0F8554", "Biogas and Biomass": "#266AA6",
         "Biogas and Charcoal": "#3B05DF",
         "Biogas and Charcoal ICS": "#3B59DF",
-        "Biogas and Electricity": "#484673",
-        "Electricity": '#CC503E', "Electricity and Biomass ICS": "#B497E7",
+        "Electricity": '#CC503E', "Electricity and Biomass ICS (ND)": "#B497E7",
+        "Electricity and Biomass ICS (FD)": "#B497E7",
+        "Electricity and Pellets ICS (FD)": "#B497E7",
         "Electricity and LPG": "#E17C05", "Electricity and Biomass": "#FFC107",
         "Electricity and Charcoal ICS": "#660000",
         "Electricity and Biogas": "#f97b72",
@@ -46,8 +50,10 @@ cmap = {"Biomass ICS": '#6F4070', "LPG": '#66C5CC', "Biomass": '#FFB6C1',
 
 labels = {"Biogas and Electricity": "Electricity and Biogas",
           'Collected Traditional Biomass': 'Biomass',
-          'Collected Improved Biomass': 'Biomass ICS',
-          'Traditional Charcoal': 'Charcoal'}
+          'Collected Improved Biomass': 'Biomass ICS (ND)',
+          'Traditional Charcoal': 'Charcoal',
+          'Biomass Forced Draft': 'Biomass ICS (FD)',
+          'Pellets Forced Draft': 'Pellets ICS (FD)'}
 
 print(f'[{country}] Saving the rasters')
 # model.gdf['max_benefit_tech'] = model.gdf['max_benefit_tech'].str.replace('_', ' ')
@@ -69,12 +75,9 @@ model.to_image('max_benefit_tech', cmap=cmap, legend_position=(1, 0.75),
                type='pdf', dpi=300, stats=True, stats_position=(1, 0.8),
                labels=labels, legend=True, legend_title='Maximum benefit\ncooking technology', rasterized=True)
 
-model.plot_split(cmap=cmap, labels=labels, save=True, height=1.5, width=3.5)
-model.plot_costs_benefits(labels=labels, save=True, height=1.5, width=2)
-model.plot_benefit_distribution(type='box', groupby='None', cmap=cmap, labels=labels, save=True, height=1.5, width=3.5)
-model.plot_benefit_distribution(type='box', groupby='UrbanRural', cmap=cmap, labels=labels, save=True, height=2.5,
-                                width=3.5)
-model.plot_benefit_distribution(type='density', cmap=cmap, labels=labels, save=True, height=1.5, width=3.5)
+model.plot_split(cmap=cmap, labels=labels, save_as='tech_split', height=1.5, width=3.5)
+model.plot_costs_benefits(labels=labels, save_as='benefits_costs', height=1.5, width=2)
+model.plot_benefit_distribution(type='box', groupby='None', cmap=cmap, labels=labels, save_as='max_benefits_box', height=1.5, width=3.5)
 
 print(f'[{country}] Saving the results')
 

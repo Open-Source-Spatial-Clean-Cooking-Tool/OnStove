@@ -1,0 +1,20 @@
+name: readthedocs
+channels:
+  - bioconda
+  - jmcmurray
+  - conda-forge
+  - defaults
+dependencies:
+  - dill
+  - geopandas
+  - matplotlib
+  - numpydoc
+  - plotnine
+  - psycopg2
+  - psutil
+  - pydata-sphinx-theme
+  - python-decouple
+  - rasterio
+  - scikit-image
+  - svgpathtools
+  - svgpath2mpl

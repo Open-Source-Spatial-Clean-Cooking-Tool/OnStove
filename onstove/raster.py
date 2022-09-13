@@ -1,28 +1,19 @@
-import os
 import glob
+import gzip
+
+import fiona
 import numpy as np
-from math import sqrt
-from heapq import heapify, heappush, heappop
+
 import rasterio
 import rasterio.mask
 from rasterio.merge import merge
 from rasterio.warp import calculate_default_transform, reproject, Resampling
-from rasterio.fill import fillnodata
-from rasterio import features
 from rasterio.enums import Resampling as enumsResampling
-import geopandas as gpd
-import fiona
-import shapely
-from osgeo import gdal, osr
-import gzip
 
 
 def align_raster(raster_1, raster_2, method='nearest', compression='DEFLATE'):
-    with rasterio.open(raster_1) as src:
-        raster_1_meta = src.meta
-    with rasterio.open(raster_2) as src:
-        raster_2 = src.read(1)
-        raster_2_meta = src.meta
+    raster_1_meta = raster_1.meta
+    raster_2_meta = raster_2.meta
 
     out_meta = raster_1_meta.copy()
     out_meta.update({
@@ -33,7 +24,7 @@ def align_raster(raster_1, raster_2, method='nearest', compression='DEFLATE'):
     })
     destination = np.full((raster_1_meta['height'], raster_1_meta['width']), raster_2_meta['nodata'])
     reproject(
-        source=raster_2,
+        source=raster_2.data,
         destination=destination,
         src_transform=raster_2_meta['transform'],
         src_crs=raster_2_meta['crs'],
@@ -44,57 +35,14 @@ def align_raster(raster_1, raster_2, method='nearest', compression='DEFLATE'):
     return destination, out_meta
 
 
-def interpolate(raster, max_search_distance=10):
-    with rasterio.open(raster) as src:
-        profile = src.profile
-        arr = src.read(1)
-        arr_filled = fillnodata(arr, mask=src.read_masks(1), max_search_distance=max_search_distance)
-
-    with rasterio.open(raster, 'w', **profile) as dest:
-        dest.write_band(1, arr_filled)
-
-
-def polygonize(raster, mask=None):
-    with rasterio.Env():
-        if type(raster) == str:
-            with rasterio.open(raster) as raster:
-                raster = raster.read(1)
-                raster = raster.astype('float32')
-
-        results = (
-            {'properties': {'raster_val': v}, 'geometry': s}
-            for i, (s, v)
-            in enumerate(
-            shapes(raster, mask=mask, transform=src.transform)))
-
-    geoms = list(results)
-    polygon = gpd.GeoDataFrame.from_features(geoms)
-    return polygon
-
-
-def proximity_raster(src_filename, dst_filename, values, compression):
-    src_ds = gdal.Open(src_filename)
-    srcband = src_ds.GetRasterBand(1)
-    dst_filename = dst_filename
-
-    drv = gdal.GetDriverByName('GTiff')
-    dst_ds = drv.Create(dst_filename,
-                        src_ds.RasterXSize, src_ds.RasterYSize, 1,
-                        gdal.GetDataTypeByName('Float32'),
-                        options=['COMPRESS={}'.format(compression)])
-
-    dst_ds.SetGeoTransform(src_ds.GetGeoTransform())
-    dst_ds.SetProjection(src_ds.GetProjectionRef())
-
-    dstband = dst_ds.GetRasterBand(1)
-
-    gdal.ComputeProximity(srcband, dstband,
-                          ["VALUES={}".format(','.join([str(i) for i in values])),
-                           "DISTUNITS=GEO"])
-    srcband = None
-    dstband = None
-    src_ds = None
-    dst_ds = None
+# def interpolate(raster, max_search_distance=10):
+#     with rasterio.open(raster) as src:
+#         profile = src.profile
+#         arr = src.read(1)
+#         arr_filled = fillnodata(arr, mask=src.read_masks(1), max_search_distance=max_search_distance)
+#
+#     with rasterio.open(raster, 'w', **profile) as dest:
+#         dest.write_band(1, arr_filled)
 
 
 def mask_raster(raster_path, mask_layer, output_file, nodata=0, compression='NONE',
@@ -198,27 +146,6 @@ def sample_raster(path, gdf):
                                                   gdf['geometry']])]
 
 
-def friction_start_points(friction, in_points):
-    if isinstance(in_points, str):
-        start = gpd.read_file(in_points)
-    else:
-        start = in_points
-    row_list = []
-    col_list = []
-    with rasterio.open(friction) as src:
-        arr = src.read(1)
-        for index, row in start.iterrows():
-            rows, cols = rasterio.transform.rowcol(src.transform, row["geometry"].x, row["geometry"].y)
-            arr[rows][cols] = 0
-
-            out_meta = src.meta
-
-            row_list.append(rows)
-            col_list.append(cols)
-
-    return row_list, col_list
-
-
 def merge_rasters(files_path, dst_crs, outpul_file):
     files = glob.glob(files_path)
     src_files_to_mosaic = []
@@ -239,42 +166,6 @@ def merge_rasters(files_path, dst_crs, outpul_file):
                     )
     with rasterio.open(outpul_file, "w", **out_meta) as dest:
         dest.write(mosaic[0], indexes=1)
-
-
-def rasterize(vector_layer, raster_base_layer, outpul_file=None, value=None,
-              nodata=0, compression='NONE', dtype=rasterio.uint8,
-              all_touched=True, save=False):
-    vector_layer = vector_layer.rename(columns={'geometry': 'geom'})
-    if value:
-        dff = vector_layer[[value, 'geom']]
-        shapes = ((g, v) for v, g in zip(dff[value].values, dff['geom'].values))
-    else:
-        shapes = ((g, 1) for g in vector_layer['geom'].values)
-
-    with rasterio.open(raster_base_layer) as src:
-        image = features.rasterize(
-            shapes,
-            out_shape=src.shape,
-            transform=src.transform,
-            all_touched=all_touched,
-            fill=nodata)
-
-        out_meta = src.meta
-
-        out_meta.update({"driver": "GTiff",
-                         "height": src.height,
-                         "width": src.width,
-                         "transform": src.transform,
-                         'compress': compression,
-                         'dtype': dtype,
-                         "crs": src.crs,
-                         'nodata': nodata})
-
-        if save:
-            with rasterio.open(outpul_file, 'w', **out_meta) as dst:
-                dst.write(image, indexes=1)
-        else:
-            return image, out_meta
 
 
 def normalize(raster=None, limit=None, output_file=None,
@@ -332,16 +223,3 @@ def resample(raster_path, height, width, method='bilinear'):
             (src.height / data.shape[-2])
         )
         return data, transform
-
-
-# def travel_time(friction, starts):
-#     friction *= 1000 / 60
-#     friction[np.isnan(friction)] = float('inf')
-#     mcp = MCP_Geometric(friction, fully_connected=True)
-#     row, col = friction_start_points(friction, starts)
-#     pointlist = np.column_stack((row, col))
-#
-#     cumulative_costs, traceback = mcp.find_costs(starts=pointlist)
-#     cumulative_costs[np.where(cumulative_costs == float('inf'))] = np.nan
-#
-#     return cumulative_costs

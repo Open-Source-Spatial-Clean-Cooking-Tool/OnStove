@@ -4,8 +4,7 @@ from decouple import config
 onstove_path = config('ONSTOVE').format(os.getlogin())
 sys.path.append(onstove_path)
 
-from onstove.layer import VectorLayer, RasterLayer
-from onstove.onstove import OnStove
+from onstove import VectorLayer, RasterLayer, OnStove
 
 # 1. Create an OnSSTOVE model
 output_directory = snakemake.params.output_directory
@@ -20,12 +19,12 @@ model.read_scenario_data(path, delimiter=',')
 
 # 3. Add a country mask layer
 path = snakemake.input.mask_layer
-mask_layer = VectorLayer('admin', 'adm_1', layer_path=path)
+mask_layer = VectorLayer('admin', 'adm_1', path=path)
 model.mask_layer = mask_layer
 
 # 4. Add a population base layer
 path = snakemake.input.population
-model.add_layer(category='Demographics', name='Population', layer_path=path, layer_type='raster', base_layer=True)
+model.add_layer(category='Demographics', name='Population', path=path, layer_type='raster', base_layer=True)
 model.population_to_dataframe()
 
 # 5. Calibrate population and urban/rural split
@@ -34,7 +33,7 @@ model.calibrate_current_pop()
 
 # path = os.path.join(output_directory, 'Demographics', 'Urban_rural_divide', 'Urban_rural_divide.tif')
 ghs_path = snakemake.input.ghs
-model.calibrate_urban_current_and_future_GHS(ghs_path)
+model.calibrate_urban_rural_split(ghs_path)
 
 # 6. Add wealth index GIS data
 print(f'[{country}] Adding wealth index')
@@ -49,7 +48,7 @@ else:
 # 8. Read electricity network GIS layers
 # Read MV lines
 path = snakemake.input.mv_lines
-mv_lines = VectorLayer('Electricity', 'MV_lines', layer_path=path, distance='proximity')
+mv_lines = VectorLayer('Electricity', 'MV_lines', path=path, distance_method='proximity')
 
 # Read HV lines
 # path = snakemake.input.hv_lines
@@ -61,10 +60,10 @@ model.distance_to_electricity(mv_lines=mv_lines)
 
 # 8.2. Add night time lights data
 path = snakemake.input.ntl
-ntl = RasterLayer('Electricity', 'Night_time_lights', layer_path=path)
+ntl = RasterLayer('Electricity', 'Night_time_lights', path=path)
 
-model.raster_to_dataframe(ntl.layer, name='Night_lights', method='read',
-                          nodata=ntl.meta['nodata'], fill_nodata='interpolate')
+model.raster_to_dataframe(ntl, name='Night_lights', method='read',
+                          fill_nodata_method='interpolate')
 
 # 9. Calibrate current electrified population
 print(f'[{country}] Calibrating current electrified')
@@ -86,9 +85,8 @@ model.read_tech_data(path, delimiter=',')
 # 12. Reading GIS data for LPG supply
 print(f'[{country}] LPG data')
 travel_time = RasterLayer('LPG', 'Traveltime', snakemake.input.traveltime_cities)
-model.techs['LPG'].travel_time = model.raster_to_dataframe(travel_time.layer,
-                                                           nodata=travel_time.meta['nodata'],
-                                                           fill_nodata='interpolate', method='read') * 2 / 60
+model.techs['LPG'].travel_time = model.raster_to_dataframe(travel_time,fill_nodata_method='interpolate',
+                                                           method='read') * 2 / 60
 
 # 13. Adding GIS data for Traditional Biomass
 print(f'[{country}] Traditional Biomass collected data')
@@ -101,6 +99,10 @@ print(f'[{country}] Improved Biomass collected data')
 model.techs['Collected_Improved_Biomass'].friction_path = snakemake.input.biomass_friction
 model.techs['Collected_Improved_Biomass'].forest_path = snakemake.input.forest
 model.techs['Collected_Improved_Biomass'].forest_condition = lambda x: x > 0
+
+model.techs['Biomass Forced Draft'].friction_path = snakemake.input.biomass_friction
+model.techs['Biomass Forced Draft'].forest_path = snakemake.input.forest
+model.techs['Biomass Forced Draft'].forest_condition = lambda x: x > 0
 
 # 15. Adding GIS data for Improved Biomass collected (ICS biomass)
 if 'Biogas' in model.techs.keys():
