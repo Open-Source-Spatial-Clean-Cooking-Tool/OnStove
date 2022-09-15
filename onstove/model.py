@@ -1294,10 +1294,16 @@ class OnStove(DataProcessor):
         specs
         gdf
         """
-        total_gis_pop = self.gdf["Pop"].sum()
-        calibration_factor = self.specs["Population_start_year"] / total_gis_pop
+        isurban = self.gdf["IsUrban"] > 20
+        total_rural_pop = self.gdf.loc[~isurban, "Pop"].sum()
+        total_urban_pop = self.gdf["Pop"].sum() - total_rural_pop
 
-        self.gdf["Calibrated_pop"] = self.gdf["Pop"] * calibration_factor
+        calibration_factor_u = (self.specs["Population_start_year"] * self.specs["Urban_start"])/total_urban_pop
+        calibration_factor_r = (self.specs["Population_start_year"] * (1-self.specs["Urban_start"]))/total_rural_pop
+
+        self.gdf["Calibrated_pop"] = 0
+        self.gdf["Calibrated_pop"].loc[~isurban] = self.gdf["Pop"] * calibration_factor_r
+        self.gdf["Calibrated_pop"].loc[isurban] = self.gdf["Pop"] * calibration_factor_u
 
     def distance_to_electricity(self, hv_lines: VectorLayer = None, mv_lines: VectorLayer = None,
                                 transformers: VectorLayer = None):
@@ -1446,6 +1452,8 @@ class OnStove(DataProcessor):
             Path to the GHS dataset
         """
         self.raster_to_dataframe(GHS_path, name="IsUrban", method='sample')
+
+        self.calibrate_current_pop()
 
         if self.specs["End_year"] > self.specs["Start_year"]:
             population_current = self.specs["Population_start_year"]
