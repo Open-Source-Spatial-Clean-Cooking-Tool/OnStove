@@ -769,7 +769,7 @@ class OnStove(DataProcessor):
         super().__init__(project_crs, cell_size, output_directory)
         self.rows = None
         self.cols = None
-        self.specs = None
+        self.specs = {'inter_year': None}
         self.techs = {}
         self.base_fuel = None
         self.i = {}
@@ -932,8 +932,8 @@ class OnStove(DataProcessor):
         """
         isurban = self.gdf["IsUrban"] > 20
         for name, tech in self.techs.items():
-            tech.population_cooking_rural = tech.current_share_rural * self.gdf.loc[~isurban, 'Calibrated_pop'].sum()
-            tech.population_cooking_urban = tech.current_share_urban * self.gdf.loc[isurban, 'Calibrated_pop'].sum()
+            tech.population_cooking_rural = tech.current_share_rural * self.gdf.loc[~isurban, 'pop_init_year'].sum()
+            tech.population_cooking_urban = tech.current_share_urban * self.gdf.loc[isurban, 'pop_init_year'].sum()
     
     def techshare_allocation(self, tech_dict):
         """
@@ -966,16 +966,16 @@ class OnStove(DataProcessor):
         #create series for biogas same size as dataframe with zeros 
         tech_dict["Biogas"].pop_sqkm = pd.Series(np.zeros(self.gdf.shape[0]))
         #allocate remaining population to biogas in rural areas where there's potential
-        biogas_factor = tech_dict["Biogas"].population_cooking_rural / (self.gdf["Calibrated_pop"].loc[(tech_dict["Biogas"].time_of_collection!=float('inf')) & ~isurban].sum())
-        tech_dict["Biogas"].pop_sqkm.loc[(~isurban) & (tech_dict["Biogas"].time_of_collection!=float('inf'))] = self.gdf["Calibrated_pop"] * biogas_factor
-        pop_diff = (tech_dict["Biogas"].pop_sqkm + tech_dict["Electricity"].pop_sqkm) > self.gdf["Calibrated_pop"]
-        tech_dict["Biogas"].pop_sqkm.loc[pop_diff] = self.gdf["Calibrated_pop"] - tech_dict["Electricity"].pop_sqkm
+        biogas_factor = tech_dict["Biogas"].population_cooking_rural / (self.gdf["pop_init_year"].loc[(tech_dict["Biogas"].time_of_collection!=float('inf')) & ~isurban].sum())
+        tech_dict["Biogas"].pop_sqkm.loc[(~isurban) & (tech_dict["Biogas"].time_of_collection!=float('inf'))] = self.gdf["pop_init_year"] * biogas_factor
+        pop_diff = (tech_dict["Biogas"].pop_sqkm + tech_dict["Electricity"].pop_sqkm) > self.gdf["pop_init_year"]
+        tech_dict["Biogas"].pop_sqkm.loc[pop_diff] = self.gdf["pop_init_year"] - tech_dict["Electricity"].pop_sqkm
         #allocate remaining population proportionally to techs other than biogas and electricity 
         remaining_share = 0
         for name, tech in tech_dict.items():
             if (name != "Biogas") & (name != "Electricity"):
                 remaining_share += tech.current_share_rural
-        remaining_pop = self.gdf.loc[~isurban, "Calibrated_pop"] - (tech_dict["Biogas"].pop_sqkm.loc[~isurban] + tech_dict["Electricity"].pop_sqkm.loc[~isurban])
+        remaining_pop = self.gdf.loc[~isurban, "pop_init_year"] - (tech_dict["Biogas"].pop_sqkm.loc[~isurban] + tech_dict["Electricity"].pop_sqkm.loc[~isurban])
         for name, tech in tech_dict.items():
             if (name != "Biogas") & (name != "Electricity"):
                 tech.pop_sqkm = pd.Series(np.zeros(self.gdf.shape[0]))
@@ -1001,11 +1001,11 @@ class OnStove(DataProcessor):
         for name, tech in tech_dict.items():
             if (name != "Biogas") & (name != "Electricity"):
                 remaining_urbshare += tech.current_share_urban
-        remaining_urbpop = self.gdf["Calibrated_pop"].loc[isurban] - tech_dict["Electricity"].pop_sqkm.loc[isurban]
+        remaining_urbpop = self.gdf["pop_init_year"].loc[isurban] - tech_dict["Electricity"].pop_sqkm.loc[isurban]
         for name, tech in tech_dict.items():
             if (name != "Biogas") & (name != "Electricity"):
                 tech.pop_sqkm.loc[isurban] = remaining_urbpop * tech.current_share_urban / remaining_urbshare
-            tech.pop_sqkm = tech.pop_sqkm / self.gdf["Calibrated_pop"]
+            tech.pop_sqkm = tech.pop_sqkm / self.gdf["pop_init_year"]
         
     def set_base_fuel(self, techs: list = None):
         """
@@ -1045,14 +1045,13 @@ class OnStove(DataProcessor):
 
             # base_tech_types = [type(tech) for tech in base_fuels.values()]
 
-            self.techshare_sumtoone()
             self.ecooking_adjustment()
             base_fuels["Biogas"].total_time(self)
             required_energy_hh = base_fuels["Biogas"].required_energy_hh(self)
-            factor = self.gdf['biogas_energy'] / (required_energy_hh * self.gdf['Households'])
+            factor = self.gdf['biogas_energy'] / (required_energy_hh * self.gdf["households_init"])
             factor[factor > 1] = 1
             base_fuels["Biogas"].factor = factor
-            base_fuels["Biogas"].households = self.gdf['Households'] * factor
+            base_fuels["Biogas"].households = self.gdf["households_init"] * factor
             self.biogas_adjustment()
             self.pop_tech()
             self.techshare_allocation(base_fuels)
@@ -1200,7 +1199,7 @@ class OnStove(DataProcessor):
 
             elec_dist = self.normalize("Elec_dist", inverse=True)
             ntl = self.normalize("Night_lights")
-            pop = self.normalize("Calibrated_pop")
+            pop = self.normalize("pop_init_year")
 
             weight_sum = elec_dist * self.specs["infra_weight"] + pop * self.specs["pop_weight"] + \
                          ntl * self.specs["NTL_weight"]
@@ -1233,11 +1232,11 @@ class OnStove(DataProcessor):
 
         i = 1
         elec_pop = 0
-        total_pop = self.gdf["Calibrated_pop"].sum()
+        total_pop = self.gdf["pop_init_year"].sum()
 
         while elec_pop <= total_pop * elec_rate:
             bool = (self.electrified_weight >= i)
-            elec_pop = self.gdf.loc[bool, "Calibrated_pop"].sum()
+            elec_pop = self.gdf.loc[bool, "pop_init_year"].sum()
 
             self.gdf.loc[bool, "Current_elec"] = 1
             i = i - 0.01
@@ -1248,7 +1247,7 @@ class OnStove(DataProcessor):
         """Calibrates the electrified population within each cell.
 
         This is a "fine-tuning" of the electrified population. It uses the ``Current_elec`` column of the :attr:`gdf`
-        GeoDataFrame (calculated using the :meth:`current_elec` method) and the ``Calibrated_pop`` column (calculated
+        GeoDataFrame (calculated using the :meth:`current_elec` method) and the ``pop_init_year`` column (calculated
         using the :meth:`calibrate_current_pop` method) to get the population that is electrified within each
         electrified settlement, according to the ``Elec_rate`` provided by the user (stored in :attr:`specs`).
 
@@ -1261,11 +1260,11 @@ class OnStove(DataProcessor):
         """
         elec_rate = self.specs["Elec_rate"]
 
-        self.gdf["Elec_pop_calib"] = self.gdf["Calibrated_pop"]
+        self.gdf["Elec_pop_calib"] = self.gdf["pop_init_year"]
 
         i = self.i + 0.01
-        total_pop = self.gdf["Calibrated_pop"].sum()
-        elec_pop = self.gdf.loc[self.gdf["Current_elec"] == 1, "Calibrated_pop"].sum()
+        total_pop = self.gdf["pop_init_year"].sum()
+        elec_pop = self.gdf.loc[self.gdf["Current_elec"] == 1, "pop_init_year"].sum()
         diff = elec_pop - (total_pop * elec_rate)
         factor = diff / self.gdf["Current_elec"].count()
 
@@ -1288,7 +1287,7 @@ class OnStove(DataProcessor):
 
     def calibrate_current_pop(self):
         """Calibrates the spatial population in each cell according to the user defined population in the start year
-        (``Population_start_year`` in the :attr:`specs` dictionary) and saves it in the ``Calibrated_pop`` column of
+        (``Population_start_year`` in the :attr:`specs` dictionary) and saves it in the ``pop_init_year`` column of
         the main GeoDataFrame (:attr:`gdf`).
 
         See also
@@ -1304,9 +1303,34 @@ class OnStove(DataProcessor):
         calibration_factor_u = (self.specs["Population_start_year"] * self.specs["Urban_start"])/total_urban_pop
         calibration_factor_r = (self.specs["Population_start_year"] * (1-self.specs["Urban_start"]))/total_rural_pop
 
-        self.gdf["Calibrated_pop"] = 0
-        self.gdf.loc[~isurban, "Calibrated_pop"] = self.gdf.loc[~isurban,"Pop"] * calibration_factor_r
-        self.gdf.loc[isurban, "Calibrated_pop"] = self.gdf.loc[isurban, "Pop"] * calibration_factor_u
+        self.gdf["pop_init_year"] = 0
+        self.gdf.loc[~isurban, "pop_init_year"] = self.gdf.loc[~isurban,"Pop"] * calibration_factor_r
+        self.gdf.loc[isurban, "pop_init_year"] = self.gdf.loc[isurban, "Pop"] * calibration_factor_u
+        
+        if self.specs['End_year'] != self.specs['Start_year']:
+            if self.specs['End_year'] < self.specs['Start_year']:
+                raise ValueError("The end year needs to be after the start year.")
+            else:
+                urban_growth = (self.specs["Urban_end"] * self.specs["Population_end_year"] ) / (self.specs["Urban_start"] * self.specs["Population_start_year"])
+                rural_growth = ((1 - self.specs["Urban_end"]) * self.specs["Population_end_year"] ) / ((1 - self.specs["Urban_start"]) * self.specs["Population_start_year"])
+
+                self.gdf.loc[~isurban, "pop_end_year"] = self.gdf.loc[~isurban,"pop_init_year"] * rural_growth
+                self.gdf.loc[isurban, "pop_end_year"] = self.gdf.loc[isurban,"pop_init_year"] * urban_growth
+        else: 
+            self.gdf["pop_end_year"] = self.gdf["pop_init_year"]
+    
+        if self.specs["inter_year"] is not None:
+            if self.specs['inter_year'] < self.specs['Start_year']:
+                raise ValueError("The intermediate year needs to be after the start year.")
+            elif self.specs['inter_year'] > self.specs['End_year']:
+                raise ValueError("The intermediate year needs to be before the end year.")
+            else:
+                yearly_pop_increase_urban = (country.specs["population_inter_year"] * country.specs["urban_inter"] - country.specs["Population_start_year"] * country.specs["Urban_start"])/(country.specs["inter_year"] - country.specs["start_year"])
+                yearly_pop_increase_rural = (country.specs["population_inter_year"] * (1 - country.specs["urban_inter"]) - country.specs["Population_start_year"] * (1 - country.specs["Urban_start"]))/(country.specs["inter_year"] - country.specs["start_year"])
+            
+                self.gdf.loc[~isurban, "pop_inter_year"] = self.gdf.loc[~isurban,"pop_init_year"] * yearly_pop_increase_urban * (country.specs["inter_year"] - country.specs["start_year"])
+                self.gdf.loc[isurban, "pop_inter_year"] = self.gdf.loc[isurban, "pop_init_year"] * yearly_pop_increase_rural * (country.specs["inter_year"] - country.specs["start_year"])
+    
 
     def distance_to_electricity(self, hv_lines: VectorLayer = None, mv_lines: VectorLayer = None,
                                 transformers: VectorLayer = None):
@@ -1458,27 +1482,12 @@ class OnStove(DataProcessor):
 
         self.calibrate_current_pop()
 
-        if self.specs["End_year"] > self.specs["Start_year"]:
-            population_current = self.specs["Population_start_year"]
-            urban_current = self.specs["Urban_start"] * population_current
-            rural_current = population_current - urban_current
-
-            population_future = self.specs["Population_end_year"]
-            urban_future = self.specs["Urban_end"] * population_future
-            rural_future = population_future - urban_future
-
-            rural_growth = (rural_future - rural_current) / (self.specs["End_year"] - self.specs["Start_year"])
-            urban_growth = (urban_future - urban_current) / (self.specs["End_year"] - self.specs["Start_year"])
-
-            self.gdf.loc[self.gdf['IsUrban'] > 20, 'Pop_future'] = self.gdf["Calibrated_pop"] * urban_growth
-            self.gdf.loc[self.gdf['IsUrban'] < 20, 'Pop_future'] = self.gdf["Calibrated_pop"] * rural_growth
-
         self.number_of_households()
 
     def calibrate_urban_manual(self):
         """Calibrates the urban rural split based on population density.
 
-        It uses the ``Calibrated_pop`` column of the main GeoDataFrame (:attr:`gdf`) and the current national urban
+        It uses the population columns of the main GeoDataFrame (:attr:`gdf`) and the national urban
         split defined in :attr:`specs`, to classify the settlements until the total urban population sum matches the
         defined split.
         """
@@ -1491,12 +1500,12 @@ class OnStove(DataProcessor):
         while abs(urban_modelled - urban_current) > 0.01:
 
             self.gdf["IsUrban"] = 0
-            self.gdf.loc[(self.gdf["Calibrated_pop"] > 5000 * factor) & (
-                    self.gdf["Calibrated_pop"] / (self.cell_size[0] ** 2 / 1000000) > 350 * factor), "IsUrban"] = 1
-            self.gdf.loc[(self.gdf["Calibrated_pop"] > 50000 * factor) & (
-                    self.gdf["Calibrated_pop"] / (self.cell_size[0] ** 2 / 1000000) > 1500 * factor), "IsUrban"] = 2
+            self.gdf.loc[(self.gdf["pop_init_year"] > 5000 * factor) & (
+                    self.gdf["pop_init_year"] / (self.cell_size[0] ** 2 / 1000000) > 350 * factor), "IsUrban"] = 1
+            self.gdf.loc[(self.gdf["pop_init_year"] > 50000 * factor) & (
+                    self.gdf["pop_init_year"] / (self.cell_size[0] ** 2 / 1000000) > 1500 * factor), "IsUrban"] = 2
 
-            pop_urb = self.gdf.loc[self.gdf["IsUrban"] > 1, "Calibrated_pop"].sum()
+            pop_urb = self.gdf.loc[self.gdf["IsUrban"] > 1, "pop_init_year"].sum()
 
             urban_modelled = pop_urb / pop_tot
 
@@ -1512,7 +1521,7 @@ class OnStove(DataProcessor):
         """Calculates the number of households withing each cell based on their urban/rural classification and a
         defined household size.
 
-        It uses the ``IsUrban`` and ``Calibrated_pop`` columns of the main GeoDataFrame (:attr:`gdf`) and the
+        It uses the ``IsUrban`` and population columns of the main GeoDataFrame (:attr:`gdf`) and the
         ``Rural_HHsize`` and ``Urban_HHsize`` values from the :attr:`specs` dictionary.
 
         See also
@@ -1522,12 +1531,29 @@ class OnStove(DataProcessor):
         calibrate_current_pop
         read_scenario_data
         """
-        self.gdf.loc[self.gdf["IsUrban"] < 20, 'Households'] = self.gdf.loc[
-                                                                   self.gdf["IsUrban"] < 20, 'Calibrated_pop'] / \
+
+        self.gdf.loc[self.gdf["IsUrban"] < 20, 'households_init'] = self.gdf.loc[
+                                                                   self.gdf["IsUrban"] < 20, 'pop_init_year'] / \
                                                                self.specs["Rural_HHsize"]
-        self.gdf.loc[self.gdf["IsUrban"] > 20, 'Households'] = self.gdf.loc[
-                                                                   self.gdf["IsUrban"] > 20, 'Calibrated_pop'] / \
+        self.gdf.loc[self.gdf["IsUrban"] > 20, 'households_init'] = self.gdf.loc[
+                                                                   self.gdf["IsUrban"] > 20, 'pop_init_year'] / \
                                                                self.specs["Urban_HHsize"]
+
+
+        self.gdf.loc[self.gdf["IsUrban"] < 20, 'households_end'] = self.gdf.loc[
+                                                                   self.gdf["IsUrban"] < 20, 'pop_end_year'] / \
+                                                               self.specs["Rural_HHsize"]
+        self.gdf.loc[self.gdf["IsUrban"] > 20, 'households_end'] = self.gdf.loc[
+                                                                   self.gdf["IsUrban"] > 20, 'pop_end_year'] / \
+                                                               self.specs["Urban_HHsize"]
+        
+        if 'population_inter_year' in self.gdf.columns:       
+            self.gdf.loc[self.gdf["IsUrban"] < 20, 'households_init'] = self.gdf.loc[
+                                                                       self.gdf["IsUrban"] < 20, 'pop_inter_year'] / \
+                                                                   self.specs["Rural_HHsize"]
+            self.gdf.loc[self.gdf["IsUrban"] > 20, 'households_init'] = self.gdf.loc[
+                                                                       self.gdf["IsUrban"] > 20, 'pop_inter_year'] / \
+                                                                   self.specs["Urban_HHsize"]
 
     def get_value_of_time(self):
         """
@@ -1586,6 +1612,7 @@ class OnStove(DataProcessor):
         extract_salvage
         """
         print(f'[{self.specs["Country_name"]}] Calculating clean cooking access')
+        self.techshare_sumtoone()
         self.get_clean_cooking_access()
         if self.base_fuel is None:
             print(f'[{self.specs["Country_name"]}] Calculating base fuel properties')
@@ -1693,7 +1720,7 @@ class OnStove(DataProcessor):
         # gdf = gdf.astype(dtype=gdf.dtypes.to_dict())
         gdf_copy = self.gdf.copy()
         for tech in techs:
-            current = (tech.households < gdf_copy['Households']) & \
+            current = (tech.households < gdf_copy["households_init"]) & \
                       (gdf_copy["max_benefit_tech"] == tech.name)
             dff = gdf_copy.loc[current].copy()
             if current.sum() > 0:
@@ -1712,20 +1739,20 @@ class OnStove(DataProcessor):
                 second_tech_net_benefit = dff.loc[current, second_benefit_cols].max(axis=1) * (
                         1 - tech.factor.loc[current])
 
-                elec_factor = dff['Elec_pop_calib'] / dff['Calibrated_pop']
+                elec_factor = dff['Elec_pop_calib'] / dff['pop_end_year']
                 dff['max_benefit_tech'] = second_best
                 dff['maximum_net_benefit'] = second_tech_net_benefit
-                dff['Calibrated_pop'] *= (1 - tech.factor.loc[current])
-                dff['Households'] *= (1 - tech.factor.loc[current])
+                dff['pop_end_year'] *= (1 - tech.factor.loc[current])
+                dff["households_init"] *= (1 - tech.factor.loc[current])
 
-                self.gdf.loc[current, 'Calibrated_pop'] *= tech.factor.loc[current]
-                self.gdf.loc[current, 'Households'] *= tech.factor.loc[current]
+                self.gdf.loc[current, 'pop_end_year'] *= tech.factor.loc[current]
+                self.gdf.loc[current, "households_init"] *= tech.factor.loc[current]
                 if tech.name == 'Electricity':
                     dff['Elec_pop_calib'] *= 0
                 #     self.gdf.loc[current, 'Elec_pop_calib'] *= tech.factor.loc[current]
                 else:
-                    self.gdf.loc[current, 'Elec_pop_calib'] = self.gdf.loc[current, 'Calibrated_pop'] * elec_factor
-                    dff['Elec_pop_calib'] = dff['Calibrated_pop'] * elec_factor
+                    self.gdf.loc[current, 'Elec_pop_calib'] = self.gdf.loc[current, 'pop_end_year'] * elec_factor
+                    dff['Elec_pop_calib'] = dff['pop_end_year'] * elec_factor
                 gdf = pd.concat([gdf, dff])
 
         self.gdf = pd.concat([self.gdf, gdf])
@@ -2071,18 +2098,18 @@ class OnStove(DataProcessor):
                 layer, meta = self._points_to_raster(dff, 'codes')
         else:
             if metric == 'total':
-                dff[variable] = dff[variable] * dff['Households']
+                dff[variable] = dff[variable] * dff["households_init"]
                 dff = dff.groupby('index').agg({variable: 'sum', 'geometry': 'first'})
             elif metric == 'per_100k':
-                dff[variable] = dff[variable] * dff['Households']
-                dff = dff.groupby('index').agg({variable: 'sum', 'Calibrated_pop': 'sum',
+                dff[variable] = dff[variable] * dff["households_init"]
+                dff = dff.groupby('index').agg({variable: 'sum', 'pop_end_year': 'sum',
                                                 'geometry': 'first'})
-                dff[variable] = dff[variable] * 100000 / dff['Calibrated_pop']
+                dff[variable] = dff[variable] * 100000 / dff['pop_end_year']
             elif metric == 'per_household':
-                dff[variable] = dff[variable] * dff['Households']
-                dff = dff.groupby('index').agg({variable: 'sum', 'Households': 'sum',
+                dff[variable] = dff[variable] * dff["households_init"]
+                dff = dff.groupby('index').agg({variable: 'sum', "households_init": 'sum',
                                                 'geometry': 'first'})
-                dff[variable] = dff[variable] / dff['Households']
+                dff[variable] = dff[variable] / dff["households_init"]
             else:
                 dff = dff.groupby('index').agg({variable: metric, 'geometry': 'first'})
             if self.rows is not None:
@@ -2399,9 +2426,9 @@ class OnStove(DataProcessor):
         for attribute in ['maximum_net_benefit', 'deaths_avoided', 'health_costs_avoided', 'time_saved',
                           'opportunity_cost_gained', 'reduced_emissions', 'emissions_costs_saved',
                           'investment_costs', 'fuel_costs', 'om_costs', 'salvage_value']:
-            dff[attribute] *= dff['Households']
-        summary = dff.groupby(['max_benefit_tech']).agg({'Calibrated_pop': lambda row: np.nansum(row) / 1000000,
-                                                         'Households': lambda row: np.nansum(row) / 1000000,
+            dff[attribute] *= dff["households_init"]
+        summary = dff.groupby(['max_benefit_tech']).agg({'pop_end_year': lambda row: np.nansum(row) / 1000000,
+                                                         "households_init": lambda row: np.nansum(row) / 1000000,
                                                          'maximum_net_benefit': lambda row: np.nansum(row) / 1000000,
                                                          'deaths_avoided': 'sum',
                                                          'health_costs_avoided': lambda row: np.nansum(row) / 1000000,
@@ -2420,11 +2447,11 @@ class OnStove(DataProcessor):
             total['max_benefit_tech'] = 'total'
             summary = pd.concat([summary, total.to_frame().T])
 
-        summary['time_saved'] /= (summary['Households'] * 1000000 * 365)
+        summary['time_saved'] /= (summary["households_init"] * 1000000 * 365)
         if pretty:
             summary.rename(columns={'max_benefit_tech': 'Max benefit technology',
-                                    'Calibrated_pop': 'Population (Million)',
-                                    'Households': 'Households (Millions)',
+                                    'pop_end_year': 'Population (Million)',
+                                    "households_init": 'Households (Millions)',
                                     'maximum_net_benefit': 'Total net benefit (MUSD)',
                                     'deaths_avoided': 'Total deaths avoided (pp/yr)',
                                     'health_costs_avoided': 'Health costs avoided (MUSD)',
@@ -2441,7 +2468,7 @@ class OnStove(DataProcessor):
 
     def plot_split(self, labels: Optional[dict[str, str]] = None,
                    cmap: Optional[dict[str, str]] = None,
-                   x_variable: str = 'Calibrated_pop',
+                   x_variable: str = 'pop_end_year',
                    height: float = 1.5, width: float = 2.5,
                    save_as: Optional[bool] = None):
         """Displays a bar plot with the population or households share using the technologies with highest net-benefits
@@ -2476,8 +2503,8 @@ class OnStove(DataProcessor):
                ...         'Charcoal ICS': '#d4bdc5',
                ...         'Biogas': '#73AF48'}
 
-        x_variable: str, default 'Calibrated_pop'
-            The variable to use in the x axis. Two options are available ``Calibrated_pop`` and ``Households``.
+        x_variable: str, default 'pop_end_year'
+            The variable to use in the x axis. Two options are available ``pop_end_year`` and ``Households``.
         height: float, default 1.5
             The heihg of the figure in inches.
         width: float, default 2.5
@@ -2488,7 +2515,7 @@ class OnStove(DataProcessor):
         """
         df = self.summary(total=False, pretty=False, labels=labels)
 
-        variables = {'Calibrated_pop': 'Population (Millions)', 'Households': 'Households (Millions)'}
+        variables = {'pop_end_year': 'Population (Millions)', "households_init": 'Households (Millions)'}
 
         tech_list = df.sort_values(x_variable)['max_benefit_tech'].tolist()
         ccolor = 'black'
@@ -2573,7 +2600,7 @@ class OnStove(DataProcessor):
                     'Fuel costs': '#f1a340', 'Emissions costs saved': '#998ec3',
                     'Om costs': '#fee0b6', 'Opportunity cost gained': '#d8daeb'}
 
-        tech_list = df.sort_values('Calibrated_pop')['max_benefit_tech'].tolist()
+        tech_list = df.sort_values('pop_end_year')['max_benefit_tech'].tolist()
         cat_order = ['Health costs avoided',
                      'Emissions costs saved',
                      'Opportunity cost gained',
@@ -2747,12 +2774,12 @@ class OnStove(DataProcessor):
                                                                         'investment_costs',
                                                                         'fuel_costs',
                                                                         'om_costs',
-                                                                        'Households',
-                                                                        'Calibrated_pop']].sum()
+                                                                        "households_init",
+                                                                        'pop_end_year']].sum()
                 df.reset_index(inplace=True)
                 df = self._re_name(df, labels, 'max_benefit_tech')
-                tech_list = df.groupby('max_benefit_tech')[['Calibrated_pop']].sum()
-                tech_list = tech_list.reset_index().sort_values('Calibrated_pop')['max_benefit_tech'].tolist()
+                tech_list = df.groupby('max_benefit_tech')[['pop_end_year']].sum()
+                tech_list = tech_list.reset_index().sort_values('pop_end_year')['max_benefit_tech'].tolist()
                 x = 'max_benefit_tech'
             elif groupby.lower() == 'urban-rural':
                 df = self.gdf.copy()
@@ -2764,8 +2791,8 @@ class OnStove(DataProcessor):
                 if best_mix:
                     df = self.gdf.copy()
                     df = self._re_name(df, labels, 'max_benefit_tech')
-                    tech_list = df.groupby('max_benefit_tech')[['Calibrated_pop']].sum()
-                    tech_list = tech_list.reset_index().sort_values('Calibrated_pop')['max_benefit_tech'].tolist()
+                    tech_list = df.groupby('max_benefit_tech')[['pop_end_year']].sum()
+                    tech_list = tech_list.reset_index().sort_values('pop_end_year')['max_benefit_tech'].tolist()
                     x = 'max_benefit_tech'
                     if variable == 'net_benefit':
                         # y = '(health_costs_avoided + opportunity_cost_gained + emissions_costs_saved + salvage_value' + \
@@ -2825,8 +2852,8 @@ class OnStove(DataProcessor):
                                                                     'investment_costs',
                                                                     'fuel_costs',
                                                                     'om_costs',
-                                                                    'Households',
-                                                                    'Calibrated_pop']].sum()
+                                                                    "households_init",
+                                                                    'pop_end_year']].sum()
             df.reset_index(inplace=True)
             df = self._re_name(df, labels, 'max_benefit_tech')
             p = (ggplot(df)
