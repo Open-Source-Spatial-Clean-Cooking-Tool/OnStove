@@ -95,10 +95,10 @@ print('Creating base layer...')
 africa._base_layer_from_bounds(africa.mask_layer.bounds, 1000, 1000)
 
 print('Saving graphs...')
-africa.plot_split(cmap=cmap, labels=labels, save=True, height=1.5, width=3.5)
-africa.plot_costs_benefits(labels=labels, save=True, height=1.5, width=2)
+africa.plot_split(cmap=cmap, labels=labels, save_as='tech_split', height=1.5, width=3.5)
+africa.plot_costs_benefits(labels=labels, save_as='benefits_costs', height=1.5, width=2)
 africa.plot_benefit_distribution(type='box', groupby='None', cmap=cmap,
-                                 labels=labels, save=True, height=1.5, width=3.5)
+                                 labels=labels, save_as='max_benefits_box', height=1.5, width=3.5)
 
 print('Creating map...')
 scale_bar_prop = dict(size=1000000, style='double', textprops=dict(size=8),

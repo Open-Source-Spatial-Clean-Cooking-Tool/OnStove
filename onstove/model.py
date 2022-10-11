@@ -37,7 +37,8 @@ from plotnine import (
     geom_density,
     after_stat,
     geom_point,
-    facet_wrap
+    facet_wrap,
+    element_blank
 )
 
 from onstove.technology import VectorLayer, RasterLayer, Technology, LPG, Biomass, Electricity, Biogas, Charcoal
@@ -2182,10 +2183,10 @@ class OnStove(DataProcessor):
                         # y = '(health_costs_avoided + opportunity_cost_gained + emissions_costs_saved + salvage_value' + \
                         #     ' - investment_costs - fuel_costs - om_costs)'
                         y = 'maximum_net_benefit'
-                        title = 'Net benefit per household (kUSD/yr)'
+                        title = 'Net benefit per household (USD/yr)'
                     elif variable == 'costs':
                         y = 'investment_costs - salvage_value + fuel_costs + om_costs'
-                        title = 'Costs per household (kUSD/yr)'
+                        title = 'Costs per household (USD/yr)'
                 else:
                     tech_list = []
                     for name, tech in self.techs.items():
@@ -2195,10 +2196,10 @@ class OnStove(DataProcessor):
                     x = 'tech'
                     if variable == 'net_benefit':
                         y = 'net_benefit'
-                        title = 'Net benefit per household (kUSD/yr)'
+                        title = 'Net benefit per household (USD/yr)'
                     elif variable == 'costs':
                         y = 'costs'
-                        title = 'Costs per household (kUSD/yr)'
+                        title = 'Costs per household (USD/yr)'
 
                     df = pd.DataFrame({x: [], y: []})
                     for tech in tech_list:

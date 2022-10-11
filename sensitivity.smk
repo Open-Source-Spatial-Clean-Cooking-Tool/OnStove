@@ -1,8 +1,8 @@
 
-# SENSITIVITY = ['1']
-SENSITIVITY, = glob_wildcards("../Clean cooking Africa paper/07. Sensitivity/LPG International price - Rural-Urban/Sensitivity_files/{sensitivity}/Scenario_files/BDI_scenario_file.csv")
+SENSITIVITY = [str(i) for i in range(1, 681)]
+# SENSITIVITY, = glob_wildcards("../Clean cooking Africa paper/07. Sensitivity/LPG International price - Rural-Urban/Sensitivity_files/{sensitivity}/Scenario_files/BDI_scenario_file.csv")
 
-# COUNTRIES = ['AGO']
+# COUNTRIES = ['AGO'] # uncomment this to run a single country
 
 COUNTRIES = ['AGO', 'BDI', 'BEN', 'BFA', 'BWA', 'CAF', 'CIV', 'CMR',
              'COD', 'COG', 'DJI', 'ERI', 'ETH', 'GAB', 'GHA', 'GIN',
