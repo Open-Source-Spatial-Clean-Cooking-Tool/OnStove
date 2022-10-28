@@ -925,7 +925,7 @@ class OnStove(DataProcessor):
         If the share of the population cooking with biogas is higher than the feasible share predicted by
         OnStove, then the function prints a message to user and the adjusted technology shares    
         """
-        biogas_calcshare = sum((self.techs["Biogas"].households * self.specs["Rural_HHsize"]))/((1-self.specs["Urban_start"]) * self.specs["Population_start_year"])
+        biogas_calcshare = sum((self.techs["Biogas"].households * self.specs["rural_hh_size"]))/((1-self.specs["urban_start"]) * self.specs["population_start_year"])
         
         if self.techs["Biogas"].current_share_rural > biogas_calcshare:
             difference = self.techs["Biogas"].current_share_rural - biogas_calcshare
@@ -1537,7 +1537,7 @@ class OnStove(DataProcessor):
         defined household size.
 
         It uses the ``IsUrban`` and ``Calibrated_pop`` columns of the main GeoDataFrame (:attr:`gdf`) and the
-        ``Rural_HHsize`` and ``Urban_HHsize`` values from the :attr:`specs` dictionary.
+        ``rural_hh_size`` and ``urban_hh_size`` values from the :attr:`specs` dictionary.
 
         See also
         --------
