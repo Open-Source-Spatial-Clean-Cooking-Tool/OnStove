@@ -537,7 +537,7 @@ class Technology:
             for j in range(int(i) - 1, proj_life, int(i)):
                 proj_years[where, j] = 1
 
-        investments = proj_years * inv[:, None]
+        investments = proj_years * np.array(inv)[:, None]
 
         if relative:
             discounted_base_investments = model.base_fuel.discounted_investments
