@@ -5,7 +5,6 @@ channels:
   - conda-forge
   - defaults
 dependencies:
-  - contextily
   - dill
   - geopandas
   - matplotlib
@@ -16,8 +15,6 @@ dependencies:
   - pydata-sphinx-theme
   - python-decouple
   - rasterio
-  - rasterstats
-  - scikit-learn
   - scikit-image
   - svgpathtools
   - svgpath2mpl
