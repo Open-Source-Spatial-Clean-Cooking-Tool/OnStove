@@ -806,7 +806,6 @@ class OnStove(DataProcessor):
 
         self.check_scenario_data()
 
-
     def check_scenario_data(self):
         """This function checks goes through all rows without default values needed in the socio-economic specification
         file to check whether they are included or not. If they are included nothing happens, otherwise a ValueError will
@@ -1119,7 +1118,7 @@ class OnStove(DataProcessor):
             reader = DictReader(csvfile, delimiter=delimiter)
             config_file = list(reader)
             for row in config_file:
-                if row['Value']:
+                if row['Value'] is not None:
                     if row['Fuel'] not in techs:
                         if 'lpg' in row['Fuel'].lower():
                             techs[row['Fuel']] = LPG()
