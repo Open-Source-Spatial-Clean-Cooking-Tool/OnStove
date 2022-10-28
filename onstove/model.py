@@ -769,7 +769,6 @@ class OnStove(DataProcessor):
         super().__init__(project_crs, cell_size, output_directory)
         self.rows = None
         self.cols = None
-        self.specs = None
         self.techs = {}
         self.base_fuel = None
         self.i = {}
@@ -780,6 +779,15 @@ class OnStove(DataProcessor):
         self.clean_cooking_access_r = None
         self.electrified_weight = None
 
+        self.specs = {'start_year': 2020, 'end_year': 2030,
+                      'end_year_target': 1.0, 'meals_per_day': 3.0, 'infra_weight': 1.0,
+                      'ntl_weight': 1.0, 'pop_weight': 1.0,'discount_rate': 0.03,
+                      'health_spillover_parameter': 0.112,
+                      'w_costs': 1.0, 'w_environment': 1.0, 'w_health': 1.0,
+                      'w_spillover': 1.0, 'w_time': 1.0}
+
+
+
     def read_scenario_data(self, path_to_config: str, delimiter=','):
         """Reads the scenario data into a dictionary
         """
@@ -788,21 +796,37 @@ class OnStove(DataProcessor):
             reader = DictReader(csvfile, delimiter=delimiter)
             config_file = list(reader)
             for row in config_file:
-                if row['Value']:
+                if row['Value'] is not None:
                     if row['data_type'] == 'int':
-                        config[row['Param']] = int(row['Value'])
+                        config[row['Param'].lower()] = int(row['Value'])
                     elif row['data_type'] == 'float':
-                        config[row['Param']] = float(row['Value'])
+                        config[row['Param'].lower()] = float(row['Value'])
                     elif row['data_type'] == 'string':
-                        config[row['Param']] = str(row['Value'])
+                        config[row['Param'].lower()] = str(row['Value'])
                     elif row['data_type'] == 'bool':
-                        config[row['Param']] = str(row['Value']).lower() in ['true', 't', 'yes', 'y', '1']
+                        config[row['Param'].lower()] = str(row['Value']).lower() in ['true', 't', 'yes', 'y', '1']
                     else:
                         raise ValueError("Config file data type not recognised.")
-        if self.specs is None:
-            self.specs = config
-        else:
-            self.specs.update(config)
+
+        self.specs.update(config)
+
+        self.check_scenario_data()
+
+    def check_scenario_data(self):
+        """This function checks goes through all rows without default values needed in the socio-economic specification
+        file to check whether they are included or not. If they are included nothing happens, otherwise a ValueError will
+        be raised.
+        """
+
+        rows = ['country_name', 'country_code', 'population_start_year', 'population_end_year', 'urban_start',
+                'urban_end', 'elec_rate', 'rural_elec_rate', 'urban_elec_rate', 'mort_copd', 'mort_ihd', 'mort_lc',
+                'mort_alri', 'morb_copd','morb_ihd', 'morb_lc', 'morb_alri', 'rural_hh_size', 'urban_hh_size',
+                'mort_stroke', 'morb_stroke', 'fnrb','coi_alri', 'coi_copd', 'coi_ihd', 'coi_lc', 'coi_stroke',
+                'cost_of_carbon_emissions', 'minimum_wage', 'vsl']
+
+        for row in rows:
+            if row not in self.specs:
+                raise ValueError("The socio-economic file has to include the " + row + " row")
 
     def techshare_sumtoone(self):
         """
@@ -901,7 +925,7 @@ class OnStove(DataProcessor):
         If the share of the population cooking with biogas is higher than the feasible share predicted by
         OnStove, then the function prints a message to user and the adjusted technology shares    
         """
-        biogas_calcshare = sum((self.techs["Biogas"].households * self.specs["Rural_HHsize"]))/((1-self.specs["Urban_start"]) * self.specs["Population_start_year"])
+        biogas_calcshare = sum((self.techs["Biogas"].households * self.specs["rural_hh_size"]))/((1-self.specs["urban_start"]) * self.specs["population_start_year"])
         
         if self.techs["Biogas"].current_share_rural > biogas_calcshare:
             difference = self.techs["Biogas"].current_share_rural - biogas_calcshare
@@ -1100,7 +1124,7 @@ class OnStove(DataProcessor):
             reader = DictReader(csvfile, delimiter=delimiter)
             config_file = list(reader)
             for row in config_file:
-                if row['Value']:
+                if row['Value'] is not None:
                     if row['Fuel'] not in techs:
                         if 'lpg' in row['Fuel'].lower():
                             techs[row['Fuel']] = LPG()
@@ -1203,8 +1227,8 @@ class OnStove(DataProcessor):
             pop = self.normalize("Calibrated_pop")
 
             weight_sum = elec_dist * self.specs["infra_weight"] + pop * self.specs["pop_weight"] + \
-                         ntl * self.specs["NTL_weight"]
-            weights = self.specs["infra_weight"] + self.specs["pop_weight"] + self.specs["NTL_weight"]
+                         ntl * self.specs["ntl_weight"]
+            weights = self.specs["infra_weight"] + self.specs["pop_weight"] + self.specs["ntl_weight"]
 
             self.electrified_weight = weight_sum / weights
         return self._electrified_weight
@@ -1227,7 +1251,7 @@ class OnStove(DataProcessor):
         read_scenario_data
         specs
         """
-        elec_rate = self.specs["Elec_rate"]
+        elec_rate = self.specs["elec_rate"]
 
         self.gdf["Current_elec"] = 0
 
@@ -1259,7 +1283,7 @@ class OnStove(DataProcessor):
         read_scenario_data
         specs
         """
-        elec_rate = self.specs["Elec_rate"]
+        elec_rate = self.specs["elec_rate"]
 
         self.gdf["Elec_pop_calib"] = self.gdf["Calibrated_pop"]
 
@@ -1301,8 +1325,8 @@ class OnStove(DataProcessor):
         total_rural_pop = self.gdf.loc[~isurban, "Pop"].sum()
         total_urban_pop = self.gdf["Pop"].sum() - total_rural_pop
 
-        calibration_factor_u = (self.specs["Population_start_year"] * self.specs["Urban_start"])/total_urban_pop
-        calibration_factor_r = (self.specs["Population_start_year"] * (1-self.specs["Urban_start"]))/total_rural_pop
+        calibration_factor_u = (self.specs["population_start_year"] * self.specs["urban_start"])/total_urban_pop
+        calibration_factor_r = (self.specs["population_start_year"] * (1-self.specs["urban_start"]))/total_rural_pop
 
         self.gdf["Calibrated_pop"] = 0
         self.gdf.loc[~isurban, "Calibrated_pop"] = self.gdf.loc[~isurban,"Pop"] * calibration_factor_r
@@ -1458,17 +1482,17 @@ class OnStove(DataProcessor):
 
         self.calibrate_current_pop()
 
-        if self.specs["End_year"] > self.specs["Start_year"]:
-            population_current = self.specs["Population_start_year"]
-            urban_current = self.specs["Urban_start"] * population_current
+        if self.specs["end_year"] > self.specs["start_year"]:
+            population_current = self.specs["population_start_year"]
+            urban_current = self.specs["urban_start"] * population_current
             rural_current = population_current - urban_current
 
-            population_future = self.specs["Population_end_year"]
-            urban_future = self.specs["Urban_end"] * population_future
+            population_future = self.specs["population_end_year"]
+            urban_future = self.specs["urban_end"] * population_future
             rural_future = population_future - urban_future
 
-            rural_growth = (rural_future - rural_current) / (self.specs["End_year"] - self.specs["Start_year"])
-            urban_growth = (urban_future - urban_current) / (self.specs["End_year"] - self.specs["Start_year"])
+            rural_growth = (rural_future - rural_current) / (self.specs["end_year"] - self.specs["start_year"])
+            urban_growth = (urban_future - urban_current) / (self.specs["end_year"] - self.specs["start_year"])
 
             self.gdf.loc[self.gdf['IsUrban'] > 20, 'Pop_future'] = self.gdf["Calibrated_pop"] * urban_growth
             self.gdf.loc[self.gdf['IsUrban'] < 20, 'Pop_future'] = self.gdf["Calibrated_pop"] * rural_growth
@@ -1484,8 +1508,8 @@ class OnStove(DataProcessor):
         """
         urban_modelled = 2
         factor = 1
-        pop_tot = self.specs["Population_start_year"]
-        urban_current = self.specs["Urban_start"]
+        pop_tot = self.specs["population_start_year"]
+        urban_current = self.specs["urban_start"]
 
         i = 0
         while abs(urban_modelled - urban_current) > 0.01:
@@ -1513,7 +1537,7 @@ class OnStove(DataProcessor):
         defined household size.
 
         It uses the ``IsUrban`` and ``Calibrated_pop`` columns of the main GeoDataFrame (:attr:`gdf`) and the
-        ``Rural_HHsize`` and ``Urban_HHsize`` values from the :attr:`specs` dictionary.
+        ``rural_hh_size`` and ``urban_hh_size`` values from the :attr:`specs` dictionary.
 
         See also
         --------
@@ -1524,10 +1548,10 @@ class OnStove(DataProcessor):
         """
         self.gdf.loc[self.gdf["IsUrban"] < 20, 'Households'] = self.gdf.loc[
                                                                    self.gdf["IsUrban"] < 20, 'Calibrated_pop'] / \
-                                                               self.specs["Rural_HHsize"]
+                                                               self.specs["rural_hh_size"]
         self.gdf.loc[self.gdf["IsUrban"] > 20, 'Households'] = self.gdf.loc[
                                                                    self.gdf["IsUrban"] > 20, 'Calibrated_pop'] / \
-                                                               self.specs["Urban_HHsize"]
+                                                               self.specs["urban_hh_size"]
 
     def get_value_of_time(self):
         """
@@ -1546,7 +1570,7 @@ class OnStove(DataProcessor):
         norm_layer = (self.gdf['relative_wealth'] - min_value) / (max_value - min_value) * wage_range + \
                      self.specs['wage_range'][0]
         self.gdf['value_of_time'] = norm_layer * self.specs[
-            'Minimum_wage'] / 30 / 8  # convert $/months to $/h (8 working hours per day)
+            'minimum_wage'] / 30 / 8  # convert $/months to $/h (8 working hours per day)
 
     def run(self, technologies: Union[list[str], str] = 'all', restriction: bool = True):
         """Runs the model using the defined ``technologies`` as options to cook with.
@@ -1585,10 +1609,10 @@ class OnStove(DataProcessor):
         extract_om_costs
         extract_salvage
         """
-        print(f'[{self.specs["Country_name"]}] Calculating clean cooking access')
+        print(f'[{self.specs["country_name"]}] Calculating clean cooking access')
         self.get_clean_cooking_access()
         if self.base_fuel is None:
-            print(f'[{self.specs["Country_name"]}] Calculating base fuel properties')
+            print(f'[{self.specs["country_name"]}] Calculating base fuel properties')
 
             self.set_base_fuel(self.techs.values())
         if technologies == 'all':
@@ -1599,7 +1623,7 @@ class OnStove(DataProcessor):
             raise ValueError("technologies must be 'all' or a list of strings with the technology names to run.")
 
         # Based on wealth index, minimum wage and a lower an upper range for cost of oportunity
-        print(f'[{self.specs["Country_name"]}] Getting value of time')
+        print(f'[{self.specs["country_name"]}] Getting value of time')
         self.get_value_of_time()
         # Loop through each technology and calculate all benefits and costs
         for tech in techs:
