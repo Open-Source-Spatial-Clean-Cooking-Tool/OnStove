@@ -788,15 +788,15 @@ class OnStove(DataProcessor):
             reader = DictReader(csvfile, delimiter=delimiter)
             config_file = list(reader)
             for row in config_file:
-                if row['Value']:
+                if row['Value'] is not None:
                     if row['data_type'] == 'int':
-                        config[row['Param']] = int(row['Value'])
+                        config[row['Param'].lower()] = int(row['Value'])
                     elif row['data_type'] == 'float':
-                        config[row['Param']] = float(row['Value'])
+                        config[row['Param'].lower()] = float(row['Value'])
                     elif row['data_type'] == 'string':
-                        config[row['Param']] = str(row['Value'])
+                        config[row['Param'].lower()] = str(row['Value'])
                     elif row['data_type'] == 'bool':
-                        config[row['Param']] = str(row['Value']).lower() in ['true', 't', 'yes', 'y', '1']
+                        config[row['Param'].lower()] = str(row['Value']).lower() in ['true', 't', 'yes', 'y', '1']
                     else:
                         raise ValueError("Config file data type not recognised.")
         if self.specs is None:
@@ -809,7 +809,7 @@ class OnStove(DataProcessor):
 
     def check_scenario_data(self):
         """This function checks goes through all rows without default values needed in the socio-economic specification
-        file to check wether they are included or not. If they are included nothing happens, otherwise a ValueError will
+        file to check whether they are included or not. If they are included nothing happens, otherwise a ValueError will
         be raised.
         """
 
