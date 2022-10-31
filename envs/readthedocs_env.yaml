@@ -1,7 +1,5 @@
 name: readthedocs
 channels:
-  - bioconda
-  - jmcmurray
   - conda-forge
   - defaults
 dependencies:

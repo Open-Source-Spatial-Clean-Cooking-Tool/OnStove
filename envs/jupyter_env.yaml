@@ -1,17 +1,16 @@
 name: onstovejupyter
 channels:
-  - bioconda
-  - jmcmurray
   - conda-forge
   - defaults
 dependencies:
   - dill
   - geopandas
   - jupyterlab
-  - matplotlib
+  - matplotlib<=3.5.2
   - plotnine
   - psutil
   - psycopg2
+  - python=>3.10
   - python-decouple
   - rasterio
   - scikit-image

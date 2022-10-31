@@ -1,16 +1,16 @@
 name: onstovesnake
 channels:
   - bioconda
-  - jmcmurray
   - conda-forge
   - defaults
 dependencies:
   - dill
   - geopandas
-  - matplotlib
+  - matplotlib<=3.5.2
   - plotnine
   - psycopg2
   - psutil
+  - python=>3.10
   - python-decouple
   - rasterio
   - scikit-image
