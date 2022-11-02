@@ -2411,7 +2411,7 @@ class OnStove(DataProcessor):
             fig, ax = plt.subplots(1, 1, figsize=figsize, dpi=dpi)
             self._add_statistics(ax, stats_position, stats_fontsize)
         else:
-            ax = None
+            fig, ax = plt.subplots(1, 1, figsize=figsize, dpi=dpi)
 
         raster.save_image(self.output_directory, type=type, cmap=cmap, cumulative_count=cumulative_count,
                           quantiles=quantiles, categories=codes, legend_position=legend_position,
