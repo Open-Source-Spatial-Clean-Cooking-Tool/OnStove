@@ -201,7 +201,7 @@ class VectorLayer(_Layer):
         """Wrapper property to get the  west, south, east, north bounds of the dataset using the ``total_bounds``
         property of ``Pandas``.
         """
-        return self.data['geometry'].total_bounds
+        return self.data.total_bounds
 
     def read_layer(self, path: str,
                    conn: Optional['sqlalchemy.engine.Connection'] = None,
@@ -308,12 +308,10 @@ class VectorLayer(_Layer):
         """
         if isinstance(base_layer, str):
             with rasterio.open(base_layer) as src:
-                bounds = src.bounds
                 width = src.width
                 height = src.height
                 transform = src.transform
         elif isinstance(base_layer, RasterLayer):
-            bounds = base_layer.bounds
             width = base_layer.meta['width']
             height = base_layer.meta['height']
             transform = base_layer.meta['transform']
@@ -480,13 +478,12 @@ class VectorLayer(_Layer):
         RasterLayer
             :class:`RasterLayer` with the rasterized dataset of the current :class:`VectorLayer`.
         """
-        bounds = self.data['geometry'].total_bounds
         if transform is None:
             if (width is None) or (height is None):
-                height, width = RasterLayer.shape_from_cell(bounds, cell_height, cell_width)
-            transform = rasterio.transform.from_bounds(*bounds, width, height)
+                height, width = RasterLayer.shape_from_cell(self.bounds, cell_height, cell_width)
+            transform = rasterio.transform.from_bounds(*self.bounds, width, height)
         elif width is None or height is None:
-            height, width = RasterLayer.shape_from_cell(bounds, transform[0], -transform[4])
+            height, width = RasterLayer.shape_from_cell(self.bounds, transform[0], -transform[4])
 
         if attribute:
             shapes = ((g, v) for v, g in zip(self.data[attribute].values, self.data['geometry'].values))
@@ -512,7 +509,6 @@ class VectorLayer(_Layer):
         raster = RasterLayer(name=self.name)
         raster.data = rasterized
         raster.meta = meta
-        # raster.bounds = bounds
 
         if output_path:
             raster.save(output_path)
@@ -771,7 +767,7 @@ class RasterLayer(_Layer):
         """
         if path:
             with rasterio.open(path) as src:
-                if window:
+                if window is not None:
                     transform = src.transform
                     self.meta = src.meta.copy()
                     window = windows.from_bounds(*window, transform=transform)

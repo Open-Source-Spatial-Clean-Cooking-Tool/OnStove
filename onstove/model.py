@@ -155,7 +155,7 @@ class DataProcessor:
                   postgres: bool = False, base_layer: bool = False, resample: str = 'nearest',
                   normalization: str = 'MinMax', inverse: bool = False, distance_method: str = 'proximity',
                   distance_limit: Optional[Callable[[np.ndarray], np.ndarray]] = None,
-                  window: Optional['rasterio.windows.Window'] = None, rescale: bool = False):
+                  window: Optional[bool] = False, rescale: bool = False):
         """
         Adds a new layer (type VectorLayer or RasterLayer) to the DataProcessor class
 
@@ -233,6 +233,8 @@ class DataProcessor:
             else:
                 if window:
                     window = self.mask_layer.data
+                else:
+                    window = None
                 layer = VectorLayer(category, name, path,
                                     normalization=normalization,
                                     distance_method=distance_method,
@@ -245,7 +247,11 @@ class DataProcessor:
                     src_crs = src.meta['crs']
                 if src_crs != self.mask_layer.data.crs:
                     bounds = transform_bounds(self.mask_layer.data.crs, src_crs, *self.mask_layer.bounds)
+                else:
+                    bounds = self.mask_layer.bounds
                 window = bounds
+            else:
+                window = None
             layer = RasterLayer(category, name, path,
                                 normalization=normalization, inverse=inverse,
                                 distance_method=distance_method, resample=resample,
