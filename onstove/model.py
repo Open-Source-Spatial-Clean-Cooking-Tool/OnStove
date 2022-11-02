@@ -816,8 +816,6 @@ class OnStove(DataProcessor):
 
         self.specs.update(config)
 
-        self.check_scenario_data()
-
     def check_scenario_data(self):
         """This function checks goes through all rows without default values needed in the socio-economic specification
         file to check whether they are included or not. If they are included nothing happens, otherwise a ValueError will
@@ -1615,6 +1613,7 @@ class OnStove(DataProcessor):
         extract_om_costs
         extract_salvage
         """
+        self.check_scenario_data()
         print(f'[{self.specs["country_name"]}] Calculating clean cooking access')
         self.get_clean_cooking_access()
         if self.base_fuel is None:
