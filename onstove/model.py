@@ -155,7 +155,7 @@ class DataProcessor:
                   postgres: bool = False, base_layer: bool = False, resample: str = 'nearest',
                   normalization: str = 'MinMax', inverse: bool = False, distance_method: str = 'proximity',
                   distance_limit: Optional[Callable[[np.ndarray], np.ndarray]] = None,
-                  window: Optional['rasterio.windows.Window'] = None, rescale: bool = False):
+                  window: Optional[bool] = False, rescale: bool = False):
         """
         Adds a new layer (type VectorLayer or RasterLayer) to the DataProcessor class
 
@@ -233,6 +233,8 @@ class DataProcessor:
             else:
                 if window:
                     window = self.mask_layer.data
+                else:
+                    window = None
                 layer = VectorLayer(category, name, path,
                                     normalization=normalization,
                                     distance_method=distance_method,
@@ -245,7 +247,11 @@ class DataProcessor:
                     src_crs = src.meta['crs']
                 if src_crs != self.mask_layer.data.crs:
                     bounds = transform_bounds(self.mask_layer.data.crs, src_crs, *self.mask_layer.bounds)
+                else:
+                    bounds = self.mask_layer.bounds
                 window = bounds
+            else:
+                window = None
             layer = RasterLayer(category, name, path,
                                 normalization=normalization, inverse=inverse,
                                 distance_method=distance_method, resample=resample,
@@ -809,8 +815,6 @@ class OnStove(DataProcessor):
                         raise ValueError("Config file data type not recognised.")
 
         self.specs.update(config)
-
-        self.check_scenario_data()
 
     def check_scenario_data(self):
         """This function checks goes through all rows without default values needed in the socio-economic specification
@@ -1609,6 +1613,7 @@ class OnStove(DataProcessor):
         extract_om_costs
         extract_salvage
         """
+        self.check_scenario_data()
         print(f'[{self.specs["country_name"]}] Calculating clean cooking access')
         self.get_clean_cooking_access()
         if self.base_fuel is None:
@@ -2406,7 +2411,7 @@ class OnStove(DataProcessor):
             fig, ax = plt.subplots(1, 1, figsize=figsize, dpi=dpi)
             self._add_statistics(ax, stats_position, stats_fontsize)
         else:
-            ax = None
+            fig, ax = plt.subplots(1, 1, figsize=figsize, dpi=dpi)
 
         raster.save_image(self.output_directory, type=type, cmap=cmap, cumulative_count=cumulative_count,
                           quantiles=quantiles, categories=codes, legend_position=legend_position,
