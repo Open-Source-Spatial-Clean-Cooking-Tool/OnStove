@@ -1,12 +1,37 @@
 import os
 import numpy as np
+import boto3
+from decouple import config
+import zipfile
+import io
 
 from onstove import DataProcessor, VectorLayer, RasterLayer
 
+def download_data(country):
+    if not os.path.exists(os.path.join('onstove', 'tests', 'data', 
+                                       country.upper())):
+        AWS_ACCESS_ID = config('AWS_ACCESS_ID')
+        AWS_SECRET_KEY = config('AWS_SECRET_KEY')
+        AWS_REGION = config('AWS_REGION')
+
+        resource = boto3.resource(
+            's3',
+            aws_access_key_id=AWS_ACCESS_ID,
+            aws_secret_access_key=AWS_SECRET_KEY,
+            region_name= AWS_REGION
+        )
+        bucket = resource.Bucket('onstove-tests-data')
+        bucket.download_file(f'{country}.zip', f'onstove/tests/data/{country}.zip')
+
+        with zipfile.ZipFile(f'onstove/tests/data/{country}.zip', 'r') as zip_ref:
+            zip_ref.extractall('onstove/tests/data')
+
 def test_process_data():
+    # 0. Download data
+    country = 'RWA'
+    download_data(country)
     # 1. Create a data processor
     output_directory = os.path.join('onstove', 'tests', 'output')
-    country = 'Rwanda'
     data = DataProcessor(project_crs=3857, cell_size=(1000, 1000))
     data.output_directory = output_directory
     assert isinstance(data, DataProcessor)
@@ -52,7 +77,7 @@ def test_process_data():
     friction_path = os.path.join('onstove', 'tests', 'data', 'RWA', 
                                  'Biomass', 'Friction', 'Friction.tif')
     data.add_layer(category='Biomass', name='Friction', path=friction_path, 
-                   layer_type='raster', resample='average', window=False)
+                   layer_type='raster', resample='average', window=True)
     assert isinstance(data.layers['Biomass']['Friction'], RasterLayer)
     
     # Electricity
@@ -113,7 +138,7 @@ def test_process_data():
                  'pigs': pigs,
                  'sheeps': sheeps}.items():
         data.add_layer(category='Biogas/Livestock', name=key, path=path,
-                       layer_type='raster', resample='nearest', window=False, 
+                       layer_type='raster', resample='nearest', window=True, 
                        rescale=True)
         assert isinstance(data.layers['Biogas/Livestock'][key], RasterLayer)
         
