@@ -1,8 +1,10 @@
-name: onstove-test
+name: onstove-tests
 channels:
   - conda-forge
 dependencies:
+  - boto3
   - dill
+  - flake8
   - geopandas
   - matplotlib<=3.5.2
   - plotnine
