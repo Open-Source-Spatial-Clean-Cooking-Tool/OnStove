@@ -152,4 +152,5 @@ example/*
 !example/tech_specs.csv
 
 onstove/tests/data
+!onstove/tests/data/.gitkeep
 onstove/tests/output
