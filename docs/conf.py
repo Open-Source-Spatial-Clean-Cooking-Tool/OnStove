@@ -89,8 +89,8 @@ html_theme_options = {
 html_favicon = "_static/OnStove_favicon.svg"
 html_css_files = ["onstove.css"]
 html_sidebars = {
-   'index': ['search-field.html', 'globaltoc.html', "sidebar-ethical-ads"],
-   'onstove_tool': ['search-field.html', 'globaltoc.html', "sidebar-ethical-ads"],
-   'quickstart': ['search-field.html', 'globaltoc.html', "sidebar-ethical-ads"],
-   'resources_and_license': ['search-field.html', 'globaltoc.html', "sidebar-ethical-ads"],
+   'index': ['search-field.html', 'globaltoc.html'],
+   'onstove_tool': ['search-field.html', 'globaltoc.html'],
+   'quickstart': ['search-field.html', 'globaltoc.html'],
+   'resources_and_license': ['search-field.html', 'globaltoc.html'],
 }
