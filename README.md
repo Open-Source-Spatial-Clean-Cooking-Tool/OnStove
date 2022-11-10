@@ -2,6 +2,9 @@
 
 [![Documentation Status](https://readthedocs.org/projects/onstove-documentation/badge/?version=latest)](https://onstove-documentation.readthedocs.io/en/latest/?badge=latest) 
 [![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/Open-Source-Spatial-Clean-Cooking-Tool/OnStove/main?labpath=%2Fexample%2FOnStove_notebook.ipynb)
+[![Tests](https://github.com/Open-Source-Spatial-Clean-Cooking-Tool/OnStove/actions/workflows/tests.yml/badge.svg?event=push)](https://github.com/Open-Source-Spatial-Clean-Cooking-Tool/OnStove/actions?query=workflow%3Atests)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.7185177.svg)](https://doi.org/10.5281/zenodo.7185177)
 
 This repository contains the general code for the geospatial cost-benefit clean cooking tool, OnStove. OnStove calculates the net-benefits of different stove options in a given geography and compares all stoves to one another with regards to their net-benefit.
 
@@ -12,10 +15,8 @@ OnStove is developed by the division of Energy Systems at KTH together with part
 OnStove produces scenarios depicting the “true” cost of clean cooking. The scenarios benefits and costs of produced by the tool are to be interpreted as the benefits and costs one could expect if the clean cooking transition was to happen now (overnight change). Results from OnStove are to be interpreted as an upper bound of net-benefits following a switch to cleaner stoves. OnStove can be used by planners and policy makers to identify whether various combinations of interventions in their settings would be worth the potential benefits that could be captured
 
 **Requirements**: 
-* [contextily](https://contextily.readthedocs.io/en/latest/)
 * [dill](https://dill.readthedocs.io/en/latest/dill.html)
 * [geopandas](https://geopandas.org/en/stable/)
-* [json](https://docs.python.org/3/library/json.html)
 * [jupyterlab](https://jupyterlab.readthedocs.io/en/stable/)
 * [matplotlib](https://matplotlib.org/)
 * [pandas](https://pandas.pydata.org/)
@@ -24,9 +25,9 @@ OnStove produces scenarios depicting the “true” cost of clean cooking. The s
 * [psutil](https://psutil.readthedocs.io/en/latest/)
 * [python-decouple](https://pypi.org/project/python-decouple/)
 * [rasterio](https://rasterio.readthedocs.io/en/latest/)
-* [rasterstats](https://pythonhosted.org/rasterstats/manual.html)
-* [scikit-learn](https://scikit-learn.org/stable/)
 * [scikit-image](https://scikit-image.org/)
+* [svgpathtools](https://pypi.org/project/svgpathtools/)
+* [svgpath2mpl](https://pypi.org/project/svgpath2mpl/)
 
 **Installation** 
 

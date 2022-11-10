@@ -228,14 +228,14 @@ class Technology:
         -------
         Discount factor and the project life
         """
-        if specs["Start_year"] == specs["End_year"]:
+        if specs["start_year"] == specs["end_year"]:
             proj_life = 1
         else:
-            proj_life = specs["End_year"] - specs["Start_year"]
+            proj_life = specs["end_year"] - specs["start_year"]
 
         year = np.arange(proj_life) + 1
 
-        discount_factor = (1 + specs["Discount_rate"]) ** year
+        discount_factor = (1 + specs["discount_rate"]) ** year
 
         return discount_factor, proj_life
 
@@ -250,7 +250,7 @@ class Technology:
             :class:`onstove.OnStove`.
         """
 
-        self.energy = model.specs["Meals_per_day"] * 365 * model.energy_per_meal / self.efficiency
+        self.energy = model.specs["meals_per_day"] * 365 * model.energy_per_meal / self.efficiency
 
     def get_carbon_intensity(self, model: 'onstove.OnStove'):
         """Calculates the carbon intensity of the associated stove.
@@ -299,9 +299,9 @@ class Technology:
         carb
         """
         self.carb(model)
-        proj_life = model.specs['End_year'] - model.specs['Start_year']
-        carbon = model.specs["Cost of carbon emissions"] * (model.base_fuel.carbon - self.carbon) / 1000 / (
-                1 + model.specs["Discount_rate"]) ** (proj_life)
+        proj_life = model.specs['end_year'] - model.specs['start_year']
+        carbon = model.specs["cost_of_carbon_emissions"] * (model.base_fuel.carbon - self.carbon) / 1000 / (
+                1 + model.specs["discount_rate"]) ** (proj_life)
 
         self.decreased_carbon_emissions = model.base_fuel.carbon - self.carbon
         self.decreased_carbon_costs = carbon
@@ -333,7 +333,7 @@ class Technology:
         self.paf_lc_u = self.paf(rr_lc, 1 - model.clean_cooking_access_u)
         self.paf_stroke_u = self.paf(rr_stroke, 1 - model.clean_cooking_access_u)
 
-    def mort_morb(self, model: 'onstove.OnStove', parameter: str = 'Mort', dr: str ='Discount_rate') -> tuple[float, float]:
+    def mort_morb(self, model: 'onstove.OnStove', parameter: str = 'mort', dr: str ='discount_rate') -> tuple[float, float]:
         """
         Calculates mortality or morbidity rate per fuel. These two calculations are very similar in nature and are
         therefore combined in one function. In order to indicate if morbidity or mortality should be calculated, the
@@ -357,7 +357,7 @@ class Technology:
 
         mor_u = {}
         mor_r = {}
-        diseases = ['ALRI', 'COPD', 'IHD', 'LC', 'STROKE']
+        diseases = ['alri', 'copd', 'ihd', 'lc', 'stroke']
         is_urban = model.gdf["IsUrban"] > 20
         is_rural = model.gdf["IsUrban"] < 20
         for disease in diseases:
@@ -371,21 +371,21 @@ class Technology:
             mor_r[disease] = model.gdf.loc[is_rural, "Calibrated_pop"].sum() * (model.base_fuel[paf] - self[paf]) * (
                     rate / 100000)
 
-        cl_diseases = {'ALRI': {1: 0.7, 2: 0.1, 3: 0.07, 4: 0.07, 5: 0.06},
-                       'COPD': {1: 0.3, 2: 0.2, 3: 0.17, 4: 0.17, 5: 0.16},
-                       'LC': {1: 0.2, 2: 0.1, 3: 0.24, 4: 0.23, 5: 0.23},
-                       'IHD': {1: 0.2, 2: 0.1, 3: 0.24, 4: 0.23, 5: 0.23},
-                       'STROKE': {1: 0.2, 2: 0.1, 3: 0.24, 4: 0.23, 5: 0.23}}
+        cl_diseases = {'alri': {1: 0.7, 2: 0.1, 3: 0.07, 4: 0.07, 5: 0.06},
+                       'copd': {1: 0.3, 2: 0.2, 3: 0.17, 4: 0.17, 5: 0.16},
+                       'lc': {1: 0.2, 2: 0.1, 3: 0.24, 4: 0.23, 5: 0.23},
+                       'ihd': {1: 0.2, 2: 0.1, 3: 0.24, 4: 0.23, 5: 0.23},
+                       'stroke': {1: 0.2, 2: 0.1, 3: 0.24, 4: 0.23, 5: 0.23}}
 
         i = 1
         total_mor_u = 0
         total_mor_r = 0
         while i < 6:
             for disease in diseases:
-                if parameter == 'Morb':
-                    cost = model.specs[f'COI_{disease}']
-                elif parameter == 'Mort':
-                    cost = model.specs['VSL']
+                if parameter == 'morb':
+                    cost = model.specs[f'coi_{disease}']
+                elif parameter == 'mort':
+                    cost = model.specs['vsl']
                 total_mor_u += cl_diseases[disease][i] * cost * mor_u[disease] / (1 + model.specs[dr]) ** (i - 1)
                 total_mor_r += cl_diseases[disease][i] * cost * mor_r[disease] / (1 + model.specs[dr]) ** (i - 1)
             i += 1
@@ -423,13 +423,13 @@ class Technology:
         mort_morb
 
         """
-        distributed_mortality, deaths_avoided = self.mort_morb(model, parameter='Mort', dr='Discount_rate')
+        distributed_mortality, deaths_avoided = self.mort_morb(model, parameter='mort', dr='discount_rate')
         self.distributed_mortality = distributed_mortality
         self.deaths_avoided = deaths_avoided
 
-        if model.specs['Health_spillovers_parameter'] > 0:
-            self.distributed_spillovers_mort = distributed_mortality * model.specs['Health_spillovers_parameter']
-            self.deaths_avoided += deaths_avoided * model.specs['Health_spillovers_parameter']
+        if model.specs['health_spillovers_parameter'] > 0:
+            self.distributed_spillovers_mort = distributed_mortality * model.specs['health_spillovers_parameter']
+            self.deaths_avoided += deaths_avoided * model.specs['health_spillovers_parameter']
         else:
             self.distributed_spillovers_mort = pd.Series(0, index=model.gdf.index, dtype='float64')
 
@@ -447,13 +447,13 @@ class Technology:
         --------
         mort_morb
         """
-        distributed_morbidity, cases_avoided = self.mort_morb(model, parameter='Morb', dr='Discount_rate')
+        distributed_morbidity, cases_avoided = self.mort_morb(model, parameter='morb', dr='discount_rate')
         self.distributed_morbidity = distributed_morbidity
         self.cases_avoided = cases_avoided
 
-        if model.specs['Health_spillovers_parameter'] > 0:
-            self.distributed_spillovers_morb = distributed_morbidity * model.specs['Health_spillovers_parameter']
-            self.cases_avoided += cases_avoided * model.specs['Health_spillovers_parameter']
+        if model.specs['health_spillovers_parameter'] > 0:
+            self.distributed_spillovers_morb = distributed_morbidity * model.specs['health_spillovers_parameter']
+            self.cases_avoided += cases_avoided * model.specs['health_spillovers_parameter']
         else:
             self.distributed_spillovers_morb = pd.Series(0, index=model.gdf.index, dtype='float64')
 
@@ -537,7 +537,7 @@ class Technology:
             for j in range(int(i) - 1, proj_life, int(i)):
                 proj_years[where, j] = 1
 
-        investments = proj_years * inv[:, None]
+        investments = proj_years * np.array(inv)[:, None]
 
         if relative:
             discounted_base_investments = model.base_fuel.discounted_investments
@@ -605,12 +605,12 @@ class Technology:
 
         """
 
-        proj_life = model.specs['End_year'] - model.specs['Start_year']
+        proj_life = model.specs['end_year'] - model.specs['start_year']
         self.total_time(model)
         self.total_time_saved = model.base_fuel.total_time_yr - self.total_time_yr
         # time value of time saved per sq km
         self.time_value = self.total_time_saved * model.gdf["value_of_time"] / (
-                1 + model.specs["Discount_rate"]) ** (proj_life)
+                1 + model.specs["discount_rate"]) ** (proj_life)
 
     def total_costs(self):
         """
@@ -849,7 +849,7 @@ class LPG(Technology):
         """
 
         transport_cost = (self.diesel_per_hour * self.diesel_cost * self.travel_time) / self.truck_capacity
-        kg_yr = (model.specs["Meals_per_day"] * 365 * model.energy_per_meal) / (
+        kg_yr = (model.specs["meals_per_day"] * 365 * model.energy_per_meal) / (
                 self.efficiency * self.energy_content)  # energy content in MJ/kg
         transport_cost = transport_cost * kg_yr
         transport_cost[transport_cost < 0] = np.nan

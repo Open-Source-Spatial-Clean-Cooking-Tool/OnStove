@@ -142,5 +142,15 @@ Africa/
 .snakemake
 CCE Storylines/
 
+Nepal paper OnStove/TechShares.ipynb
+
+.DS_Store
+
 example/*
 !example/OnStove_notebook.ipynb
+!example/soc_specs.csv
+!example/tech_specs.csv
+
+onstove/tests/data/*
+!onstove/tests/data/.gitkeep
+onstove/tests/output

@@ -25,7 +25,7 @@ To estimate which areas are urban and which are rural is an important step, as t
 
 .. note::
 
-    See the `GHS calibration <https://onstove-documentation.readthedocs.io/en/latest/generated/onstove.onstove.OnStove.calibrate_urban_rural_split.html#onstove.onstove.OnStove.calibrate_urban_rural_split>`_ and `manual calibration <https://onstove-documentation.readthedocs.io/en/latest/generated/onstove.onstove.OnStove.calibrate_urban_manual.html#onstove.onstove.OnStove.calibrate_urban_manual>`_ for more information on the GHS and manual calibration respectively.
+    See the `GHS calibration <https://onstove-documentation.readthedocs.io/en/latest/generated/onstove.OnStove.calibrate_urban_rural_split.html#onstove.OnStove.calibrate_urban_rural_split>`_ and `manual calibration <https://onstove-documentation.readthedocs.io/en/latest/generated/onstove.OnStove.calibrate_urban_manual.html#onstove.OnStove.calibrate_urban_manual>`_ for more information on the GHS and manual calibration respectively.
 
 
 Population calibration
@@ -35,7 +35,7 @@ The population calibration is important as in many instances the geospatial popu
 
 .. note::
 
-    For more information on the population calibration see the `Calibrate current pop <https://onstove-documentation.readthedocs.io/en/latest/generated/onstove.onstove.OnStove.calibrate_current_pop.html#onstove.onstove.OnStove.calibrate_current_pop>`_.
+    For more information on the population calibration see the `Calibrate current pop <https://onstove-documentation.readthedocs.io/en/latest/generated/onstove.OnStove.calibrate_current_pop.html#onstove.OnStove.calibrate_current_pop>`_.
 
 Current stove-share calibration
 -------------------------------
@@ -44,7 +44,7 @@ All benefits and costs are relative to the baseline stove calibration. In the te
 
 .. note::
 
-    The current stove shares sets the base values to which all benefits and costs are compared, see `set base fuel <https://onstove-documentation.readthedocs.io/en/latest/generated/onstove.onstove.OnStove.set_base_fuel.html#onstove.onstove.OnStove.set_base_fuel>`_.
+    The current stove shares sets the base values to which all benefits and costs are compared, see `set base fuel <https://onstove-documentation.readthedocs.io/en/latest/generated/onstove.OnStove.set_base_fuel.html#onstove.OnStove.set_base_fuel>`_.
 
 
 Current electrification calibration
@@ -76,7 +76,7 @@ The morbidity and mortality parameters describe the reduced risk of disease and 
 Where; RR is the relative risk associated with each disease studied (LC, IHD, COPD, ALRI and stroke), and :math:`\alpha, \beta, \delta` and z\ :sub:`rf`\ are disease-specific constants determined experimentally. Note that the equation system indicates that when 24-h PM\ :sub:`2.5`\-emissions are under a certain threshold (z\ :sub:`rf`\) there is no increased risk of disease. The constants :math:`\alpha, \beta, \delta` and z\ :sub:`rf`\ were determined for each disease by conducting 1,000 runs per disease. For more information on these constants, see Burnett et al. [4]_ and their `data <http://ghdx.healthdata.org/sites/default/files/record-attached-files/IHME_CRCurve_parameters.csv>`_ (clicking the link will download a csv-file). 
 
 .. note:: 
-    The values of :math:`\alpha, \beta, \delta` and z\ :sub:`rf`\ for each disease are hardcoded in OnStove as the averages of the 1,000 runs conducted by Burnett et al. [4]_. See the `relative risk function <https://onstove-documentation.readthedocs.io/en/latest/generated/onstove.technology.Technology.relative_risk.html>`_.
+    The values of :math:`\alpha, \beta, \delta` and z\ :sub:`rf`\ for each disease are hardcoded in OnStove as the averages of the 1,000 runs conducted by Burnett et al. [4]_. See the `relative risk function <https://onstove-documentation.readthedocs.io/en/latest/generated/onstove.Technology.relative_risk.html>`_.
 
 
 Once the RR is determined, the Population Attributable Fraction (PAF) is calculated based on equation 3. PAF is often used to assess the public health impacts resulting from a population’s exposure to a risk.
@@ -138,7 +138,7 @@ The biomass stoves (both traditional and improved) rely on biomass collected by 
 
 **Biogas**
 
-The calculations used for biogas are similar to those for biomass. Biogas is assumed to be produced at a household level by the end-users themselves, who are also the ones collecting the necessary material for its production. In the current version of OnStove manure is assumed to be used to produce biogas. The manure is collected by the households themselves within the square kilometer in which they live. The amount of manure available is estimated with the help of the spatial distribution of livestock (see the `GIS data section <https://onstove-documentation.readthedocs.io/en/latest/onstove_tool.html#gis-datasets>`_), estimates on who much manure each type of animal produces and how much of it can be used for conversion to biogas [9]_. The time needed to collect a sufficient amount of manure is estimated using a walking-only friction layer describing the time it takes to travel 1 m by foot through each square kilometer [8]_. See more information in the documentation of the `biogas class <https://onstove-documentation.readthedocs.io/en/latest/generated/onstove.technology.Biogas.html>`_. 
+The calculations used for biogas are similar to those for biomass. Biogas is assumed to be produced at a household level by the end-users themselves, who are also the ones collecting the necessary material for its production. In the current version of OnStove manure is assumed to be used to produce biogas. The manure is collected by the households themselves within the square kilometer in which they live. The amount of manure available is estimated with the help of the spatial distribution of livestock (see the `GIS data section <https://onstove-documentation.readthedocs.io/en/latest/onstove_tool.html#gis-datasets>`_), estimates on who much manure each type of animal produces and how much of it can be used for conversion to biogas [9]_. The time needed to collect a sufficient amount of manure is estimated using a walking-only friction layer describing the time it takes to travel 1 m by foot through each square kilometer [8]_. See more information in the documentation of the `biogas class <https://onstove-documentation.readthedocs.io/en/latest/generated/onstove.Biogas.html>`_. 
 
 Emissions avoided
 -----------------
@@ -181,11 +181,11 @@ The carbon emissions caused by the use of woody biomass is dependent on the frac
 
 **Charcoal**
 
-Similar to the case of biomass equation 10 is modified as described in equation 11 when the fuel assessed is charcoal. In addition to this emissions coupled with the production of charcoal are also added to the total emissions. Each kg of charcoal produced is assumed to produce 1,626 g of CO\ :sub:`2`, 255 g of CO, 39.6 g CH\ :sub:`4`, 0.02 g of black carbon and 0.74 g OC [13]_. These values are included in the charcoal class, to change these values refer to the `class <https://onstove-documentation.readthedocs.io/en/latest/generated/onstove.technology.Charcoal.production_emissions.html>`_.
+Similar to the case of biomass equation 10 is modified as described in equation 11 when the fuel assessed is charcoal. In addition to this emissions coupled with the production of charcoal are also added to the total emissions. Each kg of charcoal produced is assumed to produce 1,626 g of CO\ :sub:`2`, 255 g of CO, 39.6 g CH\ :sub:`4`, 0.02 g of black carbon and 0.74 g OC [13]_. These values are included in the charcoal class, to change these values refer to the `class <https://onstove-documentation.readthedocs.io/en/latest/generated/onstove.Charcoal.production_emissions.html>`_.
 
 **LPG**
 
-In addition to stove-emissions coupled with LPG-stoves, the transport of LPG is also assumed to produce emissions. These emissions are dependent on the traveltime needed to transport LPG. The time needed to transport LPG to different settlements is coupled with the assumed emissions of light-commercial vehicles (14 l/h) in order to estimate the total diesel consumption needed for transportation. Each kg of diesel used is assumed to produce 1.52 g of PM (black carbon fraction of PM is assumed to be 0.55 and the OC fraction of black carbon is assumed to be 0.7), 3.169 g of CO\ :sub:`2`, 7.4 g of CO and 0.056 g of N\ :sub:`2`\O. To change these values (as well as the diesel consumption per hour) see the `LPG class <https://onstove-documentation.readthedocs.io/en/latest/generated/onstove.technology.LPG.transport_emissions.html>`_.
+In addition to stove-emissions coupled with LPG-stoves, the transport of LPG is also assumed to produce emissions. These emissions are dependent on the traveltime needed to transport LPG. The time needed to transport LPG to different settlements is coupled with the assumed emissions of light-commercial vehicles (14 l/h) in order to estimate the total diesel consumption needed for transportation. Each kg of diesel used is assumed to produce 1.52 g of PM (black carbon fraction of PM is assumed to be 0.55 and the OC fraction of black carbon is assumed to be 0.7), 3.169 g of CO\ :sub:`2`, 7.4 g of CO and 0.056 g of N\ :sub:`2`\O. To change these values (as well as the diesel consumption per hour) see the `LPG class <https://onstove-documentation.readthedocs.io/en/latest/generated/onstove.LPG.transport_emissions.html>`_.
 
 **Electricity**
 
@@ -197,7 +197,7 @@ The production of electricity is coupled with emissions. These emissions are in 
 
 Where; :math:`\gamma_{grid}` is the CO\ :sub:`2`-equivalent intensity of the grid, :math:`\epsilon_k` is the emission factor of generation technology :math:`k` and :math:`g_k` is the electricity generation of technology :math:`k`.
 
-The user is required to enter the installed capacity and power generated by the different powerplants feeding the grid of the study area in order for this calculation to be possible. The emission factors of different powerplants are given in the `Electricity class <https://onstove-documentation.readthedocs.io/en/latest/generated/onstove.technology.Electricity.html>`_.
+The user is required to enter the installed capacity and power generated by the different powerplants feeding the grid of the study area in order for this calculation to be possible. The emission factors of different powerplants are given in the `Electricity class <https://onstove-documentation.readthedocs.io/en/latest/generated/onstove.Electricity.html>`_.
 
 
 .. note::
@@ -226,11 +226,11 @@ The salvage cost assumes a straight-line deprecation of the stove value as descr
 
 **LPG**
 
-The cost of buying a refillable LPG-cylinder is added to the investment cost of first-time LPG-users. Each cylinder is assumed to cost 2.78 USD per kg LPG capacity and the default capacity of the cylinder is assumed to be 12.5 kg of LPG. In addition to this each cylinder is assumed to have a lifetime of 15 years which is taken into account through a salvage cost. These parameters can be changed from the `LPG class <https://onstove-documentation.readthedocs.io/en/latest/generated/onstove.technology.LPG.html>`_.
+The cost of buying a refillable LPG-cylinder is added to the investment cost of first-time LPG-users. Each cylinder is assumed to cost 2.78 USD per kg LPG capacity and the default capacity of the cylinder is assumed to be 12.5 kg of LPG. In addition to this each cylinder is assumed to have a lifetime of 15 years which is taken into account through a salvage cost. These parameters can be changed from the `LPG class <https://onstove-documentation.readthedocs.io/en/latest/generated/onstove.LPG.html>`_.
 
 **Electricity**
 
-To accommodate for additional capacity needed for electrical cooking it is assumed that the cost of added capacity (as well as its salvage cost) is added to the total capital cost of electricity. The current capacities should be entered in the techno-economic specification file and the life times of technologies in the `Electricity class <https://onstove-documentation.readthedocs.io/en/latest/generated/onstove.technology.Electricity.html>`_.
+To accommodate for additional capacity needed for electrical cooking it is assumed that the cost of added capacity (as well as its salvage cost) is added to the total capital cost of electricity. The current capacities should be entered in the techno-economic specification file and the life times of technologies in the `Electricity class <https://onstove-documentation.readthedocs.io/en/latest/generated/onstove.Electricity.html>`_.
 
 .. note::
 
@@ -253,7 +253,7 @@ The cost of LPG is diversified based on settlement and dependent on the travelti
 
     \mbox{total costs } = \mbox{LPG costs } + \frac{2 * \mbox{ diesel consumption per h } * \mbox{ LPG costs } * \mbox{ travel time }}{\mbox{Transported LPG}}  \tag{15}
 
-Where; LPG cost is the base cost of LPG. For more information on this calculation refer to the `LPG class <https://onstove-documentation.readthedocs.io/en/latest/generated/onstove.technology.LPG.html>`_. 
+Where; LPG cost is the base cost of LPG. For more information on this calculation refer to the `LPG class <https://onstove-documentation.readthedocs.io/en/latest/generated/onstove.LPG.html>`_. 
 
 **Electricity**
 
