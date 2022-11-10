@@ -1839,7 +1839,7 @@ class Biogas(Technology):
         self.time_of_collection = time_of_collection
 
     def available_biogas(self, model: 'onstove.OnStove'):
-        """Caluclates the biogas production potential in liters per day. It currently takes into account 6 categories
+        """Calculates the biogas production potential in liters per day. It currently takes into account 6 categories
         of livestock (cattle, buffalo, sheep, goat, pig and poultry). The biogas potential for each category is determined
         following the methodology outlined by Lohani et al.[1]_ This function also applies a restriction to biogas
         production with regards to urban areas, areas with temperature lower than 10 degrees[1]_ celsius and areas under
