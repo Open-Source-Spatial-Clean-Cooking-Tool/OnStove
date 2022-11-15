@@ -6,6 +6,7 @@ import pandas as pd
 from typing import Optional, Callable
 from math import exp
 
+from onstove._utils import raster_setter
 from onstove.layer import VectorLayer, RasterLayer
 
 
@@ -1718,7 +1719,7 @@ class MiniGrids(Electricity):
 
     @access.setter
     def access(self, raster):
-        pass
+        self._access = raster_setter(raster)
 
     def calculate_potential(self):
         pass
