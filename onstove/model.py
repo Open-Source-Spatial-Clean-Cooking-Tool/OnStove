@@ -1117,7 +1117,6 @@ class OnStove(DataProcessor):
                             'paf_lc_u', 'paf_stroke_u']:
                     base_fuel[paf] += tech[paf] * tech.current_share_urban
             self.base_fuel = base_fuel
-            
 
     def read_tech_data(self, path_to_config: str, delimiter=','):
         """
@@ -1173,6 +1172,7 @@ class OnStove(DataProcessor):
             Stores the clean cooking access percentage in rural settlements in the :attr:`clean_cooking_access_r`
             attribute.
         """
+        # TODO: the clean cooking access needs to be calculated based on the new baseline fuels calculations
         clean_cooking_access_u = 0
         clean_cooking_access_r = 0
         for tech in self.techs.values():

@@ -6,7 +6,7 @@ import pandas as pd
 from typing import Optional, Callable
 from math import exp
 
-from onstove._utils import raster_setter
+from onstove._utils import raster_setter, vector_setter
 from onstove.layer import VectorLayer, RasterLayer
 
 
@@ -996,7 +996,7 @@ class LPG(Technology):
         --------
         infrastructure_cost
         """
-
+        # TODO: this method needs update on the current shares based on the new calibration methods
         super().discounted_inv(model, relative=relative)
         self.infrastructure_cost(model)
         if relative:
@@ -1643,6 +1643,7 @@ class Electricity(Technology):
         --------
         get_capacity_cost
         """
+        # TODO: this method needs update on the current shares based on the new calibration methods
         super().discounted_inv(model, relative=relative)
         if relative:
             share = (model.gdf['IsUrban'] > 20) * self.current_share_urban
@@ -1710,18 +1711,30 @@ class MiniGrids(Electricity):
                          grid_capacity_cost=grid_capacity_cost, fuel_cost=fuel_cost,
                          time_of_cooking=time_of_cooking, om_cost=om_cost, efficiency=efficiency, pm25=pm25)
 
-        self.access = None
+        self.coverage = None
         self.potential = None
 
     @property
-    def access(self) -> RasterLayer:
-        return self._access
+    def coverage(self) -> RasterLayer:
+        """:class:`VectorLayer` object containing a vector dataset showing the areas of coverage of the mini-grids.
 
-    @access.setter
-    def access(self, raster):
-        self._access = raster_setter(raster)
+        This layer must contain the following columns:
+        * `capacity`: installed capacity of the mini-grids
+        * `households`: amount of households served by the mini-grids
+        * `geometry`: polygons showing areas of coverage
+
+        .. seealso::
+            :meth:`calculate_potential`
+        """
+        return self._coverage
+
+    @coverage.setter
+    def coverage(self, layer):
+        self._coverage = vector_setter(layer)
 
     def calculate_potential(self):
+        """Calculates the potential of each mini-grid for supporting eCooking in each area.
+        """
         pass
 
     def discounted_inv(self, model: 'onstove.OnStove', relative: bool = True):
@@ -1729,7 +1742,8 @@ class MiniGrids(Electricity):
 
     def net_benefit(self, model: 'onstove.OnStove', w_health: int = 1, w_spillovers: int = 1,
                     w_environment: int = 1, w_time: int = 1, w_costs: int = 1):
-        pass
+        super().net_benefit(model, w_health, w_spillovers, w_environment, w_time, w_costs)
+        model.gdf.loc[self.potential == 0, "net_benefit_{}".format(self.name)] = np.nan
 
 
 class Biogas(Technology):
