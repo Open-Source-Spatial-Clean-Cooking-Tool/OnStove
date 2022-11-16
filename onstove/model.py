@@ -1052,7 +1052,7 @@ class OnStove(DataProcessor):
                 tech.is_base = True
                 base_fuels[tech.name] = tech
         if len(base_fuels) == 1:
-            self.base_fuel = copy(base_fuels.values()[0])
+            self.base_fuel = copy(list(base_fuels.values())[0])
             self.base_fuel.carb(self)
             self.base_fuel.total_time(self)
             self.base_fuel.required_energy(self)
