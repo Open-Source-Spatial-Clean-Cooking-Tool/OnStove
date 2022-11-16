@@ -792,7 +792,7 @@ class OnStove(DataProcessor):
                       'w_costs': 1.0, 'w_environment': 1.0, 'w_health': 1.0,
                       'w_spillover': 1.0, 'w_time': 1.0}
 
-
+        self.gdf = gpd.GeoDataFrame()
 
     def read_scenario_data(self, path_to_config: str, delimiter=','):
         """Reads the scenario data into a dictionary
@@ -1044,7 +1044,7 @@ class OnStove(DataProcessor):
         all technologies in the model
         """
         if techs is None:
-            techs = self.techs.values()
+            techs = list(self.techs.values())
         base_fuels = {}
         for tech in techs:
             share = tech.current_share_rural + tech.current_share_urban
@@ -1619,7 +1619,7 @@ class OnStove(DataProcessor):
         if self.base_fuel is None:
             print(f'[{self.specs["country_name"]}] Calculating base fuel properties')
 
-            self.set_base_fuel(self.techs.values())
+            self.set_base_fuel(list(self.techs.values()))
         if technologies == 'all':
             techs = [tech for tech in self.techs.values()]
         elif isinstance(technologies, list):
@@ -1627,7 +1627,7 @@ class OnStove(DataProcessor):
         else:
             raise ValueError("technologies must be 'all' or a list of strings with the technology names to run.")
 
-        # Based on wealth index, minimum wage and a lower an upper range for cost of oportunity
+        # Based on wealth index, minimum wage and a lower an upper range for cost of opportunity
         print(f'[{self.specs["country_name"]}] Getting value of time')
         self.get_value_of_time()
         # Loop through each technology and calculate all benefits and costs
