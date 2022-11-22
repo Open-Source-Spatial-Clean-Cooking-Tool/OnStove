@@ -6,6 +6,7 @@ import pandas as pd
 from typing import Optional, Callable
 from math import exp
 
+from onstove._utils import raster_setter, vector_setter
 from onstove.layer import VectorLayer, RasterLayer
 
 
@@ -64,7 +65,7 @@ class Technology:
 
     def __init__(self,
                  name: Optional[str] = None,
-                 carbon_intensity: Optional[str] =None,
+                 carbon_intensity: Optional[str] = None,
                  co2_intensity: float = 0,
                  ch4_intensity: float = 0,
                  n2o_intensity: float = 0,
@@ -215,7 +216,7 @@ class Technology:
         return paf
 
     @staticmethod
-    def discount_factor(specs: dict) -> tuple[list[float],list[float]]:
+    def discount_factor(specs: dict) -> tuple[list[float], list[float]]:
         """Calculates and returns the discount factor used for benefits and costs in the net-benefit equation. Also
         returns the length of the analysis in years
 
@@ -333,7 +334,8 @@ class Technology:
         self.paf_lc_u = self.paf(rr_lc, 1 - model.clean_cooking_access_u)
         self.paf_stroke_u = self.paf(rr_stroke, 1 - model.clean_cooking_access_u)
 
-    def mort_morb(self, model: 'onstove.OnStove', parameter: str = 'mort', dr: str ='discount_rate') -> tuple[float, float]:
+    def mort_morb(self, model: 'onstove.OnStove', parameter: str = 'mort', dr: str = 'discount_rate') -> tuple[
+        float, float]:
         """
         Calculates mortality or morbidity rate per fuel. These two calculations are very similar in nature and are
         therefore combined in one function. In order to indicate if morbidity or mortality should be calculated, the
@@ -484,7 +486,7 @@ class Technology:
 
         self.discounted_salvage_cost = discounted_salvage
 
-    def discounted_om(self,  model: 'onstove.OnStove'):
+    def discounted_om(self, model: 'onstove.OnStove'):
         """
         Calls discount_factor function and calculates discounted operation and maintenance cost for each stove.
 
@@ -737,7 +739,7 @@ class LPG(Technology):
 
     def __init__(self,
                  name: Optional[str] = None,
-                 carbon_intensity: Optional[float] = None ,
+                 carbon_intensity: Optional[float] = None,
                  co2_intensity: float = 63,
                  ch4_intensity: float = 0.003,
                  n2o_intensity: float = 0.0001,
@@ -994,7 +996,7 @@ class LPG(Technology):
         --------
         infrastructure_cost
         """
-
+        # TODO: this method needs update on the current shares based on the new calibration methods
         super().discounted_inv(model, relative=relative)
         self.infrastructure_cost(model)
         if relative:
@@ -1542,7 +1544,6 @@ class Electricity(Technology):
         model: OnStove model
             Instance of the OnStove model containing the main data of the study case. See
             :class:`onstove.OnStove`.
-
         """
         self.required_energy(model)
         if self.tiers_path is None:
@@ -1570,7 +1571,6 @@ class Electricity(Technology):
         model: OnStove model
             Instance of the OnStove model containing the main data of the study case. See
             :class:`onstove.OnStove`.
-
         """
         grid_emissions = sum([gen * self.carbon_intensities[fuel] for fuel, gen in self.generation.items()])
         grid_generation = sum(self.generation.values())
@@ -1609,7 +1609,7 @@ class Electricity(Technology):
 
         return salvage / discount_rate[0]
 
-    def carb(self,  model: 'onstove.OnStove'):
+    def carb(self, model: 'onstove.OnStove'):
         """This method expands :meth:`Technology.carbon` when electricity is the fuel used
 
 
@@ -1643,6 +1643,7 @@ class Electricity(Technology):
         --------
         get_capacity_cost
         """
+        # TODO: this method needs update on the current shares based on the new calibration methods
         super().discounted_inv(model, relative=relative)
         if relative:
             share = (model.gdf['IsUrban'] > 20) * self.current_share_urban
@@ -1657,22 +1658,22 @@ class Electricity(Technology):
         Parameters
         ----------
         model: OnStove model
-         Instance of the OnStove model containing the main data of the study case. See
-         :class:`onstove.OnStove`.
+            Instance of the OnStove model containing the main data of the study case. See
+            :class:`onstove.OnStove`.
         w_health: int, default 1
-         Determines whether health parameters (reduced morbidity and mortality)
-         should be considered in the net-benefit equation.
+            Determines whether health parameters (reduced morbidity and mortality)
+            should be considered in the net-benefit equation.
         w_spillovers: int, default 1
-         Determines whether spillover effects from cooking with traditional fuels
-         should be considered in the net-benefit equation.
+            Determines whether spillover effects from cooking with traditional fuels
+            should be considered in the net-benefit equation.
         w_environment: int, default 1
-         Determines whether environmental effects (reduced emissions) should be considered in the net-benefit
-         equation.
+            Determines whether environmental effects (reduced emissions) should be considered in the net-benefit
+            equation.
         w_time: int, default 1
-         Determines whether opportunity cost (reduced time spent) should be considered in the net-benefit
-         equation.
+            Determines whether opportunity cost (reduced time spent) should be considered in the net-benefit
+            equation.
         w_costs: int, default 1
-         Determines whether costs should be considered in the net-benefit equation.
+            Determines whether costs should be considered in the net-benefit equation.
 
         See also
         --------
@@ -1684,6 +1685,65 @@ class Electricity(Technology):
         factor[factor > 1] = 1
         self.factor = factor
         self.households = model.gdf['Households'] * factor
+
+
+class MiniGrids(Electricity):
+    """Mini-grids technology class used to model electrical stoves powered by mini-grids.
+
+    This class inherits and modifies the :class:`Electricity` class.
+    """
+
+    def __init__(self,
+                 name: Optional[str] = None,
+                 carbon_intensity: Optional[str] = None,
+                 energy_content: float = 3.6,
+                 tech_life: int = 10,  # in years
+                 inv_cost: float = 36.3,  # in USD
+                 connection_cost: float = 0,  # cost of additional infrastructure
+                 grid_capacity_cost: float = None,
+                 fuel_cost: float = 0.1,
+                 time_of_cooking: float = 1.8,
+                 om_cost: float = 3.7,  # percentage of investement cost
+                 efficiency: float = 0.85,  # ratio
+                 pm25: float = 32):
+        super().__init__(name=name, carbon_intensity=carbon_intensity, energy_content=energy_content,
+                         tech_life=tech_life, inv_cost=inv_cost, connection_cost=connection_cost,
+                         grid_capacity_cost=grid_capacity_cost, fuel_cost=fuel_cost,
+                         time_of_cooking=time_of_cooking, om_cost=om_cost, efficiency=efficiency, pm25=pm25)
+
+        self.coverage = None
+        self.potential = None
+
+    @property
+    def coverage(self) -> RasterLayer:
+        """:class:`VectorLayer` object containing a vector dataset showing the areas of coverage of the mini-grids.
+
+        This layer must contain the following columns:
+        * `capacity`: installed capacity of the mini-grids
+        * `households`: amount of households served by the mini-grids
+        * `geometry`: polygons showing areas of coverage
+
+        .. seealso::
+            :meth:`calculate_potential`
+        """
+        return self._coverage
+
+    @coverage.setter
+    def coverage(self, layer):
+        self._coverage = vector_setter(layer)
+
+    def calculate_potential(self):
+        """Calculates the potential of each mini-grid for supporting eCooking in each area.
+        """
+        pass
+
+    def discounted_inv(self, model: 'onstove.OnStove', relative: bool = True):
+        pass
+
+    def net_benefit(self, model: 'onstove.OnStove', w_health: int = 1, w_spillovers: int = 1,
+                    w_environment: int = 1, w_time: int = 1, w_costs: int = 1):
+        super().net_benefit(model, w_health, w_spillovers, w_environment, w_time, w_costs)
+        model.gdf.loc[self.potential == 0, "net_benefit_{}".format(self.name)] = np.nan
 
 
 class Biogas(Technology):
@@ -1867,7 +1927,6 @@ class Biogas(Technology):
         from_goat = model.gdf["Goats"] * 0.6 * 0.3 * 0.85 * 450
         from_pig = model.gdf["Pigs"] * 5 * 0.75 * 0.14 * 470
         from_poultry = model.gdf["Poultry"] * 0.12 * 0.25 * 0.75 * 450
-
 
         model.gdf["available_biogas"] = ((from_cattle + from_buffalo + from_goat + from_pig + from_poultry +
                                           from_sheep) * self.digestor_eff / 1000) * 365

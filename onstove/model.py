@@ -792,7 +792,7 @@ class OnStove(DataProcessor):
                       'w_costs': 1.0, 'w_environment': 1.0, 'w_health': 1.0,
                       'w_spillover': 1.0, 'w_time': 1.0}
 
-
+        self.gdf = gpd.GeoDataFrame()
 
     def read_scenario_data(self, path_to_config: str, delimiter=','):
         """Reads the scenario data into a dictionary
@@ -1044,7 +1044,7 @@ class OnStove(DataProcessor):
         all technologies in the model
         """
         if techs is None:
-            techs = self.techs.values()
+            techs = list(self.techs.values())
         base_fuels = {}
         for tech in techs:
             share = tech.current_share_rural + tech.current_share_urban
@@ -1052,7 +1052,7 @@ class OnStove(DataProcessor):
                 tech.is_base = True
                 base_fuels[tech.name] = tech
         if len(base_fuels) == 1:
-            self.base_fuel = copy(base_fuels.values()[0])
+            self.base_fuel = copy(list(base_fuels.values())[0])
             self.base_fuel.carb(self)
             self.base_fuel.total_time(self)
             self.base_fuel.required_energy(self)
@@ -1117,7 +1117,6 @@ class OnStove(DataProcessor):
                             'paf_lc_u', 'paf_stroke_u']:
                     base_fuel[paf] += tech[paf] * tech.current_share_urban
             self.base_fuel = base_fuel
-            
 
     def read_tech_data(self, path_to_config: str, delimiter=','):
         """
@@ -1173,6 +1172,7 @@ class OnStove(DataProcessor):
             Stores the clean cooking access percentage in rural settlements in the :attr:`clean_cooking_access_r`
             attribute.
         """
+        # TODO: the clean cooking access needs to be calculated based on the new baseline fuels calculations
         clean_cooking_access_u = 0
         clean_cooking_access_r = 0
         for tech in self.techs.values():
@@ -1619,7 +1619,7 @@ class OnStove(DataProcessor):
         if self.base_fuel is None:
             print(f'[{self.specs["country_name"]}] Calculating base fuel properties')
 
-            self.set_base_fuel(self.techs.values())
+            self.set_base_fuel(list(self.techs.values()))
         if technologies == 'all':
             techs = [tech for tech in self.techs.values()]
         elif isinstance(technologies, list):
@@ -1627,7 +1627,7 @@ class OnStove(DataProcessor):
         else:
             raise ValueError("technologies must be 'all' or a list of strings with the technology names to run.")
 
-        # Based on wealth index, minimum wage and a lower an upper range for cost of oportunity
+        # Based on wealth index, minimum wage and a lower an upper range for cost of opportunity
         print(f'[{self.specs["country_name"]}] Getting value of time')
         self.get_value_of_time()
         # Loop through each technology and calculate all benefits and costs
@@ -1721,12 +1721,13 @@ class OnStove(DataProcessor):
         gdf = gpd.GeoDataFrame()
         # gdf = gdf.astype(dtype=gdf.dtypes.to_dict())
         gdf_copy = self.gdf.copy()
+        # TODO: Change this to a while loop that checks the sum of number of households supplied against the total hhs
         for tech in techs:
             current = (tech.households < gdf_copy['Households']) & \
                       (gdf_copy["max_benefit_tech"] == tech.name)
             dff = gdf_copy.loc[current].copy()
             if current.sum() > 0:
-                dff.loc[current, "maximum_net_benefit"] *= tech.factor.loc[current]
+                # dff.loc[current, "maximum_net_benefit"] *= tech.factor.loc[current]
                 dff.loc[current, f'net_benefit_{tech.name}_temp'] = np.nan
 
                 second_benefit_cols = temps.copy()
@@ -1738,8 +1739,7 @@ class OnStove(DataProcessor):
                 second_best = second_best.str.replace("_temp", "")
                 second_best.replace('NaN', np.nan, inplace=True)
 
-                second_tech_net_benefit = dff.loc[current, second_benefit_cols].max(axis=1) * (
-                        1 - tech.factor.loc[current])
+                second_tech_net_benefit = dff.loc[current, second_benefit_cols].max(axis=1) #* (1 - tech.factor.loc[current])
 
                 elec_factor = dff['Elec_pop_calib'] / dff['Calibrated_pop']
                 dff['max_benefit_tech'] = second_best
@@ -1769,12 +1769,13 @@ class OnStove(DataProcessor):
             self.gdf.loc[index, f'net_benefit_{tech}_temp'] = np.nan
 
         isna = self.gdf["max_benefit_tech"].isna()
-        self.gdf.loc[isna, 'max_benefit_tech'] = self.gdf.loc[isna, temps].idxmax(axis=1)
+        if isna.sum() > 0:
+            self.gdf.loc[isna, 'max_benefit_tech'] = self.gdf.loc[isna, temps].idxmax(axis=1).asdtype(str)
         self.gdf['max_benefit_tech'] = self.gdf['max_benefit_tech'].str.replace("net_benefit_", "")
         self.gdf['max_benefit_tech'] = self.gdf['max_benefit_tech'].str.replace("_temp", "")
         self.gdf.loc[isna, "maximum_net_benefit"] = self.gdf.loc[isna, temps].max(axis=1)
 
-    # TODO: check if we ned this method
+    # TODO: check if we need this method
     def _add_admin_names(self, admin, column_name):
         if isinstance(admin, str):
             admin = gpd.read_file(admin)
@@ -2800,10 +2801,10 @@ class OnStove(DataProcessor):
                         # y = '(health_costs_avoided + opportunity_cost_gained + emissions_costs_saved + salvage_value' + \
                         #     ' - investment_costs - fuel_costs - om_costs)'
                         y = 'maximum_net_benefit'
-                        title = 'Net benefit per household (kUSD/yr)'
+                        title = 'Net benefit per household (USD/yr)'
                     elif variable == 'costs':
                         y = 'investment_costs - salvage_value + fuel_costs + om_costs'
-                        title = 'Costs per household (kUSD/yr)'
+                        title = 'Costs per household (USD/yr)'
                 else:
                     tech_list = []
                     for name, tech in self.techs.items():
@@ -2813,10 +2814,10 @@ class OnStove(DataProcessor):
                     x = 'tech'
                     if variable == 'net_benefit':
                         y = 'net_benefits'
-                        title = 'Net benefit per household (kUSD/yr)'
+                        title = 'Net benefit per household (USD/yr)'
                     elif variable == 'costs':
                         y = 'costs'
-                        title = 'Costs per household (kUSD/yr)'
+                        title = 'Costs per household (USD/yr)'
 
                     df = pd.DataFrame({x: [], y: []})
                     for tech in tech_list:
@@ -2868,7 +2869,7 @@ class OnStove(DataProcessor):
                  + scale_fill_manual(cmap, guide=False)
                  + scale_color_manual(cmap)
                  + theme_minimal()
-                 + labs(x='Net benefit per household (kUSD/yr)', color='Cooking technology')
+                 + labs(x='Net benefit per household (USD/yr)', color='Cooking technology')
                  )
         # compute lower and upper whiskers
         # ylim1 = dff['maximum_net_benefit'].quantile([0.1, 1])/1000

@@ -815,7 +815,19 @@ class RasterLayer(_Layer):
                     self.meta = src.meta
 
             if self.meta['nodata'] is None:
-                self.meta['nodata'] = np.nan
+                if self.data.dtype == int:
+                    self.meta['nodata'] = 0
+                    raise Warning(f"The {self.name} layer do not have a defined nodata value, thus 0 was assigned. "
+                                  f"You can change this defining the nodata value in the metadata of the variable as: "
+                                  f"variable.meta['nodata'] = value")
+                elif self.data.dtype == float:
+                    self.meta['nodata'] = np.nan
+                    raise Warning(f"The {self.name} layer do not have a defined nodata value, thus np.nan was assigned."
+                                  f" You can change this defining the nodata value in the metadata of the variable as: "
+                                  f"variable.meta['nodata'] = value")
+                else:
+                    raise Warning(f"The {self.name} layer do not have a defined nodata value, please define the nodata "
+                                  f"value in the metadata of the variable with: variable.meta['nodata'] = value")
         self.path = path
 
     @staticmethod
