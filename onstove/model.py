@@ -1721,12 +1721,13 @@ class OnStove(DataProcessor):
         gdf = gpd.GeoDataFrame()
         # gdf = gdf.astype(dtype=gdf.dtypes.to_dict())
         gdf_copy = self.gdf.copy()
+        # TODO: Change this to a while loop that checks the sum of number of households supplied against the total hhs
         for tech in techs:
             current = (tech.households < gdf_copy['Households']) & \
                       (gdf_copy["max_benefit_tech"] == tech.name)
             dff = gdf_copy.loc[current].copy()
             if current.sum() > 0:
-                dff.loc[current, "maximum_net_benefit"] *= tech.factor.loc[current]
+                # dff.loc[current, "maximum_net_benefit"] *= tech.factor.loc[current]
                 dff.loc[current, f'net_benefit_{tech.name}_temp'] = np.nan
 
                 second_benefit_cols = temps.copy()
@@ -1738,8 +1739,7 @@ class OnStove(DataProcessor):
                 second_best = second_best.str.replace("_temp", "")
                 second_best.replace('NaN', np.nan, inplace=True)
 
-                second_tech_net_benefit = dff.loc[current, second_benefit_cols].max(axis=1) * (
-                        1 - tech.factor.loc[current])
+                second_tech_net_benefit = dff.loc[current, second_benefit_cols].max(axis=1) #* (1 - tech.factor.loc[current])
 
                 elec_factor = dff['Elec_pop_calib'] / dff['Calibrated_pop']
                 dff['max_benefit_tech'] = second_best
@@ -1769,12 +1769,13 @@ class OnStove(DataProcessor):
             self.gdf.loc[index, f'net_benefit_{tech}_temp'] = np.nan
 
         isna = self.gdf["max_benefit_tech"].isna()
-        self.gdf.loc[isna, 'max_benefit_tech'] = self.gdf.loc[isna, temps].idxmax(axis=1)
+        if isna.sum() > 0:
+            self.gdf.loc[isna, 'max_benefit_tech'] = self.gdf.loc[isna, temps].idxmax(axis=1).asdtype(str)
         self.gdf['max_benefit_tech'] = self.gdf['max_benefit_tech'].str.replace("net_benefit_", "")
         self.gdf['max_benefit_tech'] = self.gdf['max_benefit_tech'].str.replace("_temp", "")
         self.gdf.loc[isna, "maximum_net_benefit"] = self.gdf.loc[isna, temps].max(axis=1)
 
-    # TODO: check if we ned this method
+    # TODO: check if we need this method
     def _add_admin_names(self, admin, column_name):
         if isinstance(admin, str):
             admin = gpd.read_file(admin)
@@ -2800,10 +2801,10 @@ class OnStove(DataProcessor):
                         # y = '(health_costs_avoided + opportunity_cost_gained + emissions_costs_saved + salvage_value' + \
                         #     ' - investment_costs - fuel_costs - om_costs)'
                         y = 'maximum_net_benefit'
-                        title = 'Net benefit per household (kUSD/yr)'
+                        title = 'Net benefit per household (USD/yr)'
                     elif variable == 'costs':
                         y = 'investment_costs - salvage_value + fuel_costs + om_costs'
-                        title = 'Costs per household (kUSD/yr)'
+                        title = 'Costs per household (USD/yr)'
                 else:
                     tech_list = []
                     for name, tech in self.techs.items():
@@ -2813,10 +2814,10 @@ class OnStove(DataProcessor):
                     x = 'tech'
                     if variable == 'net_benefit':
                         y = 'net_benefits'
-                        title = 'Net benefit per household (kUSD/yr)'
+                        title = 'Net benefit per household (USD/yr)'
                     elif variable == 'costs':
                         y = 'costs'
-                        title = 'Costs per household (kUSD/yr)'
+                        title = 'Costs per household (USD/yr)'
 
                     df = pd.DataFrame({x: [], y: []})
                     for tech in tech_list:
@@ -2868,7 +2869,7 @@ class OnStove(DataProcessor):
                  + scale_fill_manual(cmap, guide=False)
                  + scale_color_manual(cmap)
                  + theme_minimal()
-                 + labs(x='Net benefit per household (kUSD/yr)', color='Cooking technology')
+                 + labs(x='Net benefit per household (USD/yr)', color='Cooking technology')
                  )
         # compute lower and upper whiskers
         # ylim1 = dff['maximum_net_benefit'].quantile([0.1, 1])/1000
