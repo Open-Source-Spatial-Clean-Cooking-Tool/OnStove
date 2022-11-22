@@ -10,6 +10,7 @@ dependencies:
   - plotnine
   - psycopg2
   - psutil
+  - pyproj<=3.3.1
   - python=>3.10
   - python-decouple
   - rasterio
