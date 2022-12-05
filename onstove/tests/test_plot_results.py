@@ -89,7 +89,9 @@ def test_plot_stats():
                        height=1.5, width=3.5)
     results.plot_costs_benefits(labels=labels, save_as='benefits_costs', 
                                 height=1.5, width=2)
-    results.plot_benefit_distribution(type='box', groupby='None', cmap=cmap, 
-                                      labels=labels, save_as='max_benefits_box',
+    results.plot_benefit_distribution(type='histogram', groupby='None',
+                                      hh_divider=1000,
+                                      y_title='Households (thousands)', cmap=cmap,
+                                      labels=labels, save_as='max_benefits_hist',
                                       height=1.5, width=3.5)
     assert True
