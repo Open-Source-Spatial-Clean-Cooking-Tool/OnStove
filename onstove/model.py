@@ -2726,14 +2726,20 @@ class OnStove(DataProcessor):
         return df
 
     @staticmethod
-    def _histogram(df, cat_1, x, cmap, x_title, y_title, wrap, kwargs: Optional[dict] = None):
+    def _histogram(df, cat, x, cmap, x_title, y_title, wrap,
+                   kwargs: Optional[dict] = None, font_args: Optional[dict] = None):
         if kwargs is None:
-            kwargs = {}
+            max_val = df[x].max()
+            min_val = df[x].min()
+            binwidth = (max_val - min_val) * 0.05
+            kwargs = dict(binwidth=binwidth, alpha=0.5, size=0.3)
+        if font_args is None:
+            font_args = dict(size=6)
         p = (ggplot(df)
              + geom_histogram(aes(x=x,
                                   y=after_stat('count'),
-                                  fill=cat_1,
-                                  color=cat_1,
+                                  fill=cat,
+                                  color=cat,
                                   weight='Households',
                                   ),
                               **kwargs
@@ -2741,7 +2747,7 @@ class OnStove(DataProcessor):
              + scale_fill_manual(cmap)
              + scale_color_manual(cmap, guide=False)
              + theme_minimal()
-             + theme(subplots_adjust={'wspace': 0.25}, text=element_text(size=6))
+             + theme(subplots_adjust={'wspace': 0.25}, text=element_text(**font_args))
              + wrap
              + labs(x=x_title, y=y_title, fill='Cooking technology')
              )
@@ -2754,6 +2760,7 @@ class OnStove(DataProcessor):
                                   cmap: Optional[dict[str, str]] = None,
                                   x_title: Optional[str] = None, y_title: str = 'Households',
                                   kwargs: Optional[dict] = None,
+                                  font_args: Optional[dict] = None,
                                   height: float = 1.5, width: float = 2.5,
                                   save_as: Optional[bool] = None):
         """Displays a distribution plot with the net-benefits, benefits or costs for the technologies with the
@@ -2836,7 +2843,7 @@ class OnStove(DataProcessor):
             tech_list = df.groupby(cat_1)[[x]].mean()
             tech_list = tech_list.reset_index().sort_values(x)[cat_1].tolist()
 
-        if (groupby in self.gdf.columns) or (groupby.lower() == 'urban-rural'):
+        if (groupby in self.gdf.columns) or (groupby.lower() in ['urban-rural', 'rural-urban']):
             if groupby.lower() == 'urban-rural':
                 groupby = 'Urban'
                 df[groupby] = self.gdf[~self.gdf.index.duplicated()].loc[df.index, 'IsUrban']
@@ -2865,9 +2872,9 @@ class OnStove(DataProcessor):
         if type.lower() == 'box':
             warn("The box-plot type was deprecated in order to favor accurate representation "
                  "of the data, using 'histogram' instead.", DeprecationWarning, stacklevel=2)
-            p = self._histogram(df, cat_1, x, cmap, x_title, y_title, wrap, kwargs)
+            p = self._histogram(df, cat_1, x, cmap, x_title, y_title, wrap, kwargs, font_args)
         elif type.lower() == 'histogram':
-            p = self._histogram(df, cat_1, x, cmap, x_title, y_title, wrap, kwargs)
+            p = self._histogram(df, cat_1, x, cmap, x_title, y_title, wrap, kwargs, font_args)
         elif type.lower() == 'violin':
             raise NotImplementedError('Violin plots are not yet implemented')
             # p = (ggplot(df)
