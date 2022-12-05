@@ -54,7 +54,8 @@ intersphinx_mapping = {
     'numpy': ('https://numpy.org/doc/stable/', None),
     'matplotlib': ('https://matplotlib.org/stable', None),
     'skimage': ('https://scikit-image.org/docs/stable/', None),
-    'psycopg2': ('https://www.psycopg.org/docs/', None)
+    'psycopg2': ('https://www.psycopg.org/docs/', None),
+    'plotnine': ('https://plotnine.readthedocs.io/en/stable/', None)
 }
 
 

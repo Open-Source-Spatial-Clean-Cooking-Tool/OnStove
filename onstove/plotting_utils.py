@@ -94,7 +94,7 @@ def scale_bar(style='single', size=100000, extent=0.02, loc='lower right', ax=No
     """Function to create a :class:`ScaleBar` object and add it to a specified or current axes.
 
     This function takes as inputs the basic parameters needed to create a :class:`ScaleBar` and adds the object as a
-    :doc:`matplotlib.artist.Artist<matplotli:api/artist_api>` to a specified
+    :doc:`matplotlib.artist.Artist<matplotlib:api/artist_api>` to a specified
     :doc:`axes<matplotlib:api/axes_api>` or to the current :doc:`axes<matplotlib:api/axes_api>` in use if not
     specified.
 

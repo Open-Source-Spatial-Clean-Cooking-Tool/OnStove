@@ -5,6 +5,7 @@ from typing import Optional, Union, Callable
 from warnings import warn
 
 import dill
+import matplotlib
 import pandas as pd
 import numpy as np
 import geopandas as gpd
@@ -18,7 +19,6 @@ from time import time
 from matplotlib import cm
 from matplotlib.colors import to_rgb
 from matplotlib.offsetbox import (TextArea, AnnotationBbox, VPacker, HPacker)
-from mizani.formatters import scientific_format
 from rasterio import features
 from rasterio.fill import fillnodata
 from rasterio.warp import transform_bounds
@@ -36,11 +36,10 @@ from plotnine import (
     theme_minimal,
     theme,
     labs,
-    geom_boxplot,
-    geom_density,
     after_stat,
-    geom_point,
-    facet_wrap, geom_histogram, scale_y_log10, scale_y_continuous, scale_x_continuous, geom_violin, facet_grid
+    facet_wrap,
+    geom_histogram,
+    facet_grid
 )
 
 from onstove.technology import VectorLayer, RasterLayer, Technology, LPG, Biomass, Electricity, Biogas, Charcoal
@@ -2476,7 +2475,7 @@ class OnStove(DataProcessor):
                    cmap: Optional[dict[str, str]] = None,
                    x_variable: str = 'Calibrated_pop',
                    height: float = 1.5, width: float = 2.5,
-                   save_as: Optional[bool] = None):
+                   save_as: Optional[bool] = None) -> 'matplotlib.Figure':
         """Displays a bar plot with the population or households share using the technologies with highest net-benefits
         over the study area.
 
@@ -2518,6 +2517,11 @@ class OnStove(DataProcessor):
         save_as: str, optional
             If a string is passed, then the plot will be saved with that name as a ``pdf`` file in the
             :attr:`output_directory`.
+
+        Returns
+        -------
+        matplotlib.Figure
+            Figure object used to plot the technology split.
         """
         df = self.summary(total=False, pretty=False, labels=labels)
 
@@ -2549,7 +2553,7 @@ class OnStove(DataProcessor):
     def plot_costs_benefits(self, labels: Optional[dict[str, str]] = None,
                             cmap: Optional[dict[str, str]] = None,
                             height: float = 1.5, width: float = 2.5,
-                            save_as: Optional[bool] = None):
+                            save_as: Optional[bool] = None) -> 'matplotlib.Figure':
         """Displays a stacked bar plot with the aggregated total costs and benefits for the technologies with the
         highest net-benefits over the study area.
 
@@ -2587,6 +2591,11 @@ class OnStove(DataProcessor):
         save_as: str, optional
             If a string is passed, then the plot will be saved with that name as a ``pdf`` file in the
             :attr:`output_directory`.
+
+        Returns
+        -------
+        matplotlib.Figure
+            Figure object used to plot the cost and benefits.
         """
         df = self.summary(total=False, pretty=False, labels=labels)
         df['investment_costs'] -= df['salvage_value']
@@ -2716,6 +2725,7 @@ class OnStove(DataProcessor):
     #         p.save(file, height=height, width=width)
     #     else:
     #         return p
+
     @staticmethod
     def _reindex_df(df, weight_col):
         """expand the dataframe to prepare for resampling
@@ -2726,8 +2736,42 @@ class OnStove(DataProcessor):
         return df
 
     @staticmethod
-    def _histogram(df, cat, x, cmap, x_title, y_title, wrap,
-                   kwargs: Optional[dict] = None, font_args: Optional[dict] = None):
+    def _histogram(df: pd.DataFrame, cat: str, x: str, wrap: Union[facet_wrap, facet_grid],
+                   cmap: Optional[dict[str, str]] = None, x_title: str = '', y_title: str = '',
+                   kwargs: Optional[dict] = None, font_args: Optional[dict] = None) -> 'matplotlib.Figure':
+        """Function to plot a histogram of a selected variable divided in facets for each technology.
+
+        Parameters
+        ----------
+        df: pd.DataFrame
+            Dataframe subset containing the variable of interest ``x`` and the technology categories ``cat``.
+        cat: str
+            Column name of the technology categories.
+        x: str
+            Column name of the variable of interest.
+        wrap: facet_wrap or facet_grid
+            Object used for facetting the plot.
+        cmap: dictionary of str key-value pairs, optional
+            Dictionary with the colors to use for technology.
+        x_title: str, optional
+            Title of the x axis. If `None` is provided, then a default of ``Net benefit per household (USD/yr)`` or
+            ``Costs per household (USD/yr)`` will be used depending on the evaluated variable.
+        y_title: str, default 'Households'
+            Title of the y axis.
+        kwargs: dict, optional.
+            Dictionary of style arguments passed to the plotting function. For ``histrogram`` the default values used
+            are ``dict(binwidth=binwidth, alpha=0.5, size=0.3)``, where ``banwidth`` is calculated as 5% of the range of
+            the data.
+        font_args: dict, optional.
+            Dictionary of font arguments passed to the plotting function. If ``None`` is provided, default values of
+            ``dict(size=6)``. For available options see the :doc:`plotnine:generated/plotnine.themes.element_text`
+            object.
+
+        Returns
+        -------
+        matplotlib.Figure
+            Figure object used to plot the distribution.
+        """
         if kwargs is None:
             max_val = df[x].max()
             min_val = df[x].min()
@@ -2762,20 +2806,31 @@ class OnStove(DataProcessor):
                                   kwargs: Optional[dict] = None,
                                   font_args: Optional[dict] = None,
                                   height: float = 1.5, width: float = 2.5,
-                                  save_as: Optional[bool] = None):
+                                  save_as: Optional[bool] = None) -> 'matplotlib.Figure':
         """Displays a distribution plot with the net-benefits, benefits or costs for the technologies with the
         highest net-benefits throughout the households of the study area.
 
         Parameters
         ----------
-        type: str, default 'box'
-            The type of distribution plot to use. Available options are ``box`` and ``density``.
+        type: str, default 'histrogram'
+            The type of distribution plot to use. Available options are ``histrogram``.
+
+            .. warning::
+                The ``box`` plot option is deprecated from version 0.1.3 to favor accurate representation of data.
+                Use ``histrogram`` instead.
+
         groupby: str, default 'None'
             Groups the results by urban/rural split. Available options are ``None``, ``isurban`` and ``urban-rural``.
         variable: str, default 'net_benefit'
             Variable to use for the distribution. Available options are ``net_benefit``, ``benefits`` and ``costs``.
         best_mix: bool, default True
             Whether to plot only results for the highest net-benefit technologies, or all technologies.
+        hh_divider: int, default 1
+            Value used to scale the number of households. For example, if ``1000000`` is used, then the households will
+            be shown as millions.
+        var_divider: int, default 1
+            Value used to scale the analysed value. For example, if ``1000`` is used, then the variable will be divided
+            by ``1000``, this is useful to denote units in thousands.
         labels: dictionary of str key-value pairs, optional
             Dictionary with the keys-value pairs to use for each technology.
 
@@ -2803,6 +2858,19 @@ class OnStove(DataProcessor):
                ...         'Charcoal ICS': '#d4bdc5',
                ...         'Biogas': '#73AF48'}
 
+        x_title: str, optional
+            Title of the x axis. If `None` is provided, then a default of ``Net benefit per household (USD/yr)`` or
+            ``Costs per household (USD/yr)`` will be used depending on the evaluated variable.
+        y_title: str, default 'Households'
+            Title of the y axis.
+        kwargs: dict, optional.
+            Dictionary of style arguments passed to the plotting function. For ``histrogram`` the default values used
+            are ``dict(binwidth=binwidth, alpha=0.5, size=0.3)``, where ``banwidth`` is calculated as 5% of the range of
+            the data.
+        font_args: dict, optional.
+            Dictionary of font arguments passed to the plotting function. If ``None`` is provided, default values of
+            ``dict(size=6)``. For available options see the :doc:`plotnine:generated/plotnine.themes.element_text`
+            object.
         height: float, default 1.5
             The heihg of the figure in inches.
         width: float, default 2.5
@@ -2810,13 +2878,18 @@ class OnStove(DataProcessor):
         save_as: str, optional
             If a string is passed, then the plot will be saved with that name as a ``pdf`` file in the
             :attr:`output_directory`.
+
+        Returns
+        -------
+        matplotlib.Figure
+            Figure object used to plot the distribution
         """
         if best_mix:
             df = self.gdf[['max_benefit_tech', 'Calibrated_pop', 'Households', 'maximum_net_benefit',
                            'health_costs_avoided', 'opportunity_cost_gained', 'emissions_costs_saved',
                            'investment_costs', 'salvage_value', 'fuel_costs', 'om_costs']].copy()
             df = self._re_name(df, labels, 'max_benefit_tech')
-            cat_1 = 'max_benefit_tech'
+            cat = 'max_benefit_tech'
             tech_list = df.groupby('max_benefit_tech')[['Calibrated_pop']].sum()
             tech_list = tech_list.reset_index().sort_values('Calibrated_pop')['max_benefit_tech'].tolist()
             if variable == 'net_benefits':
@@ -2828,20 +2901,20 @@ class OnStove(DataProcessor):
             for name, tech in self.techs.items():
                 if tech.net_benefits is not None:
                     tech_list.append(name)
-            cat_1 = 'tech'
+            cat = 'tech'
             if variable == 'net_benefits':
                 x = 'net_benefits'
             elif variable == 'costs':
                 x = 'costs'
 
-            df = pd.DataFrame({cat_1: [], x: []})
+            df = pd.DataFrame({cat: [], x: []})
             for tech in tech_list:
-                df = pd.concat([df, pd.DataFrame({cat_1: [tech] * self.techs[tech][x].shape[0],
+                df = pd.concat([df, pd.DataFrame({cat: [tech] * self.techs[tech][x].shape[0],
                                                   x: self.techs[tech][x],
                                                   'Households': self.techs[tech].households})], axis=0)
-            df = self._re_name(df, labels, cat_1)
-            tech_list = df.groupby(cat_1)[[x]].mean()
-            tech_list = tech_list.reset_index().sort_values(x)[cat_1].tolist()
+            df = self._re_name(df, labels, cat)
+            tech_list = df.groupby(cat)[[x]].mean()
+            tech_list = tech_list.reset_index().sort_values(x)[cat].tolist()
 
         if (groupby in self.gdf.columns) or (groupby.lower() in ['urban-rural', 'rural-urban']):
             if groupby.lower() == 'urban-rural':
@@ -2852,9 +2925,9 @@ class OnStove(DataProcessor):
             else:
                 df[groupby] = self.gdf[~self.gdf.index.duplicated()].loc[df.index, groupby]
 
-            wrap = facet_grid(f'{cat_1} ~ {groupby}', scales='free_y')
+            wrap = facet_grid(f'{cat} ~ {groupby}', scales='free_y')
         else:
-            wrap = facet_wrap(cat_1, ncol=2, scales='free_y')
+            wrap = facet_wrap(cat, ncol=2, scales='free_y')
 
         if variable == 'net_benefits':
             x = 'net_benefits'
@@ -2867,14 +2940,14 @@ class OnStove(DataProcessor):
 
         df['Households'] /= hh_divider
         df[x] /= var_divider
-        df[cat_1] = df[cat_1].astype("category").cat.reorder_categories(tech_list[::-1])
+        df[cat] = df[cat].astype("category").cat.reorder_categories(tech_list[::-1])
 
         if type.lower() == 'box':
             warn("The box-plot type was deprecated in order to favor accurate representation "
                  "of the data, using 'histogram' instead.", DeprecationWarning, stacklevel=2)
-            p = self._histogram(df, cat_1, x, cmap, x_title, y_title, wrap, kwargs, font_args)
+            p = self._histogram(df, cat, x, wrap, cmap, x_title, y_title, kwargs, font_args)
         elif type.lower() == 'histogram':
-            p = self._histogram(df, cat_1, x, cmap, x_title, y_title, wrap, kwargs, font_args)
+            p = self._histogram(df, cat, x, wrap, cmap, x_title, y_title, kwargs, font_args)
         elif type.lower() == 'violin':
             raise NotImplementedError('Violin plots are not yet implemented')
             # p = (ggplot(df)
@@ -2903,8 +2976,6 @@ class OnStove(DataProcessor):
             p += labs(x='Settlement')
         else:
             p += theme(legend_position="none")
-            # p += scale_x_discrete(limits=tech_list)
-            # p += labs(x='')
 
         if save_as is not None:
             file = os.path.join(self.output_directory, f'{save_as}.pdf')
