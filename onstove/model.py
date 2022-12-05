@@ -2,6 +2,7 @@
 
 import os
 from typing import Optional, Union, Callable
+from warnings import warn
 
 import dill
 import pandas as pd
@@ -17,11 +18,13 @@ from time import time
 from matplotlib import cm
 from matplotlib.colors import to_rgb
 from matplotlib.offsetbox import (TextArea, AnnotationBbox, VPacker, HPacker)
+from mizani.formatters import scientific_format
 from rasterio import features
 from rasterio.fill import fillnodata
 from rasterio.warp import transform_bounds
 from plotnine import (
     ggplot,
+    element_text,
     aes,
     geom_col,
     geom_text,
@@ -37,7 +40,7 @@ from plotnine import (
     geom_density,
     after_stat,
     geom_point,
-    facet_wrap
+    facet_wrap, geom_histogram, scale_y_log10, scale_y_continuous, scale_x_continuous, geom_violin, facet_grid
 )
 
 from onstove.technology import VectorLayer, RasterLayer, Technology, LPG, Biomass, Electricity, Biogas, Charcoal
@@ -2713,11 +2716,44 @@ class OnStove(DataProcessor):
     #         p.save(file, height=height, width=width)
     #     else:
     #         return p
+    @staticmethod
+    def _reindex_df(df, weight_col):
+        """expand the dataframe to prepare for resampling
+        result is 1 row per count per sample"""
+        df = df.reset_index()
+        df = df.reindex(df.index.repeat(df[weight_col]))
+        df.reset_index(drop=True, inplace=True)
+        return df
 
-    def plot_benefit_distribution(self, type: str = 'box', groupby: str = 'None',
-                                  variable: str = 'net_benefit', best_mix: bool = True,
+    @staticmethod
+    def _histogram(df, cat_1, x, cmap, x_title, y_title, wrap, kwargs: Optional[dict] = None):
+        if kwargs is None:
+            kwargs = {}
+        p = (ggplot(df)
+             + geom_histogram(aes(x=x,
+                                  y=after_stat('count'),
+                                  fill=cat_1,
+                                  color=cat_1,
+                                  weight='Households',
+                                  ),
+                              **kwargs
+                              )
+             + scale_fill_manual(cmap)
+             + scale_color_manual(cmap, guide=False)
+             + theme_minimal()
+             + theme(subplots_adjust={'wspace': 0.25}, text=element_text(size=6))
+             + wrap
+             + labs(x=x_title, y=y_title, fill='Cooking technology')
+             )
+        return p
+
+    def plot_benefit_distribution(self, type: str = 'histogram', groupby: str = 'None',
+                                  variable: str = 'net_benefits', best_mix: bool = True,
+                                  hh_divider: int = 1, var_divider: int = 1,
                                   labels: Optional[dict[str, str]] = None,
                                   cmap: Optional[dict[str, str]] = None,
+                                  x_title: Optional[str] = None, y_title: str = 'Households',
+                                  kwargs: Optional[dict] = None,
                                   height: float = 1.5, width: float = 2.5,
                                   save_as: Optional[bool] = None):
         """Displays a distribution plot with the net-benefits, benefits or costs for the technologies with the
@@ -2768,120 +2804,102 @@ class OnStove(DataProcessor):
             If a string is passed, then the plot will be saved with that name as a ``pdf`` file in the
             :attr:`output_directory`.
         """
-        if type.lower() == 'box':
-            if groupby.lower() == 'isurban':
-                df = self.gdf.groupby(['IsUrban', 'max_benefit_tech'])[['health_costs_avoided',
-                                                                        'opportunity_cost_gained',
-                                                                        'emissions_costs_saved',
-                                                                        'salvage_value',
-                                                                        'investment_costs',
-                                                                        'fuel_costs',
-                                                                        'om_costs',
-                                                                        'Households',
-                                                                        'Calibrated_pop']].sum()
-                df.reset_index(inplace=True)
-                df = self._re_name(df, labels, 'max_benefit_tech')
-                tech_list = df.groupby('max_benefit_tech')[['Calibrated_pop']].sum()
-                tech_list = tech_list.reset_index().sort_values('Calibrated_pop')['max_benefit_tech'].tolist()
-                x = 'max_benefit_tech'
-            elif groupby.lower() == 'urban-rural':
-                df = self.gdf.copy()
-                df = self._re_name(df, labels, 'max_benefit_tech')
-                df['Urban'] = df['IsUrban'] > 20
-                df['Urban'].replace({True: 'Urban', False: 'Rural'}, inplace=True)
-                x = 'Urban'
-            else:
-                if best_mix:
-                    df = self.gdf.copy()
-                    df = self._re_name(df, labels, 'max_benefit_tech')
-                    tech_list = df.groupby('max_benefit_tech')[['Calibrated_pop']].sum()
-                    tech_list = tech_list.reset_index().sort_values('Calibrated_pop')['max_benefit_tech'].tolist()
-                    x = 'max_benefit_tech'
-                    if variable == 'net_benefit':
-                        # y = '(health_costs_avoided + opportunity_cost_gained + emissions_costs_saved + salvage_value' + \
-                        #     ' - investment_costs - fuel_costs - om_costs)'
-                        y = 'maximum_net_benefit'
-                        title = 'Net benefit per household (USD/yr)'
-                    elif variable == 'costs':
-                        y = 'investment_costs - salvage_value + fuel_costs + om_costs'
-                        title = 'Costs per household (USD/yr)'
-                else:
-                    tech_list = []
-                    for name, tech in self.techs.items():
-                        if tech.benefits is not None:
-                            # if 'net_benefit' in tech.__dict__.keys():
-                            tech_list.append(name)
-                    x = 'tech'
-                    if variable == 'net_benefit':
-                        y = 'net_benefits'
-                        title = 'Net benefit per household (USD/yr)'
-                    elif variable == 'costs':
-                        y = 'costs'
-                        title = 'Costs per household (USD/yr)'
-
-                    df = pd.DataFrame({x: [], y: []})
-                    for tech in tech_list:
-                        df = pd.concat([df, pd.DataFrame({x: [tech] * self.techs[tech][y].shape[0],
-                                                          y: self.techs[tech][y]})], axis=0)
-                    df = self._re_name(df, labels, x)
-                    tech_list = df.groupby(x)[[y]].mean()
-                    tech_list = tech_list.reset_index().sort_values(y)[x].tolist()
-
-            p = (ggplot(df)
-                 + geom_boxplot(aes(x=x,
-                                    y=y,
-                                    fill=x,
-                                    color=x
-                                    ),
-                                alpha=0.5, outlier_alpha=0.1, raster=True)
-                 + scale_fill_manual(cmap)
-                 + scale_color_manual(cmap, guide=False)
-                 + coord_flip()
-                 + theme_minimal()
-                 + labs(y=title, fill='Cooking technology')
-                 )
-            if groupby.lower() == 'urbanrural':
-                p += labs(x='Settlement')
-            else:
-                p += theme(legend_position="none")
-                p += scale_x_discrete(limits=tech_list)
-                p += labs(x='')
-
-        elif type.lower() == 'density':
-            df = self.gdf.groupby(['IsUrban', 'max_benefit_tech'])[['health_costs_avoided',
-                                                                    'opportunity_cost_gained',
-                                                                    'emissions_costs_saved',
-                                                                    'salvage_value',
-                                                                    'investment_costs',
-                                                                    'fuel_costs',
-                                                                    'om_costs',
-                                                                    'Households',
-                                                                    'Calibrated_pop']].sum()
-            df.reset_index(inplace=True)
+        if best_mix:
+            df = self.gdf[['max_benefit_tech', 'Calibrated_pop', 'Households', 'maximum_net_benefit',
+                           'health_costs_avoided', 'opportunity_cost_gained', 'emissions_costs_saved',
+                           'investment_costs', 'salvage_value', 'fuel_costs', 'om_costs']].copy()
             df = self._re_name(df, labels, 'max_benefit_tech')
-            p = (ggplot(df)
-                 + geom_density(aes(
-                        x='(health_costs_avoided + opportunity_cost_gained + emissions_costs_saved' +
-                          ' + salvage_value - investment_costs - fuel_costs - om_costs)',
-                        y=after_stat('count'),
-                        fill='max_benefit_tech', color='max_benefit_tech'),
-                        alpha=0.1)
-                 + scale_fill_manual(cmap, guide=False)
-                 + scale_color_manual(cmap)
-                 + theme_minimal()
-                 + labs(x='Net benefit per household (USD/yr)', color='Cooking technology')
-                 )
-        # compute lower and upper whiskers
-        # ylim1 = dff['maximum_net_benefit'].quantile([0.1, 1])/1000
+            cat_1 = 'max_benefit_tech'
+            tech_list = df.groupby('max_benefit_tech')[['Calibrated_pop']].sum()
+            tech_list = tech_list.reset_index().sort_values('Calibrated_pop')['max_benefit_tech'].tolist()
+            if variable == 'net_benefits':
+                df.rename({'maximum_net_benefit': 'net_benefits'}, inplace=True, axis=1)
+            elif variable == 'costs':
+                df['costs'] = df['investment_costs'] - df['salvage_value'] + df['fuel_costs'] + df['om_costs']
+        else:
+            tech_list = []
+            for name, tech in self.techs.items():
+                if tech.net_benefits is not None:
+                    tech_list.append(name)
+            cat_1 = 'tech'
+            if variable == 'net_benefits':
+                x = 'net_benefits'
+            elif variable == 'costs':
+                x = 'costs'
 
-        # scale y limits based on ylim1
-        # p = p + coord_flip()
+            df = pd.DataFrame({cat_1: [], x: []})
+            for tech in tech_list:
+                df = pd.concat([df, pd.DataFrame({cat_1: [tech] * self.techs[tech][x].shape[0],
+                                                  x: self.techs[tech][x],
+                                                  'Households': self.techs[tech].households})], axis=0)
+            df = self._re_name(df, labels, cat_1)
+            tech_list = df.groupby(cat_1)[[x]].mean()
+            tech_list = tech_list.reset_index().sort_values(x)[cat_1].tolist()
+
+        if (groupby in self.gdf.columns) or (groupby.lower() == 'urban-rural'):
+            if groupby.lower() == 'urban-rural':
+                groupby = 'Urban'
+                df[groupby] = self.gdf[~self.gdf.index.duplicated()].loc[df.index, 'IsUrban']
+                df[groupby] = df[groupby] > 20
+                df[groupby].replace({True: 'Urban', False: 'Rural'}, inplace=True)
+            else:
+                df[groupby] = self.gdf[~self.gdf.index.duplicated()].loc[df.index, groupby]
+
+            wrap = facet_grid(f'{cat_1} ~ {groupby}', scales='free_y')
+        else:
+            wrap = facet_wrap(cat_1, ncol=2, scales='free_y')
+
+        if variable == 'net_benefits':
+            x = 'net_benefits'
+            if x_title is None:
+                x_title = 'Net benefit per household (USD/yr)'
+        elif variable == 'costs':
+            x = 'costs'
+            if x_title is None:
+                x_title = 'Costs per household (USD/yr)'
+
+        df['Households'] /= hh_divider
+        df[x] /= var_divider
+        df[cat_1] = df[cat_1].astype("category").cat.reorder_categories(tech_list[::-1])
+
+        if type.lower() == 'box':
+            warn("The box-plot type was deprecated in order to favor accurate representation "
+                 "of the data, using 'histogram' instead.", DeprecationWarning, stacklevel=2)
+            p = self._histogram(df, cat_1, x, cmap, x_title, y_title, wrap, kwargs)
+        elif type.lower() == 'histogram':
+            p = self._histogram(df, cat_1, x, cmap, x_title, y_title, wrap, kwargs)
+        elif type.lower() == 'violin':
+            raise NotImplementedError('Violin plots are not yet implemented')
+            # p = (ggplot(df)
+            #      + geom_violin(aes(y=x,
+            #                        x=cat_1,
+            #                        fill=cat_1,
+            #                        color=cat_1,
+            #                        weight='Households',
+            #                        ),
+            #                    alpha=0.5,
+            #                    stat='count',
+            #                    # size=0.3,
+            #                    # raster=True
+            #                    )
+            #      + scale_fill_manual(cmap)
+            #      + scale_color_manual(cmap, guide=False)
+            #      + theme_minimal()
+            #      # + theme(subplots_adjust={'wspace':0.25}, text=element_text(size=6))
+            #      # + facet_wrap(cat_1, ncol=1, scales='free_y')#, as_table=False)
+            #      # + scale_x_continuous(labels=scientific_format())
+            #      + coord_flip()
+            #      + labs(y=x_title, x=y_title, fill='Cooking technology')
+            #      )
+
+        if groupby.lower() == 'urbanrural':
+            p += labs(x='Settlement')
+        else:
+            p += theme(legend_position="none")
+            # p += scale_x_discrete(limits=tech_list)
+            # p += labs(x='')
 
         if save_as is not None:
-            # if groupby.lower() not in ['none', '']:
-            #     sufix = f'_{groupby}'
-            # else:
-            #     sufix = ''
             file = os.path.join(self.output_directory, f'{save_as}.pdf')
             p.save(file, height=height, width=width, dpi=600)
         else:
