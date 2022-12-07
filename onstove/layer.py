@@ -201,7 +201,7 @@ class VectorLayer(_Layer):
         """Wrapper property to get the  west, south, east, north bounds of the dataset using the ``total_bounds``
         property of ``Pandas``.
         """
-        return self.data['geometry'].total_bounds
+        return self.data.total_bounds
 
     def read_layer(self, path: str,
                    conn: Optional['sqlalchemy.engine.Connection'] = None,
@@ -308,12 +308,10 @@ class VectorLayer(_Layer):
         """
         if isinstance(base_layer, str):
             with rasterio.open(base_layer) as src:
-                bounds = src.bounds
                 width = src.width
                 height = src.height
                 transform = src.transform
         elif isinstance(base_layer, RasterLayer):
-            bounds = base_layer.bounds
             width = base_layer.meta['width']
             height = base_layer.meta['height']
             transform = base_layer.meta['transform']
@@ -480,13 +478,12 @@ class VectorLayer(_Layer):
         RasterLayer
             :class:`RasterLayer` with the rasterized dataset of the current :class:`VectorLayer`.
         """
-        bounds = self.data['geometry'].total_bounds
         if transform is None:
             if (width is None) or (height is None):
-                height, width = RasterLayer.shape_from_cell(bounds, cell_height, cell_width)
-            transform = rasterio.transform.from_bounds(*bounds, width, height)
+                height, width = RasterLayer.shape_from_cell(self.bounds, cell_height, cell_width)
+            transform = rasterio.transform.from_bounds(*self.bounds, width, height)
         elif width is None or height is None:
-            height, width = RasterLayer.shape_from_cell(bounds, transform[0], -transform[4])
+            height, width = RasterLayer.shape_from_cell(self.bounds, transform[0], -transform[4])
 
         if attribute:
             shapes = ((g, v) for v, g in zip(self.data[attribute].values, self.data['geometry'].values))
@@ -512,7 +509,6 @@ class VectorLayer(_Layer):
         raster = RasterLayer(name=self.name)
         raster.data = rasterized
         raster.meta = meta
-        # raster.bounds = bounds
 
         if output_path:
             raster.save(output_path)
@@ -581,7 +577,8 @@ class VectorLayer(_Layer):
                                                  self.name + f' - restriction{i}',
                                                  layer_path, **kwargs))
 
-    def plot(self, ax: Optional[matplotlib.axes.Axes] = None, style: dict = None):
+    def plot(self, ax: Optional[matplotlib.axes.Axes] = None, column=None, style: dict = None,
+             legend_kwds=None):
         """Plots a map of the layer using custom styles.
 
         This is, in principle, a wrapper function for the :doc:`geopandas:docs/reference/api/geopandas.GeoDataFrame.plot`
@@ -596,18 +593,51 @@ class VectorLayer(_Layer):
             accepted by :doc:`geopandas:docs/reference/api/geopandas.GeoDataFrame.plot`. If not defined, then the
             :attr:`style` attribute is used.
         """
+        if legend_kwds is None:
+            legend_kwds = {}
         if style is None:
             style = self.style
 
         if ax is None:
-            ax = self.data.plot(**style,
-                                label=self.name)
+            ax = self.data.plot(label=self.name, column=column,
+                                legend_kwds=legend_kwds, **style)
+            if column is None:
+                lgnd = ax.legend()
+            else:
+                lgnd = ax.get_legend()
+            ax.add_artist(lgnd)
             # lgnd = ax.legend(loc="upper right", prop={'size': 12})
             # lgnd.legendHandles[0]._sizes = [60]
         else:
-            self.data.plot(ax=ax,
-                           **style,
-                           label=self.name)
+            # if ax.get_legend() is None:
+            #     handles = []
+            #     labels = []
+            # else:
+            #     handles = ax.get_legend().legendHandles
+            #     labels = [t.get_text() for t in ax.get_legend().get_texts()]
+            #     # ax.legend(handles=handles, labels=labels)
+            ax = self.data.plot(ax=ax, label=self.name, legend_kwds=legend_kwds,
+                                column=column, legend=True, **style)
+
+            if column is None:
+                lgnd = ax.legend()
+            else:
+                lgnd = ax.get_legend()
+            ax.add_artist(lgnd)
+            # new_handles = ax.get_legend().legendHandles
+            # new_labels = [t.get_text() for t in ax.get_legend().get_texts()]
+            # new_handles, new_labels = ax.get_legend_handles_labels()
+
+            # ax.legend(handles=self.remove_duplicates(handles, new_handles),
+            #           labels=self.remove_duplicates(labels, new_labels))
+        return ax
+
+    @staticmethod
+    def remove_duplicates(list1, list2):
+        for i in list1:
+            if i in list2:
+                del i
+        return list1 + list2
 
 
 class RasterLayer(_Layer):
@@ -771,7 +801,7 @@ class RasterLayer(_Layer):
         """
         if path:
             with rasterio.open(path) as src:
-                if window:
+                if window is not None:
                     transform = src.transform
                     self.meta = src.meta.copy()
                     window = windows.from_bounds(*window, transform=transform)
@@ -785,7 +815,19 @@ class RasterLayer(_Layer):
                     self.meta = src.meta
 
             if self.meta['nodata'] is None:
-                self.meta['nodata'] = np.nan
+                if self.data.dtype == int:
+                    self.meta['nodata'] = 0
+                    raise Warning(f"The {self.name} layer do not have a defined nodata value, thus 0 was assigned. "
+                                  f"You can change this defining the nodata value in the metadata of the variable as: "
+                                  f"variable.meta['nodata'] = value")
+                elif self.data.dtype == float:
+                    self.meta['nodata'] = np.nan
+                    raise Warning(f"The {self.name} layer do not have a defined nodata value, thus np.nan was assigned."
+                                  f" You can change this defining the nodata value in the metadata of the variable as: "
+                                  f"variable.meta['nodata'] = value")
+                else:
+                    raise Warning(f"The {self.name} layer do not have a defined nodata value, please define the nodata "
+                                  f"value in the metadata of the variable with: variable.meta['nodata'] = value")
         self.path = path
 
     @staticmethod
@@ -805,12 +847,12 @@ class RasterLayer(_Layer):
         cell_width: float
             The cell width in units consistent with the raster's crs.
         """
-        height = round((bounds[3] - bounds[1]) / cell_height)
-        width = round((bounds[2] - bounds[0]) / cell_width)
+        height = int((bounds[3] - bounds[1]) / cell_height)
+        width = int((bounds[2] - bounds[0]) / cell_width)
         return height, width
 
     def mask(self, mask_layer: VectorLayer, output_path: Optional[str] = None,
-             crop: bool = False, all_touched: bool = False):
+             crop: bool = True, all_touched: bool = False):
         """Creates a masked version of the layer, based on an input shape given by a :class:`VectorLayer`.
 
         It uses the :doc:`rasterio.mas.mask<rasterio:api/rasterio.mask>` function to create a masked version of the
@@ -839,8 +881,8 @@ class RasterLayer(_Layer):
             total_bounds = mask_layer.data['geometry'].total_bounds
             window = windows.from_bounds(*total_bounds, transform=self.meta['transform'])
             height, width = self.shape_from_cell(total_bounds, self.meta['transform'][0], -self.meta['transform'][4])
-            row_off = max(round(window.row_off), 0)
-            col_off = max(round(window.col_off), 0)
+            row_off = max(int(window.row_off), 0)
+            col_off = max(int(window.col_off), 0)
             window = windows.Window(
                 col_off=col_off,
                 row_off=row_off,
@@ -1240,29 +1282,32 @@ class RasterLayer(_Layer):
 
     def cumulative_count(self, min_max: list[float, float] = [0.02, 0.98]) -> np.ndarray:
         """Calculates a new data array flattening the raster's data values that fall in in either of the lower or upper
-         specified percentile.
+        specified percentile.
 
-         For example, a if we use a ``min_max`` of ``[0.02, 0.98]``, the array will be first ordered in ascending
-         order and then all values that fall inside the lowest 2% will be "flattened" giving them the value of the
-         highest number inside that 2%. The same is done for the upper bound, where all data values that fall in the
-         highest 2% will be given the value of the lowest number within that 2%.
+        For example, a if we use a ``min_max`` of ``[0.02, 0.98]``, the array will be first ordered in ascending
+        order and then all values that fall inside the lowest 2% will be "flattened" giving them the value of the
+        highest number inside that 2%. The same is done for the upper bound, where all data values that fall in the
+        highest 2% will be given the value of the lowest number within that 2%.
 
-         Parameters
-         ----------
-         min_max: list of float
-            List of lower and upper limits to consider for the cumulative count.
+        Parameters
+        ----------
+        min_max: list of float
+           List of lower and upper limits to consider for the cumulative count.
 
-         Returns
-         -------
-         np.ndarray
-            Raster data array with the flattened values.
-         """
-        x = self.data.flat
+        Returns
+        -------
+        np.ndarray
+           Raster data array with the flattened values.
+        """
+        x = self.data.astype('float64').copy()
+        x[x == self.meta['nodata']] = np.nan
+        x = x.flat
         x = np.sort(x[~np.isnan(x)])
         count = x.shape[0]
         max_val = x[int(count * min_max[1])]
         min_val = x[int(count * min_max[0])]
         layer = self.data.copy()
+        layer[layer == self.meta['nodata']] = np.nan
         layer[layer > max_val] = max_val
         layer[layer < min_val] = min_val
         return layer
@@ -1287,7 +1332,9 @@ class RasterLayer(_Layer):
         -----
         Refer to :doc:`numpy:reference/generated/numpy.quantile` for more information.
         """
-        x = self.data.flat
+        x = self.data.astype('float64').copy()
+        x[x == self.meta['nodata']] = np.nan
+        x = x.flat
         x = x[~np.isnan(x)].copy()
         return np.quantile(x, quantiles)
 
@@ -1312,6 +1359,7 @@ class RasterLayer(_Layer):
         """
         qs = self.get_quantiles(quantiles)
         layer = self.data.copy()
+        layer[layer == self.meta['nodata']] = np.nan
         i = 0
         min_val = np.nanmin(layer)
         layer = layer - min_val
@@ -1323,11 +1371,16 @@ class RasterLayer(_Layer):
             else:
                 new_layer[(layer >= qs[i - 1]) & (layer < qs[i])] = quantiles[i - 1] * 100
             i += 1
-        new_layer[layer >= qs[i - 1]] = quantiles[i - 1] * 100
+        # if quantiles[i - 1] >= 1:
+        #     new_layer[layer >= qs[i - 2]] = 100
+        # else:
+        new_layer[(layer >= qs[i - 2]) & (layer <= qs[i - 1])] = quantiles[i - 2] * 100
+        new_layer[layer > qs[i - 1]] = np.nan
         return new_layer
 
     @staticmethod
-    def category_legend(im, categories, legend_position=(1.05, 1), title='', legend_cols=1,
+    def category_legend(im, ax, categories, current_handles_labels=None,
+                        legend_position=(1.05, 1), title='', legend_cols=1,
                         legend_prop={'title': {'size': 12, 'weight': 'bold'}, 'size': 12}):
         """Creates a category legend for the current plot.
 
@@ -1340,7 +1393,6 @@ class RasterLayer(_Layer):
         legend_cols
         legend_prop
         """
-
         values = list(categories.values())
         titles = list(categories.keys())
 
@@ -1350,14 +1402,22 @@ class RasterLayer(_Layer):
         # put those patched as legend-handles into the legend
         prop = legend_prop.copy()
         prop.pop('title')
-        legend = plt.legend(handles=patches, bbox_to_anchor=legend_position, loc='upper left',
-                            borderaxespad=0., ncol=legend_cols, prop=prop)
+        # ax.legend(handles=patches)
+        # if current_handles_labels is not None:
+        #     new_handles = ax.get_legend().legendHandles
+        #     new_labels = [t.get_text() for t in ax.get_legend().get_texts()]
+        #     handles = current_handles_labels[0] + new_handles
+        #     labels = current_handles_labels[1] + new_labels
+        legend = ax.legend(handles=patches, bbox_to_anchor=legend_position, loc='upper left',
+                           borderaxespad=0., ncol=legend_cols, prop=prop)
         legend.set_title(title, prop=legend_prop['title'])
         legend._legend_box.align = "left"
+        ax.add_artist(legend)
+
 
     def plot(self, cmap='viridis', ticks=None, tick_labels=None,
              cumulative_count=None, quantiles=None, categories=None, legend_position=(1.05, 1),
-             admin_layer=None, title=None, ax=None, dpi=150,
+             admin_layer: Union[gpd.GeoDataFrame, VectorLayer] = None, title=None, ax=None, dpi=150,
              legend=True, legend_title='', legend_cols=1,
              legend_prop={'title': {'size': 12, 'weight': 'bold'}, 'size': 12},
              rasterized=True, colorbar=True, return_image=False, figsize=(6.4, 4.8),
@@ -1401,16 +1461,22 @@ class RasterLayer(_Layer):
         elif quantiles is not None:
             layer = self.quantiles(quantiles)
             qs = self.get_quantiles(quantiles)
-            categories = {round(i, 4): j * 100 for i, j in zip(qs, quantiles)}
+            categories = {}
+            for i, j in enumerate(quantiles):
+                if i == 0:
+                    categories[f'$<{int(qs[i])}$'] = j * 100
+                elif j >= 1:
+                    categories[f'$\geq{int(qs[i - 1])}$'] = j * 100
+                elif i < len(qs):
+                    categories[f'${int(qs[i - 1])}$' + ' to ' + f'${int(qs[i])}$'] = j * 100
             legend = True
             if legend_title is None:
                 legend_title = 'Quantiles'
         else:
             layer = self.data
+            layer = layer.astype('float64')
+            layer[layer == self.meta['nodata']] = np.nan
 
-        layer = layer.astype('float64')
-
-        layer[layer == self.meta['nodata']] = np.nan
 
         if ax is None:
             fig, ax = plt.subplots(1, 1, figsize=figsize, dpi=dpi)
@@ -1418,11 +1484,22 @@ class RasterLayer(_Layer):
         if isinstance(cmap, dict):
             values = np.sort(np.unique(layer[~np.isnan(layer)]))
             cmap = ListedColormap([to_rgb(cmap[i]) for i in values])
+
+        if ax.get_legend() is not None:
+            if ax.get_legend().legendHandles is not None:
+                handles = ax.get_legend().legendHandles
+                labels = [t.get_text() for t in ax.get_legend().get_texts()]
+                ax.legend(handles=handles, labels=labels)
+        else:
+            handles = []
+            labels = []
+
         cax = ax.imshow(layer, cmap=cmap, extent=extent, interpolation='none', zorder=1, rasterized=rasterized)
 
         if legend:
             if categories:
-                self.category_legend(cax, categories, legend_position=legend_position,
+                self.category_legend(cax, ax, categories, current_handles_labels=(handles, labels),
+                                     legend_position=legend_position,
                                      title=legend_title, legend_cols=legend_cols, legend_prop=legend_prop)
             elif colorbar:
                 colorbar = dict(shrink=0.8)
@@ -1433,6 +1510,8 @@ class RasterLayer(_Layer):
                 if tick_labels:
                     cbar.ax.set_yticklabels(tick_labels)
                 cbar.ax.set_ylabel(self.name.replace('_', ' '))
+        if isinstance(admin_layer, VectorLayer):
+            admin_layer = admin_layer.data
         if isinstance(admin_layer, gpd.GeoDataFrame):
             if admin_layer.crs != self.meta['crs']:
                 admin_layer.to_crs(self.meta['crs'], inplace=True)
@@ -1466,8 +1545,7 @@ class RasterLayer(_Layer):
                 raise ValueError('Parameter `north_arrow` need to be a dictionary with parameter/value pairs, '
                                  'accepted by the `onstove.north_arrow` function.')
 
-        if return_image:
-            return cax
+        return ax
 
     def save_image(self, output_path, type='png', cmap='viridis', ticks=None, tick_labels=None,
                    cumulative_count=None, categories=None, legend_position=(1.05, 1), figsize=(6.4, 4.8),

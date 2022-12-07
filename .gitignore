@@ -146,37 +146,11 @@ Nepal paper OnStove/TechShares.ipynb
 
 .DS_Store
 
-example/GHA.csv
-example/GHA_file_tech_specs.csv
-example/Ghana.zip
-example/Ghana/Administrative/Country_boundaries/Country_boundaries.geojson
-example/Ghana/Forest/Forest.tif
-example/Ghana/Forest/Forest.tif.aux.xml
-example/Ghana/Friction/Friction.tif
-example/Ghana/Friction/Friction.tif.aux.xml
-example/Ghana/Livestock/buffaloes/buffaloes.tif
-example/Ghana/Livestock/buffaloes/buffaloes.tif.aux.xml
-example/Ghana/Livestock/cattles/cattles.tif
-example/Ghana/Livestock/cattles/cattles.tif.aux.xml
-example/Ghana/Livestock/goats/goats.tif
-example/Ghana/Livestock/goats/goats.tif.aux.xml
-example/Ghana/Livestock/pigs/pigs.tif
-example/Ghana/Livestock/pigs/pigs.tif.aux.xml
-example/Ghana/Livestock/poultry/poultry.tif
-example/Ghana/Livestock/poultry/poultry.tif.aux.xml
-example/Ghana/Livestock/sheeps/sheeps.tif
-example/Ghana/Livestock/sheeps/sheeps.tif.aux.xml
-example/Ghana/MV lines/MV_lines.geojson
-example/Ghana/Night time lights/Night_time_lights.tif
-example/Ghana/Night time lights/Night_time_lights.tif.aux.xml
-example/Ghana/Population/Population.tif
-example/Ghana/Population/Population.tif.aux.xml
-example/Ghana/Relative wealth index/GHA_relative_wealth_index.csv
-example/Ghana/Temperature/Temperature.tif
-example/Ghana/Temperature/Temperature.tif.aux.xml
-example/Ghana/Traveltime/Traveltime.tif
-example/Ghana/Traveltime/Traveltime.tif.aux.xml
-example/Ghana/Urban/Urban.tif
-example/Ghana/Urban/Urban.tif.aux.xml
-example/Ghana/Water scarcity/Water scarcity.gpkg
+example/*
+!example/OnStove_notebook.ipynb
+!example/soc_specs.csv
+!example/tech_specs.csv
 
+onstove/tests/data/*
+!onstove/tests/data/.gitkeep
+onstove/tests/output

@@ -2,8 +2,10 @@
 
 import os
 from typing import Optional, Union, Callable
+from warnings import warn
 
 import dill
+import matplotlib
 import pandas as pd
 import numpy as np
 import geopandas as gpd
@@ -22,6 +24,7 @@ from rasterio.fill import fillnodata
 from rasterio.warp import transform_bounds
 from plotnine import (
     ggplot,
+    element_text,
     aes,
     geom_col,
     geom_text,
@@ -33,11 +36,10 @@ from plotnine import (
     theme_minimal,
     theme,
     labs,
-    geom_boxplot,
-    geom_density,
     after_stat,
-    geom_point,
-    facet_wrap
+    facet_wrap,
+    geom_histogram,
+    facet_grid
 )
 
 from onstove.technology import VectorLayer, RasterLayer, Technology, LPG, Biomass, Electricity, Biogas, Charcoal
@@ -155,7 +157,7 @@ class DataProcessor:
                   postgres: bool = False, base_layer: bool = False, resample: str = 'nearest',
                   normalization: str = 'MinMax', inverse: bool = False, distance_method: str = 'proximity',
                   distance_limit: Optional[Callable[[np.ndarray], np.ndarray]] = None,
-                  window: Optional['rasterio.windows.Window'] = None, rescale: bool = False):
+                  window: Optional[bool] = False, rescale: bool = False):
         """
         Adds a new layer (type VectorLayer or RasterLayer) to the DataProcessor class
 
@@ -233,6 +235,8 @@ class DataProcessor:
             else:
                 if window:
                     window = self.mask_layer.data
+                else:
+                    window = None
                 layer = VectorLayer(category, name, path,
                                     normalization=normalization,
                                     distance_method=distance_method,
@@ -245,7 +249,11 @@ class DataProcessor:
                     src_crs = src.meta['crs']
                 if src_crs != self.mask_layer.data.crs:
                     bounds = transform_bounds(self.mask_layer.data.crs, src_crs, *self.mask_layer.bounds)
+                else:
+                    bounds = self.mask_layer.bounds
                 window = bounds
+            else:
+                window = None
             layer = RasterLayer(category, name, path,
                                 normalization=normalization, inverse=inverse,
                                 distance_method=distance_method, resample=resample,
@@ -780,6 +788,15 @@ class OnStove(DataProcessor):
         self.clean_cooking_access_r = None
         self.electrified_weight = None
 
+        self.specs = {'start_year': 2020, 'end_year': 2030,
+                      'end_year_target': 1.0, 'meals_per_day': 3.0, 'infra_weight': 1.0,
+                      'ntl_weight': 1.0, 'pop_weight': 1.0,'discount_rate': 0.03,
+                      'health_spillover_parameter': 0.112,
+                      'w_costs': 1.0, 'w_environment': 1.0, 'w_health': 1.0,
+                      'w_spillover': 1.0, 'w_time': 1.0}
+
+        self.gdf = gpd.GeoDataFrame()
+
     def read_scenario_data(self, path_to_config: str, delimiter=','):
         """Reads the scenario data into a dictionary
         """
@@ -788,21 +805,35 @@ class OnStove(DataProcessor):
             reader = DictReader(csvfile, delimiter=delimiter)
             config_file = list(reader)
             for row in config_file:
-                if row['Value']:
+                if row['Value'] is not None:
                     if row['data_type'] == 'int':
-                        config[row['Param']] = int(row['Value'])
+                        config[row['Param'].lower()] = int(row['Value'])
                     elif row['data_type'] == 'float':
-                        config[row['Param']] = float(row['Value'])
+                        config[row['Param'].lower()] = float(row['Value'])
                     elif row['data_type'] == 'string':
-                        config[row['Param']] = str(row['Value'])
+                        config[row['Param'].lower()] = str(row['Value'])
                     elif row['data_type'] == 'bool':
-                        config[row['Param']] = str(row['Value']).lower() in ['true', 't', 'yes', 'y', '1']
+                        config[row['Param'].lower()] = str(row['Value']).lower() in ['true', 't', 'yes', 'y', '1']
                     else:
                         raise ValueError("Config file data type not recognised.")
-        if self.specs is None:
-            self.specs = config
-        else:
-            self.specs.update(config)
+
+        self.specs.update(config)
+
+    def check_scenario_data(self):
+        """This function checks goes through all rows without default values needed in the socio-economic specification
+        file to check whether they are included or not. If they are included nothing happens, otherwise a ValueError will
+        be raised.
+        """
+
+        rows = ['country_name', 'country_code', 'population_start_year', 'population_end_year', 'urban_start',
+                'urban_end', 'elec_rate', 'rural_elec_rate', 'urban_elec_rate', 'mort_copd', 'mort_ihd', 'mort_lc',
+                'mort_alri', 'morb_copd','morb_ihd', 'morb_lc', 'morb_alri', 'rural_hh_size', 'urban_hh_size',
+                'mort_stroke', 'morb_stroke', 'fnrb','coi_alri', 'coi_copd', 'coi_ihd', 'coi_lc', 'coi_stroke',
+                'cost_of_carbon_emissions', 'minimum_wage', 'vsl']
+
+        for row in rows:
+            if row not in self.specs:
+                raise ValueError("The socio-economic file has to include the " + row + " row")
 
     def techshare_sumtoone(self):
         """
@@ -901,7 +932,7 @@ class OnStove(DataProcessor):
         If the share of the population cooking with biogas is higher than the feasible share predicted by
         OnStove, then the function prints a message to user and the adjusted technology shares    
         """
-        biogas_calcshare = sum((self.techs["Biogas"].households * self.specs["Rural_HHsize"]))/((1-self.specs["Urban_start"]) * self.specs["Population_start_year"])
+        biogas_calcshare = sum((self.techs["Biogas"].households * self.specs["rural_hh_size"]))/((1-self.specs["urban_start"]) * self.specs["population_start_year"])
         
         if self.techs["Biogas"].current_share_rural > biogas_calcshare:
             difference = self.techs["Biogas"].current_share_rural - biogas_calcshare
@@ -1016,7 +1047,7 @@ class OnStove(DataProcessor):
         all technologies in the model
         """
         if techs is None:
-            techs = self.techs.values()
+            techs = list(self.techs.values())
         base_fuels = {}
         for tech in techs:
             share = tech.current_share_rural + tech.current_share_urban
@@ -1024,7 +1055,7 @@ class OnStove(DataProcessor):
                 tech.is_base = True
                 base_fuels[tech.name] = tech
         if len(base_fuels) == 1:
-            self.base_fuel = copy(base_fuels.values()[0])
+            self.base_fuel = copy(list(base_fuels.values())[0])
             self.base_fuel.carb(self)
             self.base_fuel.total_time(self)
             self.base_fuel.required_energy(self)
@@ -1088,7 +1119,6 @@ class OnStove(DataProcessor):
                             'paf_lc_u', 'paf_stroke_u']:
                     base_fuel[paf] += tech[paf] * tech.current_share_urban
             self.base_fuel = base_fuel
-            
 
     def read_tech_data(self, path_to_config: str, delimiter=','):
         """
@@ -1099,7 +1129,7 @@ class OnStove(DataProcessor):
             reader = DictReader(csvfile, delimiter=delimiter)
             config_file = list(reader)
             for row in config_file:
-                if row['Value']:
+                if row['Value'] is not None:
                     if row['Fuel'] not in techs:
                         if 'lpg' in row['Fuel'].lower():
                             techs[row['Fuel']] = LPG()
@@ -1144,6 +1174,7 @@ class OnStove(DataProcessor):
             Stores the clean cooking access percentage in rural settlements in the :attr:`clean_cooking_access_r`
             attribute.
         """
+        # TODO: the clean cooking access needs to be calculated based on the new baseline fuels calculations
         clean_cooking_access_u = 0
         clean_cooking_access_r = 0
         for tech in self.techs.values():
@@ -1202,8 +1233,8 @@ class OnStove(DataProcessor):
             pop = self.normalize("pop_init_year")
 
             weight_sum = elec_dist * self.specs["infra_weight"] + pop * self.specs["pop_weight"] + \
-                         ntl * self.specs["NTL_weight"]
-            weights = self.specs["infra_weight"] + self.specs["pop_weight"] + self.specs["NTL_weight"]
+                         ntl * self.specs["ntl_weight"]
+            weights = self.specs["infra_weight"] + self.specs["pop_weight"] + self.specs["ntl_weight"]
 
             self.electrified_weight = weight_sum / weights
         return self._electrified_weight
@@ -1226,7 +1257,7 @@ class OnStove(DataProcessor):
         read_scenario_data
         specs
         """
-        elec_rate = self.specs["Elec_rate"]
+        elec_rate = self.specs["elec_rate"]
 
         self.gdf["Current_elec"] = 0
 
@@ -1258,7 +1289,7 @@ class OnStove(DataProcessor):
         read_scenario_data
         specs
         """
-        elec_rate = self.specs["Elec_rate"]
+        elec_rate = self.specs["elec_rate"]
 
         self.gdf["Elec_pop_calib"] = self.gdf["pop_init_year"]
 
@@ -1300,8 +1331,8 @@ class OnStove(DataProcessor):
         total_rural_pop = self.gdf.loc[~isurban, "Pop"].sum()
         total_urban_pop = self.gdf["Pop"].sum() - total_rural_pop
 
-        calibration_factor_u = (self.specs["Population_start_year"] * self.specs["Urban_start"])/total_urban_pop
-        calibration_factor_r = (self.specs["Population_start_year"] * (1-self.specs["Urban_start"]))/total_rural_pop
+        calibration_factor_u = (self.specs["population_start_year"] * self.specs["urban_start"])/total_urban_pop
+        calibration_factor_r = (self.specs["population_start_year"] * (1-self.specs["urban_start"]))/total_rural_pop
 
         self.gdf["pop_init_year"] = 0
         self.gdf.loc[~isurban, "pop_init_year"] = self.gdf.loc[~isurban,"Pop"] * calibration_factor_r
@@ -1482,6 +1513,21 @@ class OnStove(DataProcessor):
 
         self.calibrate_current_pop()
 
+        if self.specs["end_year"] > self.specs["start_year"]:
+            population_current = self.specs["population_start_year"]
+            urban_current = self.specs["urban_start"] * population_current
+            rural_current = population_current - urban_current
+
+            population_future = self.specs["population_end_year"]
+            urban_future = self.specs["urban_end"] * population_future
+            rural_future = population_future - urban_future
+
+            rural_growth = (rural_future - rural_current) / (self.specs["end_year"] - self.specs["start_year"])
+            urban_growth = (urban_future - urban_current) / (self.specs["end_year"] - self.specs["start_year"])
+
+            self.gdf.loc[self.gdf['IsUrban'] > 20, 'Pop_future'] = self.gdf["Calibrated_pop"] * urban_growth
+            self.gdf.loc[self.gdf['IsUrban'] < 20, 'Pop_future'] = self.gdf["Calibrated_pop"] * rural_growth
+
         self.number_of_households()
 
     def calibrate_urban_manual(self):
@@ -1493,8 +1539,8 @@ class OnStove(DataProcessor):
         """
         urban_modelled = 2
         factor = 1
-        pop_tot = self.specs["Population_start_year"]
-        urban_current = self.specs["Urban_start"]
+        pop_tot = self.specs["population_start_year"]
+        urban_current = self.specs["urban_start"]
 
         i = 0
         while abs(urban_modelled - urban_current) > 0.01:
@@ -1521,8 +1567,8 @@ class OnStove(DataProcessor):
         """Calculates the number of households withing each cell based on their urban/rural classification and a
         defined household size.
 
-        It uses the ``IsUrban`` and population columns of the main GeoDataFrame (:attr:`gdf`) and the
-        ``Rural_HHsize`` and ``Urban_HHsize`` values from the :attr:`specs` dictionary.
+        It uses the ``IsUrban`` and ``Calibrated_pop`` columns of the main GeoDataFrame (:attr:`gdf`) and the
+        ``rural_hh_size`` and ``urban_hh_size`` values from the :attr:`specs` dictionary.
 
         See also
         --------
@@ -1538,7 +1584,12 @@ class OnStove(DataProcessor):
         self.gdf.loc[self.gdf["IsUrban"] > 20, 'households_init'] = self.gdf.loc[
                                                                    self.gdf["IsUrban"] > 20, 'pop_init_year'] / \
                                                                self.specs["Urban_HHsize"]
-
+        self.gdf.loc[self.gdf["IsUrban"] < 20, 'Households'] = self.gdf.loc[
+                                                                   self.gdf["IsUrban"] < 20, 'Calibrated_pop'] / \
+                                                               self.specs["rural_hh_size"]
+        self.gdf.loc[self.gdf["IsUrban"] > 20, 'Households'] = self.gdf.loc[
+                                                                   self.gdf["IsUrban"] > 20, 'Calibrated_pop'] / \
+                                                               self.specs["urban_hh_size"]
 
         self.gdf.loc[self.gdf["IsUrban"] < 20, 'households_end'] = self.gdf.loc[
                                                                    self.gdf["IsUrban"] < 20, 'pop_end_year'] / \
@@ -1572,7 +1623,7 @@ class OnStove(DataProcessor):
         norm_layer = (self.gdf['relative_wealth'] - min_value) / (max_value - min_value) * wage_range + \
                      self.specs['wage_range'][0]
         self.gdf['value_of_time'] = norm_layer * self.specs[
-            'Minimum_wage'] / 30 / 8  # convert $/months to $/h (8 working hours per day)
+            'minimum_wage'] / 30 / 8  # convert $/months to $/h (8 working hours per day)
 
     def run(self, technologies: Union[list[str], str] = 'all', restriction: bool = True):
         """Runs the model using the defined ``technologies`` as options to cook with.
@@ -1611,13 +1662,14 @@ class OnStove(DataProcessor):
         extract_om_costs
         extract_salvage
         """
-        print(f'[{self.specs["Country_name"]}] Calculating clean cooking access')
-        self.techshare_sumtoone()
+
+        self.check_scenario_data()
+        print(f'[{self.specs["country_name"]}] Calculating clean cooking access')
         self.get_clean_cooking_access()
         if self.base_fuel is None:
-            print(f'[{self.specs["Country_name"]}] Calculating base fuel properties')
+            print(f'[{self.specs["country_name"]}] Calculating base fuel properties')
 
-            self.set_base_fuel(self.techs.values())
+            self.set_base_fuel(list(self.techs.values()))
         if technologies == 'all':
             techs = [tech for tech in self.techs.values()]
         elif isinstance(technologies, list):
@@ -1625,8 +1677,8 @@ class OnStove(DataProcessor):
         else:
             raise ValueError("technologies must be 'all' or a list of strings with the technology names to run.")
 
-        # Based on wealth index, minimum wage and a lower an upper range for cost of oportunity
-        print(f'[{self.specs["Country_name"]}] Getting value of time')
+        # Based on wealth index, minimum wage and a lower an upper range for cost of opportunity
+        print(f'[{self.specs["country_name"]}] Getting value of time')
         self.get_value_of_time()
         # Loop through each technology and calculate all benefits and costs
         for tech in techs:
@@ -1719,12 +1771,13 @@ class OnStove(DataProcessor):
         gdf = gpd.GeoDataFrame()
         # gdf = gdf.astype(dtype=gdf.dtypes.to_dict())
         gdf_copy = self.gdf.copy()
+        # TODO: Change this to a while loop that checks the sum of number of households supplied against the total hhs
         for tech in techs:
             current = (tech.households < gdf_copy["households_init"]) & \
                       (gdf_copy["max_benefit_tech"] == tech.name)
             dff = gdf_copy.loc[current].copy()
             if current.sum() > 0:
-                dff.loc[current, "maximum_net_benefit"] *= tech.factor.loc[current]
+                # dff.loc[current, "maximum_net_benefit"] *= tech.factor.loc[current]
                 dff.loc[current, f'net_benefit_{tech.name}_temp'] = np.nan
 
                 second_benefit_cols = temps.copy()
@@ -1736,8 +1789,7 @@ class OnStove(DataProcessor):
                 second_best = second_best.str.replace("_temp", "")
                 second_best.replace('NaN', np.nan, inplace=True)
 
-                second_tech_net_benefit = dff.loc[current, second_benefit_cols].max(axis=1) * (
-                        1 - tech.factor.loc[current])
+                second_tech_net_benefit = dff.loc[current, second_benefit_cols].max(axis=1) #* (1 - tech.factor.loc[current])
 
                 elec_factor = dff['Elec_pop_calib'] / dff['pop_end_year']
                 dff['max_benefit_tech'] = second_best
@@ -1767,12 +1819,13 @@ class OnStove(DataProcessor):
             self.gdf.loc[index, f'net_benefit_{tech}_temp'] = np.nan
 
         isna = self.gdf["max_benefit_tech"].isna()
-        self.gdf.loc[isna, 'max_benefit_tech'] = self.gdf.loc[isna, temps].idxmax(axis=1)
+        if isna.sum() > 0:
+            self.gdf.loc[isna, 'max_benefit_tech'] = self.gdf.loc[isna, temps].idxmax(axis=1).asdtype(str)
         self.gdf['max_benefit_tech'] = self.gdf['max_benefit_tech'].str.replace("net_benefit_", "")
         self.gdf['max_benefit_tech'] = self.gdf['max_benefit_tech'].str.replace("_temp", "")
         self.gdf.loc[isna, "maximum_net_benefit"] = self.gdf.loc[isna, temps].max(axis=1)
 
-    # TODO: check if we ned this method
+    # TODO: check if we need this method
     def _add_admin_names(self, admin, column_name):
         if isinstance(admin, str):
             admin = gpd.read_file(admin)
@@ -2409,7 +2462,7 @@ class OnStove(DataProcessor):
             fig, ax = plt.subplots(1, 1, figsize=figsize, dpi=dpi)
             self._add_statistics(ax, stats_position, stats_fontsize)
         else:
-            ax = None
+            fig, ax = plt.subplots(1, 1, figsize=figsize, dpi=dpi)
 
         raster.save_image(self.output_directory, type=type, cmap=cmap, cumulative_count=cumulative_count,
                           quantiles=quantiles, categories=codes, legend_position=legend_position,
@@ -2470,7 +2523,7 @@ class OnStove(DataProcessor):
                    cmap: Optional[dict[str, str]] = None,
                    x_variable: str = 'pop_end_year',
                    height: float = 1.5, width: float = 2.5,
-                   save_as: Optional[bool] = None):
+                   save_as: Optional[bool] = None) -> 'matplotlib.Figure':
         """Displays a bar plot with the population or households share using the technologies with highest net-benefits
         over the study area.
 
@@ -2512,6 +2565,11 @@ class OnStove(DataProcessor):
         save_as: str, optional
             If a string is passed, then the plot will be saved with that name as a ``pdf`` file in the
             :attr:`output_directory`.
+
+        Returns
+        -------
+        matplotlib.Figure
+            Figure object used to plot the technology split.
         """
         df = self.summary(total=False, pretty=False, labels=labels)
 
@@ -2543,7 +2601,7 @@ class OnStove(DataProcessor):
     def plot_costs_benefits(self, labels: Optional[dict[str, str]] = None,
                             cmap: Optional[dict[str, str]] = None,
                             height: float = 1.5, width: float = 2.5,
-                            save_as: Optional[bool] = None):
+                            save_as: Optional[bool] = None) -> 'matplotlib.Figure':
         """Displays a stacked bar plot with the aggregated total costs and benefits for the technologies with the
         highest net-benefits over the study area.
 
@@ -2581,6 +2639,11 @@ class OnStove(DataProcessor):
         save_as: str, optional
             If a string is passed, then the plot will be saved with that name as a ``pdf`` file in the
             :attr:`output_directory`.
+
+        Returns
+        -------
+        matplotlib.Figure
+            Figure object used to plot the cost and benefits.
         """
         df = self.summary(total=False, pretty=False, labels=labels)
         df['investment_costs'] -= df['salvage_value']
@@ -2711,25 +2774,111 @@ class OnStove(DataProcessor):
     #     else:
     #         return p
 
-    def plot_benefit_distribution(self, type: str = 'box', groupby: str = 'None',
-                                  variable: str = 'net_benefit', best_mix: bool = True,
+    @staticmethod
+    def _reindex_df(df, weight_col):
+        """expand the dataframe to prepare for resampling
+        result is 1 row per count per sample"""
+        df = df.reset_index()
+        df = df.reindex(df.index.repeat(df[weight_col]))
+        df.reset_index(drop=True, inplace=True)
+        return df
+
+    @staticmethod
+    def _histogram(df: pd.DataFrame, cat: str, x: str, wrap: Union[facet_wrap, facet_grid],
+                   cmap: Optional[dict[str, str]] = None, x_title: str = '', y_title: str = '',
+                   kwargs: Optional[dict] = None, font_args: Optional[dict] = None) -> 'matplotlib.Figure':
+        """Function to plot a histogram of a selected variable divided in facets for each technology.
+
+        Parameters
+        ----------
+        df: pd.DataFrame
+            Dataframe subset containing the variable of interest ``x`` and the technology categories ``cat``.
+        cat: str
+            Column name of the technology categories.
+        x: str
+            Column name of the variable of interest.
+        wrap: facet_wrap or facet_grid
+            Object used for facetting the plot.
+        cmap: dictionary of str key-value pairs, optional
+            Dictionary with the colors to use for technology.
+        x_title: str, optional
+            Title of the x axis. If `None` is provided, then a default of ``Net benefit per household (USD/yr)`` or
+            ``Costs per household (USD/yr)`` will be used depending on the evaluated variable.
+        y_title: str, default 'Households'
+            Title of the y axis.
+        kwargs: dict, optional.
+            Dictionary of style arguments passed to the plotting function. For ``histrogram`` the default values used
+            are ``dict(binwidth=binwidth, alpha=0.5, size=0.3)``, where ``banwidth`` is calculated as 5% of the range of
+            the data.
+        font_args: dict, optional.
+            Dictionary of font arguments passed to the plotting function. If ``None`` is provided, default values of
+            ``dict(size=6)``. For available options see the :doc:`plotnine:generated/plotnine.themes.element_text`
+            object.
+
+        Returns
+        -------
+        matplotlib.Figure
+            Figure object used to plot the distribution.
+        """
+        if kwargs is None:
+            max_val = df[x].max()
+            min_val = df[x].min()
+            binwidth = (max_val - min_val) * 0.05
+            kwargs = dict(binwidth=binwidth, alpha=0.5, size=0.3)
+        if font_args is None:
+            font_args = dict(size=6)
+        p = (ggplot(df)
+             + geom_histogram(aes(x=x,
+                                  y=after_stat('count'),
+                                  fill=cat,
+                                  color=cat,
+                                  weight='Households',
+                                  ),
+                              **kwargs
+                              )
+             + scale_fill_manual(cmap)
+             + scale_color_manual(cmap, guide=False)
+             + theme_minimal()
+             + theme(subplots_adjust={'wspace': 0.25}, text=element_text(**font_args))
+             + wrap
+             + labs(x=x_title, y=y_title, fill='Cooking technology')
+             )
+        return p
+
+    def plot_benefit_distribution(self, type: str = 'histogram', groupby: str = 'None',
+                                  variable: str = 'net_benefits', best_mix: bool = True,
+                                  hh_divider: int = 1, var_divider: int = 1,
                                   labels: Optional[dict[str, str]] = None,
                                   cmap: Optional[dict[str, str]] = None,
+                                  x_title: Optional[str] = None, y_title: str = 'Households',
+                                  kwargs: Optional[dict] = None,
+                                  font_args: Optional[dict] = None,
                                   height: float = 1.5, width: float = 2.5,
-                                  save_as: Optional[bool] = None):
+                                  save_as: Optional[bool] = None) -> 'matplotlib.Figure':
         """Displays a distribution plot with the net-benefits, benefits or costs for the technologies with the
         highest net-benefits throughout the households of the study area.
 
         Parameters
         ----------
-        type: str, default 'box'
-            The type of distribution plot to use. Available options are ``box`` and ``density``.
+        type: str, default 'histrogram'
+            The type of distribution plot to use. Available options are ``histrogram``.
+
+            .. warning::
+                The ``box`` plot option is deprecated from version 0.1.3 to favor accurate representation of data.
+                Use ``histrogram`` instead.
+
         groupby: str, default 'None'
             Groups the results by urban/rural split. Available options are ``None``, ``isurban`` and ``urban-rural``.
         variable: str, default 'net_benefit'
             Variable to use for the distribution. Available options are ``net_benefit``, ``benefits`` and ``costs``.
         best_mix: bool, default True
             Whether to plot only results for the highest net-benefit technologies, or all technologies.
+        hh_divider: int, default 1
+            Value used to scale the number of households. For example, if ``1000000`` is used, then the households will
+            be shown as millions.
+        var_divider: int, default 1
+            Value used to scale the analysed value. For example, if ``1000`` is used, then the variable will be divided
+            by ``1000``, this is useful to denote units in thousands.
         labels: dictionary of str key-value pairs, optional
             Dictionary with the keys-value pairs to use for each technology.
 
@@ -2757,6 +2906,19 @@ class OnStove(DataProcessor):
                ...         'Charcoal ICS': '#d4bdc5',
                ...         'Biogas': '#73AF48'}
 
+        x_title: str, optional
+            Title of the x axis. If `None` is provided, then a default of ``Net benefit per household (USD/yr)`` or
+            ``Costs per household (USD/yr)`` will be used depending on the evaluated variable.
+        y_title: str, default 'Households'
+            Title of the y axis.
+        kwargs: dict, optional.
+            Dictionary of style arguments passed to the plotting function. For ``histrogram`` the default values used
+            are ``dict(binwidth=binwidth, alpha=0.5, size=0.3)``, where ``banwidth`` is calculated as 5% of the range of
+            the data.
+        font_args: dict, optional.
+            Dictionary of font arguments passed to the plotting function. If ``None`` is provided, default values of
+            ``dict(size=6)``. For available options see the :doc:`plotnine:generated/plotnine.themes.element_text`
+            object.
         height: float, default 1.5
             The heihg of the figure in inches.
         width: float, default 2.5
@@ -2764,7 +2926,13 @@ class OnStove(DataProcessor):
         save_as: str, optional
             If a string is passed, then the plot will be saved with that name as a ``pdf`` file in the
             :attr:`output_directory`.
+
+        Returns
+        -------
+        matplotlib.Figure
+            Figure object used to plot the distribution
         """
+
         if type.lower() == 'box':
             if groupby.lower() == 'isurban':
                 df = self.gdf.groupby(['IsUrban', 'max_benefit_tech'])[['health_costs_avoided',
@@ -2855,30 +3023,102 @@ class OnStove(DataProcessor):
                                                                     "households_init",
                                                                     'pop_end_year']].sum()
             df.reset_index(inplace=True)
-            df = self._re_name(df, labels, 'max_benefit_tech')
-            p = (ggplot(df)
-                 + geom_density(aes(
-                        x='(health_costs_avoided + opportunity_cost_gained + emissions_costs_saved' +
-                          ' + salvage_value - investment_costs - fuel_costs - om_costs)',
-                        y=after_stat('count'),
-                        fill='max_benefit_tech', color='max_benefit_tech'),
-                        alpha=0.1)
-                 + scale_fill_manual(cmap, guide=False)
-                 + scale_color_manual(cmap)
-                 + theme_minimal()
-                 + labs(x='Net benefit per household (kUSD/yr)', color='Cooking technology')
-                 )
-        # compute lower and upper whiskers
-        # ylim1 = dff['maximum_net_benefit'].quantile([0.1, 1])/1000
 
-        # scale y limits based on ylim1
-        # p = p + coord_flip()
+        if best_mix:
+            df = self.gdf[['max_benefit_tech', 'Calibrated_pop', 'Households', 'maximum_net_benefit',
+                           'health_costs_avoided', 'opportunity_cost_gained', 'emissions_costs_saved',
+                           'investment_costs', 'salvage_value', 'fuel_costs', 'om_costs']].copy()
+
+            df = self._re_name(df, labels, 'max_benefit_tech')
+            cat = 'max_benefit_tech'
+            tech_list = df.groupby('max_benefit_tech')[['Calibrated_pop']].sum()
+            tech_list = tech_list.reset_index().sort_values('Calibrated_pop')['max_benefit_tech'].tolist()
+            if variable == 'net_benefits':
+                df.rename({'maximum_net_benefit': 'net_benefits'}, inplace=True, axis=1)
+            elif variable == 'costs':
+                df['costs'] = df['investment_costs'] - df['salvage_value'] + df['fuel_costs'] + df['om_costs']
+        else:
+            tech_list = []
+            for name, tech in self.techs.items():
+                if tech.net_benefits is not None:
+                    tech_list.append(name)
+            cat = 'tech'
+            if variable == 'net_benefits':
+                x = 'net_benefits'
+            elif variable == 'costs':
+                x = 'costs'
+
+            df = pd.DataFrame({cat: [], x: []})
+            for tech in tech_list:
+                df = pd.concat([df, pd.DataFrame({cat: [tech] * self.techs[tech][x].shape[0],
+                                                  x: self.techs[tech][x],
+                                                  'Households': self.techs[tech].households})], axis=0)
+            df = self._re_name(df, labels, cat)
+            tech_list = df.groupby(cat)[[x]].mean()
+            tech_list = tech_list.reset_index().sort_values(x)[cat].tolist()
+
+        if (groupby in self.gdf.columns) or (groupby.lower() in ['urban-rural', 'rural-urban']):
+            if groupby.lower() == 'urban-rural':
+                groupby = 'Urban'
+                df[groupby] = self.gdf[~self.gdf.index.duplicated()].loc[df.index, 'IsUrban']
+                df[groupby] = df[groupby] > 20
+                df[groupby].replace({True: 'Urban', False: 'Rural'}, inplace=True)
+            else:
+                df[groupby] = self.gdf[~self.gdf.index.duplicated()].loc[df.index, groupby]
+
+            wrap = facet_grid(f'{cat} ~ {groupby}', scales='free_y')
+        else:
+            wrap = facet_wrap(cat, ncol=2, scales='free_y')
+
+        if variable == 'net_benefits':
+            x = 'net_benefits'
+            if x_title is None:
+                x_title = 'Net benefit per household (USD/yr)'
+        elif variable == 'costs':
+            x = 'costs'
+            if x_title is None:
+                x_title = 'Costs per household (USD/yr)'
+
+        df['Households'] /= hh_divider
+        df[x] /= var_divider
+        df[cat] = df[cat].astype("category").cat.reorder_categories(tech_list[::-1])
+
+        if type.lower() == 'box':
+            warn("The box-plot type was deprecated in order to favor accurate representation "
+                 "of the data, using 'histogram' instead.", DeprecationWarning, stacklevel=2)
+            p = self._histogram(df, cat, x, wrap, cmap, x_title, y_title, kwargs, font_args)
+        elif type.lower() == 'histogram':
+            p = self._histogram(df, cat, x, wrap, cmap, x_title, y_title, kwargs, font_args)
+        elif type.lower() == 'violin':
+            raise NotImplementedError('Violin plots are not yet implemented')
+            # p = (ggplot(df)
+            #      + geom_violin(aes(y=x,
+            #                        x=cat_1,
+            #                        fill=cat_1,
+            #                        color=cat_1,
+            #                        weight='Households',
+            #                        ),
+            #                    alpha=0.5,
+            #                    stat='count',
+            #                    # size=0.3,
+            #                    # raster=True
+            #                    )
+            #      + scale_fill_manual(cmap)
+            #      + scale_color_manual(cmap, guide=False)
+            #      + theme_minimal()
+            #      # + theme(subplots_adjust={'wspace':0.25}, text=element_text(size=6))
+            #      # + facet_wrap(cat_1, ncol=1, scales='free_y')#, as_table=False)
+            #      # + scale_x_continuous(labels=scientific_format())
+            #      + coord_flip()
+            #      + labs(y=x_title, x=y_title, fill='Cooking technology')
+            #      )
+
+        if groupby.lower() == 'urbanrural':
+            p += labs(x='Settlement')
+        else:
+            p += theme(legend_position="none")
 
         if save_as is not None:
-            # if groupby.lower() not in ['none', '']:
-            #     sufix = f'_{groupby}'
-            # else:
-            #     sufix = ''
             file = os.path.join(self.output_directory, f'{save_as}.pdf')
             p.save(file, height=height, width=width, dpi=600)
         else:

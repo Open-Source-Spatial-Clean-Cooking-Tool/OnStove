@@ -6,6 +6,7 @@ import pandas as pd
 from typing import Optional, Callable
 from math import exp
 
+from onstove._utils import raster_setter, vector_setter
 from onstove.layer import VectorLayer, RasterLayer
 
 
@@ -64,7 +65,7 @@ class Technology:
 
     def __init__(self,
                  name: Optional[str] = None,
-                 carbon_intensity: Optional[str] =None,
+                 carbon_intensity: Optional[str] = None,
                  co2_intensity: float = 0,
                  ch4_intensity: float = 0,
                  n2o_intensity: float = 0,
@@ -215,7 +216,7 @@ class Technology:
         return paf
 
     @staticmethod
-    def discount_factor(specs: dict) -> tuple[list[float],list[float]]:
+    def discount_factor(specs: dict) -> tuple[list[float], list[float]]:
         """Calculates and returns the discount factor used for benefits and costs in the net-benefit equation. Also
         returns the length of the analysis in years
 
@@ -228,14 +229,14 @@ class Technology:
         -------
         Discount factor and the project life
         """
-        if specs["Start_year"] == specs["End_year"]:
+        if specs["start_year"] == specs["end_year"]:
             proj_life = 1
         else:
-            proj_life = specs["End_year"] - specs["Start_year"]
+            proj_life = specs["end_year"] - specs["start_year"]
 
         year = np.arange(proj_life) + 1
 
-        discount_factor = (1 + specs["Discount_rate"]) ** year
+        discount_factor = (1 + specs["discount_rate"]) ** year
 
         return discount_factor, proj_life
 
@@ -250,7 +251,7 @@ class Technology:
             :class:`onstove.OnStove`.
         """
 
-        self.energy = model.specs["Meals_per_day"] * 365 * model.energy_per_meal / self.efficiency
+        self.energy = model.specs["meals_per_day"] * 365 * model.energy_per_meal / self.efficiency
 
     def get_carbon_intensity(self, model: 'onstove.OnStove'):
         """Calculates the carbon intensity of the associated stove.
@@ -299,9 +300,9 @@ class Technology:
         carb
         """
         self.carb(model)
-        proj_life = model.specs['End_year'] - model.specs['Start_year']
-        carbon = model.specs["Cost of carbon emissions"] * (model.base_fuel.carbon - self.carbon) / 1000 / (
-                1 + model.specs["Discount_rate"]) ** (proj_life)
+        proj_life = model.specs['end_year'] - model.specs['start_year']
+        carbon = model.specs["cost_of_carbon_emissions"] * (model.base_fuel.carbon - self.carbon) / 1000 / (
+                1 + model.specs["discount_rate"]) ** (proj_life)
 
         self.decreased_carbon_emissions = model.base_fuel.carbon - self.carbon
         self.decreased_carbon_costs = carbon
@@ -333,7 +334,8 @@ class Technology:
         self.paf_lc_u = self.paf(rr_lc, 1 - model.clean_cooking_access_u)
         self.paf_stroke_u = self.paf(rr_stroke, 1 - model.clean_cooking_access_u)
 
-    def mort_morb(self, model: 'onstove.OnStove', parameter: str = 'Mort', dr: str ='Discount_rate') -> tuple[float, float]:
+    def mort_morb(self, model: 'onstove.OnStove', parameter: str = 'mort', dr: str = 'discount_rate') -> tuple[
+        float, float]:
         """
         Calculates mortality or morbidity rate per fuel. These two calculations are very similar in nature and are
         therefore combined in one function. In order to indicate if morbidity or mortality should be calculated, the
@@ -357,7 +359,7 @@ class Technology:
 
         mor_u = {}
         mor_r = {}
-        diseases = ['ALRI', 'COPD', 'IHD', 'LC', 'STROKE']
+        diseases = ['alri', 'copd', 'ihd', 'lc', 'stroke']
         is_urban = model.gdf["IsUrban"] > 20
         is_rural = model.gdf["IsUrban"] < 20
         for disease in diseases:
@@ -371,21 +373,21 @@ class Technology:
             mor_r[disease] = model.gdf.loc[is_rural, "Calibrated_pop"].sum() * (model.base_fuel[paf] - self[paf]) * (
                     rate / 100000)
 
-        cl_diseases = {'ALRI': {1: 0.7, 2: 0.1, 3: 0.07, 4: 0.07, 5: 0.06},
-                       'COPD': {1: 0.3, 2: 0.2, 3: 0.17, 4: 0.17, 5: 0.16},
-                       'LC': {1: 0.2, 2: 0.1, 3: 0.24, 4: 0.23, 5: 0.23},
-                       'IHD': {1: 0.2, 2: 0.1, 3: 0.24, 4: 0.23, 5: 0.23},
-                       'STROKE': {1: 0.2, 2: 0.1, 3: 0.24, 4: 0.23, 5: 0.23}}
+        cl_diseases = {'alri': {1: 0.7, 2: 0.1, 3: 0.07, 4: 0.07, 5: 0.06},
+                       'copd': {1: 0.3, 2: 0.2, 3: 0.17, 4: 0.17, 5: 0.16},
+                       'lc': {1: 0.2, 2: 0.1, 3: 0.24, 4: 0.23, 5: 0.23},
+                       'ihd': {1: 0.2, 2: 0.1, 3: 0.24, 4: 0.23, 5: 0.23},
+                       'stroke': {1: 0.2, 2: 0.1, 3: 0.24, 4: 0.23, 5: 0.23}}
 
         i = 1
         total_mor_u = 0
         total_mor_r = 0
         while i < 6:
             for disease in diseases:
-                if parameter == 'Morb':
-                    cost = model.specs[f'COI_{disease}']
-                elif parameter == 'Mort':
-                    cost = model.specs['VSL']
+                if parameter == 'morb':
+                    cost = model.specs[f'coi_{disease}']
+                elif parameter == 'mort':
+                    cost = model.specs['vsl']
                 total_mor_u += cl_diseases[disease][i] * cost * mor_u[disease] / (1 + model.specs[dr]) ** (i - 1)
                 total_mor_r += cl_diseases[disease][i] * cost * mor_r[disease] / (1 + model.specs[dr]) ** (i - 1)
             i += 1
@@ -423,13 +425,13 @@ class Technology:
         mort_morb
 
         """
-        distributed_mortality, deaths_avoided = self.mort_morb(model, parameter='Mort', dr='Discount_rate')
+        distributed_mortality, deaths_avoided = self.mort_morb(model, parameter='mort', dr='discount_rate')
         self.distributed_mortality = distributed_mortality
         self.deaths_avoided = deaths_avoided
 
-        if model.specs['Health_spillovers_parameter'] > 0:
-            self.distributed_spillovers_mort = distributed_mortality * model.specs['Health_spillovers_parameter']
-            self.deaths_avoided += deaths_avoided * model.specs['Health_spillovers_parameter']
+        if model.specs['health_spillovers_parameter'] > 0:
+            self.distributed_spillovers_mort = distributed_mortality * model.specs['health_spillovers_parameter']
+            self.deaths_avoided += deaths_avoided * model.specs['health_spillovers_parameter']
         else:
             self.distributed_spillovers_mort = pd.Series(0, index=model.gdf.index, dtype='float64')
 
@@ -447,13 +449,13 @@ class Technology:
         --------
         mort_morb
         """
-        distributed_morbidity, cases_avoided = self.mort_morb(model, parameter='Morb', dr='Discount_rate')
+        distributed_morbidity, cases_avoided = self.mort_morb(model, parameter='morb', dr='discount_rate')
         self.distributed_morbidity = distributed_morbidity
         self.cases_avoided = cases_avoided
 
-        if model.specs['Health_spillovers_parameter'] > 0:
-            self.distributed_spillovers_morb = distributed_morbidity * model.specs['Health_spillovers_parameter']
-            self.cases_avoided += cases_avoided * model.specs['Health_spillovers_parameter']
+        if model.specs['health_spillovers_parameter'] > 0:
+            self.distributed_spillovers_morb = distributed_morbidity * model.specs['health_spillovers_parameter']
+            self.cases_avoided += cases_avoided * model.specs['health_spillovers_parameter']
         else:
             self.distributed_spillovers_morb = pd.Series(0, index=model.gdf.index, dtype='float64')
 
@@ -484,7 +486,7 @@ class Technology:
 
         self.discounted_salvage_cost = discounted_salvage
 
-    def discounted_om(self,  model: 'onstove.OnStove'):
+    def discounted_om(self, model: 'onstove.OnStove'):
         """
         Calls discount_factor function and calculates discounted operation and maintenance cost for each stove.
 
@@ -605,12 +607,12 @@ class Technology:
 
         """
 
-        proj_life = model.specs['End_year'] - model.specs['Start_year']
+        proj_life = model.specs['end_year'] - model.specs['start_year']
         self.total_time(model)
         self.total_time_saved = model.base_fuel.total_time_yr - self.total_time_yr
         # time value of time saved per sq km
         self.time_value = self.total_time_saved * model.gdf["value_of_time"] / (
-                1 + model.specs["Discount_rate"]) ** (proj_life)
+                1 + model.specs["discount_rate"]) ** (proj_life)
 
     def total_costs(self):
         """
@@ -737,7 +739,7 @@ class LPG(Technology):
 
     def __init__(self,
                  name: Optional[str] = None,
-                 carbon_intensity: Optional[float] = None ,
+                 carbon_intensity: Optional[float] = None,
                  co2_intensity: float = 63,
                  ch4_intensity: float = 0.003,
                  n2o_intensity: float = 0.0001,
@@ -849,7 +851,7 @@ class LPG(Technology):
         """
 
         transport_cost = (self.diesel_per_hour * self.diesel_cost * self.travel_time) / self.truck_capacity
-        kg_yr = (model.specs["Meals_per_day"] * 365 * model.energy_per_meal) / (
+        kg_yr = (model.specs["meals_per_day"] * 365 * model.energy_per_meal) / (
                 self.efficiency * self.energy_content)  # energy content in MJ/kg
         transport_cost = transport_cost * kg_yr
         transport_cost[transport_cost < 0] = np.nan
@@ -994,7 +996,7 @@ class LPG(Technology):
         --------
         infrastructure_cost
         """
-
+        # TODO: this method needs update on the current shares based on the new calibration methods
         super().discounted_inv(model, relative=relative)
         self.infrastructure_cost(model)
         if relative:
@@ -1542,7 +1544,6 @@ class Electricity(Technology):
         model: OnStove model
             Instance of the OnStove model containing the main data of the study case. See
             :class:`onstove.OnStove`.
-
         """
         self.required_energy(model)
         if self.tiers_path is None:
@@ -1570,7 +1571,6 @@ class Electricity(Technology):
         model: OnStove model
             Instance of the OnStove model containing the main data of the study case. See
             :class:`onstove.OnStove`.
-
         """
         grid_emissions = sum([gen * self.carbon_intensities[fuel] for fuel, gen in self.generation.items()])
         grid_generation = sum(self.generation.values())
@@ -1609,7 +1609,7 @@ class Electricity(Technology):
 
         return salvage / discount_rate[0]
 
-    def carb(self,  model: 'onstove.OnStove'):
+    def carb(self, model: 'onstove.OnStove'):
         """This method expands :meth:`Technology.carbon` when electricity is the fuel used
 
 
@@ -1643,6 +1643,7 @@ class Electricity(Technology):
         --------
         get_capacity_cost
         """
+        # TODO: this method needs update on the current shares based on the new calibration methods
         super().discounted_inv(model, relative=relative)
         if relative:
             share = (model.gdf['IsUrban'] > 20) * self.current_share_urban
@@ -1657,22 +1658,22 @@ class Electricity(Technology):
         Parameters
         ----------
         model: OnStove model
-         Instance of the OnStove model containing the main data of the study case. See
-         :class:`onstove.OnStove`.
+            Instance of the OnStove model containing the main data of the study case. See
+            :class:`onstove.OnStove`.
         w_health: int, default 1
-         Determines whether health parameters (reduced morbidity and mortality)
-         should be considered in the net-benefit equation.
+            Determines whether health parameters (reduced morbidity and mortality)
+            should be considered in the net-benefit equation.
         w_spillovers: int, default 1
-         Determines whether spillover effects from cooking with traditional fuels
-         should be considered in the net-benefit equation.
+            Determines whether spillover effects from cooking with traditional fuels
+            should be considered in the net-benefit equation.
         w_environment: int, default 1
-         Determines whether environmental effects (reduced emissions) should be considered in the net-benefit
-         equation.
+            Determines whether environmental effects (reduced emissions) should be considered in the net-benefit
+            equation.
         w_time: int, default 1
-         Determines whether opportunity cost (reduced time spent) should be considered in the net-benefit
-         equation.
+            Determines whether opportunity cost (reduced time spent) should be considered in the net-benefit
+            equation.
         w_costs: int, default 1
-         Determines whether costs should be considered in the net-benefit equation.
+            Determines whether costs should be considered in the net-benefit equation.
 
         See also
         --------
@@ -1684,6 +1685,65 @@ class Electricity(Technology):
         factor[factor > 1] = 1
         self.factor = factor
         self.households = model.gdf['Households'] * factor
+
+
+class MiniGrids(Electricity):
+    """Mini-grids technology class used to model electrical stoves powered by mini-grids.
+
+    This class inherits and modifies the :class:`Electricity` class.
+    """
+
+    def __init__(self,
+                 name: Optional[str] = None,
+                 carbon_intensity: Optional[str] = None,
+                 energy_content: float = 3.6,
+                 tech_life: int = 10,  # in years
+                 inv_cost: float = 36.3,  # in USD
+                 connection_cost: float = 0,  # cost of additional infrastructure
+                 grid_capacity_cost: float = None,
+                 fuel_cost: float = 0.1,
+                 time_of_cooking: float = 1.8,
+                 om_cost: float = 3.7,  # percentage of investement cost
+                 efficiency: float = 0.85,  # ratio
+                 pm25: float = 32):
+        super().__init__(name=name, carbon_intensity=carbon_intensity, energy_content=energy_content,
+                         tech_life=tech_life, inv_cost=inv_cost, connection_cost=connection_cost,
+                         grid_capacity_cost=grid_capacity_cost, fuel_cost=fuel_cost,
+                         time_of_cooking=time_of_cooking, om_cost=om_cost, efficiency=efficiency, pm25=pm25)
+
+        self.coverage = None
+        self.potential = None
+
+    @property
+    def coverage(self) -> RasterLayer:
+        """:class:`VectorLayer` object containing a vector dataset showing the areas of coverage of the mini-grids.
+
+        This layer must contain the following columns:
+        * `capacity`: installed capacity of the mini-grids
+        * `households`: amount of households served by the mini-grids
+        * `geometry`: polygons showing areas of coverage
+
+        .. seealso::
+            :meth:`calculate_potential`
+        """
+        return self._coverage
+
+    @coverage.setter
+    def coverage(self, layer):
+        self._coverage = vector_setter(layer)
+
+    def calculate_potential(self):
+        """Calculates the potential of each mini-grid for supporting eCooking in each area.
+        """
+        pass
+
+    def discounted_inv(self, model: 'onstove.OnStove', relative: bool = True):
+        pass
+
+    def net_benefit(self, model: 'onstove.OnStove', w_health: int = 1, w_spillovers: int = 1,
+                    w_environment: int = 1, w_time: int = 1, w_costs: int = 1):
+        super().net_benefit(model, w_health, w_spillovers, w_environment, w_time, w_costs)
+        model.gdf.loc[self.potential == 0, "net_benefit_{}".format(self.name)] = np.nan
 
 
 class Biogas(Technology):
@@ -1839,7 +1899,7 @@ class Biogas(Technology):
         self.time_of_collection = time_of_collection
 
     def available_biogas(self, model: 'onstove.OnStove'):
-        """Caluclates the biogas production potential in liters per day. It currently takes into account 6 categories
+        """Calculates the biogas production potential in liters per day. It currently takes into account 6 categories
         of livestock (cattle, buffalo, sheep, goat, pig and poultry). The biogas potential for each category is determined
         following the methodology outlined by Lohani et al.[1]_ This function also applies a restriction to biogas
         production with regards to urban areas, areas with temperature lower than 10 degrees[1]_ celsius and areas under
@@ -1867,7 +1927,6 @@ class Biogas(Technology):
         from_goat = model.gdf["Goats"] * 0.6 * 0.3 * 0.85 * 450
         from_pig = model.gdf["Pigs"] * 5 * 0.75 * 0.14 * 470
         from_poultry = model.gdf["Poultry"] * 0.12 * 0.25 * 0.75 * 450
-
 
         model.gdf["available_biogas"] = ((from_cattle + from_buffalo + from_goat + from_pig + from_poultry +
                                           from_sheep) * self.digestor_eff / 1000) * 365
