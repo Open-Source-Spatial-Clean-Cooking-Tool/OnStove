@@ -777,7 +777,6 @@ class OnStove(DataProcessor):
         super().__init__(project_crs, cell_size, output_directory)
         self.rows = None
         self.cols = None
-        self.specs = {'inter_year': None}
         self.techs = {}
         self.base_fuel = None
         self.i = {}
@@ -788,8 +787,8 @@ class OnStove(DataProcessor):
         self.clean_cooking_access_r = None
         self.electrified_weight = None
 
-        self.specs = {'start_year': 2020, 'end_year': 2030,
-                      'end_year_target': 1.0, 'meals_per_day': 3.0, 'infra_weight': 1.0,
+        self.specs = {'start_year': 2020, 'inter_year': None,'end_year': 2030,
+                      'inter_year_target': None, 'end_year_target': 1.0, 'meals_per_day': 3.0, 'infra_weight': 1.0,
                       'ntl_weight': 1.0, 'pop_weight': 1.0,'discount_rate': 0.03,
                       'health_spillover_parameter': 0.112,
                       'w_costs': 1.0, 'w_environment': 1.0, 'w_health': 1.0,
@@ -1318,7 +1317,7 @@ class OnStove(DataProcessor):
 
     def calibrate_current_pop(self):
         """Calibrates the spatial population in each cell according to the user defined population in the start year
-        (``Population_start_year`` in the :attr:`specs` dictionary) and saves it in the ``pop_init_year`` column of
+        (``population_start_year`` in the :attr:`specs` dictionary) and saves it in the ``pop_init_year`` column of
         the main GeoDataFrame (:attr:`gdf`).
 
         See also
@@ -1337,13 +1336,19 @@ class OnStove(DataProcessor):
         self.gdf["pop_init_year"] = 0
         self.gdf.loc[~isurban, "pop_init_year"] = self.gdf.loc[~isurban,"Pop"] * calibration_factor_r
         self.gdf.loc[isurban, "pop_init_year"] = self.gdf.loc[isurban, "Pop"] * calibration_factor_u
+
+    def calibrate_future_pop(self):
+
+        isurban = self.gdf["IsUrban"] > 20
+        urban = isurban.sum()
+        rural = len(self.gdf)-urban
         
-        if self.specs['End_year'] != self.specs['Start_year']:
-            if self.specs['End_year'] < self.specs['Start_year']:
-                raise ValueError("The end year needs to be after the start year.")
+        if self.specs['end_year'] != self.specs['start_year']:
+            if self.specs['end_year'] < self.specs['start_year']:
+                raise ValueError("The end year needs to come after the start year.")
             else:
-                urban_growth = (self.specs["Urban_end"] * self.specs["Population_end_year"] ) / (self.specs["Urban_start"] * self.specs["Population_start_year"])
-                rural_growth = ((1 - self.specs["Urban_end"]) * self.specs["Population_end_year"] ) / ((1 - self.specs["Urban_start"]) * self.specs["Population_start_year"])
+                urban_growth = (self.specs["urban_end"] * self.specs["population_end_year"] ) / (self.specs["urban_start"] * self.specs["population_start_year"])
+                rural_growth = ((1 - self.specs["urban_end"]) * self.specs["population_end_year"] ) / ((1 - self.specs["urban_start"]) * self.specs["population_start_year"])
 
                 self.gdf.loc[~isurban, "pop_end_year"] = self.gdf.loc[~isurban,"pop_init_year"] * rural_growth
                 self.gdf.loc[isurban, "pop_end_year"] = self.gdf.loc[isurban,"pop_init_year"] * urban_growth
@@ -1351,16 +1356,16 @@ class OnStove(DataProcessor):
             self.gdf["pop_end_year"] = self.gdf["pop_init_year"]
     
         if self.specs["inter_year"] is not None:
-            if self.specs['inter_year'] < self.specs['Start_year']:
-                raise ValueError("The intermediate year needs to be after the start year.")
-            elif self.specs['inter_year'] > self.specs['End_year']:
-                raise ValueError("The intermediate year needs to be before the end year.")
+            if self.specs['inter_year'] < self.specs['start_year']:
+                raise ValueError("The intermediate year needs to come after the start year.")
+            elif self.specs['inter_year'] > self.specs['end_year']:
+                raise ValueError("The intermediate year needs to come before the end year.")
             else:
-                yearly_pop_increase_urban = (country.specs["population_inter_year"] * country.specs["urban_inter"] - country.specs["Population_start_year"] * country.specs["Urban_start"])/(country.specs["inter_year"] - country.specs["start_year"])
-                yearly_pop_increase_rural = (country.specs["population_inter_year"] * (1 - country.specs["urban_inter"]) - country.specs["Population_start_year"] * (1 - country.specs["Urban_start"]))/(country.specs["inter_year"] - country.specs["start_year"])
+                yearly_pop_increase_urban = (self.specs["population_end_year"] * self.specs["urban_end"] - self.specs["population_start_year"] * self.specs["urban_start"])/(self.specs["end_year"] - self.specs["start_year"])
+                yearly_pop_increase_rural = (self.specs["population_end_year"] * (1 - self.specs["urban_end"]) - self.specs["population_start_year"] * (1 - self.specs["urban_start"]))/(self.specs["end_year"] - self.specs["start_year"])
             
-                self.gdf.loc[~isurban, "pop_inter_year"] = self.gdf.loc[~isurban,"pop_init_year"] * yearly_pop_increase_urban * (country.specs["inter_year"] - country.specs["start_year"])
-                self.gdf.loc[isurban, "pop_inter_year"] = self.gdf.loc[isurban, "pop_init_year"] * yearly_pop_increase_rural * (country.specs["inter_year"] - country.specs["start_year"])
+                self.gdf.loc[~isurban, "pop_inter_year"] = self.gdf.loc[~isurban,"pop_init_year"] + yearly_pop_increase_rural/rural * (self.specs["inter_year"] - self.specs["start_year"])
+                self.gdf.loc[isurban, "pop_inter_year"] = self.gdf.loc[isurban, "pop_init_year"] + yearly_pop_increase_urban/urban * (self.specs["inter_year"] - self.specs["start_year"])
     
 
     def distance_to_electricity(self, hv_lines: VectorLayer = None, mv_lines: VectorLayer = None,
@@ -1512,21 +1517,22 @@ class OnStove(DataProcessor):
         self.raster_to_dataframe(GHS_path, name="IsUrban", method='sample')
 
         self.calibrate_current_pop()
+        self.calibrate_future_pop()
 
-        if self.specs["end_year"] > self.specs["start_year"]:
-            population_current = self.specs["population_start_year"]
-            urban_current = self.specs["urban_start"] * population_current
-            rural_current = population_current - urban_current
-
-            population_future = self.specs["population_end_year"]
-            urban_future = self.specs["urban_end"] * population_future
-            rural_future = population_future - urban_future
-
-            rural_growth = (rural_future - rural_current) / (self.specs["end_year"] - self.specs["start_year"])
-            urban_growth = (urban_future - urban_current) / (self.specs["end_year"] - self.specs["start_year"])
-
-            self.gdf.loc[self.gdf['IsUrban'] > 20, 'Pop_future'] = self.gdf["Calibrated_pop"] * urban_growth
-            self.gdf.loc[self.gdf['IsUrban'] < 20, 'Pop_future'] = self.gdf["Calibrated_pop"] * rural_growth
+        # if self.specs["end_year"] > self.specs["start_year"]:
+        #     population_current = self.specs["population_start_year"]
+        #     urban_current = self.specs["urban_start"] * population_current
+        #     rural_current = population_current - urban_current
+        #
+        #     population_future = self.specs["population_end_year"]
+        #     urban_future = self.specs["urban_end"] * population_future
+        #     rural_future = population_future - urban_future
+        #
+        #     rural_growth = (rural_future - rural_current) / (self.specs["end_year"] - self.specs["start_year"])
+        #     urban_growth = (urban_future - urban_current) / (self.specs["end_year"] - self.specs["start_year"])
+        #
+        #     self.gdf.loc[self.gdf['IsUrban'] > 20, 'Pop_future'] = self.gdf["pop_init_year"] * urban_growth
+        #     self.gdf.loc[self.gdf['IsUrban'] < 20, 'Pop_future'] = self.gdf["pop_init_year"] * rural_growth
 
         self.number_of_households()
 
@@ -1580,31 +1586,25 @@ class OnStove(DataProcessor):
 
         self.gdf.loc[self.gdf["IsUrban"] < 20, 'households_init'] = self.gdf.loc[
                                                                    self.gdf["IsUrban"] < 20, 'pop_init_year'] / \
-                                                               self.specs["Rural_HHsize"]
+                                                               self.specs["rural_hhsize"]
         self.gdf.loc[self.gdf["IsUrban"] > 20, 'households_init'] = self.gdf.loc[
                                                                    self.gdf["IsUrban"] > 20, 'pop_init_year'] / \
-                                                               self.specs["Urban_HHsize"]
-        self.gdf.loc[self.gdf["IsUrban"] < 20, 'Households'] = self.gdf.loc[
-                                                                   self.gdf["IsUrban"] < 20, 'Calibrated_pop'] / \
-                                                               self.specs["rural_hh_size"]
-        self.gdf.loc[self.gdf["IsUrban"] > 20, 'Households'] = self.gdf.loc[
-                                                                   self.gdf["IsUrban"] > 20, 'Calibrated_pop'] / \
-                                                               self.specs["urban_hh_size"]
+                                                               self.specs["urban_hhsize"]
 
         self.gdf.loc[self.gdf["IsUrban"] < 20, 'households_end'] = self.gdf.loc[
                                                                    self.gdf["IsUrban"] < 20, 'pop_end_year'] / \
-                                                               self.specs["Rural_HHsize"]
+                                                               self.specs["rural_hhsize"]
         self.gdf.loc[self.gdf["IsUrban"] > 20, 'households_end'] = self.gdf.loc[
                                                                    self.gdf["IsUrban"] > 20, 'pop_end_year'] / \
-                                                               self.specs["Urban_HHsize"]
+                                                               self.specs["urban_hhsize"]
         
-        if 'population_inter_year' in self.gdf.columns:       
-            self.gdf.loc[self.gdf["IsUrban"] < 20, 'households_init'] = self.gdf.loc[
+        if 'pop_inter_year' in self.gdf.columns:
+            self.gdf.loc[self.gdf["IsUrban"] < 20, 'households_inter'] = self.gdf.loc[
                                                                        self.gdf["IsUrban"] < 20, 'pop_inter_year'] / \
-                                                                   self.specs["Rural_HHsize"]
-            self.gdf.loc[self.gdf["IsUrban"] > 20, 'households_init'] = self.gdf.loc[
+                                                                   self.specs["rural_hhsize"]
+            self.gdf.loc[self.gdf["IsUrban"] > 20, 'households_inter'] = self.gdf.loc[
                                                                        self.gdf["IsUrban"] > 20, 'pop_inter_year'] / \
-                                                                   self.specs["Urban_HHsize"]
+                                                                   self.specs["urban_hhsize"]
 
     def get_value_of_time(self):
         """
