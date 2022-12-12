@@ -119,6 +119,9 @@ class Technology:
                 self[paf + s] = 0
         self.discounted_fuel_cost = 0
         self.discounted_investments = 0
+        self.discounted_om_costs = 0
+        self.discounted_salvage_cost = 0
+        self.costs = 0
         self.benefits = None
         self.net_benefits = None
 
@@ -459,7 +462,7 @@ class Technology:
         else:
             self.distributed_spillovers_morb = pd.Series(0, index=model.gdf.index, dtype='float64')
 
-    def salvage(self, model: 'onstove.OnStove'):
+    def salvage(self, model: 'onstove.OnStove', relative: bool = True):
         """
         Calls discount_factor function and calculates discounted salvage cost for each stove assuming a straight-line depreciation.
 
@@ -474,8 +477,13 @@ class Technology:
         discount_factor
         """
         discount_rate, proj_life = self.discount_factor(model.specs)
-        used_life = proj_life % self.tech_life
-        used_life_base = proj_life % model.base_fuel.tech_life
+        used_life = (proj_life % self.tech_life) * np.ones(model.gdf.shape[0])
+        used_life_base = (proj_life % model.base_fuel.tech_life)*np.ones(model.gdf.shape[0])
+
+        if relative:
+            discounted_base_salvage = model.base_fuel.salvage
+        else:
+            discounted_base_salvage = 0
 
         base_salvage = model.base_fuel.inv_cost * (1 - used_life_base / model.base_fuel.tech_life)
         salvage = self.inv_cost * (1 - used_life / self.tech_life)
@@ -486,7 +494,7 @@ class Technology:
 
         self.discounted_salvage_cost = discounted_salvage
 
-    def discounted_om(self, model: 'onstove.OnStove'):
+    def discounted_om(self, model: 'onstove.OnStove', relative: bool = True):
         """
         Calls discount_factor function and calculates discounted operation and maintenance cost for each stove.
 
@@ -502,11 +510,21 @@ class Technology:
         discount_factor
         """
         discount_rate, proj_life = self.discount_factor(model.specs)
-        operation_and_maintenance = self.om_cost * np.ones(proj_life)
+        operation_and_maintenance = self.om_cost * np.ones(model.gdf.shape[0])
 
-        discounted_om = np.array([sum((operation_and_maintenance - x) / discount_rate) for
-                                  x in model.base_fuel.om_cost])
-        self.discounted_om_costs = pd.Series(discounted_om, index=model.gdf.index)
+        #if relative:
+        #    discounted_om = np.array([sum((operation_and_maintenance - x) / discount_rate) for
+        #                          x in model.base_fuel.om_cost])
+        #else:
+        #    self.discounted_om_costs = pd.Series(discounted_om, index=model.gdf.index)
+
+        if relative:
+            discounted_base_om = model.base_fuel.discounted_om_costs
+        else:
+            discounted_base_om = 0
+        # + self.om_cost - \
+        om_discounted = np.array([sum(x / discount_rate) for x in operation_and_maintenance])
+        self.discounted_om_costs = pd.Series(om_discounted, index=model.gdf.index) - discounted_base_om
 
     def discounted_inv(self, model: 'onstove.OnStove', relative: bool = True):
         """
@@ -628,7 +646,7 @@ class Technology:
         --------
         discount_fuel_cost, discounted_om, salvage, discounted_inv
         """
-        self.costs = (self.discounted_fuel_cost + self.discounted_investments +  # - self.time_value +
+        self.costs = (self.discounted_fuel_cost + self.discounted_investments +
                       self.discounted_om_costs - self.discounted_salvage_cost)
 
     def net_benefit(self, model: 'onstove.OnStove', w_health: int = 1, w_spillovers: int = 1,

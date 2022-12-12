@@ -1044,6 +1044,7 @@ class OnStove(DataProcessor):
         If no technologies are passed as input and no technologies are tagged
         as is_base = True, then it calculates the base fuel properties considering
         all technologies in the model
+
         """
         if techs is None:
             techs = list(self.techs.values())
@@ -1100,16 +1101,24 @@ class OnStove(DataProcessor):
                 base_fuel.tech_life += tech.tech_life * tech.pop_sqkm
                 base_fuel.discounted_investments += tech.discounted_investments * tech.pop_sqkm
 
+                tech.discounted_om(self, relative=False)
+                base_fuel.discounted_om_costs += tech.discounted_om_costs * tech.pop_sqkm
+
                 tech.adjusted_pm25()
                 tech.health_parameters(self)
 
                 base_fuel.carbon += tech.carbon * tech.pop_sqkm
                 base_fuel.total_time_yr += (tech.total_time_yr * tech.pop_sqkm).fillna(0)
-                base_fuel.inv_cost += tech.inv_cost * tech.pop_sqkm
-                base_fuel.om_cost += tech.om_cost * tech.pop_sqkm
+                #base_fuel.inv_cost += tech.inv_cost * tech.pop_sqkm
+                #base_fuel.om_cost += tech.om_cost * tech.pop_sqkm
 
                 tech.discount_fuel_cost(self, relative=False)
                 base_fuel.discounted_fuel_cost += tech.discounted_fuel_cost * tech.pop_sqkm
+
+                tech.salvage(self)
+                base_fuel.discounted_salvage_cost += tech.discounted_salvage_cost * tech.pop_sqkm
+
+                #base_fuel.costs += tech.total_costs * tech.pop_sqkm
 
                 for paf in ['paf_alri_r', 'paf_copd_r', 'paf_ihd_r',
                             'paf_lc_r', 'paf_stroke_r']:
@@ -1117,6 +1126,7 @@ class OnStove(DataProcessor):
                 for paf in ['paf_alri_u', 'paf_copd_u', 'paf_ihd_u',
                             'paf_lc_u', 'paf_stroke_u']:
                     base_fuel[paf] += tech[paf] * tech.current_share_urban
+
             self.base_fuel = base_fuel
 
     def read_tech_data(self, path_to_config: str, delimiter=','):
@@ -1518,22 +1528,6 @@ class OnStove(DataProcessor):
 
         self.calibrate_current_pop()
         self.calibrate_future_pop()
-
-        # if self.specs["end_year"] > self.specs["start_year"]:
-        #     population_current = self.specs["population_start_year"]
-        #     urban_current = self.specs["urban_start"] * population_current
-        #     rural_current = population_current - urban_current
-        #
-        #     population_future = self.specs["population_end_year"]
-        #     urban_future = self.specs["urban_end"] * population_future
-        #     rural_future = population_future - urban_future
-        #
-        #     rural_growth = (rural_future - rural_current) / (self.specs["end_year"] - self.specs["start_year"])
-        #     urban_growth = (urban_future - urban_current) / (self.specs["end_year"] - self.specs["start_year"])
-        #
-        #     self.gdf.loc[self.gdf['IsUrban'] > 20, 'Pop_future'] = self.gdf["pop_init_year"] * urban_growth
-        #     self.gdf.loc[self.gdf['IsUrban'] < 20, 'Pop_future'] = self.gdf["pop_init_year"] * rural_growth
-
         self.number_of_households()
 
     def calibrate_urban_manual(self):
@@ -1543,6 +1537,9 @@ class OnStove(DataProcessor):
         split defined in :attr:`specs`, to classify the settlements until the total urban population sum matches the
         defined split.
         """
+
+        # TODO: This can be be simplified and sped up.
+
         urban_modelled = 2
         factor = 1
         pop_tot = self.specs["population_start_year"]
@@ -1569,6 +1566,44 @@ class OnStove(DataProcessor):
             if i > 500:
                 break
 
+    def progression(self, method: str = 'urban'):
+        """When the end- and start-years are different this method determines who get access to clean cooking first.
+        The function assumes a linear increase in the clean cooking access rate.
+
+        Parameters
+        ----------
+        method: str, default 'urban'
+            Determines the method to be used to prioritize settlements. Three options are available 'urban', 'costs',
+            'benefits'. If 'urban' is used the cells with the highest population density will be prioritized, if
+            'costs' is used then the cells with the lowest relative cost per household will be used, if 'benefits' is
+            used then the cells with the highest benefits per household following from a swtich will be used. Default is
+            'urban'.
+        """
+
+        year = self.specs['end_year']
+        target = self.specs['end_year_target']
+        self.gdf['year'] = 0
+
+        start_rate = (self.clean_cooking_access_u*self.specs['urban_start'] \
+                     + self.clean_cooking_access_r*(1 - self.specs['urban_start']))
+        # TODO: change the print to a warning
+        if start_rate > target:
+            print('Note that your clean cooking access rate in the start year ({0}%) is higher than the clean cooking '
+                  'access rate in the end year ({1}%)'.format(start_rate*100, target*100))
+
+        if method == 'urban':
+
+            self.gdf.sort_values(by='pop_init_year', inplace=True, ascending=False)
+            cumulative_pop = self.gdf['pop_init_year'].cumsum()
+
+            while year > self.specs['start_year']:
+                self.gdf['year'] = np.where(cumulative_pop < (target * self.gdf['pop_init_year'].sum()),
+                                               year, self.gdf['year'])
+
+                year -= 1
+                target -= (year - (year-1)) * ((self.specs['end_year_target'] - start_rate) / (self.specs['end_year'] - self.specs['start_year']))
+
+
     def number_of_households(self):
         """Calculates the number of households withing each cell based on their urban/rural classification and a
         defined household size.
@@ -1586,25 +1621,25 @@ class OnStove(DataProcessor):
 
         self.gdf.loc[self.gdf["IsUrban"] < 20, 'households_init'] = self.gdf.loc[
                                                                    self.gdf["IsUrban"] < 20, 'pop_init_year'] / \
-                                                               self.specs["rural_hhsize"]
+                                                               self.specs["rural_hh_size"]
         self.gdf.loc[self.gdf["IsUrban"] > 20, 'households_init'] = self.gdf.loc[
                                                                    self.gdf["IsUrban"] > 20, 'pop_init_year'] / \
-                                                               self.specs["urban_hhsize"]
+                                                               self.specs["urban_hh_size"]
 
         self.gdf.loc[self.gdf["IsUrban"] < 20, 'households_end'] = self.gdf.loc[
                                                                    self.gdf["IsUrban"] < 20, 'pop_end_year'] / \
-                                                               self.specs["rural_hhsize"]
+                                                               self.specs["rural_hh_size"]
         self.gdf.loc[self.gdf["IsUrban"] > 20, 'households_end'] = self.gdf.loc[
                                                                    self.gdf["IsUrban"] > 20, 'pop_end_year'] / \
-                                                               self.specs["urban_hhsize"]
+                                                               self.specs["urban_hh_size"]
         
         if 'pop_inter_year' in self.gdf.columns:
             self.gdf.loc[self.gdf["IsUrban"] < 20, 'households_inter'] = self.gdf.loc[
                                                                        self.gdf["IsUrban"] < 20, 'pop_inter_year'] / \
-                                                                   self.specs["rural_hhsize"]
+                                                                   self.specs["rural_hh_size"]
             self.gdf.loc[self.gdf["IsUrban"] > 20, 'households_inter'] = self.gdf.loc[
                                                                        self.gdf["IsUrban"] > 20, 'pop_inter_year'] / \
-                                                                   self.specs["urban_hhsize"]
+                                                                   self.specs["urban_hh_size"]
 
     def get_value_of_time(self):
         """
@@ -1666,65 +1701,65 @@ class OnStove(DataProcessor):
         self.check_scenario_data()
         print(f'[{self.specs["country_name"]}] Calculating clean cooking access')
         self.get_clean_cooking_access()
+        #self.progression()
         if self.base_fuel is None:
             print(f'[{self.specs["country_name"]}] Calculating base fuel properties')
-
             self.set_base_fuel(list(self.techs.values()))
         if technologies == 'all':
-            techs = [tech for tech in self.techs.values()]
+             techs = [tech for tech in self.techs.values()]
         elif isinstance(technologies, list):
-            techs = [self.techs[name] for name in technologies]
+             techs = [self.techs[name] for name in technologies]
         else:
-            raise ValueError("technologies must be 'all' or a list of strings with the technology names to run.")
+             raise ValueError("technologies must be 'all' or a list of strings with the technology names to run.")
 
-        # Based on wealth index, minimum wage and a lower an upper range for cost of opportunity
-        print(f'[{self.specs["country_name"]}] Getting value of time')
-        self.get_value_of_time()
-        # Loop through each technology and calculate all benefits and costs
-        for tech in techs:
-            print(f'Calculating health benefits for {tech.name}...')
-            if not tech.is_base:
-                tech.adjusted_pm25()
-            tech.morbidity(self)
-            tech.mortality(self)
-            print(f'Calculating carbon emissions benefits for {tech.name}...')
-            tech.carbon_emissions(self)
-            print(f'Calculating time saved benefits for {tech.name}...')
-            tech.time_saved(self)
-            print(f'Calculating costs for {tech.name}...')
-            tech.required_energy(self)
-            tech.discounted_om(self)
-            tech.discounted_inv(self)
-            tech.discount_fuel_cost(self)
-            tech.salvage(self)
-            print(f'Calculating net benefit for {tech.name}...\n')
-            tech.net_benefit(self, self.specs['w_health'], self.specs['w_spillovers'],
-                             self.specs['w_environment'], self.specs['w_time'], self.specs['w_costs'])
-
-        print('Getting maximum net benefit technologies...')
-        self.maximum_net_benefit(techs, restriction=restriction)
-        print('Extracting indicators...')
-        print('    - Lives saved')
-        self.extract_lives_saved()
-        print('    - Health costs')
-        self.extract_health_costs_saved()
-        print('    - Time saved')
-        self.extract_time_saved()
-        print('    - Opportunity cost')
-        self.extract_opportunity_cost()
-        print('    - Avoided emissions')
-        self.extract_reduced_emissions()
-        print('    - Avoided emissions costs')
-        self.extract_emissions_costs_saved()
-        print('    - Investment costs')
-        self.extract_investment_costs()
-        print('    - Fuel costs')
-        self.extract_fuel_costs()
-        print('    - OM costs')
-        self.extract_om_costs()
-        print('    - Salvage value')
-        self.extract_salvage()
-        print('Done')
+        # # Based on wealth index, minimum wage and a lower an upper range for cost of opportunity
+        # print(f'[{self.specs["country_name"]}] Getting value of time')
+        # self.get_value_of_time()
+        # # Loop through each technology and calculate all benefits and costs
+        # for tech in techs:
+        #     print(f'Calculating health benefits for {tech.name}...')
+        #     if not tech.is_base:
+        #         tech.adjusted_pm25()
+        #     tech.morbidity(self)
+        #     tech.mortality(self)
+        #     print(f'Calculating carbon emissions benefits for {tech.name}...')
+        #     tech.carbon_emissions(self)
+        #     print(f'Calculating time saved benefits for {tech.name}...')
+        #     tech.time_saved(self)
+        #     print(f'Calculating costs for {tech.name}...')
+        #     tech.required_energy(self)
+        #     tech.discounted_om(self)
+        #     tech.discounted_inv(self)
+        #     tech.discount_fuel_cost(self)
+        #     tech.salvage(self)
+        #     print(f'Calculating net benefit for {tech.name}...\n')
+        #     tech.net_benefit(self, self.specs['w_health'], self.specs['w_spillovers'],
+        #                      self.specs['w_environment'], self.specs['w_time'], self.specs['w_costs'])
+        #
+        # print('Getting maximum net benefit technologies...')
+        # self.maximum_net_benefit(techs, restriction=restriction)
+        # print('Extracting indicators...')
+        # print('    - Lives saved')
+        # self.extract_lives_saved()
+        # print('    - Health costs')
+        # self.extract_health_costs_saved()
+        # print('    - Time saved')
+        # self.extract_time_saved()
+        # print('    - Opportunity cost')
+        # self.extract_opportunity_cost()
+        # print('    - Avoided emissions')
+        # self.extract_reduced_emissions()
+        # print('    - Avoided emissions costs')
+        # self.extract_emissions_costs_saved()
+        # print('    - Investment costs')
+        # self.extract_investment_costs()
+        # print('    - Fuel costs')
+        # self.extract_fuel_costs()
+        # print('    - OM costs')
+        # self.extract_om_costs()
+        # print('    - Salvage value')
+        # self.extract_salvage()
+        # print('Done')
 
     # TODO: check if this function is still needed
     def _get_column_functs(self):

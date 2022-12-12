@@ -18,8 +18,8 @@ Morb_COPD,1119.55,float,"Cases/100,000"
 Morb_IHD,977.35,float,"Cases/100,000"
 Morb_LC,4.55,float,"Cases/100,000"
 Morb_ALRI,7160.02,float,"Cases/100,000"
-Rural_HHsize,8,float,People/household
-Urban_HHsize,6.7,float,People/household
+Rural_HH_size,8,float,People/household
+Urban_HH_size,6.7,float,People/household
 Meals_per_day,3,float,Meals/day/person
 infra_weight,2,float,-
 NTL_weight,1,float,-
@@ -32,7 +32,7 @@ COI_COPD,103.0,float,USD/case
 COI_IHD,45.0,float,USD/case
 COI_LC,2431.0,float,USD/case
 COI_STROKE,3970.0,float,USD/case
-Cost of carbon emissions,51.0,float,USD/MT
+Cost_of_carbon_emissions,51.0,float,USD/MT
 Discount_rate,0.03,float,Ratio
 Health_spillovers_parameter,0.112,float,-
 Minimum_wage,85.0,float,USD/Month
