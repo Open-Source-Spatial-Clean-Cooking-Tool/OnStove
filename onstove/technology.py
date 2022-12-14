@@ -114,13 +114,19 @@ class Technology:
         self.current_share_rural = current_share_rural
         self.energy = 0
         self.epsilon = epsilon
-        for paf in ['paf_alri_', 'paf_copd_', 'paf_ihd_', 'paf_lc_', 'paf_stroke_']:
-            for s in ['u', 'r']:
-                self[paf + s] = 0
+        #for paf in ['paf_alri_', 'paf_copd_', 'paf_ihd_', 'paf_lc_', 'paf_stroke_']:
+        #    for s in ['u', 'r']:
+        #        self[paf + s] = 0
+        for paf in ['paf_alri', 'paf_copd', 'paf_ihd', 'paf_lc', 'paf_stroke']:
+            self[paf] = 0
         self.discounted_fuel_cost = 0
         self.discounted_investments = 0
         self.discounted_om_costs = 0
         self.discounted_salvage_cost = 0
+        self.decreased_carbon_costs = 0
+        self.clean_cooking_access = 0
+        self.sfu = 0
+        self.time_value = 0
         self.costs = 0
         self.benefits = None
         self.net_benefits = None
@@ -215,6 +221,7 @@ class Technology:
         paf: float
             The Population Attributable Fraction for each disease
         """
+
         paf = (sfu * (rr - 1)) / (sfu * (rr - 1) + 1)
         return paf
 
@@ -325,17 +332,11 @@ class Technology:
         relative_risk, paf
         """
         rr_alri, rr_copd, rr_ihd, rr_lc, rr_stroke = self.relative_risk()
-        self.paf_alri_r = self.paf(rr_alri, 1 - model.clean_cooking_access_r)
-        self.paf_copd_r = self.paf(rr_copd, 1 - model.clean_cooking_access_r)
-        self.paf_ihd_r = self.paf(rr_ihd, 1 - model.clean_cooking_access_r)
-        self.paf_lc_r = self.paf(rr_lc, 1 - model.clean_cooking_access_r)
-        self.paf_stroke_r = self.paf(rr_stroke, 1 - model.clean_cooking_access_r)
-
-        self.paf_alri_u = self.paf(rr_alri, 1 - model.clean_cooking_access_u)
-        self.paf_copd_u = self.paf(rr_copd, 1 - model.clean_cooking_access_u)
-        self.paf_ihd_u = self.paf(rr_ihd, 1 - model.clean_cooking_access_u)
-        self.paf_lc_u = self.paf(rr_lc, 1 - model.clean_cooking_access_u)
-        self.paf_stroke_u = self.paf(rr_stroke, 1 - model.clean_cooking_access_u)
+        self.paf_alri = self.paf(rr_alri, model.sfu)
+        self.paf_copd = self.paf(rr_copd, model.sfu)
+        self.paf_ihd = self.paf(rr_ihd, model.sfu)
+        self.paf_lc = self.paf(rr_lc, model.sfu)
+        self.paf_stroke = self.paf(rr_stroke, model.sfu)
 
     def mort_morb(self, model: 'onstove.OnStove', parameter: str = 'mort', dr: str = 'discount_rate') -> tuple[
         float, float]:
@@ -358,6 +359,7 @@ class Technology:
         ----------
         Monetary mortality or morbidity for each stove in urban and rural settings
         """
+        # TODO: Add relative here and vectorize, remove urban/rural. Actually remove only urban/rural and write a morb_mort baseline
         self.health_parameters(model)
 
         mor_u = {}
@@ -478,19 +480,26 @@ class Technology:
         """
         discount_rate, proj_life = self.discount_factor(model.specs)
         used_life = (proj_life % self.tech_life) * np.ones(model.gdf.shape[0])
-        used_life_base = (proj_life % model.base_fuel.tech_life)*np.ones(model.gdf.shape[0])
+
+        proj_years = np.matmul(np.expand_dims(np.ones(model.gdf.shape[0]), axis=1),
+                               np.expand_dims(np.zeros(proj_life), axis=0))
+
+        inv = self.inv_cost * np.ones(model.gdf.shape[0])
+        tech_life = self.tech_life * np.ones(model.gdf.shape[0])
+        for i in np.unique(tech_life):
+            where = np.where(tech_life == i)
+            for j in range(int(i) - 1, proj_life, int(i)):
+                proj_years[where, j] = 1
+
+        investments = proj_years * np.array(inv)[:, None]
 
         if relative:
-            discounted_base_salvage = model.base_fuel.salvage
+            base_salvage = model.base_fuel.discounted_salvage_cost
         else:
-            discounted_base_salvage = 0
+            base_salvage = 0
 
-        base_salvage = model.base_fuel.inv_cost * (1 - used_life_base / model.base_fuel.tech_life)
-        salvage = self.inv_cost * (1 - used_life / self.tech_life)
-
-        salvage = salvage - base_salvage
-        # TODO: this needs to be changed to use a series for each salvage value
-        discounted_salvage = salvage / discount_rate
+        salvage = np.array([y * (1 - x / self.tech_life) for x,y in zip(used_life,investments)])
+        discounted_salvage = np.array([sum(x / discount_rate) for x in salvage]) - base_salvage
 
         self.discounted_salvage_cost = discounted_salvage
 
@@ -511,12 +520,6 @@ class Technology:
         """
         discount_rate, proj_life = self.discount_factor(model.specs)
         operation_and_maintenance = self.om_cost * np.ones(model.gdf.shape[0])
-
-        #if relative:
-        #    discounted_om = np.array([sum((operation_and_maintenance - x) / discount_rate) for
-        #                          x in model.base_fuel.om_cost])
-        #else:
-        #    self.discounted_om_costs = pd.Series(discounted_om, index=model.gdf.index)
 
         if relative:
             discounted_base_om = model.base_fuel.discounted_om_costs
