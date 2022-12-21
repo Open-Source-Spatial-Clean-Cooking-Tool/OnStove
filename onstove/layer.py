@@ -15,6 +15,7 @@ from rasterio import warp, features, windows, transform
 from matplotlib.colors import ListedColormap, to_rgb, to_hex
 from scipy import ndimage
 from typing import Optional, Callable, Union
+from warnings import warn
 
 from onstove.plotting_utils import scale_bar as scale_bar_func
 from onstove.plotting_utils import north_arrow as north_arrow_func
@@ -244,7 +245,7 @@ class VectorLayer(_Layer):
                 self.data = self.data.query(query)
         self.path = path
 
-    def mask(self, mask_layer: gpd.GeoDataFrame, output_path: str = None):
+    def mask(self, mask_layer: gpd.GeoDataFrame, output_path: str = None, keep_geom_type=False):
         """Wrapper for the :doc:`geopandas:docs/reference/api/geopandas.GeoDataFrame.clip` method.
 
         Clip points, lines, or polygon geometries to the mask extent.
@@ -256,7 +257,7 @@ class VectorLayer(_Layer):
         output_path: str, optional
             A folder path where to save the output dataset. If not defined then the clipped dataset is not saved.
         """
-        self.data = gpd.clip(self.data, mask_layer.data.to_crs(self.data.crs))
+        self.data = gpd.clip(self.data, mask_layer.data.to_crs(self.data.crs), keep_geom_type=keep_geom_type)
         if isinstance(output_path, str):
             self.save(output_path)
 
@@ -815,19 +816,19 @@ class RasterLayer(_Layer):
                     self.meta = src.meta
 
             if self.meta['nodata'] is None:
-                if self.data.dtype == int:
+                if self.data.dtype in [int, 'int32']:
                     self.meta['nodata'] = 0
-                    raise Warning(f"The {self.name} layer do not have a defined nodata value, thus 0 was assigned. "
-                                  f"You can change this defining the nodata value in the metadata of the variable as: "
-                                  f"variable.meta['nodata'] = value")
-                elif self.data.dtype == float:
+                    warn(f"The {self.name} layer do not have a defined nodata value, thus 0 was assigned. "
+                         f"You can change this defining the nodata value in the metadata of the variable as: "
+                         f"variable.meta['nodata'] = value")
+                elif self.data.dtype in [float, 'float32', 'float64']:
                     self.meta['nodata'] = np.nan
-                    raise Warning(f"The {self.name} layer do not have a defined nodata value, thus np.nan was assigned."
-                                  f" You can change this defining the nodata value in the metadata of the variable as: "
-                                  f"variable.meta['nodata'] = value")
+                    warn(f"The {self.name} layer do not have a defined nodata value, thus np.nan was assigned."
+                         f" You can change this defining the nodata value in the metadata of the variable as: "
+                         f"variable.meta['nodata'] = value")
                 else:
-                    raise Warning(f"The {self.name} layer do not have a defined nodata value, please define the nodata "
-                                  f"value in the metadata of the variable with: variable.meta['nodata'] = value")
+                    warn(f"The {self.name} layer do not have a defined nodata value, please define the nodata "
+                         f"value in the metadata of the variable with: variable.meta['nodata'] = value")
         self.path = path
 
     @staticmethod
@@ -960,6 +961,7 @@ class RasterLayer(_Layer):
         return t, w, h
 
     def travel_time(self, rows: np.ndarray, cols: np.ndarray,
+                    include_starting_cells: bool = False,
                     output_path: Optional[str] = None,
                     create_raster: Optional[bool] = True) -> 'RasterLayer':
         """Calculates a travel time map using the raster data as cost surface and specific cells as starting points.
@@ -996,9 +998,11 @@ class RasterLayer(_Layer):
         # TODO: create method for restricted areas
         if len(pointlist) > 0:
             cumulative_costs, traceback = mcp.find_costs(starts=pointlist)
+            if include_starting_cells:
+                cumulative_costs += layer
             cumulative_costs[np.where(cumulative_costs == float('inf'))] = np.nan
         else:
-            cumulative_costs = np.full(self.data.shape, 2.0)
+            cumulative_costs = np.full(self.data.shape, 7.0)
 
         distance_raster = RasterLayer(self.category,
                                       'traveltime',
@@ -1151,7 +1155,7 @@ class RasterLayer(_Layer):
             :class:`RasterLayer` with the normalized data.
         """
         if self.normalization == 'MinMax':
-            raster = self.raster.copy()
+            raster = self.data.copy()
             nodata = self.meta['nodata']
             meta = self.meta
             if callable(self.distance_limit):
@@ -1169,7 +1173,7 @@ class RasterLayer(_Layer):
                 if not buffer:
                     raster[np.isnan(raster)] = 0
 
-            raster[self.raster == nodata] = np.nan
+            raster[self.data == nodata] = np.nan
             meta.update(nodata=np.nan, dtype='float32')
 
             normalized = RasterLayer(category=self.category,
