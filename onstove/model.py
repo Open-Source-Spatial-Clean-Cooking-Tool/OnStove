@@ -437,6 +437,8 @@ class DataProcessor:
         Saves all layers that have not been previously saved
         """
         datasets = self._get_layers(datasets)
+        datasets[self.mask_layer.category] = {self.mask_layer.name: self.mask_layer}
+        datasets[self.base_layer.category] = {self.base_layer.name: self.base_layer}
         for category, layers in datasets.items():
             for name, layer in layers.items():
                 output_path = os.path.join(self.output_directory,
@@ -1461,7 +1463,7 @@ class OnStove(DataProcessor):
                         layer = fillnodata(layer, mask=mask,
                                            max_search_distance=100)
                     elif fill_nodata_method is not None:
-                        raise ValueError('fill_nodata can only be None or "interpolate"')
+                        raise NotImplementedError('fill_nodata can only be None or "interpolate"')
                     layer[(mask == 0) & (np.isnan(layer))] = fill_default_value
 
             data = layer[self.rows, self.cols]
