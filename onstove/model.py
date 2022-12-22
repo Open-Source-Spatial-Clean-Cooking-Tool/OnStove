@@ -39,7 +39,7 @@ from plotnine import (
     after_stat,
     facet_wrap,
     geom_histogram,
-    facet_grid
+    facet_grid, element_blank
 )
 
 from onstove.technology import VectorLayer, RasterLayer, Technology, LPG, Biomass, Electricity, Biogas, Charcoal
@@ -2476,6 +2476,11 @@ class OnStove(DataProcessor):
     def plot_split(self, labels: Optional[dict[str, str]] = None,
                    cmap: Optional[dict[str, str]] = None,
                    x_variable: str = 'Calibrated_pop',
+                   orientation: str = 'horizontal',
+                   text_kwargs: Optional[dict] = None,
+                   annotation_kwargs: Optional[dict] = None,
+                   labs_kwargs: Optional[dict] = None,
+                   legend_kwargs: Optional[dict] = None,
                    height: float = 1.5, width: float = 2.5,
                    save_as: Optional[bool] = None) -> 'matplotlib.Figure':
         """Displays a bar plot with the population or households share using the technologies with highest net-benefits
@@ -2530,22 +2535,53 @@ class OnStove(DataProcessor):
         variables = {'Calibrated_pop': 'Population (Millions)', 'Households': 'Households (Millions)'}
 
         tech_list = df.sort_values(x_variable)['max_benefit_tech'].tolist()
-        ccolor = 'black'
+
+        if orientation in ['Horizontal', 'horizontal', 'H', 'h']:
+            if annotation_kwargs is None:
+                annotation_kwargs = dict(color='black', size=10, va='center', ha='left')
+        elif orientation in ['Vertical', 'vertical', 'V', 'v']:
+            if annotation_kwargs is None:
+                annotation_kwargs = dict(color='black', size=10, va='bottom', ha='center')
+        else:
+            raise ValueError('The value provided to the orientation parameter is not valid. Please choose between '
+                             '"horizontal" and "vertical"')
+
+        if text_kwargs is None:
+            text_kwargs = dict(text=element_text(size=9))
+        else:
+            for item, value in text_kwargs.items():
+                if isinstance(value, dict):
+                    text_kwargs[item] = element_text(**value)
+                elif value is None:
+                    text_kwargs[item] = element_blank()
+
+        if labs_kwargs is None:
+            labs_kwargs = dict(x='Stove share', y=variables[x_variable], fill='Cooking technology')
+        else:
+            _labs_kwargs = dict(x='Stove share', y=variables[x_variable], fill='Cooking technology')
+            _labs_kwargs.update(labs_kwargs)
+            labs_kwargs = _labs_kwargs
+
+        if legend_kwargs is None:
+            legend_kwargs = dict(legend_position='none')
 
         p = (ggplot(df)
              + geom_col(aes(x='max_benefit_tech', y=x_variable, fill='max_benefit_tech'))
              + geom_text(aes(y=df[x_variable], x='max_benefit_tech',
                              label=df[x_variable] / df[x_variable].sum()),
                          format_string='{:.0%}',
-                         color=ccolor, size=8, va='center', ha='left')
+                         **annotation_kwargs)
              + ylim(0, df[x_variable].max() * 1.15)
              + scale_x_discrete(limits=tech_list)
              + scale_fill_manual(cmap)
-             + coord_flip()
              + theme_minimal()
-             + theme(legend_position='none')
-             + labs(x='', y=variables[x_variable], fill='Cooking technology')
+             + theme(**legend_kwargs, **text_kwargs)
+             + labs(**labs_kwargs)
              )
+
+        if orientation in ['Horizontal', 'horizontal', 'H', 'h']:
+            p += coord_flip()
+
         if save_as is not None:
             file = os.path.join(self.output_directory, f'{save_as}.pdf')
             p.save(file, height=height, width=width)
