@@ -2517,6 +2517,21 @@ class OnStove(DataProcessor):
 
         x_variable: str, default 'Calibrated_pop'
             The variable to use in the x axis. Two options are available ``Calibrated_pop`` and ``Households``.
+        orientation: str, default 'horizontal'
+            It defines the orientation of the bar plot, takes as options 'horizontal' or 'vertical'.
+        text_kwargs: dict, optional
+            Dictionary with arguments for the general text of the plot such as text size. It defaults to
+            ``text_kwargs=dict(text=dict(size=9))``.
+        annotation_kwargs: dict, optional
+            Dictionary with arguments for the annotations text of the plot such as text size, color, vertical and
+            horizontal alignment. It defaults to
+            ``annotation_kwargs=dict(color='black', size=10, va='center', ha='left')``.
+        labs_kwargs: dict, optional
+            Dictionary with arguments for the x, y and fill labels. It defaults to
+            ``labs_kwargs=dict(x='Stove share', y='Population (Millions)', fill='Cooking technology')``.
+        legend_kwargs: dict, optional
+            Dictionary with arguments for the legend such as the legend position. It defaults to
+            ``legend_kwargs=dict(legend_position='none')``.
         height: float, default 1.5
             The heihg of the figure in inches.
         width: float, default 2.5
@@ -2573,7 +2588,6 @@ class OnStove(DataProcessor):
                          **annotation_kwargs)
              + ylim(0, df[x_variable].max() * 1.15)
              + scale_x_discrete(limits=tech_list)
-             + scale_fill_manual(cmap)
              + theme_minimal()
              + theme(**legend_kwargs, **text_kwargs)
              + labs(**labs_kwargs)
@@ -2581,6 +2595,9 @@ class OnStove(DataProcessor):
 
         if orientation in ['Horizontal', 'horizontal', 'H', 'h']:
             p += coord_flip()
+
+        if cmap is not None:
+            p += scale_fill_manual(cmap)
 
         if save_as is not None:
             file = os.path.join(self.output_directory, f'{save_as}.pdf')
