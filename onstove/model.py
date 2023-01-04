@@ -42,8 +42,10 @@ from plotnine import (
     facet_grid, element_blank
 )
 
-from onstove.technology import VectorLayer, RasterLayer, Technology, LPG, Biomass, Electricity, Biogas, Charcoal
+from onstove.layer import VectorLayer, RasterLayer
+from onstove.technology import Technology, LPG, Biomass, Electricity, Biogas, Charcoal, MiniGrids
 from onstove.raster import sample_raster
+from onstove._utils import Processes
 
 
 def timeit(func):
@@ -415,11 +417,18 @@ class DataProcessor:
                 output_path = os.path.join(self.output_directory,
                                            category, name)
                 os.makedirs(output_path, exist_ok=True)
-                layer.get_distance_raster(self.base_layer.path,
-                                          output_path, self.mask_layer.data)
-                # if isinstance(layer.friction, RasterLayer):
-                #     layer.friction.get_distance_raster(self.base_layer.path,
-                #                                        output_path, self.mask_layer.layer)
+                if isinstance(layer, VectorLayer):
+                    layer.get_distance_raster(raster=self.base_layer,
+                                              output_path=output_path)
+                if isinstance(layer, RasterLayer):
+                    if layer.distance_method == 'travel_time':
+                        warn(f'The distance_method of the {layer.name} layer is travel_time which cannot be called '
+                             f'using the get_distance_rasters method of the DataProcessor. Please call the '
+                             f'get_distance_raster method of the layer with the required parameters (see '
+                             f'documentation).')
+                    else:
+                        layer.get_distance_raster(output_path=output_path, mask_layer=self.mask_layer)
+
 
     def normalize_rasters(self, datasets='all', buffer=False):
         """
@@ -430,7 +439,7 @@ class DataProcessor:
             for name, layer in layers.items():
                 output_path = os.path.join(self.output_directory,
                                            category, name)
-                layer.distance_raster.normalize(output_path, self.mask_layer.data, buffer=buffer)
+                layer.distance_raster.normalize(output_path, buffer=buffer)
 
     def save_datasets(self, datasets='all'):
         """
@@ -643,7 +652,7 @@ class MCA(DataProcessor):
         output_path = os.path.join(self.output_directory,
                                    'Indexes', 'Demand Index')
         os.makedirs(output_path, exist_ok=True)
-        layer.normalize(output_path, self.mask_layer.data, buffer=buffer)
+        layer.normalize(output_path, buffer=buffer)
         layer.normalized.name = 'Demand Index'
         self.demand_index = layer.normalized
 
@@ -656,7 +665,7 @@ class MCA(DataProcessor):
         output_path = os.path.join(self.output_directory,
                                    'Indexes', 'Supply Index')
         os.makedirs(output_path, exist_ok=True)
-        layer.normalize(output_path, self.mask_layer.data, buffer=buffer)
+        layer.normalize(output_path, buffer=buffer)
         layer.normalized.name = 'Supply Index'
         self.supply_index = layer.normalized
 
@@ -668,7 +677,7 @@ class MCA(DataProcessor):
         output_path = os.path.join(self.output_directory,
                                    'Indexes', 'Clean Cooking Potential Index')
         os.makedirs(output_path, exist_ok=True)
-        layer.normalize(output_path, self.mask_layer.data, buffer=buffer)
+        layer.normalize(output_path, buffer=buffer)
         layer.normalized.name = 'Clean Cooking Potential Index'
         self.clean_cooking_index = layer.normalized
 
@@ -681,7 +690,7 @@ class MCA(DataProcessor):
         output_path = os.path.join(self.output_directory,
                                    'Indexes', 'Assistance need index')
         os.makedirs(output_path, exist_ok=True)
-        layer.normalize(output_path, self.mask_layer.data, buffer=buffer)
+        layer.normalize(output_path, buffer=buffer)
         layer.normalized.name = 'Assistance need index'
         self.assistance_need_index = layer.normalized
 
@@ -770,6 +779,8 @@ class OnStove(DataProcessor):
     clean_cooking_access_r
     electrified_weight
     """
+
+    normalize = Processes.normalize
 
     def __init__(self, project_crs: Optional[Union['pyproj.CRS', int]] = None,
                  cell_size: float = None, output_directory: str = 'output'):
@@ -1145,6 +1156,8 @@ class OnStove(DataProcessor):
                             techs[row['Fuel']] = Biogas()
                         elif 'electricity' in row['Fuel'].lower():
                             techs[row['Fuel']] = Electricity()
+                        elif 'mini_grids' in row['Fuel'].lower():
+                            techs[row['Fuel']] = MiniGrids()
                         else:
                             techs[row['Fuel']] = Technology()
                     if row['data_type'] == 'int':
@@ -1186,28 +1199,6 @@ class OnStove(DataProcessor):
         self.clean_cooking_access_u = clean_cooking_access_u
         self.clean_cooking_access_r = clean_cooking_access_r
 
-    def normalize(self, column: str, inverse: bool = False):
-        """Uses the MinMax method to normalize the data from a column of the :attr:`gdf` GeoDataFrame.
-
-        Parameters
-        ----------
-        column: str
-            Name of the column of the :attr:`gdf` to create the normalized data from.
-        inverse: bool, default False
-            Whether to invert the range in the normalized data.
-
-        Returns
-        -------
-        pd.Series
-            The normalized pd.Series.
-        """
-        if inverse:
-            normalized = (self.gdf[column].max() - self.gdf[column]) / (self.gdf[column].max() - self.gdf[column].min())
-        else:
-            normalized = (self.gdf[column] - self.gdf[column].min()) / (self.gdf[column].max() - self.gdf[column].min())
-
-        return normalized
-
     @property
     def electrified_weight(self):
         """Spatial weighted average factor used to calibrate the current electrified population.
@@ -1230,9 +1221,9 @@ class OnStove(DataProcessor):
             else:
                 self.gdf["Elec_dist"] = self.gdf["HV_lines_dist"]
 
-            elec_dist = self.normalize("Elec_dist", inverse=True)
-            ntl = self.normalize("Night_lights")
-            pop = self.normalize("Calibrated_pop")
+            elec_dist = self.normalize(column="Elec_dist", inverse=True)
+            ntl = self.normalize(column="Night_lights")
+            pop = self.normalize(column="Calibrated_pop")
 
             weight_sum = elec_dist * self.specs["infra_weight"] + pop * self.specs["pop_weight"] + \
                          ntl * self.specs["ntl_weight"]
@@ -2155,10 +2146,10 @@ class OnStove(DataProcessor):
             :meth:`create_layer`.
         """
         raster, codes, cmap = self.create_layer(variable, labels=labels, cmap=cmap, metric=metric)
-        raster.save(os.path.join(self.output_directory, 'Output'))
-        print(f'Layer saved in {os.path.join(self.output_directory, "Output", variable + ".tif")}\n')
+        raster.save(os.path.join(self.output_directory, 'Rasters'))
+        print(f'Layer saved in {os.path.join(self.output_directory, "Rasters", raster.name + ".tif")}\n')
         if codes and cmap:
-            with open(os.path.join(self.output_directory, 'Output', f'{variable}ColorMap.clr'), 'w') as f:
+            with open(os.path.join(self.output_directory, 'Rasters', f'{variable}ColorMap.clr'), 'w') as f:
                 for label, code in codes.items():
                     r = int(to_rgb(cmap[code])[0] * 255)
                     g = int(to_rgb(cmap[code])[1] * 255)
