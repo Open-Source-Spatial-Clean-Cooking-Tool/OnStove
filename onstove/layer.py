@@ -39,7 +39,7 @@ class _Layer:
     """Template Layer initializing all common needed attributes.
     """
 
-    def __init__(self, category: Optional[str] = None, name: Optional[str] = None,
+    def __init__(self, category: Optional[str] = None, name: Optional[str] = '',
                  path: Optional[str] = None, conn: Optional[str] = None,
                  normalization: Optional[str] = 'MinMax', inverse: bool = False,
                  distance_method:  Optional[str] = 'proximity', distance_limit: Optional[float] = None):
@@ -171,7 +171,7 @@ class VectorLayer(_Layer):
     """
 
     def __init__(self, category: Optional[str] = None,
-                 name: Optional[str] = None,
+                 name: Optional[str] = '',
                  path: Optional[str] = None,
                  conn: Optional['sqlalchemy.engine.Connection'] = None,
                  query: Optional[str] = None,
@@ -742,7 +742,7 @@ class RasterLayer(_Layer):
     """
 
     def __init__(self, category: Optional[str] = None,
-                 name: Optional[str] = None,
+                 name: Optional[str] = '',
                  path: Optional[str] = None,
                  conn: Optional['sqlalchemy.engine.Connection'] = None,
                  normalization: Optional[str] = 'MinMax', inverse: bool = False,
@@ -1071,7 +1071,7 @@ class RasterLayer(_Layer):
         else:
             return distance_raster
 
-    def get_distance_raster(self, method: Optional[str] = 'log',
+    def get_distance_raster(self, method: Optional[str] = None,
                             output_path: Optional[str] = None,
                             mask_layer: Optional[VectorLayer] = None,
                             starting_points: Optional[Callable[[np.ndarray], np.ndarray]] = None):
