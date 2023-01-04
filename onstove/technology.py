@@ -3,10 +3,11 @@
 import os
 import numpy as np
 import pandas as pd
+import geopandas as gpd
 from typing import Optional, Callable
 from math import exp
 
-from onstove._utils import raster_setter, vector_setter
+from onstove._utils import raster_setter, vector_setter, Processes
 from onstove.layer import VectorLayer, RasterLayer
 
 
@@ -62,6 +63,8 @@ class Technology:
     epsilon: float, default 0.71
         Emissions adjustment factor multiplied with the PM25 emissions.
     """
+
+    normalize = Processes.normalize
 
     def __init__(self,
                  name: Optional[str] = None,
@@ -121,6 +124,7 @@ class Technology:
         self.discounted_investments = 0
         self.benefits = None
         self.net_benefits = None
+        self.gdf = gpd.GeoDataFrame()
 
     def __setitem__(self, idx, value):
         self.__dict__[idx] = value
@@ -1708,8 +1712,10 @@ class MiniGrids(Electricity):
                  om_cost: float = 3.7,
                  efficiency: float = 0.85,  # ratio
                  pm25: float = 32,
-                 stove_power: float = 1.2,
-                 capacity_factor: float = 0.8):
+                 stove_power: float = 0.7,
+                 capacity_factor: float = 0.8,
+                 base_load: float = 0.1,  # in kW
+                 ):
         super().__init__(name=name, carbon_intensity=carbon_intensity, energy_content=energy_content,
                          tech_life=tech_life, inv_cost=inv_cost, connection_cost=connection_cost,
                          grid_capacity_cost=grid_capacity_cost, fuel_cost=fuel_cost,
@@ -1719,6 +1725,7 @@ class MiniGrids(Electricity):
         self.potential = None
         self.capacity_factor = capacity_factor
         self.stove_power = stove_power
+        self.base_load = base_load
 
     @property
     def coverage(self) -> RasterLayer:
@@ -1738,18 +1745,99 @@ class MiniGrids(Electricity):
     def coverage(self, layer):
         self._coverage = vector_setter(layer)
 
-    def calculate_potential(self):
+    @property
+    def distance(self) -> RasterLayer:
+        """:class:`VectorLayer` object containing a vector dataset showing the areas of coverage of the mini-grids.
+
+        This layer must contain the following columns:
+        * `capacity`: installed capacity of the mini-grids
+        * `households`: amount of households served by the mini-grids
+        * `geometry`: polygons showing areas of coverage
+
+        .. seealso::
+            :meth:`calculate_potential`
+        """
+        return self._distance
+
+    @distance.setter
+    def distance(self, layer):
+        self._distance = raster_setter(layer)
+
+    @property
+    def ntl(self) -> RasterLayer:
+        """:class:`VectorLayer` object containing a vector dataset showing the areas of coverage of the mini-grids.
+
+        This layer must contain the following columns:
+        * `capacity`: installed capacity of the mini-grids
+        * `households`: amount of households served by the mini-grids
+        * `geometry`: polygons showing areas of coverage
+
+        .. seealso::
+            :meth:`calculate_potential`
+        """
+        return self._ntl
+
+    @ntl.setter
+    def ntl(self, layer):
+        self._ntl = raster_setter(layer)
+
+    def calculate_potential(self, model):
         """Calculates the potential of each mini-grid for supporting eCooking in each area.
         """
-        self.capacity_factor * self.coverage['capacity']
+        leftover = np.maximum(self.capacity_factor * self.coverage.data['capacity'] -
+                              self.coverage.data['households'] * self.base_load, 0)
+        self.coverage.data['potential_hh'] = leftover / self.stove_power  # in number of households
+
+        self.gdf = model.gdf[['geometry']].sjoin(self.coverage.data, how='left')
+        self.gdf['mg_dist'] = model.raster_to_dataframe(self.distance, method='read')
+        self.gdf['ntl'] = model.raster_to_dataframe(self.ntl, method='read')
+
+        pop_norm = model.normalize('Calibrated_pop')
+        ntl_norm = self.normalize('ntl')
+        mg_dist_norm = self.normalize('mg_dist', inverse=True)
+        w_pop = 1
+        w_ntl = 1
+        w_mg_dist = 2
+        weights = w_pop + w_ntl + w_mg_dist
+        weight_sum = (w_pop * pop_norm + w_ntl * ntl_norm + w_mg_dist * mg_dist_norm) / weights
+        self.gdf['mg_acces_weight'] = weight_sum
+        self.gdf["current_mg_elec"] = 0
+        self.gdf['supported_hh'] = 0
+        self.gdf['supported_pop'] = 0
+        for municipality, group in self.gdf.groupby('municipality'):
+            hh_access = group['potential_hh'].mean()
+            weights = sorted(group['mg_acces_weight'], reverse=True)
+            elec_hh = 0
+            i = 0
+
+            while elec_hh < hh_access:
+                muni_vec = (self.gdf['municipality'] == municipality)
+                not_grid = (model.gdf['Current_elec'] == 0)
+                bool_vec = muni_vec & not_grid & (self.gdf['mg_acces_weight'] >= weights[i])
+                elec_hh = model.gdf.loc[bool_vec, "Households"].sum()
+
+                self.gdf.loc[bool_vec, 'supported_hh'] = model.gdf.loc[bool_vec, "Households"]
+                self.gdf.loc[bool_vec, 'current_mg_elec'] = 1
+                self.gdf.loc[bool_vec, 'supported_pop'] = model.gdf.loc[bool_vec, "Calibrated_pop"]
+                i += 1
+                if i == len(weights):
+                    break
 
     def discounted_inv(self, model: 'onstove.OnStove', relative: bool = True):
-        pass
+        super(Electricity, self).discounted_inv(model, relative=relative)
+        self.discounted_investments += self.connection_cost
 
     def net_benefit(self, model: 'onstove.OnStove', w_health: int = 1, w_spillovers: int = 1,
                     w_environment: int = 1, w_time: int = 1, w_costs: int = 1):
-        super().net_benefit(model, w_health, w_spillovers, w_environment, w_time, w_costs)
-        model.gdf.loc[self.potential == 0, "net_benefit_{}".format(self.name)] = np.nan
+        super(Electricity, self).net_benefit(model, w_health, w_spillovers, w_environment, w_time, w_costs)
+        self.calculate_potential(model)
+        self.households = self.gdf['supported_hh']
+        model.gdf.loc[self.households == 0, "net_benefit_{}".format(self.name)] = np.nan
+        self.net_benefits.loc[self.households == 0] = np.nan
+        # factor = self.gdf['Elec_pop_calib'] / self.gdf['Calibrated_pop']
+        factor = np.ones(self.households.shape[0])
+        factor[self.households == 0] = 0
+        self.factor = factor
 
 
 class Biogas(Technology):
