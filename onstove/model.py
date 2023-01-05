@@ -122,12 +122,15 @@ class DataProcessor:
         """
         if layers == 'all':
             _layers = self.layers
-        else:
-            _layers = {}
-            for category, names in layers.items():
-                _layers[category] = {}
-                for name in names:
-                    _layers[category][name] = self.layers[category][name]
+        elif isinstance(layers, dict):
+            if isinstance(list(layers.values())[0], list):
+                _layers = {}
+                for category, names in layers.items():
+                    _layers[category] = {}
+                    for name in names:
+                        _layers[category][name] = self.layers[category][name]
+            else:
+                _layers = layers
         return _layers
 
     def set_postgres(self, dbname: str, user: str, password: str):
@@ -157,7 +160,7 @@ class DataProcessor:
 
     def add_layer(self, category: str, name: str, path: str, layer_type: str, query: str = None,
                   postgres: bool = False, base_layer: bool = False, resample: str = 'nearest',
-                  normalization: str = 'MinMax', inverse: bool = False, distance_method: str = 'proximity',
+                  normalization: str = 'MinMax', inverse: bool = False, distance_method: Optional[str] = None,
                   distance_limit: Optional[Callable[[np.ndarray], np.ndarray]] = None,
                   window: Optional[bool] = False, rescale: bool = False):
         """
@@ -215,7 +218,7 @@ class DataProcessor:
                If the ``layer_type`` is `vector`, this parameters will be passed to any raster dataset created from
                the vector layer, for example see :attr:`VectorLayer.distance_raster`.
 
-        distance_method: str, default 'proximity'
+        distance_method: str, optional
             Sets the default distance algorithm to use when calling the :meth:`get_distance_raster` method for the
             layer, see :class:`VectorLayer` and :class:`RasterLayer`.
         distance_limit: Callable object (function or lambda function) with a numpy array as input, optional
@@ -318,7 +321,7 @@ class DataProcessor:
 
         self.mask_layer.save(os.path.join(self.output_directory, self.mask_layer.category, self.mask_layer.name))
 
-    def mask_layers(self, datasets: dict[str, list[str]] = 'all'):
+    def mask_layers(self, datasets: dict[str, list[str]] = 'all', crop: bool = True):
         """
         Uses the a mask layer in ``self.mask_layer`` to mask all other layers to its boundaries.
 
@@ -345,14 +348,14 @@ class DataProcessor:
                 else:
                     all_touched = False
                 if isinstance(layer, RasterLayer):
-                    layer.mask(self.mask_layer, output_path, all_touched=all_touched)
+                    layer.mask(self.mask_layer, output_path, all_touched=all_touched, crop=crop)
                 elif isinstance(layer, VectorLayer):
                     layer.mask(self.mask_layer, output_path)
 
                 if isinstance(layer.friction, RasterLayer):
-                    layer.friction.mask(self.mask_layer, output_path)
+                    layer.friction.mask(self.mask_layer, output_path, crop=crop)
                 if isinstance(layer.distance_raster, RasterLayer):
-                    layer.distance_raster.mask(self.mask_layer, output_path)
+                    layer.distance_raster.mask(self.mask_layer, output_path, crop=crop)
 
     def align_layers(self, datasets: dict[str, list[str]] = 'all'):
         """
@@ -439,7 +442,8 @@ class DataProcessor:
             for name, layer in layers.items():
                 output_path = os.path.join(self.output_directory,
                                            category, name)
-                layer.distance_raster.normalize(output_path, buffer=buffer)
+                layer.mask(self.mask_layer, crop=False, all_touched=False)
+                layer.normalize(output_path, buffer=buffer, inverse=layer.inverse)
 
     def save_datasets(self, datasets='all'):
         """
@@ -530,7 +534,7 @@ class MCA(DataProcessor):
         elif raster is None:
             self._demand_index = None
         else:
-            raise ValueError('The demand index needs to be of class `RasterLayer`.')
+            raise ValueError('The demand index needs to be of class `RasterLayer`, but {type(raster)} was provided.')
 
     @property
     def supply_index(self):
@@ -561,10 +565,10 @@ class MCA(DataProcessor):
     def supply_index(self, raster):
         if isinstance(raster, RasterLayer):
             self._supply_index = raster
-        if raster is None:
+        elif raster is None:
             self._supply_index = None
         else:
-            raise ValueError('The supply index needs to be of class `RasterLayer`.')
+            raise ValueError(f'The supply index needs to be of class `RasterLayer`, but {type(raster)} was provided.')
 
     @property
     def clean_cooking_index(self):
@@ -593,10 +597,11 @@ class MCA(DataProcessor):
     def clean_cooking_index(self, raster):
         if isinstance(raster, RasterLayer):
             self._clean_cooking_index = raster
-        if raster is None:
+        elif raster is None:
             self._clean_cooking_index = None
         else:
-            raise ValueError('The clean cooking index needs to be of class `RasterLayer`.')
+            raise ValueError('The clean cooking index needs to be of class `RasterLayer`, but {type(raster)} was '
+                             'provided.')
 
     @property
     def assistance_need_index(self):
@@ -625,7 +630,7 @@ class MCA(DataProcessor):
     def assistance_need_index(self, raster):
         if isinstance(raster, RasterLayer):
             self._assistance_need_index = raster
-        if raster is None:
+        elif raster is None:
             self._assistance_need_index = None
         else:
             raise ValueError('The assistance need index needs to be of class `RasterLayer`.')
@@ -638,61 +643,55 @@ class MCA(DataProcessor):
         weights = []
         rasters = []
         for name, layer in data.items():
-            rasters.append(layer.weight * layer.distance_raster.normalized.data)
+            rasters.append(layer.weight * layer.normalized.data)
             weights.append(layer.weight)
 
         return sum(rasters) / sum(weights)
 
-    def get_demand_index(self, datasets='all', buffer=False):
-        self.normalize_rasters(datasets=datasets, buffer=buffer)
+    def _update_layers(self, datasets):
         datasets = self._get_layers(datasets)
-        layer = RasterLayer('Indexes', 'Demand_index', normalization='MinMax')
+        new_datasets = {}
+        for key, items in datasets.items():
+            new_datasets[key] = {}
+            for name, item in items.items():
+                layer = RasterLayer()
+                layer.data = item.distance_raster.data.copy()
+                layer.name = item.distance_raster.name
+                layer.category = item.distance_raster.category
+                layer.weight = item.weight
+                layer.inverse = item.inverse
+                layer.distance_limit = item.distance_limit
+                layer.meta = dict(item.distance_raster.meta)
+                new_datasets[key][name] = layer
+        return new_datasets
+
+    def get_index(self, datasets='all', buffer=False, name=None):
+        datasets = self._update_layers(datasets)
+        self.normalize_rasters(datasets=datasets, buffer=buffer)
+        layer = RasterLayer(normalization='MinMax')
         layer.data = self.index(datasets)
         layer.meta = self.base_layer.meta
-        output_path = os.path.join(self.output_directory,
-                                   'Indexes', 'Demand Index')
-        os.makedirs(output_path, exist_ok=True)
-        layer.normalize(output_path, buffer=buffer)
-        layer.normalized.name = 'Demand Index'
-        self.demand_index = layer.normalized
+        layer.normalize(buffer=buffer)
+        layer.normalized.name = name
+        return layer.normalized
 
-    def get_supply_index(self, datasets='all', buffer=False):
-        self.normalize_rasters(datasets=datasets, buffer=buffer)
-        datasets = self._get_layers(datasets)
-        layer = RasterLayer('Indexes', 'Supply index', normalization='MinMax')
-        layer.data = self.index(datasets)
-        layer.meta = self.base_layer.meta
-        output_path = os.path.join(self.output_directory,
-                                   'Indexes', 'Supply Index')
-        os.makedirs(output_path, exist_ok=True)
-        layer.normalize(output_path, buffer=buffer)
-        layer.normalized.name = 'Supply Index'
-        self.supply_index = layer.normalized
+    def set_demand_index(self, datasets='all', buffer=False):
+        self.demand_index = self.get_index(datasets=datasets, buffer=buffer, name='Demand Index')
 
-    def get_clean_cooking_index(self, demand_weight=1, supply_weight=1, buffer=False):
-        layer = RasterLayer('Indexes', 'Clean Cooking Potential Index', normalization='MinMax')
+    def set_supply_index(self, datasets='all', buffer=False):
+        self.supply_index = self.get_index(datasets=datasets, buffer=buffer, name='Supply Index')
+
+    def set_clean_cooking_index(self, demand_weight=1, supply_weight=1, buffer=False):
+        layer = RasterLayer(normalization='MinMax')
         layer.data = (demand_weight * self.demand_index.data + supply_weight * self.supply_index.data) / \
                      (demand_weight + supply_weight)
         layer.meta = self.base_layer.meta
-        output_path = os.path.join(self.output_directory,
-                                   'Indexes', 'Clean Cooking Potential Index')
-        os.makedirs(output_path, exist_ok=True)
-        layer.normalize(output_path, buffer=buffer)
+        layer.normalize(buffer=buffer)
         layer.normalized.name = 'Clean Cooking Potential Index'
         self.clean_cooking_index = layer.normalized
 
-    def get_assistance_need_index(self, datasets='all', buffer=False):
-        self.normalize_rasters(datasets=datasets, buffer=buffer)
-        datasets = self._get_layers(datasets)
-        layer = RasterLayer('Indexes', 'Assistance need index', normalization='MinMax')
-        layer.data = self.index(datasets)
-        layer.meta = self.base_layer.meta
-        output_path = os.path.join(self.output_directory,
-                                   'Indexes', 'Assistance need index')
-        os.makedirs(output_path, exist_ok=True)
-        layer.normalize(output_path, buffer=buffer)
-        layer.normalized.name = 'Assistance need index'
-        self.assistance_need_index = layer.normalized
+    def set_assistance_need_index(self, datasets='all', buffer=False):
+        self.assistance_need_index = self.get_index(datasets=datasets, buffer=buffer, name='Assistance need index')
 
     @staticmethod
     def autopct_format(values):
