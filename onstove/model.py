@@ -289,7 +289,7 @@ class DataProcessor:
             self.layers[category] = {name: layer}
 
     def add_mask_layer(self, category: str, name: str, path: str,
-                       query: str = None, postgres: bool = False):
+                       query: str = None, postgres: bool = False, save_layer: bool = False):
         """
         Adds a vector layer to self.mask_layer, which will be used to mask all
         other layers into is boundaries
@@ -318,10 +318,19 @@ class DataProcessor:
         if self.mask_layer.data.crs != self.project_crs:
             output_path = os.path.join(self.output_directory, category, name)
             self.mask_layer.reproject(self.project_crs, output_path)
+        if save_layer:
+            self.mask_layer.save(os.path.join(self.output_directory, self.mask_layer.category, self.mask_layer.name))
 
-        self.mask_layer.save(os.path.join(self.output_directory, self.mask_layer.category, self.mask_layer.name))
+    def _save_layers(self, save: bool, category: str, name: str):
+        if save:
+            output_path = os.path.join(self.output_directory,
+                                       category, name)
+            os.makedirs(output_path, exist_ok=True)
+        else:
+            output_path = None
+        return output_path
 
-    def mask_layers(self, datasets: dict[str, list[str]] = 'all', crop: bool = True):
+    def mask_layers(self, datasets: dict[str, list[str]] = 'all', crop: bool = True, save_layers: bool = False):
         """
         Uses the a mask layer in ``self.mask_layer`` to mask all other layers to its boundaries.
 
@@ -340,9 +349,7 @@ class DataProcessor:
         datasets = self._get_layers(datasets)
         for category, layers in datasets.items():
             for name, layer in layers.items():
-                output_path = os.path.join(self.output_directory,
-                                           category, name)
-                os.makedirs(output_path, exist_ok=True)
+                output_path = self._save_layers(save=save_layers, category=category, name=name)
                 if name != self.base_layer.name:
                     all_touched = True
                 else:
@@ -357,7 +364,7 @@ class DataProcessor:
                 if isinstance(layer.distance_raster, RasterLayer):
                     layer.distance_raster.mask(self.mask_layer, output_path, crop=crop)
 
-    def align_layers(self, datasets: dict[str, list[str]] = 'all'):
+    def align_layers(self, datasets: dict[str, list[str]] = 'all', save_layers=False):
         """
         Ensures that the coordinate system and resolution of the raster is the same as the base layer
 
@@ -374,9 +381,7 @@ class DataProcessor:
         datasets = self._get_layers(datasets)
         for category, layers in datasets.items():
             for name, layer in layers.items():
-                output_path = os.path.join(self.output_directory,
-                                           category, name)
-                os.makedirs(output_path, exist_ok=True)
+                output_path = self._save_layers(save=save_layers, category=category, name=name)
                 if isinstance(layer, VectorLayer):
                     if isinstance(layer.friction, RasterLayer):
                         layer.friction.align(base_layer=self.base_layer, output_path=output_path)
@@ -386,7 +391,7 @@ class DataProcessor:
                     if isinstance(layer.friction, RasterLayer):
                         layer.friction.align(base_layer=self.base_layer, output_path=output_path)
 
-    def reproject_layers(self, datasets: dict[str, list[str]] = 'all'):
+    def reproject_layers(self, datasets: dict[str, list[str]] = 'all', save_layers=False):
         """
         Reprojects the layers specified by the user.
 
@@ -403,23 +408,19 @@ class DataProcessor:
         datasets = self._get_layers(datasets)
         for category, layers in datasets.items():
             for name, layer in layers.items():
-                output_path = os.path.join(self.output_directory,
-                                           category, name)
-                os.makedirs(output_path, exist_ok=True)
+                output_path = self._save_layers(save=save_layers, category=category, name=name)
                 layer.reproject(self.project_crs, output_path)
                 if isinstance(layer.friction, RasterLayer):
                     layer.friction.reproject(self.project_crs, output_path)
 
-    def get_distance_rasters(self, datasets='all'):
+    def get_distance_rasters(self, datasets='all', save_layers=False):
         """
         Goes through all layer and call their `.distance_raster` method
         """
         datasets = self._get_layers(datasets)
         for category, layers in datasets.items():
             for name, layer in layers.items():
-                output_path = os.path.join(self.output_directory,
-                                           category, name)
-                os.makedirs(output_path, exist_ok=True)
+                output_path = self._save_layers(save=save_layers, category=category, name=name)
                 if isinstance(layer, VectorLayer):
                     layer.get_distance_raster(raster=self.base_layer,
                                               output_path=output_path)
@@ -427,15 +428,14 @@ class DataProcessor:
                     layer.get_distance_raster(output_path=output_path, mask_layer=self.mask_layer)
 
 
-    def normalize_rasters(self, datasets='all', buffer=False):
+    def normalize_rasters(self, datasets='all', buffer=False, save_layers=False):
         """
         Goes through all layer and call their `.normalize` method
         """
         datasets = self._get_layers(datasets)
         for category, layers in datasets.items():
             for name, layer in layers.items():
-                output_path = os.path.join(self.output_directory,
-                                           category, name)
+                output_path = self._save_layers(save=save_layers, category=category, name=name)
                 layer.mask(self.mask_layer, crop=False, all_touched=False)
                 layer.normalize(output_path, buffer=buffer, inverse=layer.inverse)
 
@@ -455,6 +455,7 @@ class DataProcessor:
     def to_pickle(self, name):
         """Saves the model as a pickle."""
         self.conn = None
+        os.makedirs(self.output_directory, exist_ok=True)
         with open(os.path.join(self.output_directory, name), "wb") as f:
             dill.dump(self, f)
 
