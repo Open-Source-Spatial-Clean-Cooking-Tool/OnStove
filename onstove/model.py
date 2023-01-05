@@ -450,6 +450,7 @@ class DataProcessor:
             for name, layer in layers.items():
                 output_path = os.path.join(self.output_directory,
                                            category, name)
+                os.makedirs(output_path, exist_ok=True)
                 layer.save(output_path)
 
     def to_pickle(self, name):
