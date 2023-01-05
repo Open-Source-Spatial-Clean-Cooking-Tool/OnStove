@@ -759,6 +759,7 @@ class RasterLayer(_Layer):
         self.rescale = rescale
         self.meta = {}
         self.normalized = None
+        self.starting_points = None
         super().__init__(category=category, name=name,
                          path=path, conn=conn,
                          normalization=normalization, inverse=inverse,
@@ -1127,6 +1128,9 @@ class RasterLayer(_Layer):
         """
         if callable(condition):
             return np.where(condition(self.data))
+        elif condition is None:
+            if isinstance(self.starting_points, tuple):
+                return self.starting_points
         else:
             raise TypeError('The condition can only be a callable object.')
 

@@ -424,13 +424,7 @@ class DataProcessor:
                     layer.get_distance_raster(raster=self.base_layer,
                                               output_path=output_path)
                 if isinstance(layer, RasterLayer):
-                    if layer.distance_method == 'travel_time':
-                        warn(f'The distance_method of the {layer.name} layer is travel_time which cannot be called '
-                             f'using the get_distance_rasters method of the DataProcessor. Please call the '
-                             f'get_distance_raster method of the layer with the required parameters (see '
-                             f'documentation).')
-                    else:
-                        layer.get_distance_raster(output_path=output_path, mask_layer=self.mask_layer)
+                    layer.get_distance_raster(output_path=output_path, mask_layer=self.mask_layer)
 
 
     def normalize_rasters(self, datasets='all', buffer=False):
