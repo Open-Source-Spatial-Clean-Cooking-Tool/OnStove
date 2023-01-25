@@ -338,6 +338,62 @@ class Technology:
         self.paf_lc = self.paf(rr_lc, model.sfu)
         self.paf_stroke = self.paf(rr_stroke, model.sfu)
 
+    #def base_mort_morb(self, model: 'onstove.OnStove', parameter: str = 'mort')#, dr: str = 'discount_rate') -> tuple[
+    #    float, float]:
+    def base_mort_morb(self, model: 'onstove.OnStove', parameter: str = 'mort') -> tuple[
+        float, float]:
+
+        """
+        Calculates mortality or morbidity rate for the base year. These two calculations are very similar in nature and are
+        therefore combined in one function. In order to indicate if morbidity or mortality should be calculated, the
+        `parameter` parameter can be changed (to either `Morb` or `Mort`).
+
+        Parameters
+        ----------
+        model: OnStove model
+            Instance of the OnStove model containing the main data of the study case. See
+            :class:`onstove.OnStove`.
+        parameter: str, default 'Mort'
+            Parameter to calculate. For mortality enter 'Mort' and for morbidity enter 'Morb'
+        dr: str, default 'Discount_rate'
+            Discount rate used in the analysis read from the socio-economic file
+
+        Returns
+        ----------
+        Monetary mortality or morbidity for each stove in the baseline
+        """
+        # TODO: Add relative here and vectorize, remove urban/rural. Actually remove only urban/rural and write a morb_mort baseline
+        #self.health_parameters(model)
+
+        mor = {}
+        diseases = ['alri', 'copd', 'ihd', 'lc', 'stroke']
+
+        for disease in diseases:
+            rate = model.specs[f'{parameter}_{disease}']
+
+            paf = f'paf_{disease.lower()}'
+            mor[disease] = model.gdf['pop_init_year'].sum() * model.base_fuel[paf] * (rate / 100000)
+
+        total_mor = 0
+        
+        for disease in diseases:
+            if parameter == 'morb':
+                cost = model.specs[f'coi_{disease}']
+            elif parameter == 'mort':
+                cost = model.specs['vsl']
+                
+            total_mor += cost * mor[disease] #/ (1 + model.specs[dr]) ** (i - 1)
+            
+
+        denominator = model.gdf['pop_init_year'].sum() * model.gdf['households_init']
+
+        distributed_cost = pd.Series(index=model.gdf.index, dtype='float64')
+
+        distributed_cost = model.gdf['pop_init_year'] * total_mor / denominator
+
+        return distributed_cost
+
+
     def mort_morb(self, model: 'onstove.OnStove', parameter: str = 'mort', dr: str = 'discount_rate') -> tuple[
         float, float]:
         """
@@ -357,25 +413,18 @@ class Technology:
 
         Returns
         ----------
-        Monetary mortality or morbidity for each stove in urban and rural settings
+        Monetary mortality or morbidity for each stove.
         """
-        # TODO: Add relative here and vectorize, remove urban/rural. Actually remove only urban/rural and write a morb_mort baseline
         self.health_parameters(model)
 
-        mor_u = {}
-        mor_r = {}
+        mor = {}
         diseases = ['alri', 'copd', 'ihd', 'lc', 'stroke']
-        is_urban = model.gdf["IsUrban"] > 20
-        is_rural = model.gdf["IsUrban"] < 20
+
         for disease in diseases:
             rate = model.specs[f'{parameter}_{disease}']
 
-            paf = f'paf_{disease.lower()}_u'
-            mor_u[disease] = model.gdf.loc[is_urban, "Calibrated_pop"].sum() * (model.base_fuel[paf] - self[paf]) * (
-                    rate / 100000)
-
-            paf = f'paf_{disease.lower()}_r'
-            mor_r[disease] = model.gdf.loc[is_rural, "Calibrated_pop"].sum() * (model.base_fuel[paf] - self[paf]) * (
+            paf = f'paf_{disease.lower()}'
+            mor[disease] = model.gdf.loc['pop_init_year'].sum() * (model.base_fuel[paf] - self[paf]) * (
                     rate / 100000)
 
         cl_diseases = {'alri': {1: 0.7, 2: 0.1, 3: 0.07, 4: 0.07, 5: 0.06},
@@ -385,33 +434,25 @@ class Technology:
                        'stroke': {1: 0.2, 2: 0.1, 3: 0.24, 4: 0.23, 5: 0.23}}
 
         i = 1
-        total_mor_u = 0
-        total_mor_r = 0
+        total_mor = 0
         while i < 6:
             for disease in diseases:
                 if parameter == 'morb':
                     cost = model.specs[f'coi_{disease}']
                 elif parameter == 'mort':
                     cost = model.specs['vsl']
-                total_mor_u += cl_diseases[disease][i] * cost * mor_u[disease] / (1 + model.specs[dr]) ** (i - 1)
-                total_mor_r += cl_diseases[disease][i] * cost * mor_r[disease] / (1 + model.specs[dr]) ** (i - 1)
+                total_mor += cl_diseases[disease][i] * cost * mor[disease] / (1 + model.specs[dr]) ** (i - 1)
             i += 1
 
-        is_urban = model.gdf["IsUrban"] > 20
-        is_rural = model.gdf["IsUrban"] < 20
-
-        urban_denominator = model.gdf.loc[is_urban, "Calibrated_pop"].sum() * model.gdf.loc[is_urban, 'Households']
-        rural_denominator = model.gdf.loc[is_rural, "Calibrated_pop"].sum() * model.gdf.loc[is_rural, 'Households']
+        denominator = model.gdf['pop_init_year'].sum() * model.gdf['households_init']
 
         distributed_cost = pd.Series(index=model.gdf.index, dtype='float64')
 
-        distributed_cost[is_urban] = model.gdf.loc[is_urban, "Calibrated_pop"] * total_mor_u / urban_denominator
-        distributed_cost[is_rural] = model.gdf.loc[is_rural, "Calibrated_pop"] * total_mor_r / rural_denominator
+        distributed_cost = model.gdf['pop_init_year'] * total_mor / denominator
 
         cases_avoided = pd.Series(index=model.gdf.index, dtype='float64')
 
-        cases_avoided[is_urban] = sum(mor_u.values()) * model.gdf.loc[is_urban, "Calibrated_pop"] / urban_denominator
-        cases_avoided[is_rural] = sum(mor_r.values()) * model.gdf.loc[is_rural, "Calibrated_pop"] / rural_denominator
+        cases_avoided = sum(mor.values()) * model.gdf['pop_init_year'] / denominator
 
         return distributed_cost, cases_avoided
 

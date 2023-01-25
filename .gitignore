@@ -154,3 +154,4 @@ example/*
 onstove/tests/data/*
 !onstove/tests/data/.gitkeep
 onstove/tests/output
+example/OnStove_notebook.ipynb

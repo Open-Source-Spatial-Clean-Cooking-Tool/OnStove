@@ -1115,6 +1115,7 @@ class OnStove(DataProcessor):
                 for paf in ['paf_alri', 'paf_copd', 'paf_ihd', 'paf_lc', 'paf_stroke']:
                     base_fuel[paf] += tech[paf] * tech.pop_sqkm
 
+
                 base_fuel.carbon += tech.carbon * tech.pop_sqkm
                 base_fuel.decreased_carbon_costs += base_fuel.carbon * self.specs['cost_of_carbon_emissions']
                 base_fuel.total_time_yr += (tech.total_time_yr * tech.pop_sqkm).fillna(0)
@@ -1130,7 +1131,6 @@ class OnStove(DataProcessor):
                 #for paf in ['paf_alri_u', 'paf_copd_u', 'paf_ihd_u',
                 #            'paf_lc_u', 'paf_stroke_u']:
                 #   base_fuel[paf] += tech[paf] * tech.current_share_urban
-
                 tech.salvage(self, relative=False)
                 base_fuel.discounted_salvage_cost += tech.discounted_salvage_cost * tech.pop_sqkm
 
@@ -1138,11 +1138,20 @@ class OnStove(DataProcessor):
                 base_fuel.costs += tech.costs * tech.pop_sqkm
                 self.gdf["baseline_costs"] = base_fuel.costs
 
+            base_fuel.sfu = 1 - base_fuel.clean_cooking_access
+            self.base_fuel = base_fuel
+
+            base_fuel.mort = tech.base_mort_morb(self, 'mort')
+            base_fuel.morb = tech.base_mort_morb(self, 'morb')
+
             base_fuel.decreased_carbon_costs = base_fuel.carbon * self.specs['cost_of_carbon_emissions'] / 1000
             base_fuel.time_value = base_fuel.total_time_yr * self.gdf["value_of_time"] / (
                 1 + self.specs["discount_rate"]) ** (self.specs['end_year']- self.specs['start_year'])
-            base_fuel.sfu = 1 - base_fuel.clean_cooking_access
-            self.base_fuel = base_fuel
+
+            base_fuel.benefits = base_fuel.mort + base_fuel.morb + base_fuel.decreased_carbon_costs + \
+                                 base_fuel.time_value
+
+            self.gdf["baseline_benefits"] = base_fuel.benefits
 
     def read_tech_data(self, path_to_config: str, delimiter=','):
         """
@@ -1609,10 +1618,11 @@ class OnStove(DataProcessor):
         if method == 'urban':
 
             self.gdf.sort_values(by='pop_init_year', inplace=True, ascending=False)
-            cumulative_pop = self.gdf['pop_init_year'].cumsum()
+            #cumulative_pop = self.gdf['pop_init_year'].cumsum()
+            cumulative_pop = (self.gdf['pop_init_year'] * (1 - self.clean_cooking_access)).cumsum()
 
             while year > self.specs['start_year']:
-                self.gdf['year'] = np.where(cumulative_pop < (target * self.gdf['pop_init_year'].sum()),
+                self.gdf['year'] = np.where(cumulative_pop < ((target - start_rate) * self.gdf['pop_init_year'].sum()),
                                                year, self.gdf['year'])
 
                 year -= 1
@@ -1620,18 +1630,27 @@ class OnStove(DataProcessor):
 
         if method == 'costs':
 
-            self.gdf.sort_values(by='baseline_costs', inplace =True, ascending=False)
-            cumulative_pop = self.gdf['pop_init_year'].cumsum()
+            self.gdf.sort_values(by='baseline_costs', inplace=True, ascending=False)
+            cumulative_pop = (self.gdf['pop_init_year'] * (1 - self.clean_cooking_access)).cumsum()
 
             while year > self.specs['start_year']:
-                self.gdf['year'] = np.where(cumulative_pop < (target*self.gdf['pop_init_year'].sum()),
+                self.gdf['year'] = np.where(cumulative_pop < ((target - start_rate) * self.gdf['pop_init_year'].sum()),
                                             year, self.gdf['year'])
 
                 year -= 1
                 target -= (year - (year-1)) * ((self.specs['end_year_target'] - start_rate) / (self.specs['end_year'] -self.specs['start_year']))
 
+        if method == 'benefits':
 
+            self.gdf.sort_values(by='baseline_benefits', inplace=True, ascending=True)
+            cumulative_pop = (self.gdf['pop_init_year'] * (1 - self.clean_cooking_access)).cumsum()
 
+            while year > self.specs['start_year']:
+                self.gdf['year'] = np.where(cumulative_pop < ((target - start_rate) * self.gdf['pop_init_year'].sum()),
+                                            year, self.gdf['year'])
+
+                year -= 1
+                target -= (year - (year-1)) * ((self.specs['end_year_target'] - start_rate) / (self.specs['end_year'] - self.specs['start_year']))
 
     def number_of_households(self):
         """Calculates the number of households withing each cell based on their urban/rural classification and a
@@ -1740,7 +1759,7 @@ class OnStove(DataProcessor):
         else:
              raise ValueError("technologies must be 'all' or a list of strings with the technology names to run.")
 
-        self.progression(method = 'costs')
+        self.progression(method='benefits')
         # # Based on wealth index, minimum wage and a lower an upper range for cost of opportunity
         # print(f'[{self.specs["country_name"]}] Getting value of time')
         # self.get_value_of_time()
