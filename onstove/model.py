@@ -1048,12 +1048,16 @@ class OnStove(DataProcessor):
         """
         if techs is None:
             techs = list(self.techs.values())
+
         base_fuels = {}
+
         for tech in techs:
             share = tech.current_share_rural + tech.current_share_urban
+
             if (share >= 0) or tech.is_base:
                 tech.is_base = True
                 base_fuels[tech.name] = tech
+
         if len(base_fuels) == 1:
             self.base_fuel = copy(list(base_fuels.values())[0])
             self.base_fuel.carb(self)
@@ -1061,8 +1065,10 @@ class OnStove(DataProcessor):
             self.base_fuel.required_energy(self)
             self.base_fuel.adjusted_pm25()
             self.base_fuel.health_parameters(self)
+
             if isinstance(self.base_fuel, LPG):
                 self.base_fuel.transportation_cost(self)
+
             self.base_fuel.inv_cost = pd.Series([self.base_fuel.inv_cost] * self.gdf.shape[0],
                                                 index=self.gdf.index)
             self.base_fuel.om_cost = pd.Series([self.base_fuel.om_cost] * self.gdf.shape[0],
@@ -1070,6 +1076,7 @@ class OnStove(DataProcessor):
         else:
             if len(base_fuels) == 0:
                 base_fuels = self.techs
+
             base_fuel = Technology(name='Base fuel')
             base_fuel.carbon = 0
             base_fuel.total_time_yr = 0
@@ -1088,15 +1095,15 @@ class OnStove(DataProcessor):
 
             for name, tech in base_fuels.items():
                 if tech.is_clean:
-
                     pop_sqkm += tech.pop_sqkm
 
                 self.clean_cooking_access = pop_sqkm
                 self.sfu = 1 - self.clean_cooking_access
-
                 tech.carb(self)
+
                 if name != "Biogas":
                     tech.total_time(self)
+
                 tech.required_energy(self)
 
                 if isinstance(tech, LPG):
@@ -1115,22 +1122,13 @@ class OnStove(DataProcessor):
                 for paf in ['paf_alri', 'paf_copd', 'paf_ihd', 'paf_lc', 'paf_stroke']:
                     base_fuel[paf] += tech[paf] * tech.pop_sqkm
 
-
                 base_fuel.carbon += tech.carbon * tech.pop_sqkm
                 base_fuel.decreased_carbon_costs += base_fuel.carbon * self.specs['cost_of_carbon_emissions']
                 base_fuel.total_time_yr += (tech.total_time_yr * tech.pop_sqkm).fillna(0)
-                #base_fuel.inv_cost += tech.inv_cost * tech.pop_sqkm
-                #base_fuel.om_cost += tech.om_cost * tech.pop_sqkm
 
                 tech.discount_fuel_cost(self, relative=False)
                 base_fuel.discounted_fuel_cost += tech.discounted_fuel_cost * tech.pop_sqkm
 
-                #for paf in ['paf_alri_r', 'paf_copd_r', 'paf_ihd_r',
-                #            'paf_lc_r', 'paf_stroke_r']:
-                #    base_fuel[paf] += tech[paf] * tech.current_share_rural
-                #for paf in ['paf_alri_u', 'paf_copd_u', 'paf_ihd_u',
-                #            'paf_lc_u', 'paf_stroke_u']:
-                #   base_fuel[paf] += tech[paf] * tech.current_share_urban
                 tech.salvage(self, relative=False)
                 base_fuel.discounted_salvage_cost += tech.discounted_salvage_cost * tech.pop_sqkm
 
@@ -1145,11 +1143,9 @@ class OnStove(DataProcessor):
             base_fuel.morb = tech.base_mort_morb(self, 'morb')
 
             base_fuel.decreased_carbon_costs = base_fuel.carbon * self.specs['cost_of_carbon_emissions'] / 1000
-            base_fuel.time_value = base_fuel.total_time_yr * self.gdf["value_of_time"] / (
-                1 + self.specs["discount_rate"]) ** (self.specs['end_year']- self.specs['start_year'])
+            base_fuel.time_value = base_fuel.total_time_yr * self.gdf["value_of_time"]
 
-            base_fuel.benefits = base_fuel.mort + base_fuel.morb + base_fuel.decreased_carbon_costs + \
-                                 base_fuel.time_value
+            base_fuel.benefits = base_fuel.time_value + base_fuel.decreased_carbon_costs + base_fuel.mort + base_fuel.morb
 
             self.gdf["baseline_benefits"] = base_fuel.benefits
 
@@ -1590,7 +1586,7 @@ class OnStove(DataProcessor):
             if i > 500:
                 break
 
-    def progression(self, method: str = 'urban'):
+    def progression(self, method: str = 'benefits'):
         """When the end- and start-years are different this method determines who get access to clean cooking first.
         The function assumes a linear increase in the clean cooking access rate.
 
@@ -1618,8 +1614,7 @@ class OnStove(DataProcessor):
         if method == 'urban':
 
             self.gdf.sort_values(by='pop_init_year', inplace=True, ascending=False)
-            #cumulative_pop = self.gdf['pop_init_year'].cumsum()
-            cumulative_pop = (self.gdf['pop_init_year'] * (1 - self.clean_cooking_access)).cumsum()
+            cumulative_pop = (self.gdf['pop_init_year'] * (1 - self.clean_cooking_access.loc[self.gdf.index])).cumsum()
 
             while year > self.specs['start_year']:
                 self.gdf['year'] = np.where(cumulative_pop < ((target - start_rate) * self.gdf['pop_init_year'].sum()),
@@ -1631,7 +1626,7 @@ class OnStove(DataProcessor):
         if method == 'costs':
 
             self.gdf.sort_values(by='baseline_costs', inplace=True, ascending=False)
-            cumulative_pop = (self.gdf['pop_init_year'] * (1 - self.clean_cooking_access)).cumsum()
+            cumulative_pop = (self.gdf['pop_init_year'] * (1 - self.clean_cooking_access.loc[self.gdf.index])).cumsum()
 
             while year > self.specs['start_year']:
                 self.gdf['year'] = np.where(cumulative_pop < ((target - start_rate) * self.gdf['pop_init_year'].sum()),
@@ -1642,8 +1637,8 @@ class OnStove(DataProcessor):
 
         if method == 'benefits':
 
-            self.gdf.sort_values(by='baseline_benefits', inplace=True, ascending=True)
-            cumulative_pop = (self.gdf['pop_init_year'] * (1 - self.clean_cooking_access)).cumsum()
+            self.gdf.sort_values(by='baseline_benefits', inplace=True, ascending=False)
+            cumulative_pop = (self.gdf['pop_init_year'] * (1 - self.clean_cooking_access.loc[self.gdf.index])).cumsum()
 
             while year > self.specs['start_year']:
                 self.gdf['year'] = np.where(cumulative_pop < ((target - start_rate) * self.gdf['pop_init_year'].sum()),
@@ -1696,7 +1691,7 @@ class OnStove(DataProcessor):
         Time is monetized using the minimum wage in the study area, defined in the :attr:`specs` dictionary, and a
         geospatial representation of wealth, which can be either a relative wealth index or a poverty layer (see the
         :meth:`extract_wealth_index` method). The minimum wage value is then distributed spatially using an upper limit
-        of 0.5 times the minimung wage in the wealthier regions and an lower limit of 0.2 in the poorest regions.
+        of 0.5 times the minimum wage in the wealthier regions and an lower limit of 0.2 in the poorest regions.
         """
         min_value = np.nanmin(self.gdf['relative_wealth'])
         max_value = np.nanmax(self.gdf['relative_wealth'])
@@ -1760,10 +1755,10 @@ class OnStove(DataProcessor):
              raise ValueError("technologies must be 'all' or a list of strings with the technology names to run.")
 
         self.progression(method='benefits')
-        # # Based on wealth index, minimum wage and a lower an upper range for cost of opportunity
-        # print(f'[{self.specs["country_name"]}] Getting value of time')
-        # self.get_value_of_time()
-        # # Loop through each technology and calculate all benefits and costs
+        # Based on wealth index, minimum wage and a lower an upper range for cost of opportunity
+        print(f'[{self.specs["country_name"]}] Getting value of time')
+        self.get_value_of_time()
+        # Loop through each technology and calculate all benefits and costs
         # for tech in techs:
         #     print(f'Calculating health benefits for {tech.name}...')
         #     if not tech.is_base:

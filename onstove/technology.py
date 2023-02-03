@@ -338,8 +338,6 @@ class Technology:
         self.paf_lc = self.paf(rr_lc, model.sfu)
         self.paf_stroke = self.paf(rr_stroke, model.sfu)
 
-    #def base_mort_morb(self, model: 'onstove.OnStove', parameter: str = 'mort')#, dr: str = 'discount_rate') -> tuple[
-    #    float, float]:
     def base_mort_morb(self, model: 'onstove.OnStove', parameter: str = 'mort') -> tuple[
         float, float]:
 
@@ -362,8 +360,6 @@ class Technology:
         ----------
         Monetary mortality or morbidity for each stove in the baseline
         """
-        # TODO: Add relative here and vectorize, remove urban/rural. Actually remove only urban/rural and write a morb_mort baseline
-        #self.health_parameters(model)
 
         mor = {}
         diseases = ['alri', 'copd', 'ihd', 'lc', 'stroke']
@@ -382,12 +378,10 @@ class Technology:
             elif parameter == 'mort':
                 cost = model.specs['vsl']
                 
-            total_mor += cost * mor[disease] #/ (1 + model.specs[dr]) ** (i - 1)
+            total_mor += cost * mor[disease]
             
 
         denominator = model.gdf['pop_init_year'].sum() * model.gdf['households_init']
-
-        distributed_cost = pd.Series(index=model.gdf.index, dtype='float64')
 
         distributed_cost = model.gdf['pop_init_year'] * total_mor / denominator
 
