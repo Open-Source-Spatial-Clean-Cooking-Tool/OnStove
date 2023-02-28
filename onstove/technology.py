@@ -222,6 +222,7 @@ class Technology:
             The Population Attributable Fraction for each disease
         """
 
+        # TODO: Should sfu be updated from year to year?
         paf = (sfu * (rr - 1)) / (sfu * (rr - 1) + 1)
         return paf
 
@@ -304,18 +305,21 @@ class Technology:
         model: OnStove model
             Instance of the OnStove model containing the main data of the study case. See
             :class:`onstove.OnStove`.
+        year: int
+            Defines which year that is being run.
 
         See also
         --------
         carb
         """
+
+        # TODO: I think this function works.
         self.carb(model)
         proj_life = model.specs['end_year'] - model.specs['start_year']
-        carbon = model.specs["cost_of_carbon_emissions"] * (model.base_fuel.carbon - self.carbon) / 1000 / (
-                1 + model.specs["discount_rate"]) ** (proj_life)
 
         self.decreased_carbon_emissions = model.base_fuel.carbon - self.carbon
-        self.decreased_carbon_costs = carbon
+        self.decreased_carbon_costs = model.specs["cost_of_carbon_emissions"] * (model.base_fuel.carbon - self.carbon) \
+                                      / 1000 / (1 + model.specs["discount_rate"]) ** (proj_life - 1)
 
     def health_parameters(self, model: 'onstove.OnStove'):
         """Calculates the population attributable fraction for ALRI, COPD, IHD, lung cancer or stroke for urban and
@@ -371,15 +375,15 @@ class Technology:
             mor[disease] = model.gdf['pop_init_year'].sum() * model.base_fuel[paf] * (rate / 100000)
 
         total_mor = 0
-        
+
         for disease in diseases:
             if parameter == 'morb':
                 cost = model.specs[f'coi_{disease}']
             elif parameter == 'mort':
                 cost = model.specs['vsl']
-                
+
             total_mor += cost * mor[disease]
-            
+
 
         denominator = model.gdf['pop_init_year'].sum() * model.gdf['households_init']
 
@@ -388,7 +392,7 @@ class Technology:
         return distributed_cost
 
 
-    def mort_morb(self, model: 'onstove.OnStove', parameter: str = 'mort', dr: str = 'discount_rate') -> tuple[
+    def mort_morb(self, model: 'onstove.OnStove', year: int, parameter: str = 'mort', dr: str = 'discount_rate') -> tuple[
         float, float]:
         """
         Calculates mortality or morbidity rate per fuel. These two calculations are very similar in nature and are
@@ -400,6 +404,8 @@ class Technology:
         model: OnStove model
             Instance of the OnStove model containing the main data of the study case. See
             :class:`onstove.OnStove`.
+        year: int
+            Defines which year that is being run.
         parameter: str, default 'Mort'
             Parameter to calculate. For mortality enter 'Mort' and for morbidity enter 'Morb'
         dr: str, default 'Discount_rate'
@@ -418,8 +424,8 @@ class Technology:
             rate = model.specs[f'{parameter}_{disease}']
 
             paf = f'paf_{disease.lower()}'
-            mor[disease] = model.gdf.loc['pop_init_year'].sum() * (model.base_fuel[paf] - self[paf]) * (
-                    rate / 100000)
+            pop, house = model.yearly_pop(year)
+            mor[disease] = pop * (model.base_fuel[paf] - self[paf]) * (rate / 100000)
 
         cl_diseases = {'alri': {1: 0.7, 2: 0.1, 3: 0.07, 4: 0.07, 5: 0.06},
                        'copd': {1: 0.3, 2: 0.2, 3: 0.17, 4: 0.17, 5: 0.16},
@@ -427,30 +433,35 @@ class Technology:
                        'ihd': {1: 0.2, 2: 0.1, 3: 0.24, 4: 0.23, 5: 0.23},
                        'stroke': {1: 0.2, 2: 0.1, 3: 0.24, 4: 0.23, 5: 0.23}}
 
+        year_diff = year - model.specs['start_year']
         i = 1
         total_mor = 0
         while i < 6:
             for disease in diseases:
+
                 if parameter == 'morb':
                     cost = model.specs[f'coi_{disease}']
                 elif parameter == 'mort':
                     cost = model.specs['vsl']
-                total_mor += cl_diseases[disease][i] * cost * mor[disease] / (1 + model.specs[dr]) ** (i - 1)
+
+                total_mor += cl_diseases[disease][i] * cost * mor[disease] / (1 + model.specs[dr]) ** (i + year_diff - 1)
             i += 1
 
-        denominator = model.gdf['pop_init_year'].sum() * model.gdf['households_init']
+        # TODO: This is the total pop and total house, should it be the values of the cells being assessed? Why distribute
+        #       the morb and mort from each timestep with the total populations?
+        denominator = pop.sum() * pop/house
 
         distributed_cost = pd.Series(index=model.gdf.index, dtype='float64')
 
-        distributed_cost = model.gdf['pop_init_year'] * total_mor / denominator
+        distributed_cost = pop * total_mor / denominator
 
         cases_avoided = pd.Series(index=model.gdf.index, dtype='float64')
 
-        cases_avoided = sum(mor.values()) * model.gdf['pop_init_year'] / denominator
+        cases_avoided = sum(mor.values()) * pop / denominator
 
         return distributed_cost, cases_avoided
 
-    def mortality(self, model: 'onstove.OnStove'):
+    def mortality(self, model: 'onstove.OnStove', year):
         """
         Distributes the total mortality across the study area per fuel.
 
@@ -465,7 +476,7 @@ class Technology:
         mort_morb
 
         """
-        distributed_mortality, deaths_avoided = self.mort_morb(model, parameter='mort', dr='discount_rate')
+        distributed_mortality, deaths_avoided = self.mort_morb(model, year, parameter='mort', dr='discount_rate')
         self.distributed_mortality = distributed_mortality
         self.deaths_avoided = deaths_avoided
 
@@ -475,7 +486,7 @@ class Technology:
         else:
             self.distributed_spillovers_mort = pd.Series(0, index=model.gdf.index, dtype='float64')
 
-    def morbidity(self, model: 'onstove.OnStove'):
+    def morbidity(self, model: 'onstove.OnStove', year):
         """
         Distributes the total morbidity across the study area per fuel.
 
@@ -484,12 +495,14 @@ class Technology:
         model: OnStove model
             Instance of the OnStove model containing the main data of the study case. See
             :class:`onstove.OnStove`.
+        year: int
+            Determines which year that is assessed.
 
         See also
         --------
         mort_morb
         """
-        distributed_morbidity, cases_avoided = self.mort_morb(model, parameter='morb', dr='discount_rate')
+        distributed_morbidity, cases_avoided = self.mort_morb(model, year, parameter='morb', dr='discount_rate')
         self.distributed_morbidity = distributed_morbidity
         self.cases_avoided = cases_avoided
 
@@ -507,7 +520,9 @@ class Technology:
         ----------
         model: OnStove model
             Instance of the OnStove model containing the main data of the study case. See
-            :class:`onstove.OnStove`.
+            :class:`onstove.OnStove`
+        year: int
+            Determines which year that is assessed..
 
         See also
         --------
@@ -662,13 +677,15 @@ class Technology:
             :class:`onstove.OnStove`.
 
         """
+        # TODO: Should be OK?
 
         proj_life = model.specs['end_year'] - model.specs['start_year']
+
         self.total_time(model)
         self.total_time_saved = model.base_fuel.total_time_yr - self.total_time_yr
         # time value of time saved per sq km
         self.time_value = self.total_time_saved * model.gdf["value_of_time"] / (
-                1 + model.specs["discount_rate"]) ** (proj_life)
+               1 + model.specs["discount_rate"]) ** (proj_life)
 
     def total_costs(self):
         """
@@ -724,7 +741,10 @@ class Technology:
         model.gdf["benefits_{}".format(self.name)] = self.benefits
         model.gdf["net_benefit_{}".format(self.name)] = self.benefits - w_costs * self.costs
         self.factor = pd.Series(np.ones(model.gdf.shape[0]), index=model.gdf.index)
-        self.households = model.gdf['Households']
+        self.households = model.gdf["households_init"] + \
+                          (model.year - model.specs["start_year"]) * \
+                          ((model.gdf["households_end"] - model.gdf["households_init"])/\
+                          (model.specs["end_year"] - model.specs["start_year"]))
 
 
 class LPG(Technology):
@@ -1737,10 +1757,15 @@ class Electricity(Technology):
         """
         super().net_benefit(model, w_health, w_spillovers, w_environment, w_time, w_costs)
         model.gdf.loc[model.gdf['Current_elec'] == 0, "net_benefit_{}".format(self.name)] = np.nan
-        factor = model.gdf['Elec_pop_calib'] / model.gdf['Calibrated_pop']
+        #TODO: Everywere where we have model.gdf["pop_init_year"] or model.gdf["pop_end_year"] see if it needs to be
+        #TODO: replaced with the population in the actual year.
+        factor = model.gdf['Elec_pop_calib'] / model.gdf['pop_init_year']
         factor[factor > 1] = 1
         self.factor = factor
-        self.households = model.gdf['Households'] * factor
+        self.households = factor * (model.gdf["households_init"] + \
+                          (model.year - model.specs["start_year"]) * \
+                          ((model.gdf["households_end"] - model.gdf["households_init"])/\
+                          (model.specs["end_year"] - model.specs["start_year"])))
 
 
 class MiniGrids(Electricity):
@@ -2094,14 +2119,18 @@ class Biogas(Technology):
         required_energy_hh = self.required_energy_hh(model)
         model.gdf.loc[(model.gdf['biogas_energy'] < required_energy_hh), "benefits_{}".format(self.name)] = np.nan
         model.gdf.loc[(model.gdf['biogas_energy'] < required_energy_hh), "net_benefit_{}".format(self.name)] = np.nan
-        factor = model.gdf['biogas_energy'] / (required_energy_hh * model.gdf['Households'])
+        households = model.gdf["households_init"] + \
+                        (model.year - model.specs["start_year"]) * \
+                        ((model.gdf["households_end"] - model.gdf["households_init"]) / \
+                        (model.specs["end_year"] - model.specs["start_year"]))
+        factor = model.gdf['biogas_energy'] / (required_energy_hh * households)
         factor[factor > 1] = 1
         self.factor = factor
-        self.households = model.gdf['Households'] * factor
+        self.households = households * factor
 
-        del model.gdf["Cattles"]
-        del model.gdf["Buffaloes"]
-        del model.gdf["Sheeps"]
-        del model.gdf["Goats"]
-        del model.gdf["Pigs"]
-        del model.gdf["Poultry"]
+        #del model.gdf["Cattles"]
+        #del model.gdf["Buffaloes"]
+        #del model.gdf["Sheeps"]
+        #del model.gdf["Goats"]
+        #del model.gdf["Pigs"]
+        #del model.gdf["Poultry"]

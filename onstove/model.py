@@ -1367,6 +1367,40 @@ class OnStove(DataProcessor):
         self.gdf.loc[~isurban, "pop_init_year"] = self.gdf.loc[~isurban,"Pop"] * calibration_factor_r
         self.gdf.loc[isurban, "pop_init_year"] = self.gdf.loc[isurban, "Pop"] * calibration_factor_u
 
+        self.gdf.loc[~isurban, 'households_init'] = self.gdf.loc[~isurban, 'pop_init_year'] / self.specs["rural_hh_size"]
+        self.gdf.loc[isurban, 'households_init'] = self.gdf.loc[isurban, 'pop_init_year'] / self.specs["urban_hh_size"]
+
+    def yearly_pop(self, year):
+
+        isurban = self.gdf["IsUrban"] > 20
+        urban = isurban.sum()
+        rural = len(self.gdf)-urban
+
+        if year == self.specs['start_year']:
+            pop = self.gdf['pop_init_year']
+            house = self.gdf['households_init']
+        else:
+            yearly_pop_increase_urban = (self.specs["population_end_year"] * self.specs["urban_end"] - self.specs[
+                "population_start_year"] * self.specs["urban_start"]) / (self.specs["end_year"] - self.specs["start_year"])
+            yearly_pop_increase_rural = (self.specs["population_end_year"] * (1 - self.specs["urban_end"]) - self.specs[
+                "population_start_year"] * (1 - self.specs["urban_start"])) / (
+                                                    self.specs["end_year"] - self.specs["start_year"])
+
+            pop = pd.Series(index=self.gdf.index)
+            house = pd.Series(index=self.gdf.index)
+
+            pop.loc[~isurban] = self.gdf.loc[~isurban, "pop_init_year"] + yearly_pop_increase_rural / rural * (
+                    year - self.specs["start_year"])
+
+            pop.loc[isurban] = self.gdf.loc[isurban, "pop_init_year"] + yearly_pop_increase_urban / urban * (
+                    year - self.specs["start_year"])
+
+            house.loc[~isurban] = pop.loc[~isurban]/self.specs['rural_hh_size']
+            house.loc[isurban] = pop.loc[isurban] / self.specs['urban_hh_size']
+
+        return pop, house
+
+
     def calibrate_future_pop(self):
 
         isurban = self.gdf["IsUrban"] > 20
@@ -1377,25 +1411,19 @@ class OnStove(DataProcessor):
             if self.specs['end_year'] < self.specs['start_year']:
                 raise ValueError("The end year needs to come after the start year.")
             else:
-                urban_growth = (self.specs["urban_end"] * self.specs["population_end_year"] ) / (self.specs["urban_start"] * self.specs["population_start_year"])
-                rural_growth = ((1 - self.specs["urban_end"]) * self.specs["population_end_year"] ) / ((1 - self.specs["urban_start"]) * self.specs["population_start_year"])
-
-                self.gdf.loc[~isurban, "pop_end_year"] = self.gdf.loc[~isurban,"pop_init_year"] * rural_growth
-                self.gdf.loc[isurban, "pop_end_year"] = self.gdf.loc[isurban,"pop_init_year"] * urban_growth
+                self.gdf['pop_end_year'], self.gdf['households_end'] = self.yearly_pop(self.specs["end_year"])
         else: 
             self.gdf["pop_end_year"] = self.gdf["pop_init_year"]
-    
+            self.gdf["households_end"] = self.gdf["households_init"]
+
+        #TODO: do we need this?!
         if self.specs["inter_year"] is not None:
             if self.specs['inter_year'] < self.specs['start_year']:
                 raise ValueError("The intermediate year needs to come after the start year.")
             elif self.specs['inter_year'] > self.specs['end_year']:
                 raise ValueError("The intermediate year needs to come before the end year.")
             else:
-                yearly_pop_increase_urban = (self.specs["population_end_year"] * self.specs["urban_end"] - self.specs["population_start_year"] * self.specs["urban_start"])/(self.specs["end_year"] - self.specs["start_year"])
-                yearly_pop_increase_rural = (self.specs["population_end_year"] * (1 - self.specs["urban_end"]) - self.specs["population_start_year"] * (1 - self.specs["urban_start"]))/(self.specs["end_year"] - self.specs["start_year"])
-            
-                self.gdf.loc[~isurban, "pop_inter_year"] = self.gdf.loc[~isurban,"pop_init_year"] + yearly_pop_increase_rural/rural * (self.specs["inter_year"] - self.specs["start_year"])
-                self.gdf.loc[isurban, "pop_inter_year"] = self.gdf.loc[isurban, "pop_init_year"] + yearly_pop_increase_urban/urban * (self.specs["inter_year"] - self.specs["start_year"])
+                self.gdf['pop_inter_year'], self.gdf['households_inter']  = self.yearly_pop(self.specs["inter_year"])
     
 
     def distance_to_electricity(self, hv_lines: VectorLayer = None, mv_lines: VectorLayer = None,
@@ -1548,7 +1576,7 @@ class OnStove(DataProcessor):
 
         self.calibrate_current_pop()
         self.calibrate_future_pop()
-        self.number_of_households()
+        #self.number_of_households()
 
     def calibrate_urban_manual(self):
         """Calibrates the urban rural split based on population density.
@@ -1601,11 +1629,14 @@ class OnStove(DataProcessor):
         """
         # TODO: From target remove the starting share
         year = self.specs['end_year']
+        start = self.specs['start_year']
         target = self.specs['end_year_target']
         self.gdf['year'] = 0
+        self.years = list(range(start+1, year+1))
 
         start_rate = (self.clean_cooking_access_u*self.specs['urban_start'] \
                      + self.clean_cooking_access_r*(1 - self.specs['urban_start']))
+
         # TODO: change the print to a warning
         if start_rate > target:
             print('Note that your clean cooking access rate in the start year ({0}%) is higher than the clean cooking '
@@ -1616,38 +1647,41 @@ class OnStove(DataProcessor):
             self.gdf.sort_values(by='pop_init_year', inplace=True, ascending=False)
             cumulative_pop = (self.gdf['pop_init_year'] * (1 - self.clean_cooking_access.loc[self.gdf.index])).cumsum()
 
-            while year > self.specs['start_year']:
+            while year > start:
                 self.gdf['year'] = np.where(cumulative_pop < ((target - start_rate) * self.gdf['pop_init_year'].sum()),
                                                year, self.gdf['year'])
 
                 year -= 1
-                target -= (year - (year-1)) * ((self.specs['end_year_target'] - start_rate) / (self.specs['end_year'] - self.specs['start_year']))
+                target -= (year - (year-1)) * ((self.specs['end_year_target'] - start_rate) / (self.specs['end_year'] - start))
 
         if method == 'costs':
 
             self.gdf.sort_values(by='baseline_costs', inplace=True, ascending=False)
             cumulative_pop = (self.gdf['pop_init_year'] * (1 - self.clean_cooking_access.loc[self.gdf.index])).cumsum()
 
-            while year > self.specs['start_year']:
+            while year > start:
                 self.gdf['year'] = np.where(cumulative_pop < ((target - start_rate) * self.gdf['pop_init_year'].sum()),
                                             year, self.gdf['year'])
 
                 year -= 1
-                target -= (year - (year-1)) * ((self.specs['end_year_target'] - start_rate) / (self.specs['end_year'] -self.specs['start_year']))
+                target -= (year - (year-1)) * ((self.specs['end_year_target'] - start_rate) / (self.specs['end_year'] - start))
 
         if method == 'benefits':
 
             self.gdf.sort_values(by='baseline_benefits', inplace=True, ascending=False)
             cumulative_pop = (self.gdf['pop_init_year'] * (1 - self.clean_cooking_access.loc[self.gdf.index])).cumsum()
 
-            while year > self.specs['start_year']:
+            while year > start:
                 self.gdf['year'] = np.where(cumulative_pop < ((target - start_rate) * self.gdf['pop_init_year'].sum()),
                                             year, self.gdf['year'])
 
                 year -= 1
-                target -= (year - (year-1)) * ((self.specs['end_year_target'] - start_rate) / (self.specs['end_year'] - self.specs['start_year']))
+                target -= (year - (year-1)) * ((self.specs['end_year_target'] - start_rate) / (self.specs['end_year'] - start))
+
+        self.year = pd.Series(self.gdf['year'].values, index=self.gdf.index)
 
     def number_of_households(self):
+        #TODO: needed or poppycock?
         """Calculates the number of households withing each cell based on their urban/rural classification and a
         defined household size.
 
@@ -1662,12 +1696,7 @@ class OnStove(DataProcessor):
         read_scenario_data
         """
 
-        self.gdf.loc[self.gdf["IsUrban"] < 20, 'households_init'] = self.gdf.loc[
-                                                                   self.gdf["IsUrban"] < 20, 'pop_init_year'] / \
-                                                               self.specs["rural_hh_size"]
-        self.gdf.loc[self.gdf["IsUrban"] > 20, 'households_init'] = self.gdf.loc[
-                                                                   self.gdf["IsUrban"] > 20, 'pop_init_year'] / \
-                                                               self.specs["urban_hh_size"]
+
 
         self.gdf.loc[self.gdf["IsUrban"] < 20, 'households_end'] = self.gdf.loc[
                                                                    self.gdf["IsUrban"] < 20, 'pop_end_year'] / \
@@ -1703,7 +1732,7 @@ class OnStove(DataProcessor):
         self.gdf['value_of_time'] = norm_layer * self.specs[
             'minimum_wage'] / 30 / 8  # convert $/months to $/h (8 working hours per day)
 
-    def run(self, technologies: Union[list[str], str] = 'all', restriction: bool = True):
+    def run(self, technologies: Union[list[str], str] = 'all', restriction: bool = True, progression: str = "urban"):
         """Runs the model using the defined ``technologies`` as options to cook with.
 
         It loops through the ``technologies`` and calculates all costs, benefit and the net-benefit of cooking with
@@ -1725,6 +1754,11 @@ class OnStove(DataProcessor):
         restriction: bool, default True
             Whether to have the restriction to only select technologies that produce a positive benefit compared to the
             baseline.
+        progression: str, default 'urban'
+            Decides who gets clean cooking first. Three different options can be used: 'urban' which prioritzes based on
+            population density, 'costs' which prioritizes based on lowest cost, and 'benefits' which prioritizes based on
+            highest benefit
+
 
         See also
         --------
@@ -1754,35 +1788,41 @@ class OnStove(DataProcessor):
         else:
              raise ValueError("technologies must be 'all' or a list of strings with the technology names to run.")
 
-        self.progression(method='benefits')
+        self.progression(method=progression)
         # Based on wealth index, minimum wage and a lower an upper range for cost of opportunity
         print(f'[{self.specs["country_name"]}] Getting value of time')
         self.get_value_of_time()
         # Loop through each technology and calculate all benefits and costs
-        # for tech in techs:
-        #     print(f'Calculating health benefits for {tech.name}...')
-        #     if not tech.is_base:
-        #         tech.adjusted_pm25()
-        #     tech.morbidity(self)
-        #     tech.mortality(self)
-        #     print(f'Calculating carbon emissions benefits for {tech.name}...')
-        #     tech.carbon_emissions(self)
-        #     print(f'Calculating time saved benefits for {tech.name}...')
-        #     tech.time_saved(self)
-        #     print(f'Calculating costs for {tech.name}...')
-        #     tech.required_energy(self)
-        #     tech.discounted_om(self)
-        #     tech.discounted_inv(self)
-        #     tech.discount_fuel_cost(self)
-        #     tech.salvage(self)
-        #     print(f'Calculating net benefit for {tech.name}...\n')
-        #     tech.net_benefit(self, self.specs['w_health'], self.specs['w_spillovers'],
-        #                      self.specs['w_environment'], self.specs['w_time'], self.specs['w_costs'])
-        #
+        for year in self.years:
+            self.year = year
+            mask = self.gdf["year"] == year
+
+            for tech in techs:
+                print(f'Calculating health benefits for {tech.name}...')
+
+                if not tech.is_base:
+                    tech.adjusted_pm25()
+
+                tech.morbidity(self, year)
+                tech.mortality(self, year)
+                print(f'Calculating carbon emissions benefits for {tech.name}...')
+                tech.carbon_emissions(self)
+                print(f'Calculating time saved benefits for {tech.name}...')
+                tech.time_saved(self)
+                print(f'Calculating costs for {tech.name}...')
+                tech.required_energy(self)
+                tech.discounted_om(self)
+                tech.discounted_inv(self)
+                tech.discount_fuel_cost(self)
+                tech.salvage(self)
+                print(f'Calculating net benefit for {tech.name}...\n')
+                tech.net_benefit(self, self.specs['w_health'], self.specs['w_spillovers'],
+                                 self.specs['w_environment'], self.specs['w_time'], self.specs['w_costs'])
+
         # print('Getting maximum net benefit technologies...')
         # self.maximum_net_benefit(techs, restriction=restriction)
         # print('Extracting indicators...')
-        # print('    - Lives saved')
+        # print('    - Deaths avoided')
         # self.extract_lives_saved()
         # print('    - Health costs')
         # self.extract_health_costs_saved()
