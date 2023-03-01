@@ -2,6 +2,7 @@
 
 import os
 import numpy as np
+import geopandas as gpd
 import pandas as pd
 from typing import Optional, Callable
 from math import exp
@@ -129,6 +130,8 @@ class Technology:
         self.time_value = 0
         self.costs = 0
         self.benefits = None
+        self.distributed_morbidity = None
+        self.distributed_mortality = None
         self.net_benefits = None
 
     def __setitem__(self, idx, value):
@@ -222,7 +225,7 @@ class Technology:
             The Population Attributable Fraction for each disease
         """
 
-        # TODO: Should sfu be updated from year to year?
+        #TODO: Should sfu be updated from year to year?
         paf = (sfu * (rr - 1)) / (sfu * (rr - 1) + 1)
         return paf
 
@@ -313,7 +316,6 @@ class Technology:
         carb
         """
 
-        # TODO: I think this function works.
         self.carb(model)
         proj_life = model.specs['end_year'] - model.specs['start_year']
 
@@ -392,7 +394,7 @@ class Technology:
         return distributed_cost
 
 
-    def mort_morb(self, model: 'onstove.OnStove', year: int, parameter: str = 'mort', dr: str = 'discount_rate') -> tuple[
+    def mort_morb(self, model: 'onstove.OnStove', year: int, mask: gpd.GeoSeries, parameter: str = 'mort', dr: str = 'discount_rate') -> tuple[
         float, float]:
         """
         Calculates mortality or morbidity rate per fuel. These two calculations are very similar in nature and are
@@ -425,7 +427,8 @@ class Technology:
 
             paf = f'paf_{disease.lower()}'
             pop, house = model.yearly_pop(year)
-            mor[disease] = pop * (model.base_fuel[paf] - self[paf]) * (rate / 100000)
+            mor[disease] = pd.Series(np.zeros(model.gdf.shape[0]), index = model.gdf.index)
+            mor[disease].loc[mask] = pop.loc[mask] * (model.base_fuel[paf] - self[paf]) * (rate / 100000)
 
         cl_diseases = {'alri': {1: 0.7, 2: 0.1, 3: 0.07, 4: 0.07, 5: 0.06},
                        'copd': {1: 0.3, 2: 0.2, 3: 0.17, 4: 0.17, 5: 0.16},
@@ -461,7 +464,7 @@ class Technology:
 
         return distributed_cost, cases_avoided
 
-    def mortality(self, model: 'onstove.OnStove', year):
+    def mortality(self, model: 'onstove.OnStove', year, mask):
         """
         Distributes the total mortality across the study area per fuel.
 
@@ -476,17 +479,29 @@ class Technology:
         mort_morb
 
         """
-        distributed_mortality, deaths_avoided = self.mort_morb(model, year, parameter='mort', dr='discount_rate')
-        self.distributed_mortality = distributed_mortality
-        self.deaths_avoided = deaths_avoided
+        distributed_mortality, deaths_avoided = self.mort_morb(model, year, mask, parameter='mort', dr='discount_rate')
 
-        if model.specs['health_spillovers_parameter'] > 0:
-            self.distributed_spillovers_mort = distributed_mortality * model.specs['health_spillovers_parameter']
-            self.deaths_avoided += deaths_avoided * model.specs['health_spillovers_parameter']
+        if isinstance(self.distributed_mortality, pd.Series):
+            self.distributed_mortality.loc[mask] = distributed_mortality.loc[mask]
+            self.deaths_avoided.loc[mask] = deaths_avoided.loc[mask]
+
+            if model.specs['health_spillovers_parameter'] > 0:
+                self.distributed_spillovers_mort.loc[mask] = distributed_mortality.loc[mask] * model.specs['health_spillovers_parameter']
+                self.deaths_avoided.loc[mask] += deaths_avoided.loc[mask] * model.specs['health_spillovers_parameter']
+            else:
+                self.distributed_spillovers_mort = pd.Series(0, index=model.gdf.index, dtype='float64')
         else:
-            self.distributed_spillovers_mort = pd.Series(0, index=model.gdf.index, dtype='float64')
+            self.distributed_mortality = distributed_mortality
+            self.deaths_avoided = deaths_avoided
 
-    def morbidity(self, model: 'onstove.OnStove', year):
+            if model.specs['health_spillovers_parameter'] > 0:
+                self.distributed_spillovers_mort = distributed_mortality * model.specs[
+                    'health_spillovers_parameter']
+                self.deaths_avoided += deaths_avoided * model.specs['health_spillovers_parameter']
+            else:
+                self.distributed_spillovers_mort = pd.Series(0, index=model.gdf.index, dtype='float64')
+
+    def morbidity(self, model: 'onstove.OnStove', year, mask):
         """
         Distributes the total morbidity across the study area per fuel.
 
@@ -502,15 +517,26 @@ class Technology:
         --------
         mort_morb
         """
-        distributed_morbidity, cases_avoided = self.mort_morb(model, year, parameter='morb', dr='discount_rate')
-        self.distributed_morbidity = distributed_morbidity
-        self.cases_avoided = cases_avoided
+        distributed_morbidity, cases_avoided = self.mort_morb(model, year, mask, parameter='morb', dr='discount_rate')
 
-        if model.specs['health_spillovers_parameter'] > 0:
-            self.distributed_spillovers_morb = distributed_morbidity * model.specs['health_spillovers_parameter']
-            self.cases_avoided += cases_avoided * model.specs['health_spillovers_parameter']
+        if isinstance(self.distributed_morbidity, pd.Series):
+            self.distributed_morbidity.loc[mask] = distributed_morbidity.loc[mask]
+            self.cases_avoided.loc[mask] = cases_avoided.loc[mask]
+
+            if model.specs['health_spillovers_parameter'] > 0:
+                self.distributed_spillovers_morb.loc[mask] = distributed_morbidity.loc[mask] * model.specs['health_spillovers_parameter']
+                self.cases_avoided.loc[mask] += cases_avoided.loc[mask] * model.specs['health_spillovers_parameter']
+            else:
+                self.distributed_spillovers_morb = pd.Series(0, index=model.gdf.index, dtype='float64')
         else:
-            self.distributed_spillovers_morb = pd.Series(0, index=model.gdf.index, dtype='float64')
+            self.distributed_morbidity = distributed_morbidity
+            self.cases_avoided = cases_avoided
+
+            if model.specs['health_spillovers_parameter'] > 0:
+                self.distributed_spillovers_morb = distributed_morbidity * model.specs['health_spillovers_parameter']
+                self.cases_avoided += cases_avoided * model.specs['health_spillovers_parameter']
+            else:
+                self.distributed_spillovers_morb = pd.Series(0, index=model.gdf.index, dtype='float64')
 
     def salvage(self, model: 'onstove.OnStove', relative: bool = True):
         """
