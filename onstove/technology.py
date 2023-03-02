@@ -132,6 +132,7 @@ class Technology:
         self.benefits = None
         self.distributed_morbidity = None
         self.distributed_mortality = None
+        self.time_value = None
         self.decreased_carbon_emissions = None
         self.net_benefits = None
 
@@ -300,8 +301,9 @@ class Technology:
         self.required_energy(model)
         if self.carbon_intensity is None:
             self.get_carbon_intensity(model)
-        self.carbon = pd.Series([(self.energy * self.carbon_intensity) / 1000] * model.gdf.shape[0],
-                                index=model.gdf.index)
+
+        self.carbon = pd.Series((self.energy * self.carbon_intensity) / 1000, index = model.gdf.index)
+
 
     def carbon_emissions(self, model: 'onstove.OnStove', year: int, mask: pd.Series):
         """Calculates the reduced emissions and the costs avoided by reducing these emissions.
@@ -324,15 +326,14 @@ class Technology:
         self.carb(model, mask)
         proj_life = year - model.specs['start_year']
 
-        if isinstance(self.decreased_carbon_emissions, pd.Series):
-            self.decreased_carbon_emissions.loc[mask] = model.base_fuel.carbon.loc[mask] - self.carbon.loc[mask]
-            self.decreased_carbon_costs.loc[mask] = model.specs["cost_of_carbon_emissions"] * \
-                                                    (model.base_fuel.carbon.loc[mask] - self.carbon.loc[mask]) / 1000 \
-                                                    / (1 + model.specs["discount_rate"]) ** (proj_life - 1)
-        else:
-            self.decreased_carbon_emissions = model.base_fuel.carbon - self.carbon
-            self.decreased_carbon_costs = model.specs["cost_of_carbon_emissions"] * (model.base_fuel.carbon - self.carbon) \
-                                          / 1000 / (1 + model.specs["discount_rate"]) ** (proj_life - 1)
+        if not isinstance(self.decreased_carbon_emissions, pd.Series):
+            self.decreased_carbon_emissions = pd.Series(0, index=model.gdf.index, dtype='float64')
+            self.decreased_carbon_costs = pd.Series(0, index=model.gdf.index, dtype='float64')
+
+        self.decreased_carbon_emissions.loc[mask] = model.base_fuel.carbon.loc[mask] - self.carbon.loc[mask]
+        self.decreased_carbon_costs.loc[mask] = model.specs["cost_of_carbon_emissions"] * \
+                                                (model.base_fuel.carbon.loc[mask] - self.carbon.loc[mask]) / 1000 \
+                                                / (1 + model.specs["discount_rate"]) ** (proj_life - 1)
 
     def health_parameters(self, model: 'onstove.OnStove'):
         """Calculates the population attributable fraction for ALRI, COPD, IHD, lung cancer or stroke for urban and
@@ -508,7 +509,7 @@ class Technology:
             else:
                 self.distributed_spillovers_mort = pd.Series(0, index=model.gdf.index, dtype='float64')
 
-    def morbidity(self, model: 'onstove.OnStove', year, mask):
+    def morbidity(self, model: 'onstove.OnStove', year: int, mask: pd.Series):
         """
         Distributes the total morbidity across the study area per fuel.
 
@@ -527,6 +528,7 @@ class Technology:
         mort_morb
         """
         distributed_morbidity, cases_avoided = self.mort_morb(model, year, mask, parameter='morb')
+
 
         if isinstance(self.distributed_morbidity, pd.Series):
             self.distributed_morbidity.loc[mask] = distributed_morbidity.loc[mask]
@@ -701,7 +703,7 @@ class Technology:
         """
         self.total_time_yr = (self.time_of_cooking + self.time_of_collection) * 365
 
-    def time_saved(self, model: 'onstove.OnStove'):
+    def time_saved(self, model: 'onstove.OnStove', year, mask):
         """
         Calculates time saved per year by adopting a new stove.
 
@@ -710,17 +712,25 @@ class Technology:
         model: OnStove model
             Instance of the OnStove model containing the main data of the study case. See
             :class:`onstove.OnStove`.
-
+        year: int
+            Defines which year that is being run.
+        mask: pd.Series
+            Determines which cells are ran. This is relevant when the start and end years are different
         """
-        # TODO: Should be OK?
 
-        proj_life = model.specs['end_year'] - model.specs['start_year']
+        proj_life = year - model.specs['start_year']
 
         self.total_time(model)
         self.total_time_saved = model.base_fuel.total_time_yr - self.total_time_yr
         # time value of time saved per sq km
-        self.time_value = self.total_time_saved * model.gdf["value_of_time"] / (
-               1 + model.specs["discount_rate"]) ** (proj_life)
+
+        if not isinstance(self.time_value, pd.Series):
+            self.time_value = pd.Series(0, index=model.gdf.index, dtype='float64')
+
+
+        self.time_value.loc[mask] = self.total_time_saved * model.gdf["value_of_time"].loc[mask] / (
+                   1 + model.specs["discount_rate"]) ** (proj_life)
+
 
     def total_costs(self):
         """
@@ -1311,7 +1321,7 @@ class Biomass(Technology):
         travel_time = 2 * model.raster_to_dataframe(self.forest.distance_raster,
                                                     fill_nodata_method='interpolate', method='read')
         travel_time[travel_time > 7] = 7  # cap to max travel time based on literature
-        self.travel_time = travel_time
+        self.travel_time = pd.Series(travel_time, index = model.gdf.index)
 
     def total_time(self, model: 'onstove.OnStove'):
         """This method expands :meth:`Technology.total_time` when biomass is collected.
