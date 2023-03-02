@@ -132,6 +132,7 @@ class Technology:
         self.benefits = None
         self.distributed_morbidity = None
         self.distributed_mortality = None
+        self.decreased_carbon_emissions = None
         self.net_benefits = None
 
     def __setitem__(self, idx, value):
@@ -279,7 +280,7 @@ class Technology:
         pollutants = ['co2', 'ch4', 'n2o', 'co', 'bc', 'oc']
         self.carbon_intensity = sum([self[f'{pollutant}_intensity'] * model.gwp[pollutant] for pollutant in pollutants])
 
-    def carb(self, model: 'onstove.OnStove'):
+    def carb(self, model: 'onstove.OnStove', mask: pd.Series):
         """Checks if carbon_emission is given in the socio-economic specification file. If it is given this is read
         directly, otherwise the get_carbon_intensity function is called
 
@@ -288,6 +289,8 @@ class Technology:
         model: OnStove model
             Instance of the OnStove model containing the main data of the study case. See
             :class:`onstove.OnStove`.
+        mask: pd.Series
+            Determines which cells are ran. This is relevant when the start and end years are different
 
         See also
         --------
@@ -300,7 +303,7 @@ class Technology:
         self.carbon = pd.Series([(self.energy * self.carbon_intensity) / 1000] * model.gdf.shape[0],
                                 index=model.gdf.index)
 
-    def carbon_emissions(self, model: 'onstove.OnStove'):
+    def carbon_emissions(self, model: 'onstove.OnStove', year: int, mask: pd.Series):
         """Calculates the reduced emissions and the costs avoided by reducing these emissions.
 
         Parameters
@@ -310,18 +313,26 @@ class Technology:
             :class:`onstove.OnStove`.
         year: int
             Defines which year that is being run.
+        mask: pd.Series
+            Determines which cells are ran. This is relevant when the start and end years are different
 
         See also
         --------
         carb
         """
 
-        self.carb(model)
-        proj_life = model.specs['end_year'] - model.specs['start_year']
+        self.carb(model, mask)
+        proj_life = year - model.specs['start_year']
 
-        self.decreased_carbon_emissions = model.base_fuel.carbon - self.carbon
-        self.decreased_carbon_costs = model.specs["cost_of_carbon_emissions"] * (model.base_fuel.carbon - self.carbon) \
-                                      / 1000 / (1 + model.specs["discount_rate"]) ** (proj_life - 1)
+        if isinstance(self.decreased_carbon_emissions, pd.Series):
+            self.decreased_carbon_emissions.loc[mask] = model.base_fuel.carbon.loc[mask] - self.carbon.loc[mask]
+            self.decreased_carbon_costs.loc[mask] = model.specs["cost_of_carbon_emissions"] * \
+                                                    (model.base_fuel.carbon.loc[mask] - self.carbon.loc[mask]) / 1000 \
+                                                    / (1 + model.specs["discount_rate"]) ** (proj_life - 1)
+        else:
+            self.decreased_carbon_emissions = model.base_fuel.carbon - self.carbon
+            self.decreased_carbon_costs = model.specs["cost_of_carbon_emissions"] * (model.base_fuel.carbon - self.carbon) \
+                                          / 1000 / (1 + model.specs["discount_rate"]) ** (proj_life - 1)
 
     def health_parameters(self, model: 'onstove.OnStove'):
         """Calculates the population attributable fraction for ALRI, COPD, IHD, lung cancer or stroke for urban and
@@ -394,7 +405,7 @@ class Technology:
         return distributed_cost
 
 
-    def mort_morb(self, model: 'onstove.OnStove', year: int, mask: gpd.GeoSeries, parameter: str = 'mort', dr: str = 'discount_rate') -> tuple[
+    def mort_morb(self, model: 'onstove.OnStove', year: int, mask: gpd.GeoSeries, parameter: str = 'mort') -> tuple[
         float, float]:
         """
         Calculates mortality or morbidity rate per fuel. These two calculations are very similar in nature and are
@@ -408,10 +419,10 @@ class Technology:
             :class:`onstove.OnStove`.
         year: int
             Defines which year that is being run.
+        mask: gpd.GeoSeries
+            Determines which cells are ran. This is relevant when the start and end years are different
         parameter: str, default 'Mort'
             Parameter to calculate. For mortality enter 'Mort' and for morbidity enter 'Morb'
-        dr: str, default 'Discount_rate'
-            Discount rate used in the analysis read from the socio-economic file
 
         Returns
         ----------
@@ -447,19 +458,13 @@ class Technology:
                 elif parameter == 'mort':
                     cost = model.specs['vsl']
 
-                total_mor += cl_diseases[disease][i] * cost * mor[disease] / (1 + model.specs[dr]) ** (i + year_diff - 1)
+                total_mor += cl_diseases[disease][i] * cost * mor[disease] / (1 + model.specs["discount_rate"]) ** (i + year_diff - 1)
             i += 1
 
         # TODO: This is the total pop and total house, should it be the values of the cells being assessed? Why distribute
         #       the morb and mort from each timestep with the total populations?
         denominator = pop.sum() * pop/house
-
-        distributed_cost = pd.Series(index=model.gdf.index, dtype='float64')
-
         distributed_cost = pop * total_mor / denominator
-
-        cases_avoided = pd.Series(index=model.gdf.index, dtype='float64')
-
         cases_avoided = sum(mor.values()) * pop / denominator
 
         return distributed_cost, cases_avoided
@@ -473,13 +478,15 @@ class Technology:
         model: OnStove model
             Instance of the OnStove model containing the main data of the study case. See
             :class:`onstove.OnStove`.
+        mask: gpd.GeoSeries
+            Determines which cells are ran. This is relevant when the start and end years are different
 
         See also
         --------
         mort_morb
 
         """
-        distributed_mortality, deaths_avoided = self.mort_morb(model, year, mask, parameter='mort', dr='discount_rate')
+        distributed_mortality, deaths_avoided = self.mort_morb(model, year, mask, parameter='mort')
 
         if isinstance(self.distributed_mortality, pd.Series):
             self.distributed_mortality.loc[mask] = distributed_mortality.loc[mask]
@@ -512,12 +519,14 @@ class Technology:
             :class:`onstove.OnStove`.
         year: int
             Determines which year that is assessed.
+        mask: gpd.GeoSeries
+            Determines which cells are ran. This is relevant when the start and end years are different
 
         See also
         --------
         mort_morb
         """
-        distributed_morbidity, cases_avoided = self.mort_morb(model, year, mask, parameter='morb', dr='discount_rate')
+        distributed_morbidity, cases_avoided = self.mort_morb(model, year, mask, parameter='morb')
 
         if isinstance(self.distributed_morbidity, pd.Series):
             self.distributed_morbidity.loc[mask] = distributed_morbidity.loc[mask]
@@ -924,8 +933,9 @@ class LPG(Technology):
 
         lpg.friction = friction
         lpg.travel_time(create_raster=True)
-        self.travel_time = 2 * model.raster_to_dataframe(lpg.distance_raster,
+        travel_time = 2 * model.raster_to_dataframe(lpg.distance_raster,
                                                          fill_nodata_method='interpolate', method='read')
+        self.travel_time = pd.Series(travel_time, index = model.gdf.index)
 
     def transportation_cost(self, model: 'onstove.OnStove'):
         """The cost of transporting LPG.
@@ -980,7 +990,7 @@ class LPG(Technology):
         self.transportation_cost(model)
         super().discount_fuel_cost(model, relative)
 
-    def transport_emissions(self, model: 'onstove.OnStove'):
+    def transport_emissions(self, model: 'onstove.OnStove', mask: int):
         """Calculates the emissions caused by the transportation of LPG. This is dependent on the diesel consumption of
         the truck. Diesel consumption is assumed to be 14 l/h (14 l/100km). Each truck is assumed to transport 2,000
         kg LPG
@@ -1013,12 +1023,12 @@ class LPG(Technology):
         diesel_ef = {'co2': 3.169, 'co': 7.40, 'n2o': 0.056,
                      'bc': bc_fraction * pm_diesel, 'oc': oc_fraction * bc_fraction * pm_diesel}  # g/kg_Diesel
         kg_yr = self.energy / self.energy_content  # LPG use (kg/yr). Energy required (MJ/yr)/LPG energy content (MJ/kg)
-        diesel_consumption = self.travel_time * (14 / 1000) * diesel_density  # kg of diesel per trip
+        diesel_consumption = self.travel_time.loc[mask] * (14 / 1000) * diesel_density  # kg of diesel per trip
         hh_emissions = sum([ef * model.gwp[pollutant] * diesel_consumption / self.truck_capacity * kg_yr for
                             pollutant, ef in diesel_ef.items()])  # in gCO2eq per yr
         return hh_emissions / 1000  # in kgCO2eq per yr
 
-    def carb(self, model: 'onstove.OnStove'):
+    def carb(self, model: 'onstove.OnStove', mask):
         """This method expands :meth:`Technology.carbon` when LPG is the stove assessed in order to ensure that the
          emissions caused by the transportation is included.
 
@@ -1032,8 +1042,8 @@ class LPG(Technology):
         --------
         transport_emissions
         """
-        super().carb(model)
-        self.carbon += self.transport_emissions(model)
+        super().carb(model, mask)
+        self.carbon.loc[mask] += self.transport_emissions(model, mask)
 
     def infrastructure_cost(self, model: 'onstove.OnStove'):
         """Calculates cost of cylinders for first-time LPG users. It is assumed that the cylinder contains 12.5 kg of
@@ -1517,7 +1527,7 @@ class Charcoal(Technology):
                             emission_factors.items()])  # gCO2eq/yr
         return hh_emissions / 1000  # kgCO2/yr
 
-    def carb(self, model: 'onstove.OnStove'):
+    def carb(self, model: 'onstove.OnStove', mask):
         """This method expands :meth:`Technology.carbon` when Charcoal is the fuel used (both traditional stoves and ICS)
          in order to ensure that the emissions caused by the production and transportation is included in the total emissions.
 
@@ -1531,8 +1541,8 @@ class Charcoal(Technology):
         --------
         carbon
         """
-        super().carb(model)
-        self.carbon += self.production_emissions(model)
+        super().carb(model, mask)
+        self.carbon.loc[mask] += self.production_emissions(model)
 
 
 class Electricity(Technology):
@@ -1711,7 +1721,7 @@ class Electricity(Technology):
 
         return salvage / discount_rate[0]
 
-    def carb(self, model: 'onstove.OnStove'):
+    def carb(self, model: 'onstove.OnStove', mask):
         """This method expands :meth:`Technology.carbon` when electricity is the fuel used
 
 
@@ -1727,7 +1737,7 @@ class Electricity(Technology):
          """
         if self.carbon_intensity is None:
             self.get_carbon_intensity(model)
-        super().carb(model)
+        super().carb(model, mask)
 
     def discounted_inv(self, model: 'onstove.OnStove', relative: bool = True):
         """This method expands :meth:`Technology.discounted_inv` by adding connection and added capacity costs.

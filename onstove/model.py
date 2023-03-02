@@ -1099,7 +1099,8 @@ class OnStove(DataProcessor):
 
                 self.clean_cooking_access = pop_sqkm
                 self.sfu = 1 - self.clean_cooking_access
-                tech.carb(self)
+                mask = self.gdf.index
+                tech.carb(self, mask)
 
                 if name != "Biogas":
                     tech.total_time(self)
@@ -1806,7 +1807,7 @@ class OnStove(DataProcessor):
                 tech.morbidity(self, year, mask)
                 tech.mortality(self, year, mask)
                 print(f'Calculating carbon emissions benefits for {tech.name}...')
-                tech.carbon_emissions(self, mask)
+                tech.carbon_emissions(self, year, mask)
                 # print(f'Calculating time saved benefits for {tech.name}...')
                 # tech.time_saved(self)
                 # print(f'Calculating costs for {tech.name}...')
