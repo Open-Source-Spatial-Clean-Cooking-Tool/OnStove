@@ -120,10 +120,10 @@ class Technology:
         #        self[paf + s] = 0
         for paf in ['paf_alri', 'paf_copd', 'paf_ihd', 'paf_lc', 'paf_stroke']:
             self[paf] = 0
-        self.discounted_fuel_cost = 0
-        self.discounted_investments = 0
-        self.discounted_om_costs = 0
-        self.discounted_salvage_cost = 0
+        self.discounted_fuel_cost = None
+        self.discounted_investments = None
+        self.discounted_om_costs = None
+        self.discounted_salvage_cost = None
         self.decreased_carbon_costs = 0
         self.clean_cooking_access = 0
         self.sfu = 0
@@ -590,7 +590,7 @@ class Technology:
 
         self.discounted_salvage_cost = discounted_salvage
 
-    def discounted_om(self, model: 'onstove.OnStove', relative: bool = True):
+    def discounted_om(self, model: 'onstove.OnStove', mask: pd.Series, relative: bool = True):
         """
         Calls discount_factor function and calculates discounted operation and maintenance cost for each stove.
 
@@ -605,18 +605,36 @@ class Technology:
         --------
         discount_factor
         """
+
+
         discount_rate, proj_life = self.discount_factor(model.specs)
-        operation_and_maintenance = self.om_cost * np.ones(model.gdf.shape[0])
+        operation_and_maintenance = self.om_cost * np.ones(proj_life)
+
+        proj_years = np.matmul(np.expand_dims(np.ones(model.gdf.shape[0]), axis=1),
+                               np.expand_dims(np.zeros(proj_life), axis=0))
+
+        start_year = mask[mask].index
 
         if relative:
-            discounted_base_om = model.base_fuel.discounted_om_costs
-        else:
-            discounted_base_om = 0
-        # + self.om_cost - \
-        om_discounted = np.array([sum(x / discount_rate) for x in operation_and_maintenance])
-        self.discounted_om_costs = pd.Series(om_discounted, index=model.gdf.index) - discounted_base_om
+            discounted_base_om = model.base_fuel.discounted_om
 
-    def discounted_inv(self, model: 'onstove.OnStove', relative: bool = True):
+            for i in proj_years:
+                for j in range(country.year - country.specs["start_year"] - 1, len(i)):
+                    i[j] = 1
+
+            om = proj_years * np.array(operation_and_maintenance)[:, None]
+
+            discounted_om = np.array([sum(x / discount_rate) for x in om])
+
+            if not isinstance(self.discounted_om_costs, pd.Series):
+                self.discounted_om_costs = pd.Series(0, index=model.gdf.index, dtype='float64')
+
+            self.discounted_om_costs[start_year.tolist()] = discounted_om[start_year.tolist()] \
+                                                               - discounted_base_om[start_year.tolist()]
+        else:
+            self.discounted_om_costs = pd.Series(self.om_cost, index=model.gdf.index)
+
+    def discounted_inv(self, model: 'onstove.OnStove', mask: pd.Series, relative: bool):
         """
         Calls discount_factor function and calculates discounted investment cost. Uses proj_life and tech_life to determine
         number of necessary re-investments
@@ -626,6 +644,9 @@ class Technology:
         model: OnStove model
             Instance of the OnStove model containing the main data of the study case. See
             :class:`onstove.OnStove`.
+        mask: pd.Series
+            Mask rows included in the calculations. For the base fuel all rows are used, but for different years,
+            ceratin rows are masked out.
         relative: bool, default True
             Boolean parameter to indicate if the discounted investments will be calculated relative to the `base_fuel`
             or not.
@@ -635,28 +656,33 @@ class Technology:
         discount_factor
         """
         discount_rate, proj_life = self.discount_factor(model.specs)
-
         inv = self.inv_cost * np.ones(model.gdf.shape[0])
         tech_life = self.tech_life * np.ones(model.gdf.shape[0])
 
         proj_years = np.matmul(np.expand_dims(np.ones(model.gdf.shape[0]), axis=1),
                                np.expand_dims(np.zeros(proj_life), axis=0))
 
-        for i in np.unique(tech_life):
-            where = np.where(tech_life == i)
-            for j in range(int(i) - 1, proj_life, int(i)):
-                proj_years[where, j] = 1
-
-        investments = proj_years * np.array(inv)[:, None]
+        start_year = mask[mask].index
 
         if relative:
             discounted_base_investments = model.base_fuel.discounted_investments
-        else:
-            discounted_base_investments = 0
 
-        investments_discounted = np.array([sum(x / discount_rate) for x in investments])
-        self.discounted_investments = pd.Series(investments_discounted, index=model.gdf.index) + self.inv_cost - \
-                                      discounted_base_investments
+            for i in np.unique(tech_life):
+                for j in range(int(i), proj_life, int(i)):
+                    proj_years[start_year, model.year - model.specs["start_year"] - 1] = 1
+                    proj_years[start_year, j + mdoel.year - model.specs["start_year"] - 1] = 1
+
+            investments = proj_years * np.array(inv)[:, None]
+
+            investments_discounted = np.array([sum(x / discount_rate) for x in investments])
+
+            if not isinstance(self.discounted_investments, pd.Series):
+                self.discounted_investments = pd.Series(0, index=model.gdf.index, dtype='float64')
+
+            self.discounted_investments[start_year.tolist()] = investments_discounted[start_year.tolist()] \
+                                                               - discounted_base_investments[start_year.tolist()]
+        else:
+            self.discounted_investments = pd.Series(self.inv_cost, index=model.gdf.index)
 
     def discount_fuel_cost(self, model: 'onstove.OnStove', relative: bool = True):
         """
@@ -1101,7 +1127,7 @@ class LPG(Technology):
         salvage = cost * (1 - used_life / life)
         return salvage / discount_rate[0]
 
-    def discounted_inv(self, model: 'onstove.OnStove', relative: bool = True):
+    def discounted_inv(self, model: 'onstove.OnStove', mask: pd.Series, relative: bool = True):
         """This method expands :meth:`Technology.discounted_inv` by adding the cylinder cost for households currently
         not using LPG.
 
@@ -1119,7 +1145,7 @@ class LPG(Technology):
         infrastructure_cost
         """
         # TODO: this method needs update on the current shares based on the new calibration methods
-        super().discounted_inv(model, relative=relative)
+        super().discounted_inv(model, mask, relative=relative)
         self.infrastructure_cost(model)
         if relative:
             share = (model.gdf['IsUrban'] > 20) * self.current_share_urban
@@ -1393,7 +1419,7 @@ class Biomass(Technology):
             self.inv_cost = inv_cost
             self.solar_panel_adjusted = True  # This is to prevent to adjust the capital cost more than once
 
-    def discounted_inv(self, model: 'onstove.OnStove', relative: bool = True):
+    def discounted_inv(self, model: 'onstove.OnStove', mask: pd.Series, relative: bool = True):
         """This method expands :meth:`Technology.discounted_inv` by adding the solar panel cost in unlectrified areas.
 
         Parameters
@@ -1411,7 +1437,7 @@ class Biomass(Technology):
         """
         if self.draft_type.lower().replace('_', ' ') in ['forced', 'forced draft']:
             self.solar_panel_investment(model)
-        super().discounted_inv(model, relative=relative)
+        super().discounted_inv(model, mask, relative=relative)
 
 
 class Charcoal(Technology):
@@ -1749,7 +1775,7 @@ class Electricity(Technology):
             self.get_carbon_intensity(model)
         super().carb(model, mask)
 
-    def discounted_inv(self, model: 'onstove.OnStove', relative: bool = True):
+    def discounted_inv(self, model: 'onstove.OnStove', mask: pd.Series, relative: bool = True):
         """This method expands :meth:`Technology.discounted_inv` by adding connection and added capacity costs.
 
         Parameters
@@ -1766,7 +1792,7 @@ class Electricity(Technology):
         get_capacity_cost
         """
         # TODO: this method needs update on the current shares based on the new calibration methods
-        super().discounted_inv(model, relative=relative)
+        super().discounted_inv(model, mask, relative=relative)
         if relative:
             share = (model.gdf['IsUrban'] > 20) * self.current_share_urban
             share[model.gdf['IsUrban'] < 20] *= self.current_share_rural
@@ -1864,7 +1890,7 @@ class MiniGrids(Electricity):
         """
         pass
 
-    def discounted_inv(self, model: 'onstove.OnStove', relative: bool = True):
+    def discounted_inv(self, model: 'onstove.OnStove', mask: pd.Series, relative: bool = True):
         pass
 
     def net_benefit(self, model: 'onstove.OnStove', w_health: int = 1, w_spillovers: int = 1,

@@ -1110,11 +1110,11 @@ class OnStove(DataProcessor):
                 if isinstance(tech, LPG):
                     tech.transportation_cost(self)
 
-                tech.discounted_inv(self, relative=False)
+                tech.discounted_inv(self, mask, relative=False)
                 base_fuel.tech_life += tech.tech_life * tech.pop_sqkm
                 base_fuel.discounted_investments += tech.discounted_investments * tech.pop_sqkm
 
-                tech.discounted_om(self, relative=False)
+                tech.discounted_om(self, mask, relative=False)
                 base_fuel.discounted_om_costs += tech.discounted_om_costs * tech.pop_sqkm
 
                 tech.adjusted_pm25()
@@ -1812,8 +1812,8 @@ class OnStove(DataProcessor):
                 tech.time_saved(self, year, mask)
                 print(f'Calculating costs for {tech.name}...')
                 tech.required_energy(self)
-                # tech.discounted_om(self)
-                # tech.discounted_inv(self)
+                tech.discounted_om(self, mask)
+                tech.discounted_inv(self, mask)
                 # tech.discount_fuel_cost(self)
                 # tech.salvage(self)
                 # print(f'Calculating net benefit for {tech.name}...\n')
