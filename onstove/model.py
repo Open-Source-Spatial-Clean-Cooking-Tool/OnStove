@@ -1099,7 +1099,7 @@ class OnStove(DataProcessor):
 
                 self.clean_cooking_access = pop_sqkm
                 self.sfu = 1 - self.clean_cooking_access
-                mask = self.gdf.index
+                mask = pd.Series(True, index = self.gdf.index)
                 tech.carb(self, mask)
 
                 if name != "Biogas":
@@ -1127,10 +1127,10 @@ class OnStove(DataProcessor):
                 base_fuel.decreased_carbon_costs += base_fuel.carbon * self.specs['cost_of_carbon_emissions']
                 base_fuel.total_time_yr += (tech.total_time_yr * tech.pop_sqkm).fillna(0)
 
-                tech.discount_fuel_cost(self, relative=False)
+                tech.discount_fuel_cost(self, mask, relative=False)
                 base_fuel.discounted_fuel_cost += tech.discounted_fuel_cost * tech.pop_sqkm
 
-                tech.salvage(self, relative=False)
+                tech.salvage(self, mask, relative=False)
                 base_fuel.discounted_salvage_cost += tech.discounted_salvage_cost * tech.pop_sqkm
 
                 tech.total_costs()
@@ -1812,15 +1812,15 @@ class OnStove(DataProcessor):
                 tech.time_saved(self, year, mask)
                 print(f'Calculating costs for {tech.name}...')
                 tech.required_energy(self)
-                tech.discounted_om(self, mask)
-                tech.discounted_inv(self, mask)
-                # tech.discount_fuel_cost(self)
-                # tech.salvage(self)
-                # print(f'Calculating net benefit for {tech.name}...\n')
-                # tech.net_benefit(self, self.specs['w_health'], self.specs['w_spillovers'],
-                #                  self.specs['w_environment'], self.specs['w_time'], self.specs['w_costs'])
+                tech.discounted_om(self, mask, relative = True)
+                tech.discounted_inv(self, mask, relative = True)
+                tech.discount_fuel_cost(self, mask, relative = True)
+                tech.salvage(self, mask, relative = True)
+                print(f'Calculating net benefit for {tech.name}...\n')
+                tech.net_benefit(self, self.specs['w_health'], self.specs['w_spillovers'],
+                                  self.specs['w_environment'], self.specs['w_time'], self.specs['w_costs'])
 
-        # print('Getting maximum net benefit technologies...')
+        print('Getting maximum net benefit technologies...')
         # self.maximum_net_benefit(techs, restriction=restriction)
         # print('Extracting indicators...')
         # print('    - Deaths avoided')
