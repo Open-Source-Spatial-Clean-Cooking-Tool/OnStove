@@ -52,6 +52,10 @@ Through the jupyter_env.yaml in the env-folder using [Anaconda](https://www.anac
 
 ## How to cite
 
-### Will be added when publications come
-
+```
+Khavari, Babak, Camilo Ramirez, Marc Jeuland and Francesco Fuso Nerini (12 January 2023). 
+"A geospatial approach to understanding clean cooking challenges in sub-Saharan Africa". 
+Nature Sustainability. 1–11. ISSN 2398-9629. doi:10.1038/s41893-022-01039-8. 
+Creative Commons CC‑BY‑4.0 license.
+```
 
