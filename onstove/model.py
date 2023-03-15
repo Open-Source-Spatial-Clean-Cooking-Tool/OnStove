@@ -1079,6 +1079,8 @@ class OnStove(DataProcessor):
 
             base_fuel = Technology(name='Base fuel')
             base_fuel.carbon = 0
+            base_fuel.deaths = 0
+            base_fuel.cases = 0
             base_fuel.total_time_yr = 0
 
             self.ecooking_adjustment()
@@ -1096,6 +1098,8 @@ class OnStove(DataProcessor):
             for name, tech in base_fuels.items():
                 if tech.is_clean:
                     pop_sqkm += tech.pop_sqkm
+
+                self.base_fuel = base_fuel
 
                 self.clean_cooking_access = pop_sqkm
                 self.sfu = 1 - self.clean_cooking_access
@@ -1121,6 +1125,7 @@ class OnStove(DataProcessor):
                 tech.health_parameters(self)
 
                 for paf in ['paf_alri', 'paf_copd', 'paf_ihd', 'paf_lc', 'paf_stroke']:
+                    base_fuel[paf] = 0
                     base_fuel[paf] += tech[paf] * tech.pop_sqkm
 
                 base_fuel.carbon += tech.carbon * tech.pop_sqkm
@@ -1137,18 +1142,18 @@ class OnStove(DataProcessor):
                 base_fuel.costs += tech.costs * tech.pop_sqkm
                 self.gdf["baseline_costs"] = base_fuel.costs
 
-            base_fuel.sfu = 1 - base_fuel.clean_cooking_access
-            self.base_fuel = base_fuel
+                tech.mortality(self, mask, 'mort', False)
+                tech.morbidity(self, mask, 'morb', False)
+                base_fuel.deaths += tech.deaths_avoided * tech.pop_sqkm
+                base_fuel.cases += tech.cases * tech.pop_sqkm
 
-            base_fuel.mort = tech.base_mort_morb(self, 'mort')
-            base_fuel.morb = tech.base_mort_morb(self, 'morb')
 
-            base_fuel.decreased_carbon_costs = base_fuel.carbon * self.specs['cost_of_carbon_emissions'] / 1000
-            base_fuel.time_value = base_fuel.total_time_yr * self.gdf["value_of_time"]
-
-            base_fuel.benefits = base_fuel.time_value + base_fuel.decreased_carbon_costs + base_fuel.mort + base_fuel.morb
-
-            self.gdf["baseline_benefits"] = base_fuel.benefits
+            # base_fuel.decreased_carbon_costs = base_fuel.carbon * self.specs['cost_of_carbon_emissions'] / 1000
+            # base_fuel.time_value = base_fuel.total_time_yr * self.gdf["value_of_time"]
+            #
+            # base_fuel.benefits = base_fuel.time_value + base_fuel.decreased_carbon_costs + base_fuel.mort + base_fuel.morb
+            #
+            # self.gdf["baseline_benefits"] = base_fuel.benefits
 
     def read_tech_data(self, path_to_config: str, delimiter=','):
         """
@@ -1374,32 +1379,45 @@ class OnStove(DataProcessor):
     def yearly_pop(self, year):
 
         isurban = self.gdf["IsUrban"] > 20
-        urban = isurban.sum()
-        rural = len(self.gdf)-urban
+
+        #   TODO: To make this function work, give default values to pop_end_year and urban_end equal to their start
+        #       values
+
+        pop = pd.Series(0, index=self.gdf.index)
+        house = pd.Series(0, index=self.gdf.index)
+        pop_increase = pd.Series(0, index=self.gdf.index)
+
+
+        yearly_pop_increase_urban = (self.specs["population_end_year"] * self.specs["urban_end"] / (self.specs[
+                                        "population_start_year"] * self.specs["urban_start"])) ** (
+                                                1 / (self.specs["end_year"] -
+                                                     self.specs["start_year"])) - 1
+        yearly_pop_increase_rural = (self.specs["population_end_year"] * (1 - self.specs["urban_end"]) / (self.specs[
+                                        "population_start_year"] * (
+                                            1 -self.specs["urban_start"]))) ** (
+                                                1 / (self.specs["end_year"] -
+                                                     self.specs["start_year"])) - 1
+
+        pop_increase[~isurban] = yearly_pop_increase_rural
+        pop_increase[isurban] = yearly_pop_increase_urban
 
         if year == self.specs['start_year']:
             pop = self.gdf['pop_init_year']
             house = self.gdf['households_init']
+            pop_increase[~isurban] = yearly_pop_increase_rural
+            pop_increase[isurban] = yearly_pop_increase_urban
         else:
-            yearly_pop_increase_urban = (self.specs["population_end_year"] * self.specs["urban_end"] - self.specs[
-                "population_start_year"] * self.specs["urban_start"]) / (self.specs["end_year"] - self.specs["start_year"])
-            yearly_pop_increase_rural = (self.specs["population_end_year"] * (1 - self.specs["urban_end"]) - self.specs[
-                "population_start_year"] * (1 - self.specs["urban_start"])) / (
-                                                    self.specs["end_year"] - self.specs["start_year"])
-
-            pop = pd.Series(index=self.gdf.index)
-            house = pd.Series(index=self.gdf.index)
-
-            pop.loc[~isurban] = self.gdf.loc[~isurban, "pop_init_year"] + yearly_pop_increase_rural / rural * (
+            pop.loc[~isurban] = self.gdf.loc[~isurban, "pop_init_year"] * (1 + yearly_pop_increase_rural) ** (
                     year - self.specs["start_year"])
 
-            pop.loc[isurban] = self.gdf.loc[isurban, "pop_init_year"] + yearly_pop_increase_urban / urban * (
+            pop.loc[isurban] = self.gdf.loc[isurban, "pop_init_year"] * (1 + yearly_pop_increase_urban) ** (
                     year - self.specs["start_year"])
 
             house.loc[~isurban] = pop.loc[~isurban]/self.specs['rural_hh_size']
             house.loc[isurban] = pop.loc[isurban] / self.specs['urban_hh_size']
 
-        return pop, house
+
+        return pop, house, pop_increase
 
 
     def calibrate_future_pop(self):
@@ -1412,19 +1430,21 @@ class OnStove(DataProcessor):
             if self.specs['end_year'] < self.specs['start_year']:
                 raise ValueError("The end year needs to come after the start year.")
             else:
-                self.gdf['pop_end_year'], self.gdf['households_end'] = self.yearly_pop(self.specs["end_year"])
+                self.gdf['pop_end_year'], self.gdf['households_end'], pop_increase\
+                    = self.yearly_pop(self.specs["end_year"])
         else: 
             self.gdf["pop_end_year"] = self.gdf["pop_init_year"]
             self.gdf["households_end"] = self.gdf["households_init"]
 
-        #TODO: do we need this?!
+        #TODO: do we need this?
         if self.specs["inter_year"] is not None:
             if self.specs['inter_year'] < self.specs['start_year']:
                 raise ValueError("The intermediate year needs to come after the start year.")
             elif self.specs['inter_year'] > self.specs['end_year']:
                 raise ValueError("The intermediate year needs to come before the end year.")
             else:
-                self.gdf['pop_inter_year'], self.gdf['households_inter']  = self.yearly_pop(self.specs["inter_year"])
+                self.gdf['pop_inter_year'], self.gdf['households_inter'], pop_increase\
+                    = self.yearly_pop(self.specs["inter_year"])
     
 
     def distance_to_electricity(self, hv_lines: VectorLayer = None, mv_lines: VectorLayer = None,
@@ -1804,23 +1824,23 @@ class OnStove(DataProcessor):
                 if not tech.is_base:
                     tech.adjusted_pm25()
 
-                tech.morbidity(self, year, mask)
-                tech.mortality(self, year, mask)
-                print(f'Calculating carbon emissions benefits for {tech.name}...')
-                tech.carbon_emissions(self, year, mask)
-                print(f'Calculating time saved benefits for {tech.name}...')
-                tech.time_saved(self, year, mask)
-                print(f'Calculating costs for {tech.name}...')
-                tech.required_energy(self)
-                tech.discounted_om(self, mask, relative = True)
-                tech.discounted_inv(self, mask, relative = True)
-                tech.discount_fuel_cost(self, mask, relative = True)
-                tech.salvage(self, mask, relative = True)
-                print(f'Calculating net benefit for {tech.name}...\n')
-                tech.net_benefit(self, self.specs['w_health'], self.specs['w_spillovers'],
-                                  self.specs['w_environment'], self.specs['w_time'], self.specs['w_costs'])
-
-        print('Getting maximum net benefit technologies...')
+        #         tech.morbidity(self, year, mask)
+        #         tech.mortality(self, year, mask)
+        #         print(f'Calculating carbon emissions benefits for {tech.name}...')
+        #         tech.carbon_emissions(self, year, mask)
+        #         print(f'Calculating time saved benefits for {tech.name}...')
+        #         tech.time_saved(self, year, mask)
+        #         print(f'Calculating costs for {tech.name}...')
+        #         tech.required_energy(self)
+        #         tech.discounted_om(self, mask, relative = True)
+        #         tech.discounted_inv(self, mask, relative = True)
+        #         tech.discount_fuel_cost(self, mask, relative = True)
+        #         tech.salvage(self, mask, relative = True)
+        #         print(f'Calculating net benefit for {tech.name}...\n')
+        #         tech.net_benefit(self, self.specs['w_health'], self.specs['w_spillovers'],
+        #                           self.specs['w_environment'], self.specs['w_time'], self.specs['w_costs'])
+        #
+        # print('Getting maximum net benefit technologies...')
         # self.maximum_net_benefit(techs, restriction=restriction)
         # print('Extracting indicators...')
         # print('    - Deaths avoided')

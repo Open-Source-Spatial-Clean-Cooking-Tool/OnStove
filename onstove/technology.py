@@ -115,9 +115,6 @@ class Technology:
         self.current_share_rural = current_share_rural
         self.energy = 0
         self.epsilon = epsilon
-        #for paf in ['paf_alri_', 'paf_copd_', 'paf_ihd_', 'paf_lc_', 'paf_stroke_']:
-        #    for s in ['u', 'r']:
-        #        self[paf + s] = 0
         for paf in ['paf_alri', 'paf_copd', 'paf_ihd', 'paf_lc', 'paf_stroke']:
             self[paf] = 0
         self.discounted_fuel_cost = 0
@@ -136,6 +133,8 @@ class Technology:
         self.time_value = None
         self.decreased_carbon_emissions = None
         self.net_benefits = None
+        self.deaths = None
+        self.cases = None
 
     def __setitem__(self, idx, value):
         self.__dict__[idx] = value
@@ -227,8 +226,6 @@ class Technology:
         paf: float
             The Population Attributable Fraction for each disease
         """
-
-        #TODO: Should sfu be updated from year to year?
         paf = (sfu * (rr - 1)) / (sfu * (rr - 1) + 1)
         return paf
 
@@ -291,8 +288,6 @@ class Technology:
         model: OnStove model
             Instance of the OnStove model containing the main data of the study case. See
             :class:`onstove.OnStove`.
-        mask: pd.Series
-            Determines which cells are ran. This is relevant when the start and end years are different
 
         See also
         --------
@@ -306,7 +301,7 @@ class Technology:
         self.carbon = pd.Series((self.energy * self.carbon_intensity) / 1000, index = model.gdf.index)
 
 
-    def carbon_emissions(self, model: 'onstove.OnStove', year: int, mask: pd.Series):
+    def carbon_emissions(self, model: 'onstove.OnStove', mask: pd.Series, relative: bool = True):
         """Calculates the reduced emissions and the costs avoided by reducing these emissions.
 
         Parameters
@@ -323,18 +318,43 @@ class Technology:
         --------
         carb
         """
-
+        discount_rate, proj_life = self.discount_factor(model.specs)
         self.carb(model, mask)
-        proj_life = year - model.specs['start_year']
 
-        if not isinstance(self.decreased_carbon_emissions, pd.Series):
-            self.decreased_carbon_emissions = pd.Series(0, index=model.gdf.index, dtype='float64')
-            self.decreased_carbon_costs = pd.Series(0, index=model.gdf.index, dtype='float64')
+        proj_years = np.matmul(np.expand_dims(np.ones(model.gdf.shape[0]), axis=1),
+                               np.expand_dims(np.zeros(proj_life), axis=0))
 
-        self.decreased_carbon_emissions.loc[mask] = model.base_fuel.carbon.loc[mask] - self.carbon.loc[mask]
-        self.decreased_carbon_costs.loc[mask] = model.specs["cost_of_carbon_emissions"] * \
-                                                (model.base_fuel.carbon.loc[mask] - self.carbon.loc[mask]) / 1000 \
-                                                / (1 + model.specs["discount_rate"]) ** (proj_life - 1)
+        if relative:
+            start_year = mask[mask].index
+
+            base_annual_carbon = np.repeat(np.expand_dims(model.base_fuel.carbon, axis=1),
+                                           model.specs["end_year"] - model.specs["start_year"], axis=1)
+
+            proj_years[start_year, (model.year - model.specs["start_year"] - 1):proj_years.shape[1]] = 1
+
+            carbon = proj_years * np.array(self.carbon)[:, None]
+            carbon[start_year, 0:(model.year - model.specs["start_year"] - 1)] = base_annual_carbon[start_year.tolist(),
+                                                                                 0:model.year - model.specs[
+                                                                                     "start_year"] - 1]
+
+            if not isinstance(self.decreased_carbon_emissions, pd.Series):
+                self.decreased_carbon_emissions = pd.Series(0, index=model.gdf.index, dtype='float64')
+                self.decreased_carbon_costs = pd.Series(0, index=model.gdf.index, dtype='float64')
+
+            # TODO: save this one
+            decreased_carbon = base_annual_carbon - carbon
+
+            self.decreased_carbon_emissions.loc[start_year.tolist()] = decreased_carbon[start_year.tolist()].sum()
+
+            discounted_carbon = np.array(
+                [sum(x * model.specs["cost_of_carbon_emissions"] / (1000 * discount_rate)) for x in decreased_carbon])
+
+            self.decreased_carbon_costs.loc[start_year.tolist()] = discounted_carbon[start_year]
+        else:
+            proj_years[:] = 1
+            carbon = proj_years * np.array(self.carbon)[:, None]
+            discounted_carbon = np.array([sum(x * model.specs["cost_of_carbon_emissions"] / (1000 * discount_rate)) for x in carbon])
+            self.discounted_carbon_costs = pd.Series(discounted_carbon, index=model.gdf.index)
 
     def health_parameters(self, model: 'onstove.OnStove'):
         """Calculates the population attributable fraction for ALRI, COPD, IHD, lung cancer or stroke for urban and
@@ -387,7 +407,7 @@ class Technology:
             rate = model.specs[f'{parameter}_{disease}']
 
             paf = f'paf_{disease.lower()}'
-            mor[disease] = model.gdf['pop_init_year'].sum() * model.base_fuel[paf] * (rate / 100000)
+            mor[disease] = model.gdf['pop_init_year'] * model.base_fuel[paf] * (rate / 100000)
 
         total_mor = 0
 
@@ -399,7 +419,6 @@ class Technology:
 
             total_mor += cost * mor[disease]
 
-
         denominator = model.gdf['pop_init_year'].sum() * model.gdf['households_init']
 
         distributed_cost = model.gdf['pop_init_year'] * total_mor / denominator
@@ -407,7 +426,7 @@ class Technology:
         return distributed_cost
 
 
-    def mort_morb(self, model: 'onstove.OnStove', year: int, mask: gpd.GeoSeries, parameter: str = 'mort') -> tuple[
+    def mort_morb(self, model: 'onstove.OnStove', mask: gpd.GeoSeries, parameter: str = 'mort', relative = True) -> tuple[
         float, float]:
         """
         Calculates mortality or morbidity rate per fuel. These two calculations are very similar in nature and are
@@ -419,8 +438,6 @@ class Technology:
         model: OnStove model
             Instance of the OnStove model containing the main data of the study case. See
             :class:`onstove.OnStove`.
-        year: int
-            Defines which year that is being run.
         mask: gpd.GeoSeries
             Determines which cells are ran. This is relevant when the start and end years are different
         parameter: str, default 'Mort'
@@ -430,48 +447,125 @@ class Technology:
         ----------
         Monetary mortality or morbidity for each stove.
         """
-        self.health_parameters(model)
+        # self.health_parameters(model)
+        #
+        # mor = {}
+        # diseases = ['alri', 'copd', 'ihd', 'lc', 'stroke']
+        #
+        # for disease in diseases:
+        #     rate = model.specs[f'{parameter}_{disease}']
+        #
+        #     paf = f'paf_{disease.lower()}'
+        #     pop, house = model.yearly_pop(model.year)
+        #     mor[disease] = pd.Series(np.zeros(model.gdf.shape[0]), index = model.gdf.index)
+        #     mor[disease].loc[mask] = pop.loc[mask] * (model.base_fuel[paf] - self[paf]) * (rate / 100000)
+        #
+        # cl_diseases = {'alri': {1: 0.7, 2: 0.1, 3: 0.07, 4: 0.07, 5: 0.06},
+        #                'copd': {1: 0.3, 2: 0.2, 3: 0.17, 4: 0.17, 5: 0.16},
+        #                'lc': {1: 0.2, 2: 0.1, 3: 0.24, 4: 0.23, 5: 0.23},
+        #                'ihd': {1: 0.2, 2: 0.1, 3: 0.24, 4: 0.23, 5: 0.23},
+        #                'stroke': {1: 0.2, 2: 0.1, 3: 0.24, 4: 0.23, 5: 0.23}}
+        #
+        # year_diff = model.year - model.specs['start_year']
+        # i = 1
+        # total_mor = 0
+        # while i < 6:
+        #     for disease in diseases:
+        #
+        #         if parameter == 'morb':
+        #             cost = model.specs[f'coi_{disease}']
+        #         elif parameter == 'mort':
+        #             cost = model.specs['vsl']
+        #
+        #         total_mor += cl_diseases[disease][i] * cost * mor[disease] / (1 + model.specs["discount_rate"]) ** (i + year_diff - 1)
+        #     i += 1
+        #
+        # # TODO: This is the total pop and total house, should it be the values of the cells being assessed? Why distribute
+        # #       the morb and mort from each timestep with the total populations?
+        # denominator = pop.sum() * pop/house
+        # distributed_cost = pop * total_mor / denominator
+        # cases_avoided = sum(mor.values()) * pop / denominator
+        #
+        # return distributed_cost, cases_avoided
+        discount_rate, proj_life = self.discount_factor(model.specs)
+
+        cases = np.matmul(np.expand_dims(np.ones(model.gdf.shape[0]), axis=1),
+                          np.expand_dims(np.zeros(proj_life), axis=0))
+        costs = cases.copy()
 
         mor = {}
         diseases = ['alri', 'copd', 'ihd', 'lc', 'stroke']
 
-        for disease in diseases:
-            rate = model.specs[f'{parameter}_{disease}']
+        cumulative_cases = pd.Series(0, index=model.gdf.index)
 
-            paf = f'paf_{disease.lower()}'
-            pop, house = model.yearly_pop(year)
-            mor[disease] = pd.Series(np.zeros(model.gdf.shape[0]), index = model.gdf.index)
-            mor[disease].loc[mask] = pop.loc[mask] * (model.base_fuel[paf] - self[paf]) * (rate / 100000)
+        if relative:
+            start_year = mask[mask].index
+            self.health_parameters(model)
 
-        cl_diseases = {'alri': {1: 0.7, 2: 0.1, 3: 0.07, 4: 0.07, 5: 0.06},
-                       'copd': {1: 0.3, 2: 0.2, 3: 0.17, 4: 0.17, 5: 0.16},
-                       'lc': {1: 0.2, 2: 0.1, 3: 0.24, 4: 0.23, 5: 0.23},
-                       'ihd': {1: 0.2, 2: 0.1, 3: 0.24, 4: 0.23, 5: 0.23},
-                       'stroke': {1: 0.2, 2: 0.1, 3: 0.24, 4: 0.23, 5: 0.23}}
+            cl_diseases = {'alri': {1: 0.7, 2: 0.1, 3: 0.07, 4: 0.07, 5: 0.06},
+                           'copd': {1: 0.3, 2: 0.2, 3: 0.17, 4: 0.17, 5: 0.16},
+                           'lc': {1: 0.2, 2: 0.1, 3: 0.24, 4: 0.23, 5: 0.23},
+                           'ihd': {1: 0.2, 2: 0.1, 3: 0.24, 4: 0.23, 5: 0.23},
+                           'stroke': {1: 0.2, 2: 0.1, 3: 0.24, 4: 0.23, 5: 0.23}}
 
-        year_diff = year - model.specs['start_year']
-        i = 1
-        total_mor = 0
-        while i < 6:
             for disease in diseases:
+                rate = model.specs[f'{parameter}_{disease}']
+                i = model.year
+                paf = f'paf_{disease.lower()}'
+                pop, house, pop_increase = model.yearly_pop(model.year)
+                mor[disease] = pd.Series(np.zeros(model.gdf.shape[0]), index=model.gdf.index)
+                mor[disease].loc[start_year] = pop.loc[start_year] * (model.base_fuel[paf] - self[paf]) * (
+                            rate / 100000)
 
-                if parameter == 'morb':
-                    cost = model.specs[f'coi_{disease}']
-                elif parameter == 'mort':
-                    cost = model.specs['vsl']
+                while i <= model.specs["end_year"]:
+                    if parameter == 'morb':
+                        cost = model.specs[f'coi_{disease}']
+                    elif parameter == 'mort':
+                        cost = model.specs['vsl']
 
-                total_mor += cl_diseases[disease][i] * cost * mor[disease] / (1 + model.specs["discount_rate"]) ** (i + year_diff - 1)
-            i += 1
+                    if i - model.year + 1 > 5:
+                        cl = 1
+                    else:
+                        cl = cl_diseases[disease][i - model.year + 1]
 
-        # TODO: This is the total pop and total house, should it be the values of the cells being assessed? Why distribute
-        #       the morb and mort from each timestep with the total populations?
-        denominator = pop.sum() * pop/house
-        distributed_cost = pop * total_mor / denominator
-        cases_avoided = sum(mor.values()) * pop / denominator
+                    cumulative_cases += mor[disease].loc[start_year] * (1 - cl) * (1 + pop_increase[start_year]) ** (
+                            i - model.year)
+                    cases[start_year, i - model.specs["start_year"] - 1] = cumulative_cases[start_year]
+                    costs[start_year, i - model.specs["start_year"] - 1] = cases[start_year, i - model.specs[
+                        "start_year"] - 1] * cost
 
-        return distributed_cost, cases_avoided
+                    i += 1
 
-    def mortality(self, model: 'onstove.OnStove', year, mask):
+            relative_costs = model.base_fuel[parameter + '_costs'] - costs
+
+            discounted_costs = np.array([sum(x / discount_rate) for x in relative_costs])
+
+            return cases, costs, discounted_costs
+        else:
+            cases[:] = 1
+            for disease in diseases:
+                i = model.specs["start_year"]
+                rate = model.specs[f'{parameter}_{disease}']
+                paf = f'paf_{disease.lower()}'
+                pop, house, pop_increase = model.yearly_pop(model.specs["start_year"])
+                mor[disease] = pop * (model.base_fuel[paf]) * (rate / 100000)
+
+                while i < model.specs["end_year"]:
+                    if parameter == 'morb':
+                        cost = model.specs[f'coi_{disease}']
+                    elif parameter == 'mort':
+                        cost = model.specs['vsl']
+
+                    cumulative_cases += mor[disease] * (1 + pop_increase) ** (i - model.specs["start_year"])
+                    cases[:, i - model.specs["start_year"]] = cumulative_cases
+                    costs[:, i - model.specs["start_year"]] = cases[:, i - model.specs["start_year"]] * cost
+                    i += 1
+
+            discounted_costs = np.array([sum(x / discount_rate) for x in costs])
+
+            return cases, costs, discounted_costs
+
+    def mortality(self, model: 'onstove.OnStove', mask, parameter, relative):
         """
         Distributes the total mortality across the study area per fuel.
 
@@ -488,29 +582,66 @@ class Technology:
         mort_morb
 
         """
-        distributed_mortality, deaths_avoided = self.mort_morb(model, year, mask, parameter='mort')
+        # distributed_mortality, deaths_avoided = self.mort_morb(model, mask, parameter='mort')
+        #
+        # if isinstance(self.distributed_mortality, pd.Series):
+        #     self.distributed_mortality.loc[mask] = distributed_mortality.loc[mask]
+        #     self.deaths_avoided.loc[mask] = deaths_avoided.loc[mask]
+        #
+        #     if model.specs['health_spillovers_parameter'] > 0:
+        #         self.distributed_spillovers_mort.loc[mask] = distributed_mortality.loc[mask] * model.specs['health_spillovers_parameter']
+        #         self.deaths_avoided.loc[mask] += deaths_avoided.loc[mask] * model.specs['health_spillovers_parameter']
+        #     else:
+        #         self.distributed_spillovers_mort = pd.Series(0, index=model.gdf.index, dtype='float64')
+        # else:
+        #     self.distributed_mortality = distributed_mortality
+        #     self.deaths_avoided = deaths_avoided
+        #
+        #     if model.specs['health_spillovers_parameter'] > 0:
+        #         self.distributed_spillovers_mort = distributed_mortality * model.specs[
+        #             'health_spillovers_parameter']
+        #         self.deaths_avoided += deaths_avoided * model.specs['health_spillovers_parameter']
+        #     else:
+        #         self.distributed_spillovers_mort = pd.Series(0, index=model.gdf.index, dtype='float64')
+        deaths, costs, discounted_costs = self.mort_morb(model, mask, parameter=parameter, relative=relative)
 
-        if isinstance(self.distributed_mortality, pd.Series):
-            self.distributed_mortality.loc[mask] = distributed_mortality.loc[mask]
-            self.deaths_avoided.loc[mask] = deaths_avoided.loc[mask]
+        if not isinstance(self.deaths, pd.Series):
+            self.deaths = pd.Series(0, index=model.gdf.index)
+            self.relative_deaths = pd.Series(0, index=model.gdf.index)
+            self.deaths_avoided = pd.Series(0, index=model.gdf.index)
+            self.distributed_mortality = pd.Series(0, index=model.gdf.index)
+            self.distributed_spillovers_mort = pd.Series(0, index=model.gdf.index)
+            self.mort_costs = pd.Series(0, index = model.gdf.index)
+
+        self.distributed_mortality.loc[mask] = pd.Series(discounted_costs, index=model.gdf.index).loc[mask]
+
+        if relative:
+            self.relative_deaths[mask] = model.base_fuel.deaths[mask] - deaths[mask]
+            self.deaths_avoided.loc[mask] = \
+                pd.Series(np.array([sum(x) for x in self.relative_deaths]), index=model.gdf.index).loc[mask]
 
             if model.specs['health_spillovers_parameter'] > 0:
-                self.distributed_spillovers_mort.loc[mask] = distributed_mortality.loc[mask] * model.specs['health_spillovers_parameter']
-                self.deaths_avoided.loc[mask] += deaths_avoided.loc[mask] * model.specs['health_spillovers_parameter']
-            else:
-                self.distributed_spillovers_mort = pd.Series(0, index=model.gdf.index, dtype='float64')
+                self.distributed_spillovers_mort.loc[mask] = self.distributed_mortality.loc[mask] * (1 + model.specs[
+                    'health_spillovers_parameter'])
+                self.deaths_avoided.loc[mask] += self.deaths_avoided.loc[mask] * (1 + model.specs[
+                    'health_spillovers_parameter'])
         else:
-            self.distributed_mortality = distributed_mortality
-            self.deaths_avoided = deaths_avoided
+            self.deaths[mask] = deaths[mask]
+            self.mort_costs[mask] = costs[mask]
 
+            # TODO: should self.deaths and self.deaths_avoided be named the same thing? we want to call the same
+            #   thing in the set_base_fuel function when calling this function, no matter if we have spillover
+            #   or not.
             if model.specs['health_spillovers_parameter'] > 0:
-                self.distributed_spillovers_mort = distributed_mortality * model.specs[
-                    'health_spillovers_parameter']
-                self.deaths_avoided += deaths_avoided * model.specs['health_spillovers_parameter']
-            else:
-                self.distributed_spillovers_mort = pd.Series(0, index=model.gdf.index, dtype='float64')
+                self.distributed_spillovers_mort.loc[mask] = self.mort_costs.loc[mask] * (1 + model.specs[
+                    'health_spillovers_parameter'])
+                self.deaths_avoided.loc[mask] += self.deaths.loc[mask] * (1 + model.specs[
+                    'health_spillovers_parameter'])
 
-    def morbidity(self, model: 'onstove.OnStove', year: int, mask: pd.Series):
+
+
+
+    def morbidity(self, model: 'onstove.OnStove', mask, parameter, relative):
         """
         Distributes the total morbidity across the study area per fuel.
 
@@ -519,8 +650,6 @@ class Technology:
         model: OnStove model
             Instance of the OnStove model containing the main data of the study case. See
             :class:`onstove.OnStove`.
-        year: int
-            Determines which year that is assessed.
         mask: gpd.GeoSeries
             Determines which cells are ran. This is relevant when the start and end years are different
 
@@ -528,27 +657,51 @@ class Technology:
         --------
         mort_morb
         """
-        distributed_morbidity, cases_avoided = self.mort_morb(model, year, mask, parameter='morb')
+
+        cases, costs, discounted_costs = self.mort_morb(model, mask, parameter=parameter, relative=relative)
+
+        if not isinstance(self.cases, pd.Series):
+            self.cases = pd.Series(0, index=model.gdf.index)
+            self.relative_cases = pd.Series(0, index=model.gdf.index)
+            self.cases_avoided = pd.Series(0, index=model.gdf.index)
+            self.distributed_morbidity = pd.Series(0, index=model.gdf.index)
+            self.distributed_spillovers_morb = pd.Series(0, index=model.gdf.index)
+            self.morb_costs = pd.Series(0, index=model.gdf.index)
 
 
-        if isinstance(self.distributed_morbidity, pd.Series):
-            self.distributed_morbidity.loc[mask] = distributed_morbidity.loc[mask]
-            self.cases_avoided.loc[mask] = cases_avoided.loc[mask]
+        self.distributed_morbidity.loc[mask] = pd.Series(discounted_costs, index = model.gdf.index).loc[mask]
 
-            if model.specs['health_spillovers_parameter'] > 0:
-                self.distributed_spillovers_morb.loc[mask] = distributed_morbidity.loc[mask] * model.specs['health_spillovers_parameter']
-                self.cases_avoided.loc[mask] += cases_avoided.loc[mask] * model.specs['health_spillovers_parameter']
-            else:
-                self.distributed_spillovers_morb = pd.Series(0, index=model.gdf.index, dtype='float64')
+        if relative:
+            self.relative_cases[mask] = model.base_fuel.cases[mask] - cases[mask]
+            self.cases_avoded.loc[mask] = \
+                pd.Series(np.array([sum(x) for x in self.relative_cases]), index=model.gdf.index).loc[mask]
         else:
-            self.distributed_morbidity = distributed_morbidity
-            self.cases_avoided = cases_avoided
+            self.cases[mask] = cases[mask]
+            self.morb_costs[mask] = costs[mask]
 
-            if model.specs['health_spillovers_parameter'] > 0:
-                self.distributed_spillovers_morb = distributed_morbidity * model.specs['health_spillovers_parameter']
-                self.cases_avoided += cases_avoided * model.specs['health_spillovers_parameter']
-            else:
-                self.distributed_spillovers_morb = pd.Series(0, index=model.gdf.index, dtype='float64')
+        if model.specs['health_spillovers_parameter'] > 0:
+            self.distributed_spillovers_morb.loc[mask] = self.distributed_morbidity.loc[mask] * model.specs[
+                'health_spillovers_parameter']
+            self.cases_avoided.loc[mask] += self.cases_avoided.loc[mask] * model.specs['health_spillovers_parameter']
+
+        # if isinstance(self.distributed_morbidity, pd.Series):
+        #     self.distributed_morbidity.loc[mask] = distributed_morbidity.loc[mask]
+        #     self.cases_avoided.loc[mask] = cases_avoided.loc[mask]
+        #
+        #     if model.specs['health_spillovers_parameter'] > 0:
+        #         self.distributed_spillovers_morb.loc[mask] = distributed_morbidity.loc[mask] * model.specs['health_spillovers_parameter']
+        #         self.cases_avoided.loc[mask] += cases_avoided.loc[mask] * model.specs['health_spillovers_parameter']
+        #     else:
+        #         self.distributed_spillovers_morb = pd.Series(0, index=model.gdf.index, dtype='float64')
+        # else:
+        #     self.distributed_morbidity = distributed_morbidity
+        #     self.cases_avoided = cases_avoided
+        #
+        #     if model.specs['health_spillovers_parameter'] > 0:
+        #         self.distributed_spillovers_morb = distributed_morbidity * model.specs['health_spillovers_parameter']
+        #         self.cases_avoided += cases_avoided * model.specs['health_spillovers_parameter']
+        #     else:
+        #         self.distributed_spillovers_morb = pd.Series(0, index=model.gdf.index, dtype='float64')
 
     def salvage(self, model: 'onstove.OnStove', mask: pd.Series, relative: bool = True):
         """
@@ -559,16 +712,14 @@ class Technology:
         model: OnStove model
             Instance of the OnStove model containing the main data of the study case. See
             :class:`onstove.OnStove`
-        year: int
-            Determines which year that is assessed..
 
         See also
         --------
         discount_factor
         """
         discount_rate, proj_life = self.discount_factor(model.specs)
-        used_life = (proj_life % self.tech_life) * np.ones(model.gdf.shape[0])
         inv = self.inv_cost * np.ones(model.gdf.shape[0])
+        used_life = (proj_life % self.tech_life) * np.ones(model.gdf.shape[0])
 
         proj_years = np.matmul(np.expand_dims(np.ones(model.gdf.shape[0]), axis=1),
                                np.expand_dims(np.zeros(proj_life), axis=0))
@@ -577,14 +728,30 @@ class Technology:
 
         investments = proj_years * np.array(inv)[:, None]
         salvage = np.array([y * (1 - x / self.tech_life) for x, y in zip(used_life, investments)])
-        discounted_salvage = np.array([sum(x / discount_rate) for x in salvage])
+
+        start_year = mask[mask].index
 
         if relative:
-            base_salvage = model.base_fuel.discounted_salvage_cost
-        else:
-            base_salvage = 0
+            salvage_base = np.zeros(model.gdf.shape[0])
 
-        self.discounted_salvage_cost = discounted_salvage - base_salvage
+            for life in model.base_fuel.tech_life.unique():
+                remainder = (model.year - model.specs["start_year"]) % life
+                idx = model.base_fuel.tech_life == life
+                idx2 = idx * mask
+                rows = idx2[idx2].index
+                salvage_base[rows.tolist()] = model.base_fuel.inv_cost[rows.tolist()] * remainder / life
+            # TODO: save this one
+            salvage[start_year, (model.year - model.specs["start_year"] - 1)] = salvage_base[start_year.tolist()]
+
+            discounted_salvage = np.array([sum(x / discount_rate) for x in salvage])
+
+            if not isinstance(self.discounted_salvage_cost, pd.Series):
+                self.discounted_salvage_cost = pd.Series(0, index=model.gdf.index, dtype='float64')
+
+            self.discounted_salvage_cost[start_year.tolist()] = discounted_salvage[start_year.tolist()] - self.discounted_salvage_cost
+        else:
+            discounted_salvage = np.array([sum(x / discount_rate) for x in salvage])
+            self.discounted_salvage_cost = pd.Series(discounted_salvage, index=model.gdf.index)
 
     def discounted_om(self, model: 'onstove.OnStove', mask: pd.Series, relative: bool = True):
         """
@@ -620,6 +787,7 @@ class Technology:
             proj_years[start_year, (model.year - model.specs["start_year"] - 1):proj_years.shape[1]] = 1
 
             om = proj_years * np.array(operation_and_maintenance)[:, None]
+            # TODO: save this one
             om[start_year, 0:(model.year - model.specs["start_year"] - 1)] = base_annual_om[start_year.tolist()]
 
             discounted_om = np.array([sum(x / discount_rate) for x in om])
@@ -668,12 +836,10 @@ class Technology:
         start_year = mask[mask].index
 
         if relative:
-            discounted_base_investments = model.base_fuel.discounted_investments
+            model.base_fuel.inv_cost = model.base_fuel.discounted_investments / (
+                    (1 - 1 / (1 + model.specs["discount_rate"]) ** proj_life) / model.specs["discount_rate"])
 
-            base_annual_inv = discounted_base_investments / (
-                        (1 - 1 / (1 + model.specs["discount_rate"]) ** proj_life) / model.specs["discount_rate"])
-            base_annual_inv = np.repeat(np.expand_dims(base_annual_inv, axis=1),
-                                       model.year - model.specs["start_year"] - 1, axis=1)
+            model.base_fuel.tech_life = round(model.base_fuel.tech_life).astype(int)
 
             proj_years[start_year, model.year - model.specs["start_year"] - 1] = 1
             for j in range(self.tech_life, proj_life, self.tech_life):
@@ -681,8 +847,23 @@ class Technology:
                     proj_years[start_year, j + model.year - model.specs["start_year"] - 1] = 1
 
             investments = proj_years * np.array(inv)[:, None]
-            investments[start_year, 0:(model.year - model.specs["start_year"] - 1)] =\
-                base_annual_inv[start_year.tolist()]
+
+            proj_base_year = np.matmul(np.expand_dims(np.ones(model.gdf.shape[0]), axis=1),
+                                       np.expand_dims(np.zeros(proj_life), axis=0))
+
+            for life in model.base_fuel.tech_life.unique():
+                if life < model.year - model.specs["start_year"]:
+                    idx = model.base_fuel.tech_life == life
+                    idx2 = idx * mask
+                    rows = idx2[idx2].index
+                    proj_base_year[rows, life - 1] = 1
+                    for j in range(2 * life, proj_life, life):
+                        if j < model.year - model.specs["start_year"] - 1:
+                            proj_base_year[rows, j] = 1
+
+            base_investments = proj_base_year * np.array(model.base_fuel.inv_cost)[:, None]
+            # TODO: save this one
+            investments = investments + base_investments
 
             investments_discounted = np.array([sum(x / discount_rate) for x in investments])
 
@@ -690,12 +871,13 @@ class Technology:
                 self.discounted_investments = pd.Series(0, index=model.gdf.index, dtype='float64')
 
             self.discounted_investments[start_year.tolist()] = investments_discounted[start_year.tolist()] \
-                                                               - discounted_base_investments[start_year.tolist()]
+                                                               - model.base_fuel.discounted_investments[
+                                                                   start_year.tolist()]
         else:
             proj_years[:, 0] = 1
             for j in range(self.tech_life, proj_life, self.tech_life):
-                if j - 1 <= proj_life:
-                    proj_years[:, j - 1] = 1
+                if j < proj_life:
+                    proj_years[:, j] = 1
 
             investments = proj_years * np.array(inv)[:, None]
 
@@ -741,6 +923,7 @@ class Technology:
             proj_years[start_year, (model.year - model.specs["start_year"] - 1):proj_years.shape[1]] = 1
 
             fuel_cost = proj_years * np.array(cost)[:, None]
+            # TODO: save this one
             fuel_cost[start_year, 0:(model.year - model.specs["start_year"] - 1)] = base_annual_fuel_cost[start_year.tolist()]
 
             fuel_cost_discounted = np.array([sum(x / discount_rate) for x in fuel_cost])
@@ -769,9 +952,9 @@ class Technology:
             Instance of the OnStove model containing the main data of the study case. See
             :class:`onstove.OnStove`.
         """
-        self.total_time_yr = (self.time_of_cooking + self.time_of_collection) * 365
+        self.total_time_yr = pd.Series((self.time_of_cooking + self.time_of_collection) * 365, index = model.gdf.index)
 
-    def time_saved(self, model: 'onstove.OnStove', year, mask):
+    def time_saved(self, model: 'onstove.OnStove', mask: pd.Series, relative: bool = True):
         """
         Calculates time saved per year by adopting a new stove.
 
@@ -780,24 +963,44 @@ class Technology:
         model: OnStove model
             Instance of the OnStove model containing the main data of the study case. See
             :class:`onstove.OnStove`.
-        year: int
-            Defines which year that is being run.
         mask: pd.Series
             Determines which cells are ran. This is relevant when the start and end years are different
         """
-
-        proj_life = year - model.specs['start_year']
-
+        discount_rate, proj_life = self.discount_factor(model.specs)
         self.total_time(model)
-        self.total_time_saved = model.base_fuel.total_time_yr - self.total_time_yr
-        # time value of time saved per sq km
 
-        if not isinstance(self.time_value, pd.Series):
-            self.time_value = pd.Series(0, index=model.gdf.index, dtype='float64')
+        proj_years = np.matmul(np.expand_dims(np.ones(model.gdf.shape[0]), axis=1),
+                               np.expand_dims(np.zeros(proj_life), axis=0))
 
+        if relative:
+            start_year = mask[mask].index
 
-        self.time_value.loc[mask] = self.total_time_saved * model.gdf["value_of_time"].loc[mask] / (
-                   1 + model.specs["discount_rate"]) ** (proj_life)
+            base_annual_time = np.repeat(np.expand_dims(model.base_fuel.total_time_yr, axis=1),
+                                         model.specs["end_year"] - model.specs["start_year"], axis=1)
+
+            proj_years[start_year, (model.year - model.specs["start_year"] - 1):proj_years.shape[1]] = 1
+
+            time = proj_years * np.array(self.total_time_yr)[:, None]
+            time[start_year, 0:(model.year - model.specs["start_year"] - 1)] = base_annual_time[start_year.tolist(),
+                                                                                0:model.year - model.specs["start_year"] - 1]
+
+            if not isinstance(self.time_value, pd.Series):
+                self.total_time_saved = pd.Series(0, index=model.gdf.index, dtype='float64')
+                self.time_value = pd.Series(0, index=model.gdf.index, dtype='float64')
+
+            # TODO: save this one
+            decreased_time = base_annual_time - time
+
+            self.total_time_saved.loc[start_year.tolist()] = decreased_time[start_year.tolist()].sum()
+
+            discounted_time = np.array([sum(x * model.gdf["value_of_time"]/ discount_rate) for x in decreased_time])
+
+            self.time_value.loc[start_year.tolist()] = discounted_time[start_year]
+        else:
+            proj_years[:] = 1
+            time = proj_years * np.array(self.total_time_yr)[:, None]
+            discounted_time = np.array([sum(x * model.gdf["value_of_time"]/ discount_rate) for x in time])
+            self.discounted_time_value = pd.Series(discounted_time, index=model.gdf.index)
 
 
     def total_costs(self):
