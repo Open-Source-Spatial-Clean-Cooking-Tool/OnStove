@@ -1078,10 +1078,12 @@ class OnStove(DataProcessor):
                 base_fuels = self.techs
 
             base_fuel = Technology(name='Base fuel')
-            base_fuel.carbon = 0
-            base_fuel.deaths = 0
-            base_fuel.cases = 0
-            base_fuel.total_time_yr = 0
+            base_fuel.carbon = pd.Series(0, index = self.gdf.index)
+            base_fuel.mort = pd.Series(0, index = self.gdf.index)
+            base_fuel.morb = pd.Series(0, index = self.gdf.index)
+            base_fuel.time = pd.Series(0, index = self.gdf.index)
+            base_fuel.deaths = np.zeros((len(self.gdf), self.specs["end_year"] - self.specs["start_year"]))
+            base_fuel.benefits = pd.Series(0, index = self.gdf.index)
 
             self.ecooking_adjustment()
             base_fuels["Biogas"].total_time(self)
@@ -1094,16 +1096,18 @@ class OnStove(DataProcessor):
             self.pop_tech()
             self.techshare_allocation(base_fuels)
             pop_sqkm = 0
+            self.clean_cooking_access = pd.Series(0, index = self.gdf.index)
 
-            for name, tech in base_fuels.items():
+            for tech in base_fuels.values():
                 if tech.is_clean:
                     pop_sqkm += tech.pop_sqkm
 
-                self.base_fuel = base_fuel
+                    self.clean_cooking_access += pop_sqkm
 
-                self.clean_cooking_access = pop_sqkm
-                self.sfu = 1 - self.clean_cooking_access
-                mask = pd.Series(True, index = self.gdf.index)
+            self.sfu = 1 - self.clean_cooking_access
+            mask = pd.Series(True, index=self.gdf.index)
+
+            for name, tech in base_fuels.items():
                 tech.carb(self, mask)
 
                 if name != "Biogas":
@@ -1124,14 +1128,6 @@ class OnStove(DataProcessor):
                 tech.adjusted_pm25()
                 tech.health_parameters(self)
 
-                for paf in ['paf_alri', 'paf_copd', 'paf_ihd', 'paf_lc', 'paf_stroke']:
-                    base_fuel[paf] = 0
-                    base_fuel[paf] += tech[paf] * tech.pop_sqkm
-
-                base_fuel.carbon += tech.carbon * tech.pop_sqkm
-                base_fuel.decreased_carbon_costs += base_fuel.carbon * self.specs['cost_of_carbon_emissions']
-                base_fuel.total_time_yr += (tech.total_time_yr * tech.pop_sqkm).fillna(0)
-
                 tech.discount_fuel_cost(self, mask, relative=False)
                 base_fuel.discounted_fuel_cost += tech.discounted_fuel_cost * tech.pop_sqkm
 
@@ -1140,20 +1136,26 @@ class OnStove(DataProcessor):
 
                 tech.total_costs()
                 base_fuel.costs += tech.costs * tech.pop_sqkm
-                self.gdf["baseline_costs"] = base_fuel.costs
 
                 tech.mortality(self, mask, 'mort', False)
                 tech.morbidity(self, mask, 'morb', False)
-                base_fuel.deaths += tech.deaths_avoided * tech.pop_sqkm
-                base_fuel.cases += tech.cases * tech.pop_sqkm
+                base_fuel.mort += tech.distributed_mortality * tech.pop_sqkm
+                base_fuel.morb += tech.distributed_morbidity * tech.pop_sqkm
+                base_fuel.deaths += tech.deaths * np.repeat(np.expand_dims(tech.pop_sqkm, axis=1),
+                                       self.specs["end_year"]  - self.specs["start_year"], axis=1)
 
+                tech.carbon_emissions(self, mask, False)
+                base_fuel.carbon += tech.discounted_carbon_costs * tech.pop_sqkm
 
-            # base_fuel.decreased_carbon_costs = base_fuel.carbon * self.specs['cost_of_carbon_emissions'] / 1000
-            # base_fuel.time_value = base_fuel.total_time_yr * self.gdf["value_of_time"]
-            #
-            # base_fuel.benefits = base_fuel.time_value + base_fuel.decreased_carbon_costs + base_fuel.mort + base_fuel.morb
-            #
-            # self.gdf["baseline_benefits"] = base_fuel.benefits
+                tech.time_saved(self, mask, False)
+                base_fuel.time += tech.discounted_time_value * tech.pop_sqkm
+
+                base_fuel.benefits += base_fuel.time + base_fuel.carbon + base_fuel.mort + base_fuel.morb
+
+            self.gdf["baseline_benefits"] = base_fuel.benefits
+            self.gdf["baseline_costs"] = base_fuel.costs
+
+            self.base_fuel = base_fuel
 
     def read_tech_data(self, path_to_config: str, delimiter=','):
         """
@@ -1404,8 +1406,6 @@ class OnStove(DataProcessor):
         if year == self.specs['start_year']:
             pop = self.gdf['pop_init_year']
             house = self.gdf['households_init']
-            pop_increase[~isurban] = yearly_pop_increase_rural
-            pop_increase[isurban] = yearly_pop_increase_urban
         else:
             pop.loc[~isurban] = self.gdf.loc[~isurban, "pop_init_year"] * (1 + yearly_pop_increase_rural) ** (
                     year - self.specs["start_year"])
