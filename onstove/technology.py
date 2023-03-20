@@ -401,14 +401,11 @@ class Technology:
 
         discount_rate, proj_life = self.discount_factor(model.specs)
 
-        cases = np.matmul(np.expand_dims(np.ones(model.gdf.shape[0]), axis=1),
-                          np.expand_dims(np.zeros(proj_life), axis=0))
-        costs = cases.copy()
-
         mor = {}
-        diseases = ['alri', 'copd', 'ihd', 'lc', 'stroke']
+        cases_dict = {}
+        costs_dict = {}
 
-        cumulative_cases = pd.Series(0, index=model.gdf.index)
+        diseases = ['alri', 'copd', 'ihd', 'lc', 'stroke']
 
         if relative:
             start_year = mask[mask].index
@@ -428,6 +425,8 @@ class Technology:
                 mor[disease] = pd.Series(np.zeros(model.gdf.shape[0]), index=model.gdf.index)
                 mor[disease].loc[start_year] = pop.loc[start_year] * (model.base_fuel[paf] - self[paf]) * (
                             rate / 100000)
+                cases = np.zeros((len(model.gdf), model.specs["end_year"] - model.specs["start_year"]))
+                costs = np.zeros((len(model.gdf), model.specs["end_year"] - model.specs["start_year"]))
 
                 while i <= model.specs["end_year"]:
                     if parameter == 'morb':
@@ -440,35 +439,29 @@ class Technology:
                     else:
                         cl = cl_diseases[disease][i - model.year + 1]
 
-                    cumulative_cases += mor[disease].loc[start_year] * (1 - cl) * (1 + pop_increase[start_year]) ** (
+                    disease_cases = mor[disease].loc[start_year] * cl * (1 + pop_increase[start_year]) ** (
                             i - model.year)
-                    cases[start_year, i - model.specs["start_year"] - 1] = cumulative_cases[start_year]
-                    costs[start_year, i - model.specs["start_year"] - 1] = cases[start_year, i - model.specs[
-                        "start_year"] - 1] * cost
+                    cases[start_year, i - model.specs["start_year"] - 1] += disease_cases[start_year]
+                    costs[start_year, i - model.specs["start_year"] - 1] += disease_cases[start_year] * cost
 
                     i += 1
 
-            relative_costs = model.base_fuel[parameter + '_costs'] - costs
+                cases_dict[disease] = cases
+                costs_dict[disease] = costs
+
+            total_costs = np.sum(list(costs_dict.values()), axis=0)
+            total_cases = np.sum(list(cases_dict.values()), axis=0)
+
+            relative_costs = model.base_fuel[parameter + '_costs'] - total_costs
 
             discounted_costs = np.array([sum(x / discount_rate) for x in relative_costs])
-
-            return cases, costs, discounted_costs
         else:
-            discount_rate, proj_life = self.discount_factor(model.specs)
-            pop, house, pop_increase = model.yearly_pop(model.specs["start_year"])
-
-            mor = {}
-            cases_dict = {}
-            costs_dict = {}
-
-            diseases = ['alri', 'copd', 'ihd', 'lc', 'stroke']
-
             for disease in diseases:
                 i = model.specs["start_year"]
+                pop, house, pop_increase = model.yearly_pop(model.specs["start_year"])
                 rate = model.specs[f'{parameter}_{disease}']
                 paf = f'paf_{disease.lower()}'
                 mor[disease] = pop * (self[paf]) * (rate / 100000)
-                cumulative_cases = pd.Series(0, index=model.gdf.index)
                 cases = np.zeros((len(model.gdf), model.specs["end_year"] - model.specs["start_year"]))
                 costs = np.zeros((len(model.gdf), model.specs["end_year"] - model.specs["start_year"]))
                 while i < model.specs["end_year"]:
@@ -479,7 +472,8 @@ class Technology:
 
                     disease_cases = mor[disease] * (1 + pop_increase) ** (i - model.specs["start_year"])
                     cases[:, i - model.specs["start_year"]] += disease_cases
-                    costs[:, i - model.specs["start_year"]] += disease_cases * cost
+                    costs[:, i - model.specs["start_year"]] += (disease_cases * cost)
+
                     i += 1
 
                 cases_dict[disease] = cases
@@ -489,7 +483,7 @@ class Technology:
             total_cases = np.sum(list(cases_dict.values()), axis=0)
             discounted_costs = np.array([sum(x / discount_rate) for x in total_costs])
 
-            return total_cases, total_costs, discounted_costs
+        return total_cases, total_costs, discounted_costs
 
     def mortality(self, model: 'onstove.OnStove', mask, parameter, relative):
         """
@@ -524,12 +518,6 @@ class Technology:
             self.relative_deaths[mask] = model.base_fuel.deaths[mask] - deaths[mask]
             self.deaths_avoided.loc[mask] = \
                 pd.Series(np.array([sum(x) for x in self.relative_deaths]), index=model.gdf.index).loc[mask]
-
-            if model.specs['health_spillovers_parameter'] > 0:
-                self.distributed_mortality.loc[mask] = self.distributed_mortality.loc[mask] * (1 + model.specs['w_spillover']
-                                                                         * model.specs['health_spillovers_parameter'])
-                self.deaths_avoided.loc[mask] += self.deaths_avoided.loc[mask] * (1 + model.specs['w_spillover']
-                                                                         * model.specs['health_spillovers_parameter'])
         else:
             self.deaths[mask] = deaths[mask]
             self.mort_costs[mask] = costs[mask]
@@ -560,28 +548,26 @@ class Technology:
         cases, costs, discounted_costs = self.mort_morb(model, mask, parameter=parameter, relative=relative)
 
         if not isinstance(self.cases, pd.Series):
-            self.cases = pd.Series(0, index=model.gdf.index)
-            self.relative_cases = pd.Series(0, index=model.gdf.index)
+            self.cases = np.zeros((len(model.gdf), model.specs["end_year"] - model.specs["start_year"]))
+            self.relative_cases = np.zeros((len(model.gdf), model.specs["end_year"] - model.specs["start_year"]))
             self.cases_avoided = pd.Series(0, index=model.gdf.index)
             self.distributed_morbidity = pd.Series(0, index=model.gdf.index)
-            self.distributed_spillovers_morb = pd.Series(0, index=model.gdf.index)
-            self.morb_costs = pd.Series(0, index=model.gdf.index)
-
+            self.morb_costs =  np.zeros((len(model.gdf), model.specs["end_year"] - model.specs["start_year"]))
 
         self.distributed_morbidity.loc[mask] = pd.Series(discounted_costs, index = model.gdf.index).loc[mask]
 
         if relative:
             self.relative_cases[mask] = model.base_fuel.cases[mask] - cases[mask]
-            self.cases_avoded.loc[mask] = \
+            self.cases_avoided.loc[mask] = \
                 pd.Series(np.array([sum(x) for x in self.relative_cases]), index=model.gdf.index).loc[mask]
         else:
             self.cases[mask] = cases[mask]
             self.morb_costs[mask] = costs[mask]
 
             if model.specs['health_spillovers_parameter'] > 0:
-                self.morb_costs.loc[mask] = self.morb_costs.loc[mask] *  (1 + model.specs['w_spillover']
+                self.morb_costs[mask] = self.morb_costs[mask] * (1 + model.specs['w_spillover']
                                                                          * model.specs['health_spillovers_parameter'])
-                self.cases.loc[mask] = self.cases.loc[mask] *  (1 + model.specs['w_spillover']
+                self.cases[mask] = self.cases[mask] * (1 + model.specs['w_spillover']
                                                                          * model.specs['health_spillovers_parameter'])
 
     def salvage(self, model: 'onstove.OnStove', mask: pd.Series, relative: bool = True):
