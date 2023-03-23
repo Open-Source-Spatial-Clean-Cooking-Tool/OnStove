@@ -344,7 +344,7 @@ class Technology:
             # TODO: save this one
             decreased_carbon = base_annual_carbon - carbon
 
-            self.decreased_carbon_emissions.loc[start_year.tolist()] = decreased_carbon[start_year.tolist()].sum()
+            self.decreased_carbon_emissions.loc[start_year.tolist()] = decreased_carbon[start_year.tolist()].sum(axis=1)
 
             discounted_carbon = np.array(
                 [sum(x * model.specs["cost_of_carbon_emissions"] / (1000 * discount_rate)) for x in decreased_carbon])
@@ -419,12 +419,13 @@ class Technology:
 
             for disease in diseases:
                 rate = model.specs[f'{parameter}_{disease}']
+                cl = 0
                 i = model.year
                 paf = f'paf_{disease.lower()}'
                 pop, house, pop_increase = model.yearly_pop(model.year)
                 mor[disease] = pd.Series(np.zeros(model.gdf.shape[0]), index=model.gdf.index)
                 mor[disease].loc[start_year] = pop.loc[start_year] * (model.base_fuel[paf] - self[paf]) * (
-                            rate / 100000)
+                        rate / 100000)
                 cases = np.zeros((len(model.gdf), model.specs["end_year"] - model.specs["start_year"]))
                 costs = np.zeros((len(model.gdf), model.specs["end_year"] - model.specs["start_year"]))
 
@@ -437,7 +438,7 @@ class Technology:
                     if i - model.year + 1 > 5:
                         cl = 1
                     else:
-                        cl = cl_diseases[disease][i - model.year + 1]
+                        cl += cl_diseases[disease][i - model.year + 1]
 
                     disease_cases = mor[disease].loc[start_year] * cl * (1 + pop_increase[start_year]) ** (
                             i - model.year)
@@ -452,9 +453,7 @@ class Technology:
             total_costs = np.sum(list(costs_dict.values()), axis=0)
             total_cases = np.sum(list(cases_dict.values()), axis=0)
 
-            relative_costs = model.base_fuel[parameter + '_costs'] - total_costs
-
-            discounted_costs = np.array([sum(x / discount_rate) for x in relative_costs])
+            discounted_costs = np.array([sum(x / discount_rate) for x in total_costs])
         else:
             for disease in diseases:
                 i = model.specs["start_year"]
@@ -515,9 +514,15 @@ class Technology:
         self.distributed_mortality.loc[mask] = pd.Series(discounted_costs, index=model.gdf.index).loc[mask]
 
         if relative:
-            self.relative_deaths[mask] = model.base_fuel.deaths[mask] - deaths[mask]
+            self.relative_deaths[mask] = deaths[mask]
             self.deaths_avoided.loc[mask] = \
                 pd.Series(np.array([sum(x) for x in self.relative_deaths]), index=model.gdf.index).loc[mask]
+
+            if model.specs['health_spillovers_parameter'] > 0:
+                self.deaths_avoided[mask] = self.deaths_avoided[mask] * (1 + model.specs['w_spillover']
+                                                                         * model.specs['health_spillovers_parameter'])
+                self.distributed_mortality.loc[mask] = self.distributed_mortality.loc[mask] * (1 + model.specs['w_spillover']
+                                                                         * model.specs['health_spillovers_parameter'])
         else:
             self.deaths[mask] = deaths[mask]
             self.mort_costs[mask] = costs[mask]
@@ -526,6 +531,8 @@ class Technology:
                 self.mort_costs[mask] = self.mort_costs[mask] * (1 + model.specs['w_spillover']
                                                                          * model.specs['health_spillovers_parameter'])
                 self.deaths[mask] = self.deaths[mask] * (1 + model.specs['w_spillover']
+                                                                         * model.specs['health_spillovers_parameter'])
+                self.distributed_mortality.loc[mask] = self.distributed_mortality.loc[mask] * (1 + model.specs['w_spillover']
                                                                          * model.specs['health_spillovers_parameter'])
 
     def morbidity(self, model: 'onstove.OnStove', mask, parameter, relative):
@@ -557,9 +564,15 @@ class Technology:
         self.distributed_morbidity.loc[mask] = pd.Series(discounted_costs, index = model.gdf.index).loc[mask]
 
         if relative:
-            self.relative_cases[mask] = model.base_fuel.cases[mask] - cases[mask]
+            self.relative_cases[mask] = cases[mask]
             self.cases_avoided.loc[mask] = \
                 pd.Series(np.array([sum(x) for x in self.relative_cases]), index=model.gdf.index).loc[mask]
+
+            if model.specs['health_spillovers_parameter'] > 0:
+                self.cases_avoided[mask] = self.cases_avoided[mask] * (1 + model.specs['w_spillover']
+                                                                         * model.specs['health_spillovers_parameter'])
+                self.distributed_morbidity.loc[mask] = self.distributed_morbidity.loc[mask] * (1 + model.specs['w_spillover']
+                                                                         * model.specs['health_spillovers_parameter'])
         else:
             self.cases[mask] = cases[mask]
             self.morb_costs[mask] = costs[mask]
@@ -568,6 +581,8 @@ class Technology:
                 self.morb_costs[mask] = self.morb_costs[mask] * (1 + model.specs['w_spillover']
                                                                          * model.specs['health_spillovers_parameter'])
                 self.cases[mask] = self.cases[mask] * (1 + model.specs['w_spillover']
+                                                                         * model.specs['health_spillovers_parameter'])
+                self.distributed_morbidity.loc[mask] = self.distributed_morbidity.loc[mask] * (1 + model.specs['w_spillover']
                                                                          * model.specs['health_spillovers_parameter'])
 
     def salvage(self, model: 'onstove.OnStove', mask: pd.Series, relative: bool = True):
@@ -849,7 +864,8 @@ class Technology:
 
             time = proj_years * np.array(self.total_time_yr)[:, None]
             time[start_year, 0:(model.year - model.specs["start_year"] - 1)] = base_annual_time[start_year.tolist(),
-                                                                                0:model.year - model.specs["start_year"] - 1]
+                                                                               0:model.year - model.specs[
+                                                                                   "start_year"] - 1]
 
             if not isinstance(self.time_value, pd.Series):
                 self.total_time_saved = pd.Series(0, index=model.gdf.index, dtype='float64')
@@ -858,9 +874,9 @@ class Technology:
             # TODO: save this one
             decreased_time = base_annual_time - time
 
-            self.total_time_saved.loc[start_year.tolist()] = decreased_time[start_year.tolist()].sum()
+            self.total_time_saved.loc[start_year.tolist()] = decreased_time[start_year.tolist()].sum(axis=1)
 
-            discounted_time = np.array([sum(x * model.gdf["value_of_time"]/ discount_rate) for x in decreased_time])
+            discounted_time = np.array([sum(x / discount_rate) for x in decreased_time]) * model.gdf["value_of_time"]
 
             self.time_value.loc[start_year.tolist()] = discounted_time[start_year]
         else:
@@ -1209,6 +1225,7 @@ class LPG(Technology):
         --------
         infrastructure_salvage
         """
+        # TODO: For this and infra_salvage add the same type of matrices that we have for the investment and salvage costs above
         cost = self.cylinder_cost * 12.5
         salvage = self.infrastructure_salvage(model, cost, self.cylinder_life)
         self.discounted_infra_cost = (cost - salvage)
@@ -1256,12 +1273,9 @@ class LPG(Technology):
         --------
         infrastructure_cost
         """
-        # TODO: test this
         super().discounted_inv(model, mask, relative=relative)
         self.infrastructure_cost(model)
         if relative:
-            #share = (model.gdf['IsUrban'] > 20) * self.current_share_urban
-            #share[model.gdf['IsUrban'] < 20] *= self.current_share_rural
             self.discounted_investments += (self.discounted_infra_cost * (1 - self.pop_sqkm))
 
 
@@ -1811,11 +1825,13 @@ class Electricity(Technology):
         if self.tiers_path is None:
             add_capacity = 1
         else:
+            # TODO: This is never used, dont worry abt it for now
             model.raster_to_dataframe(self.tiers_path, name='Electricity_tiers', method='sample')
             self.tiers = model.gdf['Electricity_tiers'].copy()
             add_capacity = (self.tiers < 3)
 
         if self.grid_capacity_cost is None:
+            # TODO: update this with the matrix, so that we know where we have inv and salvage. (grid_salvage) and then the code below the if/else (capacity_cost)
             self.get_grid_capacity_cost()
             salvage = self.grid_salvage(model)
         else:

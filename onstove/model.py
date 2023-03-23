@@ -1081,11 +1081,11 @@ class OnStove(DataProcessor):
             base_fuel.carbon = pd.Series(0, index = self.gdf.index)
             base_fuel.mort = pd.Series(0, index = self.gdf.index)
             base_fuel.morb = pd.Series(0, index = self.gdf.index)
+            base_fuel.discounted_carbon_costs = pd.Series(0, index = self.gdf.index)
             base_fuel.time = pd.Series(0, index = self.gdf.index)
+            base_fuel.total_time_yr = pd.Series(0, index = self.gdf.index)
             base_fuel.deaths = np.zeros((len(self.gdf), self.specs["end_year"] - self.specs["start_year"]))
             base_fuel.cases = np.zeros((len(self.gdf), self.specs["end_year"] - self.specs["start_year"]))
-            base_fuel.mort_costs = np.zeros((len(self.gdf), self.specs["end_year"] - self.specs["start_year"]))
-            base_fuel.morb_costs = np.zeros((len(self.gdf), self.specs["end_year"] - self.specs["start_year"]))
             base_fuel.benefits = pd.Series(0, index = self.gdf.index)
 
             self.ecooking_adjustment()
@@ -1150,18 +1150,15 @@ class OnStove(DataProcessor):
                 base_fuel.cases += tech.cases * np.repeat(np.expand_dims(tech.pop_sqkm, axis=1),
                                                             self.specs["end_year"] - self.specs["start_year"], axis=1)
 
-                base_fuel.mort_costs += tech.mort_costs * np.repeat(np.expand_dims(tech.pop_sqkm, axis=1),
-                                       self.specs["end_year"]  - self.specs["start_year"], axis=1)
-                base_fuel.morb_costs += tech.morb_costs * np.repeat(np.expand_dims(tech.pop_sqkm, axis=1),
-                                       self.specs["end_year"]  - self.specs["start_year"], axis=1)
-
                 tech.carbon_emissions(self, mask, False)
-                base_fuel.carbon += tech.discounted_carbon_costs * tech.pop_sqkm
+                base_fuel.carbon += tech.carbon * tech.pop_sqkm
+                base_fuel.discounted_carbon_costs += tech.discounted_carbon_costs * tech.pop_sqkm
 
                 tech.time_saved(self, mask, False)
                 base_fuel.time += tech.discounted_time_value * tech.pop_sqkm
+                base_fuel.total_time_yr += tech.total_time_yr * tech.pop_sqkm
 
-                base_fuel.benefits += base_fuel.time + base_fuel.carbon + base_fuel.mort + base_fuel.morb
+                base_fuel.benefits += base_fuel.time + base_fuel.discounted_carbon_costs + base_fuel.mort + base_fuel.morb
 
                 for paf in ['paf_alri', 'paf_copd', 'paf_ihd', 'paf_lc', 'paf_stroke']:
                     base_fuel[paf] += tech[paf] * tech.pop_sqkm
@@ -1831,18 +1828,18 @@ class OnStove(DataProcessor):
             self.year = year
             mask = self.gdf["year"] == year
 
-            for tech in techs:
-                print(f'Calculating health benefits for {tech.name}...')
-
-                if not tech.is_base:
-                    tech.adjusted_pm25()
-
-                tech.morbidity(self, mask, 'morb', True)
-                tech.mortality(self, mask, 'mort', True)
-                print(f'Calculating carbon emissions benefits for {tech.name}...')
-                tech.carbon_emissions(self, mask, True)
+            # for tech in techs:
+            #     print(f'Calculating health benefits for {tech.name}...')
+            #
+            #     if not tech.is_base:
+            #         tech.adjusted_pm25()
+            #
+            #     tech.morbidity(self, mask, 'morb', True)
+            #     tech.mortality(self, mask, 'mort', True)
+            #     print(f'Calculating carbon emissions benefits for {tech.name}...')
+            #     tech.carbon_emissions(self, mask, True)
             #     print(f'Calculating time saved benefits for {tech.name}...')
-            #     tech.time_saved(self, year, mask)
+                # tech.time_saved(self, mask, True)
             #     print(f'Calculating costs for {tech.name}...')
             #     tech.required_energy(self)
             #     tech.discounted_om(self, mask, relative = True)
