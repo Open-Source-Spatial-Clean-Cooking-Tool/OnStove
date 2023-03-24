@@ -601,7 +601,13 @@ class Technology:
         """
         discount_rate, proj_life = self.discount_factor(model.specs)
         inv = self.inv_cost * np.ones(model.gdf.shape[0])
-        used_life = (proj_life % self.tech_life) * np.ones(model.gdf.shape[0])
+
+        if relative:
+            year = model.year
+        else:
+            year = model.specs["start_year"]
+
+        used_life = ((model.specs["end_year"] - year + 1) % self.tech_life) * np.ones(model.gdf.shape[0])
 
         proj_years = np.matmul(np.expand_dims(np.ones(model.gdf.shape[0]), axis=1),
                                np.expand_dims(np.zeros(proj_life), axis=0))
@@ -630,7 +636,8 @@ class Technology:
             if not isinstance(self.discounted_salvage_cost, pd.Series):
                 self.discounted_salvage_cost = pd.Series(0, index=model.gdf.index, dtype='float64')
 
-            self.discounted_salvage_cost[start_year.tolist()] = discounted_salvage[start_year.tolist()] - self.discounted_salvage_cost
+            self.discounted_salvage_cost[start_year.tolist()] = discounted_salvage[start_year.tolist()] \
+                                                        - model.base_fuel.discounted_salvage_cost[start_year.tolist()]
         else:
             discounted_salvage = np.array([sum(x / discount_rate) for x in salvage])
             self.discounted_salvage_cost = pd.Series(discounted_salvage, index=model.gdf.index)
@@ -1035,7 +1042,7 @@ class LPG(Technology):
                  diesel_per_hour: float = 14,
                  lpg_path: Optional[str] = None,
                  friction_path: Optional[str] = None,
-                 cylinder_cost: float = 2.78,  # USD/kg,
+                 cylinder_cost: float = 34.75,  # USD/cylinder,
                  cylinder_life: float = 15):
         super().__init__(name, carbon_intensity, co2_intensity, ch4_intensity,
                          n2o_intensity, co_intensity, bc_intensity, oc_intensity,
@@ -1050,6 +1057,7 @@ class LPG(Technology):
         self.friction_path = friction_path
         self.cylinder_cost = cylinder_cost
         self.cylinder_life = cylinder_life
+        self.discounted_infra_cost = None
 
     def add_travel_time(self, model: 'onstove.OnStove', lpg_path: Optional[str] = None,
                         friction_path: Optional[str] = None, align: bool = False):
@@ -1209,7 +1217,7 @@ class LPG(Technology):
         super().carb(model, mask)
         self.carbon.loc[mask] += self.transport_emissions(model, mask)
 
-    def infrastructure_cost(self, model: 'onstove.OnStove'):
+    def infrastructure_cost(self, model: 'onstove.OnStove', mask: pd.Series):
         """Calculates cost of cylinders for first-time LPG users. It is assumed that the cylinder contains 12.5 kg of
         LPG. The function calls ``infrastructure_salvage``.
 
@@ -1225,12 +1233,33 @@ class LPG(Technology):
         --------
         infrastructure_salvage
         """
-        # TODO: For this and infra_salvage add the same type of matrices that we have for the investment and salvage costs above
-        cost = self.cylinder_cost * 12.5
-        salvage = self.infrastructure_salvage(model, cost, self.cylinder_life)
-        self.discounted_infra_cost = (cost - salvage)
 
-    def infrastructure_salvage(self, model: 'onstove.OnStove', cost: float, life: int):
+        discount_rate, proj_life = self.discount_factor(model.specs)
+        cost = self.cylinder_cost * np.ones(model.gdf.shape[0])
+
+        proj_years = np.matmul(np.expand_dims(np.ones(model.gdf.shape[0]), axis=1),
+                               np.expand_dims(np.zeros(proj_life), axis=0))
+
+        start_year = mask[mask].index
+
+        proj_years[start_year, model.year - model.specs["start_year"] - 1] = 1
+        for j in range(self.cylinder_life, proj_life, self.cylinder_life):
+            if j + model.year - model.specs["start_year"] - 1 < proj_life:
+                proj_years[start_year, j + model.year - model.specs["start_year"] - 1] = 1
+
+        costs = proj_years * np.array(cost)[:, None]
+
+        if not isinstance(self.discounted_infra_cost, pd.Series):
+            self.discounted_infra_cost = pd.Series(0, index=model.gdf.index, dtype='float64')
+
+        costs_discounted = np.array([sum(x / discount_rate) for x in costs])
+
+        salvage = self.infrastructure_salvage(model, cost, mask)
+
+        self.discounted_infra_cost[start_year.tolist()] = costs_discounted[start_year.tolist()] - salvage[
+            start_year.tolist()]
+
+    def infrastructure_salvage(self, model: 'onstove.OnStove', cost: float, mask: pd.Series):
         """Calculates the salvaged cylinder cost. The function calls ``discount_factor``.
 
         Parameters
@@ -1240,8 +1269,7 @@ class LPG(Technology):
             :class:`onstove.OnStove`.
         cost: float
             The cost of buying an LPG-cylinder.
-        life: int
-            The lifetime of a cylinder.
+
 
         Returns
         -------
@@ -1252,9 +1280,22 @@ class LPG(Technology):
         discount_factor
         """
         discount_rate, proj_life = self.discount_factor(model.specs)
-        used_life = proj_life % life
-        salvage = cost * (1 - used_life / life)
-        return salvage / discount_rate[0]
+
+        used_life = ((model.specs["end_year"] - model.year + 1) % self.cylinder_life) * np.ones(model.gdf.shape[0])
+
+        proj_years = np.matmul(np.expand_dims(np.ones(model.gdf.shape[0]), axis=1),
+                               np.expand_dims(np.zeros(proj_life), axis=0))
+
+        start_year = mask[mask].index
+
+        proj_years[start_year, -1] = 1
+
+        investments = proj_years * np.array(cost)[:, None]
+        salvage = np.array([y * (1 - x / self.cylinder_life) for x, y in zip(used_life, investments)])
+
+        discounted_salvage = np.array([sum(x / discount_rate) for x in salvage])
+
+        return discounted_salvage
 
     def discounted_inv(self, model: 'onstove.OnStove', mask: pd.Series, relative: bool = True):
         """This method expands :meth:`Technology.discounted_inv` by adding the cylinder cost for households currently
@@ -1274,10 +1315,10 @@ class LPG(Technology):
         infrastructure_cost
         """
         super().discounted_inv(model, mask, relative=relative)
-        self.infrastructure_cost(model)
         if relative:
-            self.discounted_investments += (self.discounted_infra_cost * (1 - self.pop_sqkm))
-
+            start_year = mask[mask].index
+            self.infrastructure_cost(model, mask)
+            self.discounted_investments.loc[start_year.tolist()] += (self.discounted_infra_cost[start_year.tolist()] * (1 - self.pop_sqkm[start_year.tolist()]))
 
 class Biomass(Technology):
     """Biomass technology class used to model traditional and improved stoves.
@@ -1921,8 +1962,7 @@ class Electricity(Technology):
         --------
         get_capacity_cost
         """
-        # TODO: Test this, the connection cost is just a number. We need to take into account the year they got connected
-        #   (upgraded the cable)
+        # TODO: Add mask
         super().discounted_inv(model, mask, relative=relative)
         if relative:
             #share = (model.gdf['IsUrban'] > 20) * self.current_share_urban

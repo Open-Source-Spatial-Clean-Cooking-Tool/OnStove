@@ -1828,27 +1828,27 @@ class OnStove(DataProcessor):
             self.year = year
             mask = self.gdf["year"] == year
 
-            # for tech in techs:
-            #     print(f'Calculating health benefits for {tech.name}...')
-            #
-            #     if not tech.is_base:
-            #         tech.adjusted_pm25()
-            #
-            #     tech.morbidity(self, mask, 'morb', True)
-            #     tech.mortality(self, mask, 'mort', True)
-            #     print(f'Calculating carbon emissions benefits for {tech.name}...')
-            #     tech.carbon_emissions(self, mask, True)
-            #     print(f'Calculating time saved benefits for {tech.name}...')
-                # tech.time_saved(self, mask, True)
-            #     print(f'Calculating costs for {tech.name}...')
-            #     tech.required_energy(self)
-            #     tech.discounted_om(self, mask, relative = True)
-            #     tech.discounted_inv(self, mask, relative = True)
-            #     tech.discount_fuel_cost(self, mask, relative = True)
-            #     tech.salvage(self, mask, relative = True)
-            #     print(f'Calculating net benefit for {tech.name}...\n')
-            #     tech.net_benefit(self, self.specs['w_health'], self.specs['w_spillovers'],
-            #                       self.specs['w_environment'], self.specs['w_time'], self.specs['w_costs'])
+            for tech in techs:
+                print(f'Calculating health benefits for {tech.name}...')
+
+                if not tech.is_base:
+                    tech.adjusted_pm25()
+
+                tech.morbidity(self, mask, 'morb', True)
+                tech.mortality(self, mask, 'mort', True)
+                print(f'Calculating carbon emissions benefits for {tech.name}...')
+                tech.carbon_emissions(self, mask, True)
+                print(f'Calculating time saved benefits for {tech.name}...')
+                tech.time_saved(self, mask, True)
+                print(f'Calculating costs for {tech.name}...')
+                tech.required_energy(self)
+                tech.discounted_om(self, mask, relative = True)
+                tech.discounted_inv(self, mask, relative = True)
+                tech.discount_fuel_cost(self, mask, relative = True)
+                tech.salvage(self, mask, relative = True)
+                print(f'Calculating net benefit for {tech.name}...\n')
+                # tech.net_benefit(self, self.specs['w_health'], self.specs['w_spillovers'],
+                #                   self.specs['w_environment'], self.specs['w_time'], self.specs['w_costs'])
         #
         # print('Getting maximum net benefit technologies...')
         # self.maximum_net_benefit(techs, restriction=restriction)
