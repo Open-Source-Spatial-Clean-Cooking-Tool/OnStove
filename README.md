@@ -48,7 +48,7 @@ Through the jupyter_env.yaml in the env-folder using [Anaconda](https://www.anac
 
 ## Resources
 
-### Will be added when journal articles are out
+[Publication on sub-Saharan Africa](https://www.nature.com/articles/s41893-022-01039-8)
 
 ## How to cite
 
