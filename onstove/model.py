@@ -988,11 +988,11 @@ class OnStove(DataProcessor):
         """
         #allocate population in each urban cell to electricity
         isurban = self.gdf["IsUrban"] > 20
-        urban_factor = tech_dict["Electricity"].population_cooking_urban / sum(isurban * self.gdf["Elec_pop_calib"])
-        tech_dict["Electricity"].pop_sqkm = (isurban) * (self.gdf["Elec_pop_calib"] * urban_factor)
+        urban_factor = tech_dict["Electricity"].population_cooking_urban / sum(isurban * self.elec_pop * self.gdf["pop_init_year"])
+        tech_dict["Electricity"].pop_sqkm = (isurban) * (self.elec_pop * self.gdf["pop_init_year"] * urban_factor)
         #allocate population in each rural cell to electricity 
-        rural_factor = tech_dict["Electricity"].population_cooking_rural / sum(~isurban * self.gdf["Elec_pop_calib"])
-        tech_dict["Electricity"].pop_sqkm.loc[~isurban] = (self.gdf["Elec_pop_calib"] * rural_factor)
+        rural_factor = tech_dict["Electricity"].population_cooking_rural / sum(~isurban * self.elec_pop * self.gdf["pop_init_year"])
+        tech_dict["Electricity"].pop_sqkm.loc[~isurban] = (self.elec_pop * self.gdf["pop_init_year"] * rural_factor)
         #create series for biogas same size as dataframe with zeros 
         tech_dict["Biogas"].pop_sqkm = pd.Series(np.zeros(self.gdf.shape[0]))
         #allocate remaining population to biogas in rural areas where there's potential
@@ -1087,6 +1087,7 @@ class OnStove(DataProcessor):
             base_fuel.deaths = np.zeros((len(self.gdf), self.specs["end_year"] - self.specs["start_year"]))
             base_fuel.cases = np.zeros((len(self.gdf), self.specs["end_year"] - self.specs["start_year"]))
             base_fuel.benefits = pd.Series(0, index = self.gdf.index)
+            base_fuel.costs = pd.Series(0, index=self.gdf.index)
 
             self.ecooking_adjustment()
             base_fuels["Biogas"].total_time(self)
@@ -1137,7 +1138,7 @@ class OnStove(DataProcessor):
                 tech.salvage(self, mask, relative=False)
                 base_fuel.discounted_salvage_cost += tech.discounted_salvage_cost * tech.pop_sqkm
 
-                tech.total_costs()
+                tech.total_costs(self, mask)
                 base_fuel.costs += tech.costs * tech.pop_sqkm
 
                 tech.mortality(self, mask, 'mort', False)
@@ -1290,22 +1291,26 @@ class OnStove(DataProcessor):
     def electrified_weight(self, value):
         self._electrified_weight = value
 
-    def current_elec(self):
-        """Calculates a binary variable that defines which settlements are at least partially electrified.
+    def final_elec(self):
+        """Calculates a binary variable that defines which settlements are at least partially electrified and
+        calibrates the electrified population within each cell.
 
-        It uses the electrification rate provided by the user in the :attr:`specs` file (named as ``Elec_rate``) and
+        It uses the electrification rate provided by the user in the :attr:`specs` file (named as ``elec_rate``) and
         the :attr:`electrified_weight` to make the calibration. The binary variable is saved as a column of the
-        GeoDataFrame :attr:`gdf` with the name of ``Current_elec``.
+        GeoDataFrame :attr:`gdf` with the name of ``Current_elec``. This is then "fine-tuned" by using the
+        ``Current_elec`` column of the :attr:`gdf` GeoDataFrame and the ``pop_init_year`` column (calculated
+        using the :meth:`calibrate_current_pop` method) to get the population that is electrified within each
+        electrified settlement, according to the ``elec_rate`` provided by the user (stored in :attr:`specs`). The
+        results are stored in a column called ``Elec_pop_calib`` and as an attribute to the model with the same name
 
         See also
         --------
         electrified_weight
-        final_elec
         read_scenario_data
         specs
         """
-        elec_rate = self.specs["elec_rate"]
 
+        elec_rate = self.specs["elec_rate"]
         self.gdf["Current_elec"] = 0
 
         i = 1
@@ -1320,23 +1325,6 @@ class OnStove(DataProcessor):
             i = i - 0.01
 
         self.i = i
-
-    def final_elec(self):
-        """Calibrates the electrified population within each cell.
-
-        This is a "fine-tuning" of the electrified population. It uses the ``Current_elec`` column of the :attr:`gdf`
-        GeoDataFrame (calculated using the :meth:`current_elec` method) and the ``pop_init_year`` column (calculated
-        using the :meth:`calibrate_current_pop` method) to get the population that is electrified within each
-        electrified settlement, according to the ``Elec_rate`` provided by the user (stored in :attr:`specs`).
-
-        See also
-        --------
-        electrified_weight
-        current_elec
-        read_scenario_data
-        specs
-        """
-        elec_rate = self.specs["elec_rate"]
 
         self.gdf["Elec_pop_calib"] = self.gdf["pop_init_year"]
 
@@ -1362,6 +1350,8 @@ class OnStove(DataProcessor):
                 i = i + 0.01
 
         self.gdf.loc[self.gdf["Current_elec"] == 0, "Elec_pop_calib"] = 0
+        self.gdf["Elec_pop_calib"] = self.gdf["Elec_pop_calib"] / self.gdf["pop_init_year"]
+        self.elec_pop = self.gdf["Elec_pop_calib"]
 
     def calibrate_current_pop(self):
         """Calibrates the spatial population in each cell according to the user defined population in the start year
@@ -1384,6 +1374,7 @@ class OnStove(DataProcessor):
         self.gdf["pop_init_year"] = 0
         self.gdf.loc[~isurban, "pop_init_year"] = self.gdf.loc[~isurban,"Pop"] * calibration_factor_r
         self.gdf.loc[isurban, "pop_init_year"] = self.gdf.loc[isurban, "Pop"] * calibration_factor_u
+        self.gdf["Pop"] = self.gdf["pop_init_year"]
 
         self.gdf.loc[~isurban, 'households_init'] = self.gdf.loc[~isurban, 'pop_init_year'] / self.specs["rural_hh_size"]
         self.gdf.loc[isurban, 'households_init'] = self.gdf.loc[isurban, 'pop_init_year'] / self.specs["urban_hh_size"]
@@ -1819,7 +1810,7 @@ class OnStove(DataProcessor):
         else:
              raise ValueError("technologies must be 'all' or a list of strings with the technology names to run.")
 
-        self.progression(method='benefits')
+        self.progression(method='costs')
         # Based on wealth index, minimum wage and a lower an upper range for cost of opportunity
         print(f'[{self.specs["country_name"]}] Getting value of time')
         self.get_value_of_time()
@@ -1847,33 +1838,33 @@ class OnStove(DataProcessor):
                 tech.discount_fuel_cost(self, mask, relative = True)
                 tech.salvage(self, mask, relative = True)
                 print(f'Calculating net benefit for {tech.name}...\n')
-                # tech.net_benefit(self, self.specs['w_health'], self.specs['w_spillovers'],
-                #                   self.specs['w_environment'], self.specs['w_time'], self.specs['w_costs'])
-        #
-        # print('Getting maximum net benefit technologies...')
-        # self.maximum_net_benefit(techs, restriction=restriction)
-        # print('Extracting indicators...')
-        # print('    - Deaths avoided')
-        # self.extract_lives_saved()
-        # print('    - Health costs')
-        # self.extract_health_costs_saved()
-        # print('    - Time saved')
-        # self.extract_time_saved()
-        # print('    - Opportunity cost')
-        # self.extract_opportunity_cost()
-        # print('    - Avoided emissions')
-        # self.extract_reduced_emissions()
-        # print('    - Avoided emissions costs')
-        # self.extract_emissions_costs_saved()
-        # print('    - Investment costs')
-        # self.extract_investment_costs()
-        # print('    - Fuel costs')
-        # self.extract_fuel_costs()
-        # print('    - OM costs')
-        # self.extract_om_costs()
-        # print('    - Salvage value')
-        # self.extract_salvage()
-        # print('Done')
+                tech.net_benefit(self, mask)
+            break
+            #print('Getting maximum net benefit technologies...')
+            #self.maximum_net_benefit(tech, restriction=restriction)
+
+            # print('Extracting indicators...')
+            # print('    - Deaths avoided')
+            # self.extract_lives_saved()
+            # print('    - Health costs')
+            # self.extract_health_costs_saved()
+            # print('    - Time saved')
+            # self.extract_time_saved()
+            # print('    - Opportunity cost')
+            # self.extract_opportunity_cost()
+            # print('    - Avoided emissions')
+            # self.extract_reduced_emissions()
+            # print('    - Avoided emissions costs')
+            # self.extract_emissions_costs_saved()
+            # print('    - Investment costs')
+            # self.extract_investment_costs()
+            # print('    - Fuel costs')
+            # self.extract_fuel_costs()
+            # print('    - OM costs')
+            # self.extract_om_costs()
+            # print('    - Salvage value')
+            # self.extract_salvage()
+        print('Done')
 
     # TODO: check if this function is still needed
     def _get_column_functs(self):
@@ -1922,11 +1913,12 @@ class OnStove(DataProcessor):
         gdf_copy = self.gdf.copy()
         # TODO: Change this to a while loop that checks the sum of number of households supplied against the total hhs
         for tech in techs:
+            # replace gdf_copy["households_init"] with households in each year
             current = (tech.households < gdf_copy["households_init"]) & \
                       (gdf_copy["max_benefit_tech"] == tech.name)
             dff = gdf_copy.loc[current].copy()
             if current.sum() > 0:
-                # dff.loc[current, "maximum_net_benefit"] *= tech.factor.loc[current]
+
                 dff.loc[current, f'net_benefit_{tech.name}_temp'] = np.nan
 
                 second_benefit_cols = temps.copy()
@@ -1938,7 +1930,7 @@ class OnStove(DataProcessor):
                 second_best = second_best.str.replace("_temp", "")
                 second_best.replace('NaN', np.nan, inplace=True)
 
-                second_tech_net_benefit = dff.loc[current, second_benefit_cols].max(axis=1) #* (1 - tech.factor.loc[current])
+                second_tech_net_benefit = dff.loc[current, second_benefit_cols].max(axis=1)
 
                 elec_factor = dff['Elec_pop_calib'] / dff['pop_end_year']
                 dff['max_benefit_tech'] = second_best
@@ -1950,14 +1942,15 @@ class OnStove(DataProcessor):
                 self.gdf.loc[current, "households_init"] *= tech.factor.loc[current]
                 if tech.name == 'Electricity':
                     dff['Elec_pop_calib'] *= 0
-                #     self.gdf.loc[current, 'Elec_pop_calib'] *= tech.factor.loc[current]
                 else:
                     self.gdf.loc[current, 'Elec_pop_calib'] = self.gdf.loc[current, 'pop_end_year'] * elec_factor
                     dff['Elec_pop_calib'] = dff['pop_end_year'] * elec_factor
                 gdf = pd.concat([gdf, dff])
 
+        print(self.gdf.shape)
+        print(gdf.shape)
         self.gdf = pd.concat([self.gdf, gdf])
-
+        print(self.gdf.shape)
         for net in net_benefit_cols:
             self.gdf[net + '_temp'] = self.gdf[net]
 
@@ -1969,7 +1962,8 @@ class OnStove(DataProcessor):
 
         isna = self.gdf["max_benefit_tech"].isna()
         if isna.sum() > 0:
-            self.gdf.loc[isna, 'max_benefit_tech'] = self.gdf.loc[isna, temps].idxmax(axis=1).asdtype(str)
+            self.gdf.loc[isna, 'max_benefit_tech'] = self.gdf.loc[isna, temps].idxmax(axis=1).astype(str)
+
         self.gdf['max_benefit_tech'] = self.gdf['max_benefit_tech'].str.replace("net_benefit_", "")
         self.gdf['max_benefit_tech'] = self.gdf['max_benefit_tech'].str.replace("_temp", "")
         self.gdf.loc[isna, "maximum_net_benefit"] = self.gdf.loc[isna, temps].max(axis=1)

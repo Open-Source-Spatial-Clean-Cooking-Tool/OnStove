@@ -118,6 +118,7 @@ class Technology:
         for paf in ['paf_alri', 'paf_copd', 'paf_ihd', 'paf_lc', 'paf_stroke']:
             self[paf] = 0
         self.discounted_fuel_cost = 0
+        self.factor = None
         self.discounted_investments = 0
         self.discounted_om_costs = 0
         self.discounted_salvage_cost = 0
@@ -125,7 +126,7 @@ class Technology:
         self.clean_cooking_access = 0
         self.sfu = 0
         self.time_value = 0
-        self.costs = 0
+        self.costs = None
         self.benefits = None
         self.pop_sqkm = None
         self.distributed_morbidity = None
@@ -343,6 +344,7 @@ class Technology:
 
             # TODO: save this one
             decreased_carbon = base_annual_carbon - carbon
+
 
             self.decreased_carbon_emissions.loc[start_year.tolist()] = decreased_carbon[start_year.tolist()].sum(axis=1)
 
@@ -893,7 +895,7 @@ class Technology:
             self.discounted_time_value = pd.Series(discounted_time, index=model.gdf.index)
 
 
-    def total_costs(self):
+    def total_costs(self, model: 'onstove.OnStove', mask):
         """
         Calculates total costs (fuel, investment, operation and maintenance as well as salvage costs)
 
@@ -907,12 +909,15 @@ class Technology:
         --------
         discount_fuel_cost, discounted_om, salvage, discounted_inv
         """
-        self.costs = (self.discounted_fuel_cost + self.discounted_investments +
-                      self.discounted_om_costs - self.discounted_salvage_cost)
 
-    def net_benefit(self, model: 'onstove.OnStove', w_health: int = 1, w_spillovers: int = 1,
-                    w_environment: int = 1, w_time: int = 1, w_costs: int = 1):
-        # TOOD: Read these from specs
+        if not isinstance(self.costs, pd.Series):
+            self.costs = pd.Series(0, index = model.gdf.index)
+
+        self.costs[mask] = (self.discounted_fuel_cost[mask] + self.discounted_investments[mask] +
+                      self.discounted_om_costs[mask] - self.discounted_salvage_cost[mask])
+
+    def net_benefit(self, model: 'onstove.OnStove', mask):
+
         """This method combines all costs and benefits as specified by the user using the weights parameters
 
          Parameters
@@ -920,37 +925,35 @@ class Technology:
          model: OnStove model
              Instance of the OnStove model containing the main data of the study case. See
              :class:`onstove.OnStove`.
-         w_health: int, default 1
-             Determines whether health parameters (reduced morbidity and mortality)
-             should be considered in the net-benefit equation.
-         w_spillovers: int, default 1
-             Determines whether spillover effects from cooking with traditional fuels
-             should be considered in the net-benefit equation.
-         w_environment: int, default 1
-             Determines whether environmental effects (reduced emissions) should be considered in the net-benefit
-             equation.
-         w_time: int, default 1
-             Determines whether opportunity cost (reduced time spent) should be considered in the net-benefit
-             equation.
-         w_costs: int, default 1
-             Determines whether costs should be considered in the net-benefit equation.
 
          See also
          --------
          total_costs, morbidity, mortality, time_saved, carbon_emissions
         """
-        self.total_costs()
-        self.benefits = w_health * (self.distributed_morbidity + self.distributed_mortality) + \
-                        w_environment * self.decreased_carbon_costs + w_time * self.time_value
-        self.net_benefits = self.benefits - w_costs * self.costs
-        model.gdf["costs_{}".format(self.name)] = self.costs
-        model.gdf["benefits_{}".format(self.name)] = self.benefits
-        model.gdf["net_benefit_{}".format(self.name)] = self.net_benefits
-        self.factor = pd.Series(np.ones(model.gdf.shape[0]), index=model.gdf.index)
-        self.households = model.gdf["households_init"] + \
-                          (model.year - model.specs["start_year"]) * \
-                          ((model.gdf["households_end"] - model.gdf["households_init"])/\
-                          (model.specs["end_year"] - model.specs["start_year"]))
+        self.total_costs(model, mask)
+
+        if not isinstance(self.benefits, pd.Series):
+            self.benefits = pd.Series(0, index=model.gdf.index, dtype='float64')
+            self.net_benefits = pd.Series(0, index=model.gdf.index, dtype='float64')
+            self.factor = pd.Series(0, index=model.gdf.index, dtype='float64')
+            self.households = pd.Series(0, index=model.gdf.index, dtype='float64')
+
+
+        self.benefits[mask] = model.specs["w_health"] * (self.distributed_morbidity[mask] + self.distributed_mortality[mask]) + \
+                        model.specs["w_environment"] * self.decreased_carbon_costs[mask] + model.specs["w_time"] * self.time_value[mask]
+        self.net_benefits[mask] = self.benefits[mask] - model.specs["w_costs"] * self.costs[mask]
+
+        if "costs_{}".format(self.name) not in model.gdf.columns:
+            model.gdf["costs_{}".format(self.name)] = np.nan
+            model.gdf["benefits_{}".format(self.name)] = np.nan
+            model.gdf["net_benefit_{}".format(self.name)] = np.nan
+
+        model.gdf.loc[mask, "costs_{}".format(self.name)] = self.costs.loc[mask]
+        model.gdf.loc[mask, "benefits_{}".format(self.name)] = self.benefits.loc[mask]
+        model.gdf.loc[mask, "net_benefit_{}".format(self.name)] = self.net_benefits.loc[mask]
+        self.factor.loc[mask] = pd.Series(np.ones(model.gdf.shape[0]), index=model.gdf.index).loc[mask]
+        pop, house, pop_increase = model.yearly_pop(model.year)
+        self.households.loc[mask] = house.loc[mask]
 
 
 class LPG(Technology):
@@ -1814,6 +1817,8 @@ class Electricity(Technology):
         self.capacities = {}
         self.grid_capacity_cost = grid_capacity_cost
         self.tiers_path = None
+        self.discounted_capacity_cost = None
+        self.capacity_cost = None
         self.connection_cost = connection_cost
         self.carbon_intensities = {'coal': 0.090374363, 'natural_gas': 0.050300655,
                                    'crude_oil': 0.070650288, 'heavy_fuel_oil': 0.074687989,
@@ -1850,7 +1855,7 @@ class Electricity(Technology):
         else:
             super().__setitem__(idx, value)
 
-    def get_capacity_cost(self, model: 'onstove.OnStove'):
+    def get_capacity_cost(self, model: 'onstove.OnStove', mask: pd.Series):
         """This method determines the cost of electricity for each added unit of capacity (kW). The added capacity is
         assumed to be the same shares as the current installed capacity (i.e. if a country uses 10% coal powered power
         plants and 90% natural gas, the added capacity will consist of 10% coal and 90% natural gas)
@@ -1861,7 +1866,6 @@ class Electricity(Technology):
             Instance of the OnStove model containing the main data of the study case. See
             :class:`onstove.OnStove`.
         """
-        # TODO: Add the temporal dimension here
         self.required_energy(model)
         if self.tiers_path is None:
             add_capacity = 1
@@ -1871,15 +1875,44 @@ class Electricity(Technology):
             self.tiers = model.gdf['Electricity_tiers'].copy()
             add_capacity = (self.tiers < 3)
 
-        if self.grid_capacity_cost is None:
-            # TODO: update this with the matrix, so that we know where we have inv and salvage. (grid_salvage) and then the code below the if/else (capacity_cost)
-            self.get_grid_capacity_cost()
-            salvage = self.grid_salvage(model)
-        else:
-            salvage = self.grid_salvage(model, True)
 
-        self.capacity = self.energy * add_capacity / (3.6 * self.time_of_cooking * 365)
-        self.capacity_cost = self.capacity * (self.grid_capacity_cost - salvage)
+        # TODO: update this with the matrix, so that we know where we have inv and salvage. (grid_salvage) and then the code below the if/else (capacity_cost)
+
+        self.get_grid_capacity_cost()
+        self.get_grid_life()
+
+        discount_rate, proj_life = self.discount_factor(model.specs)
+        cost = self.grid_capacity_cost * np.ones(model.gdf.shape[0])
+
+        proj_years = np.matmul(np.expand_dims(np.ones(model.gdf.shape[0]), axis=1),
+                               np.expand_dims(np.zeros(proj_life), axis=0))
+
+        start_year = mask[mask].index
+
+        proj_years[start_year, model.year - model.specs["start_year"] - 1] = 1
+        self.grid_life = round(self.grid_life)
+
+        for j in range(self.grid_life, proj_life, self.grid_life):
+            if j + model.year - model.specs["start_year"] - 1 < proj_life:
+                proj_years[start_year, j + model.year - model.specs["start_year"] - 1] = 1
+
+        costs = proj_years * np.array(cost)[:, None]
+
+        if not isinstance(self.discounted_capacity_cost, pd.Series):
+            self.discounted_capacity_cost = pd.Series(0, index=model.gdf.index, dtype='float64')
+
+        discounted_capacity_cost = np.array([sum(x / discount_rate) for x in costs])
+
+        salvage = self.grid_salvage(model, mask, cost)
+
+        self.discounted_capacity_cost[start_year.tolist()] = discounted_capacity_cost[start_year.tolist()] - salvage[
+            start_year.tolist()]
+
+        self.capacity = self.energy / (3.6 * self.time_of_cooking * 365)
+        if not isinstance(self.capacity_cost, pd.Series):
+            self.capacity_cost = pd.Series(0, index=model.gdf.index, dtype='float64')
+
+        self.capacity_cost[start_year.tolist()] = self.capacity * self.discounted_capacity_cost[start_year.tolist()]
 
     def get_carbon_intensity(self, model: 'onstove.OnStove'):
         """This function determines the carbon intensity of generated electricity based on the power plant mix in the
@@ -1901,7 +1934,13 @@ class Electricity(Technology):
             [self.grid_capacity_costs[fuel] * (cap / sum(self.capacities.values())) for fuel, cap in
              self.capacities.items()])
 
-    def grid_salvage(self, model: 'onstove.OnStove', single: bool = False):
+    def get_grid_life(self):
+        """This function determines the grid capacity cost in the area of interest."""
+        self.grid_life = sum(
+            [self.grid_techs_life[tech] * (cap / sum(self.capacities.values())) for tech, cap in
+             self.capacities.items()])
+
+    def grid_salvage(self, model: 'onstove.OnStove', mask: pd.Series, cost, single: bool = False):
         """This method determines the salvage cost of the grid connected power plants.
 
         Parameters
@@ -1913,20 +1952,26 @@ class Electricity(Technology):
             Boolean parameter to indicate if there is only one grid_capacity_cost or several.
         """
         discount_rate, proj_life = self.discount_factor(model.specs)
+
+        used_life = ((model.specs["end_year"] - model.year + 1) % self.grid_life) * np.ones(model.gdf.shape[0])
+
+        proj_years = np.matmul(np.expand_dims(np.ones(model.gdf.shape[0]), axis=1),
+                               np.expand_dims(np.zeros(proj_life), axis=0))
+
+        start_year = mask[mask].index
+
+        proj_years[start_year, -1] = 1
+
         if single:
-            used_life = proj_life % self.grid_cap_life
-            salvage = self.grid_capacity_cost * (1 - used_life / self.grid_cap_life)
+            used_life = proj_life % self.grid_life
+            discounted_salvage = self.grid_capacity_cost * (1 - used_life / self.grid_life)
         else:
-            salvage_values = []
+            investments = proj_years * np.array(cost)[:, None]
+            salvage = np.array([y * (1 - x / self.grid_life) for x, y in zip(used_life, investments)])
 
-            for tech, cap in self.capacities.items():
-                used_life = proj_life % self.grid_techs_life[tech]
-                salvage = self.grid_capacity_costs[tech] * (1 - used_life / self.grid_techs_life[tech])
-                salvage_values.append(salvage * cap / sum(self.capacities.values()))
+            discounted_salvage = np.array([sum(x / discount_rate) for x in salvage])
 
-            salvage = sum(salvage_values)
-
-        return salvage / discount_rate[0]
+        return discounted_salvage
 
     def carb(self, model: 'onstove.OnStove', mask):
         """This method expands :meth:`Technology.carbon` when electricity is the fuel used
@@ -1962,15 +2007,16 @@ class Electricity(Technology):
         --------
         get_capacity_cost
         """
-        # TODO: Add mask
         super().discounted_inv(model, mask, relative=relative)
         if relative:
-            #share = (model.gdf['IsUrban'] > 20) * self.current_share_urban
-            #share[model.gdf['IsUrban'] < 20] *= self.current_share_rural
-            self.discounted_investments += (self.connection_cost + self.capacity_cost * (1 - self.pop_sqkm))
+            self.get_capacity_cost(model, mask)
+            if isinstance(self.connection_cost, pd.Series):
+                self.discounted_investments[mask] += (self.connection_cost[mask] + self.discounted_capacity_cost[mask] * (1 - self.pop_sqkm[mask]))
+            else:
+                self.discounted_investments[mask] += (
+                        self.connection_cost + self.discounted_capacity_cost[mask] * (1 - self.pop_sqkm[mask]))
 
-    def net_benefit(self, model: 'onstove.OnStove', w_health: int = 1, w_spillovers: int = 1,
-                    w_environment: int = 1, w_time: int = 1, w_costs: int = 1):
+    def net_benefit(self, model: 'onstove.OnStove', mask):
         """This method expands :meth:`Technology.net_benefit` by taking into account electricity availability
         in the calculations.
 
@@ -1979,37 +2025,22 @@ class Electricity(Technology):
         model: OnStove model
             Instance of the OnStove model containing the main data of the study case. See
             :class:`onstove.OnStove`.
-        w_health: int, default 1
-            Determines whether health parameters (reduced morbidity and mortality)
-            should be considered in the net-benefit equation.
-        w_spillovers: int, default 1
-            Determines whether spillover effects from cooking with traditional fuels
-            should be considered in the net-benefit equation.
-        w_environment: int, default 1
-            Determines whether environmental effects (reduced emissions) should be considered in the net-benefit
-            equation.
-        w_time: int, default 1
-            Determines whether opportunity cost (reduced time spent) should be considered in the net-benefit
-            equation.
-        w_costs: int, default 1
-            Determines whether costs should be considered in the net-benefit equation.
 
         See also
         --------
         net_benefit
         """
-        super().net_benefit(model, w_health, w_spillovers, w_environment, w_time, w_costs)
+        super().net_benefit(model, mask)
         model.gdf.loc[model.gdf['Current_elec'] == 0, "net_benefit_{}".format(self.name)] = np.nan
         #TODO: Everywere where we have model.gdf["pop_init_year"] or model.gdf["pop_end_year"] see if it needs to be
         #TODO: replaced with the population in the actual year.
-        factor = model.gdf['Elec_pop_calib'] / model.gdf['pop_init_year']
-        factor[factor > 1] = 1
-        self.factor = factor
-        self.households = factor * (model.gdf["households_init"] + \
-                          (model.year - model.specs["start_year"]) * \
-                          ((model.gdf["households_end"] - model.gdf["households_init"])/\
-                          (model.specs["end_year"] - model.specs["start_year"])))
-
+        #factor = model.gdf['Elec_pop_calib'] / model.gdf['pop_init_year']
+        #factor[factor > 1] = 1
+        #self.factor.loc[mask] = factor.loc[mask]
+        self.factor.loc[mask] = model.elec_pop.loc[mask]
+        pop, house, pop_increase = model.yearly_pop(model.year)
+        #self.households.loc[mask] = factor.loc[mask] * house.loc[mask]
+        self.households.loc[mask] = model.elec_pop.loc[mask] * house.loc[mask]
 
 class MiniGrids(Electricity):
     """Mini-grids technology class used to model electrical stoves powered by mini-grids.
@@ -2064,9 +2095,8 @@ class MiniGrids(Electricity):
     def discounted_inv(self, model: 'onstove.OnStove', mask: pd.Series, relative: bool = True):
         pass
 
-    def net_benefit(self, model: 'onstove.OnStove', w_health: int = 1, w_spillovers: int = 1,
-                    w_environment: int = 1, w_time: int = 1, w_costs: int = 1):
-        super().net_benefit(model, w_health, w_spillovers, w_environment, w_time, w_costs)
+    def net_benefit(self, mask):
+        super().net_benefit(model, mask)
         model.gdf.loc[self.potential == 0, "net_benefit_{}".format(self.name)] = np.nan
 
 
@@ -2329,8 +2359,7 @@ class Biogas(Technology):
         self.get_collection_time(model)
         super().total_time(model)
 
-    def net_benefit(self, model: 'onstove.OnStove', w_health: int = 1, w_spillovers: int = 1,
-                    w_environment: int = 1, w_time: int = 1, w_costs: int = 1):
+    def net_benefit(self, model: 'onstove.OnStove', mask):
         """This method expands :meth:`Technology.net_benefit` by taking into account biogas availability
         in the calculations.
 
@@ -2339,41 +2368,18 @@ class Biogas(Technology):
         model: OnStove model
             Instance of the OnStove model containing the main data of the study case. See
             :class:`onstove.OnStove`.
-        w_health: int, default 1
-            Determines whether health parameters (reduced morbidity and mortality)
-            should be considered in the net-benefit equation.
-        w_spillovers: int, default 1
-            Determines whether spillover effects from cooking with traditional fuels
-            should be considered in the net-benefit equation.
-        w_environment: int, default 1
-            Determines whether environmental effects (reduced emissions) should be considered in the net-benefit
-            equation.
-        w_time: int, default 1
-            Determines whether opportunity cost (reduced time spent) should be considered in the net-benefit
-            equation.
-        w_costs: int, default 1
-            Determines whether costs should be considered in the net-benefit equation.
 
         See also
         --------
         net_benefit
         """
-        super().net_benefit(model, w_health, w_spillovers, w_environment, w_time, w_costs)
+        super().net_benefit(model, mask)
         required_energy_hh = self.required_energy_hh(model)
         model.gdf.loc[(model.gdf['biogas_energy'] < required_energy_hh), "benefits_{}".format(self.name)] = np.nan
         model.gdf.loc[(model.gdf['biogas_energy'] < required_energy_hh), "net_benefit_{}".format(self.name)] = np.nan
-        households = model.gdf["households_init"] + \
-                        (model.year - model.specs["start_year"]) * \
-                        ((model.gdf["households_end"] - model.gdf["households_init"]) / \
-                        (model.specs["end_year"] - model.specs["start_year"]))
-        factor = model.gdf['biogas_energy'] / (required_energy_hh * households)
+        pop_init, house_init, pop_increase_init = model.yearly_pop(model.specs["start_year"])
+        factor = model.gdf['biogas_energy'] / (required_energy_hh * house_init)
         factor[factor > 1] = 1
-        self.factor = factor
-        self.households = households * factor
-
-        #del model.gdf["Cattles"]
-        #del model.gdf["Buffaloes"]
-        #del model.gdf["Sheeps"]
-        #del model.gdf["Goats"]
-        #del model.gdf["Pigs"]
-        #del model.gdf["Poultry"]
+        self.factor.loc[mask] = factor.loc[mask]
+        pop, house, pop_increase = model.yearly_pop(model.year)
+        self.households.loc[mask] = house.loc[mask] * factor.loc[mask]
