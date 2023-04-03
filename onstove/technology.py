@@ -924,7 +924,7 @@ class Technology:
             self.discounted_time_value = pd.Series(discounted_time, index=mask.index)
 
 
-    def total_costs(self, model: 'onstove.OnStove', mask):
+    def total_costs(self, model: 'onstove.OnStove', masky):
         """
         Calculates total costs (fuel, investment, operation and maintenance as well as salvage costs)
 
@@ -940,10 +940,10 @@ class Technology:
         """
 
         if not isinstance(self.costs, pd.Series):
-            self.costs = pd.Series(0, index=mask.index)
+            self.costs = pd.Series(0, index=masky.index)
 
-        self.costs.loc[mask] = (self.discounted_fuel_cost.loc[mask] + self.discounted_investments.loc[mask] +
-                      self.discounted_om_costs.loc[mask] - self.discounted_salvage_cost.loc[mask])
+        self.costs.loc[masky] = (self.discounted_fuel_cost.loc[masky] + self.discounted_investments.loc[masky] +
+                      self.discounted_om_costs.loc[masky] - self.discounted_salvage_cost.loc[masky])
 
     def net_benefit(self, model: 'onstove.OnStove', mask):
 
@@ -1248,7 +1248,8 @@ class LPG(Technology):
         transport_emissions
         """
         super().carb(model, mask)
-        self.carbon.loc[mask] += self.transport_emissions(model, mask)
+        masky = mask[mask].index
+        self.carbon.loc[masky] += self.transport_emissions(model, mask)
 
     def infrastructure_cost(self, model: 'onstove.OnStove', mask: pd.Series):
         """Calculates cost of cylinders for first-time LPG users. It is assumed that the cylinder contains 12.5 kg of
@@ -1351,7 +1352,7 @@ class LPG(Technology):
         if relative:
             start_year = mask[mask].index
             self.infrastructure_cost(model, mask)
-            self.discounted_investments.loc[start_year.tolist()] += (self.discounted_infra_cost[start_year.tolist()] * (1 - self.pop_sqkm[start_year.tolist()]))
+            self.discounted_investments.loc[start_year] += (self.discounted_infra_cost[start_year] * (1 - self.pop_sqkm[start_year]))
 
 class Biomass(Technology):
     """Biomass technology class used to model traditional and improved stoves.
@@ -1819,7 +1820,8 @@ class Charcoal(Technology):
         carbon
         """
         super().carb(model, mask)
-        self.carbon.loc[mask] += self.production_emissions(model)
+        masky = mask[mask].index
+        self.carbon.loc[masky] += self.production_emissions(model)
 
 
 class Electricity(Technology):
@@ -2105,13 +2107,9 @@ class Electricity(Technology):
         model.gdf.loc[model.gdf['Current_elec'] == 0, "net_benefit_{}".format(self.name)] = np.nan
         #TODO: Everywere where we have model.gdf["pop_init_year"] or model.gdf["pop_end_year"] see if it needs to be
         #TODO: replaced with the population in the actual year.
-        #factor = model.gdf['Elec_pop_calib'] / model.gdf['pop_init_year']
-        #factor[factor > 1] = 1
-        #self.factor.loc[mask] = factor.loc[mask]
         masky = mask[mask].index
         self.factor.loc[masky] = model.elec_pop.loc[masky]
         pop, house, pop_increase = model.yearly_pop(model.year)
-        #self.households.loc[mask] = factor.loc[mask] * house.loc[mask]
         self.households.loc[masky] = model.elec_pop.loc[masky] * house.loc[masky]
 
 class MiniGrids(Electricity):

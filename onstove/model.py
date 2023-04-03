@@ -1903,21 +1903,22 @@ class OnStove(DataProcessor):
         net_benefit_cols = [col for col in self.gdf if 'net_benefit_' in col]
         benefits_cols = [col for col in self.gdf if 'benefits_' in col]
 
+        masky = mask[mask].index
         for benefit, net in zip(benefits_cols, net_benefit_cols):
-            self.gdf.loc[mask, net + '_temp'] = self.gdf.loc[mask, net]
+            self.gdf.loc[masky, net + '_temp'] = self.gdf.loc[masky, net]
             if restriction in [True, 'yes', 'y', 'Y', 'Yes', 'PositiveBenefits', 'Positive_Benefits']:
                 self.gdf.loc[(self.gdf["year"] == self.year) & (self.gdf[benefit] < 0), net + '_temp'] = np.nan
 
         temps = [col for col in self.gdf if '_temp' in col]
-        self.gdf.loc[mask, "max_benefit_tech"] = self.gdf.loc[mask, temps].idxmax(axis=1).astype('string')
+        self.gdf.loc[masky, "max_benefit_tech"] = self.gdf.loc[masky, temps].idxmax(axis=1).astype('string')
 
-        self.gdf.loc[mask, 'max_benefit_tech'] = self.gdf.loc[mask, 'max_benefit_tech'].str.replace("net_benefit_", "")
-        self.gdf.loc[mask, 'max_benefit_tech'] = self.gdf.loc[mask, 'max_benefit_tech'].str.replace("_temp", "")
-        self.gdf.loc[mask, "maximum_net_benefit"] = self.gdf.loc[mask, temps].max(axis=1)
+        self.gdf.loc[masky, 'max_benefit_tech'] = self.gdf.loc[masky, 'max_benefit_tech'].str.replace("net_benefit_", "")
+        self.gdf.loc[masky, 'max_benefit_tech'] = self.gdf.loc[masky, 'max_benefit_tech'].str.replace("_temp", "")
+        self.gdf.loc[masky, "maximum_net_benefit"] = self.gdf.loc[masky, temps].max(axis=1)
 
         gdf = gpd.GeoDataFrame()
         gdf_copy = self.gdf.copy()
-        masky = mask[mask].index
+
 
         for tech in techs:
             current = (tech.households.loc[masky] < gdf_copy["Households"].loc[masky]) & \
@@ -1942,10 +1943,18 @@ class OnStove(DataProcessor):
                 dff['maximum_net_benefit'] = second_tech_net_benefit
 
                 dff['Pop'] *= (1 - tech.factor.loc[current[current].index])
+                dff['pop_end_year'] *= (1 - tech.factor.loc[current[current].index])
+                dff['pop_init_year'] *= (1 - tech.factor.loc[current[current].index])
+                dff['households_init'] *= (1 - tech.factor.loc[current[current].index])
+                dff['households_end'] *= (1 - tech.factor.loc[current[current].index])
                 dff["Households"] *= (1 - tech.factor.loc[current[current].index])
 
                 self.gdf.loc[current[current].index, 'Pop'] *= tech.factor.loc[current[current].index]
                 self.gdf.loc[current[current].index, "Households"] *= tech.factor.loc[current[current].index]
+                self.gdf.loc[current[current].index,'pop_end_year'] *= tech.factor.loc[current[current].index]
+                self.gdf.loc[current[current].index,'pop_init_year'] *=tech.factor.loc[current[current].index]
+                self.gdf.loc[current[current].index,'households_init'] *= tech.factor.loc[current[current].index]
+                self.gdf.loc[current[current].index,'households_end'] *= tech.factor.loc[current[current].index]
 
                 if tech.name == 'Electricity':
                     dff['Elec_pop_calib'] *= 0
