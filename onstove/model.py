@@ -1089,8 +1089,10 @@ class OnStove(DataProcessor):
             base_fuel.benefits = pd.Series(0, index = self.gdf.index)
             base_fuel.costs = pd.Series(0, index=self.gdf.index)
 
+            mask = pd.Series(True, index=self.gdf.index)
+
             self.ecooking_adjustment()
-            base_fuels["Biogas"].total_time(self)
+            base_fuels["Biogas"].total_time(self, mask)
             required_energy_hh = base_fuels["Biogas"].required_energy_hh(self)
             factor = self.gdf['biogas_energy'] / (required_energy_hh * self.gdf["households_init"])
             factor[factor > 1] = 1
@@ -1107,15 +1109,13 @@ class OnStove(DataProcessor):
                     pop_sqkm += tech.pop_sqkm
 
                     self.clean_cooking_access += pop_sqkm
-
             self.sfu = 1 - self.clean_cooking_access
-            mask = pd.Series(True, index=self.gdf.index)
 
             for name, tech in base_fuels.items():
                 tech.carb(self, mask)
 
                 if name != "Biogas":
-                    tech.total_time(self)
+                    tech.total_time(self, mask)
 
                 tech.required_energy(self)
 
@@ -1374,7 +1374,6 @@ class OnStove(DataProcessor):
         self.gdf["pop_init_year"] = 0
         self.gdf.loc[~isurban, "pop_init_year"] = self.gdf.loc[~isurban,"Pop"] * calibration_factor_r
         self.gdf.loc[isurban, "pop_init_year"] = self.gdf.loc[isurban, "Pop"] * calibration_factor_u
-        self.gdf["Pop"] = self.gdf["pop_init_year"]
 
         self.gdf.loc[~isurban, 'households_init'] = self.gdf.loc[~isurban, 'pop_init_year'] / self.specs["rural_hh_size"]
         self.gdf.loc[isurban, 'households_init'] = self.gdf.loc[isurban, 'pop_init_year'] / self.specs["urban_hh_size"]
@@ -1405,6 +1404,8 @@ class OnStove(DataProcessor):
         pop_increase[isurban] = yearly_pop_increase_urban
 
         if year == self.specs['start_year']:
+            # TODO: This needs rewriting, stop people from selected the same start and end year. Set the default end_year
+            #   to start_year + 1 and if someone enters an end_year lower than start_year give an error.
             pop = self.gdf['pop_init_year']
             house = self.gdf['households_init']
         else:
@@ -1417,9 +1418,7 @@ class OnStove(DataProcessor):
             house.loc[~isurban] = pop.loc[~isurban]/self.specs['rural_hh_size']
             house.loc[isurban] = pop.loc[isurban] / self.specs['urban_hh_size']
 
-
         return pop, house, pop_increase
-
 
     def calibrate_future_pop(self):
 
@@ -1815,9 +1814,14 @@ class OnStove(DataProcessor):
         print(f'[{self.specs["country_name"]}] Getting value of time')
         self.get_value_of_time()
         # Loop through each technology and calculate all benefits and costs
+        years = self.gdf["year"].copy()
         for year in self.years:
             self.year = year
-            mask = self.gdf["year"] == year
+            mask = years == year
+            pop, house, increase = self.yearly_pop(self.year)
+            self.gdf["Pop"] = pop
+            # TODO: make sure that self.gdf["Households"] is used everywhere in the runs, "increase" needs to be an input
+            self.gdf["Households"] = house
 
             for tech in techs:
                 print(f'Calculating health benefits for {tech.name}...')
@@ -1839,9 +1843,10 @@ class OnStove(DataProcessor):
                 tech.salvage(self, mask, relative = True)
                 print(f'Calculating net benefit for {tech.name}...\n')
                 tech.net_benefit(self, mask)
-            break
-            #print('Getting maximum net benefit technologies...')
-            #self.maximum_net_benefit(tech, restriction=restriction)
+
+            print('Getting maximum net benefit technologies...')
+            self.maximum_net_benefit(techs, mask, restriction=restriction)
+            self.gdf = self.gdf.filter(regex='^(?!.*temp).*')
 
             # print('Extracting indicators...')
             # print('    - Deaths avoided')
@@ -1864,6 +1869,7 @@ class OnStove(DataProcessor):
             # self.extract_om_costs()
             # print('    - Salvage value')
             # self.extract_salvage()
+
         print('Done')
 
     # TODO: check if this function is still needed
@@ -1874,7 +1880,7 @@ class OnStove(DataProcessor):
         columns_dict['max_benefit_tech'] = 'first'
         return columns_dict
 
-    def maximum_net_benefit(self, techs: list['Technology'], restriction: bool = True):
+    def maximum_net_benefit(self, techs: list['Technology'], mask, restriction: bool = True):
         """Extracts the technology or technology combinations producing the highest net-benefit in each cell.
 
         It saves the technology with highest net-benefit in the ``max_benefi_tech`` column of the :attr:`gdf`
@@ -1893,80 +1899,92 @@ class OnStove(DataProcessor):
         --------
         run
         """
+        # TODO: Change this to a while loop that checks the sum of number of households supplied against the total hhs
         net_benefit_cols = [col for col in self.gdf if 'net_benefit_' in col]
         benefits_cols = [col for col in self.gdf if 'benefits_' in col]
 
         for benefit, net in zip(benefits_cols, net_benefit_cols):
-            self.gdf[net + '_temp'] = self.gdf[net]
+            self.gdf.loc[mask, net + '_temp'] = self.gdf.loc[mask, net]
             if restriction in [True, 'yes', 'y', 'Y', 'Yes', 'PositiveBenefits', 'Positive_Benefits']:
-                self.gdf.loc[self.gdf[benefit] < 0, net + '_temp'] = np.nan
+                self.gdf.loc[(self.gdf["year"] == self.year) & (self.gdf[benefit] < 0), net + '_temp'] = np.nan
 
         temps = [col for col in self.gdf if '_temp' in col]
-        self.gdf["max_benefit_tech"] = self.gdf[temps].idxmax(axis=1).astype('string')
+        self.gdf.loc[mask, "max_benefit_tech"] = self.gdf.loc[mask, temps].idxmax(axis=1).astype('string')
 
-        self.gdf['max_benefit_tech'] = self.gdf['max_benefit_tech'].str.replace("net_benefit_", "")
-        self.gdf['max_benefit_tech'] = self.gdf['max_benefit_tech'].str.replace("_temp", "")
-        self.gdf["maximum_net_benefit"] = self.gdf[temps].max(axis=1)
+        self.gdf.loc[mask, 'max_benefit_tech'] = self.gdf.loc[mask, 'max_benefit_tech'].str.replace("net_benefit_", "")
+        self.gdf.loc[mask, 'max_benefit_tech'] = self.gdf.loc[mask, 'max_benefit_tech'].str.replace("_temp", "")
+        self.gdf.loc[mask, "maximum_net_benefit"] = self.gdf.loc[mask, temps].max(axis=1)
 
         gdf = gpd.GeoDataFrame()
-        # gdf = gdf.astype(dtype=gdf.dtypes.to_dict())
         gdf_copy = self.gdf.copy()
-        # TODO: Change this to a while loop that checks the sum of number of households supplied against the total hhs
-        for tech in techs:
-            # replace gdf_copy["households_init"] with households in each year
-            current = (tech.households < gdf_copy["households_init"]) & \
-                      (gdf_copy["max_benefit_tech"] == tech.name)
-            dff = gdf_copy.loc[current].copy()
-            if current.sum() > 0:
+        masky = mask[mask].index
 
-                dff.loc[current, f'net_benefit_{tech.name}_temp'] = np.nan
+        for tech in techs:
+            current = (tech.households.loc[masky] < gdf_copy["Households"].loc[masky]) & \
+                      (gdf_copy["max_benefit_tech"] == tech.name) & (gdf_copy["year"] == self.year)
+            dff = gdf_copy.loc[current[current].index].copy()
+
+            if current.sum() > 0:
+                dff.loc[current[current].index, f'net_benefit_{tech.name}_temp'] = np.nan
 
                 second_benefit_cols = temps.copy()
                 second_benefit_cols.remove(f'net_benefit_{tech.name}_temp')
-                second_best = dff.loc[current, second_benefit_cols].idxmax(axis=1)
+                second_best = dff.loc[current[current].index, second_benefit_cols].idxmax(axis=1)
 
                 second_best.replace(np.nan, 'NaN', inplace=True)
                 second_best = second_best.str.replace("net_benefit_", "")
                 second_best = second_best.str.replace("_temp", "")
                 second_best.replace('NaN', np.nan, inplace=True)
 
-                second_tech_net_benefit = dff.loc[current, second_benefit_cols].max(axis=1)
+                second_tech_net_benefit = dff.loc[current[current].index, second_benefit_cols].max(axis=1)
 
-                elec_factor = dff['Elec_pop_calib'] / dff['pop_end_year']
                 dff['max_benefit_tech'] = second_best
                 dff['maximum_net_benefit'] = second_tech_net_benefit
-                dff['pop_end_year'] *= (1 - tech.factor.loc[current])
-                dff["households_init"] *= (1 - tech.factor.loc[current])
 
-                self.gdf.loc[current, 'pop_end_year'] *= tech.factor.loc[current]
-                self.gdf.loc[current, "households_init"] *= tech.factor.loc[current]
+                dff['Pop'] *= (1 - tech.factor.loc[current[current].index])
+                dff["Households"] *= (1 - tech.factor.loc[current[current].index])
+
+                self.gdf.loc[current[current].index, 'Pop'] *= tech.factor.loc[current[current].index]
+                self.gdf.loc[current[current].index, "Households"] *= tech.factor.loc[current[current].index]
+
                 if tech.name == 'Electricity':
                     dff['Elec_pop_calib'] *= 0
-                else:
-                    self.gdf.loc[current, 'Elec_pop_calib'] = self.gdf.loc[current, 'pop_end_year'] * elec_factor
-                    dff['Elec_pop_calib'] = dff['pop_end_year'] * elec_factor
+
                 gdf = pd.concat([gdf, dff])
 
-        print(self.gdf.shape)
-        print(gdf.shape)
         self.gdf = pd.concat([self.gdf, gdf])
-        print(self.gdf.shape)
+
         for net in net_benefit_cols:
-            self.gdf[net + '_temp'] = self.gdf[net]
+            self.gdf.loc[masky, net + '_temp'] = self.gdf.loc[masky, net]
 
         temps = [col for col in self.gdf if 'temp' in col]
 
-        for tech in self.gdf["max_benefit_tech"].unique():
-            index = self.gdf.loc[self.gdf['max_benefit_tech'] == tech].index
+        for tech in self.gdf.loc[masky, "max_benefit_tech"].unique():
+            index = self.gdf[(self.gdf["year"] == self.year) & (self.gdf['max_benefit_tech'] == tech)].index
             self.gdf.loc[index, f'net_benefit_{tech}_temp'] = np.nan
 
         isna = self.gdf["max_benefit_tech"].isna()
-        if isna.sum() > 0:
-            self.gdf.loc[isna, 'max_benefit_tech'] = self.gdf.loc[isna, temps].idxmax(axis=1).astype(str)
+        if ((self.gdf["year"] == self.year) & isna).sum() > 0:
+            self.gdf.loc[(self.gdf["year"] == self.year) & isna, 'max_benefit_tech'] = self.gdf.loc[
+                (self.gdf["year"] == self.year) & isna, temps].idxmax(axis=1).astype(str)
+            self.gdf.loc[(self.gdf["year"] == self.year) & isna, "maximum_net_benefit"] = self.gdf.loc[
+                (self.gdf["year"] == self.year) & isna, temps].max(axis=1)
 
-        self.gdf['max_benefit_tech'] = self.gdf['max_benefit_tech'].str.replace("net_benefit_", "")
-        self.gdf['max_benefit_tech'] = self.gdf['max_benefit_tech'].str.replace("_temp", "")
-        self.gdf.loc[isna, "maximum_net_benefit"] = self.gdf.loc[isna, temps].max(axis=1)
+        self.gdf.loc[(self.gdf["year"] == self.year), 'max_benefit_tech'] = self.gdf.loc[
+            (self.gdf["year"] == self.year), 'max_benefit_tech'].str.replace("net_benefit_", "")
+        self.gdf.loc[(self.gdf["year"] == self.year), 'max_benefit_tech'] = self.gdf.loc[
+            (self.gdf["year"] == self.year), 'max_benefit_tech'].str.replace("_temp", "")
+
+
+        lst = ["carbon", "paf_alri", "paf_copd", "paf_lc", "paf_stroke", "paf_ihd", "tech_life", "inv_cost",
+                "discounted_salvage_cost", "discounted_om_costs", "discounted_investments", "discounted_fuel_cost",
+                "total_time_yr"]
+
+        # dup_index = self.gdf.loc[masky].index[self.gdf.loc[masky].index.duplicated()]
+        #
+        # for param in lst:
+        #     duplicated_rows = self.base_fuel[param].loc[dup_index]
+        #     self.base_fuel[param] = pd.concat([self.base_fuel[param], duplicated_rows], ignore_index = False, verify_integrity=False)
 
     # TODO: check if we need this method
     def _add_admin_names(self, admin, column_name):
