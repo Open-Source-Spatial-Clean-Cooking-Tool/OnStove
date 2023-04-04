@@ -464,7 +464,7 @@ class Technology:
                 pop, house, pop_increase = model.yearly_pop(model.specs["start_year"])
                 rate = model.specs[f'{parameter}_{disease}']
                 paf = f'paf_{disease.lower()}'
-                mor[disease] = pop * (self[paf]) * (rate / 100000)
+                mor[disease] = (pop * (self[paf]) * (rate / 100000))/house
                 cases = np.zeros((len(mask), model.specs["end_year"] - model.specs["start_year"]))
                 costs = np.zeros((len(mask), model.specs["end_year"] - model.specs["start_year"]))
                 while i < model.specs["end_year"]:
@@ -1290,8 +1290,7 @@ class LPG(Technology):
 
         salvage = self.infrastructure_salvage(model, cost, mask)
 
-        self.discounted_infra_cost.loc[start_year] = costs_discounted[mask] - salvage.loc[
-            start_year]
+        self.discounted_infra_cost.loc[start_year] = costs_discounted[mask] - salvage[mask]
 
     def infrastructure_salvage(self, model: 'onstove.OnStove', cost: float, mask: pd.Series):
         """Calculates the salvaged cylinder cost. The function calls ``discount_factor``.
