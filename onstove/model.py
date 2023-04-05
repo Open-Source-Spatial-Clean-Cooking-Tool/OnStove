@@ -1937,7 +1937,7 @@ class OnStove(DataProcessor):
             return df
 
     def _points_to_raster(self, dff, variable, cell_width=1000, cell_height=1000,
-                          dtype=rasterio.uint8, nodata=111):
+                          dtype=rasterio.uint8, nodata=0):
         bounds = self.mask_layer.bounds
         height, width = RasterLayer.shape_from_cell(bounds, cell_height, cell_width)
         transform = rasterio.transform.from_bounds(*bounds, width, height)
@@ -1989,7 +1989,8 @@ class OnStove(DataProcessor):
 
     def create_layer(self, variable: str, name: Optional[str] = None,
                      labels: Optional[dict[str, str]] = None, cmap: Optional[dict[str, str]] = None,
-                     metric: str = 'mean') -> tuple[RasterLayer, dict[int, str], dict[int, str]]:
+                     metric: str = 'mean', 
+                     nodata: Optional[Union[float, int]] = None) -> tuple[RasterLayer, dict[int, str], dict[int, str]]:
         """Creates a :class:`RasterLayer` from a column of the main GeoDataFrame (:attr:`gdf`).
 
         If the data is categorical, then a rasterized version of the data is created, using integers in asscending
@@ -2069,7 +2070,6 @@ class OnStove(DataProcessor):
         codes = None
         if self.base_layer is not None:
             layer = np.empty(self.base_layer.data.shape)
-            layer[:] = np.nan
             dff = self.gdf.copy().reset_index(drop=False)
         else:
             layer = None
@@ -2083,17 +2083,27 @@ class OnStove(DataProcessor):
             dff[variable] = [s[0:len(s) - 5] for s in dff[variable]]
             if isinstance(labels, dict):
                 dff = self._re_name(dff, labels, variable)
-            codes = {tech: i for i, tech in enumerate(dff[variable].unique())}
-
             if isinstance(cmap, dict):
-                cmap = {i: cmap[tech] for i, tech in enumerate(dff[variable].unique())}
+                # _codes = {tech: i for i, tech in enumerate(dff[variable].unique())}
+                _codes = {tech: i + 1 for i, tech in enumerate(cmap.keys())}
+                codes = {tech: _codes[tech] for tech in dff[variable].unique()}
+                codes = dict(sorted(codes.items(), key=lambda item: item[1]))
+                # cmap = {_codes[tech]: cmap[tech] for tech in cmap.keys()}
+                cmap = {codes[tech]: cmap[tech] for tech in dff[variable].unique()}
+                cmap = dict(sorted(cmap.items()))
+            else:
+                codes = {tech: i for i, tech in enumerate(dff[variable].unique())}
 
             if self.rows is not None:
+                if nodata is None:
+                    nodata = 0
+                layer[:] = nodata
                 layer[self.rows, self.cols] = [codes[tech] for tech in dff[variable]]
                 meta = self.base_layer.meta
+                meta.update(nodata=nodata, dtype='uint16')
             else:
                 dff['codes'] = [codes[tech] for tech in dff[variable]]
-                layer, meta = self._points_to_raster(dff, 'codes')
+                layer, meta = self._points_to_raster(dff, 'codes', dtype='uint16', nodata=nodata)
         else:
             if metric == 'total':
                 dff[variable] = dff[variable] * dff['Households']
@@ -2111,8 +2121,12 @@ class OnStove(DataProcessor):
             else:
                 dff = dff.groupby('index').agg({variable: metric, 'geometry': 'first'})
             if self.rows is not None:
+                if nodata is None:
+                    nodata = 0
+                layer[:] = nodata
                 layer[self.rows, self.cols] = dff[variable]
                 meta = self.base_layer.meta
+                meta.update(nodata=nodata, dtype='float32')
             else:
                 layer, meta = self._points_to_raster(dff, variable, dtype='float32',
                                                      nodata=np.nan)
