@@ -1159,11 +1159,10 @@ class OnStove(DataProcessor):
                 base_fuel.time += tech.discounted_time_value * tech.pop_sqkm
                 base_fuel.total_time_yr += tech.total_time_yr * tech.pop_sqkm
 
-                base_fuel.benefits += base_fuel.time + base_fuel.discounted_carbon_costs + base_fuel.mort + base_fuel.morb
-
                 for paf in ['paf_alri', 'paf_copd', 'paf_ihd', 'paf_lc', 'paf_stroke']:
                     base_fuel[paf] += tech[paf] * tech.pop_sqkm
 
+            base_fuel.benefits = base_fuel.time + base_fuel.discounted_carbon_costs + base_fuel.mort + base_fuel.morb
             self.gdf["baseline_benefits"] = base_fuel.benefits
             self.gdf["baseline_costs"] = base_fuel.costs
             self.base_fuel = base_fuel
@@ -1372,11 +1371,12 @@ class OnStove(DataProcessor):
         calibration_factor_r = (self.specs["population_start_year"] * (1-self.specs["urban_start"]))/total_rural_pop
 
         self.gdf["pop_init_year"] = 0
-        self.gdf.loc[~isurban, "pop_init_year"] = self.gdf.loc[~isurban,"Pop"] * calibration_factor_r
+        self.gdf.loc[~isurban, "pop_init_year"] = self.gdf.loc[~isurban, "Pop"] * calibration_factor_r
         self.gdf.loc[isurban, "pop_init_year"] = self.gdf.loc[isurban, "Pop"] * calibration_factor_u
 
         self.gdf.loc[~isurban, 'households_init'] = self.gdf.loc[~isurban, 'pop_init_year'] / self.specs["rural_hh_size"]
         self.gdf.loc[isurban, 'households_init'] = self.gdf.loc[isurban, 'pop_init_year'] / self.specs["urban_hh_size"]
+        self.gdf["Pop"] = self.gdf["pop_init_year"]
 
     def yearly_pop(self, year):
 
@@ -1753,7 +1753,7 @@ class OnStove(DataProcessor):
         self.gdf['value_of_time'] = norm_layer * self.specs[
             'minimum_wage'] / 30 / 8  # convert $/months to $/h (8 working hours per day)
 
-    def run(self, technologies: Union[list[str], str] = 'all', restriction: bool = True, progression: str = "urban"):
+    def run(self, technologies: Union[list[str], str] = 'all', restriction: bool = True):
         """Runs the model using the defined ``technologies`` as options to cook with.
 
         It loops through the ``technologies`` and calculates all costs, benefit and the net-benefit of cooking with
@@ -1809,68 +1809,68 @@ class OnStove(DataProcessor):
         else:
              raise ValueError("technologies must be 'all' or a list of strings with the technology names to run.")
 
-        self.progression(method='benefits')
-        # Based on wealth index, minimum wage and a lower an upper range for cost of opportunity
-        print(f'[{self.specs["country_name"]}] Getting value of time')
-        self.get_value_of_time()
-        # Loop through each technology and calculate all benefits and costs
-        years = self.gdf["year"].copy()
-        for year in self.years:
-            self.year = year
-            mask = years == year
-            pop, house, increase = self.yearly_pop(self.year)
-            self.gdf["Pop"] = pop
-            # TODO: make sure that self.gdf["Households"] is used everywhere in the runs, "increase" needs to be an input
-            self.gdf["Households"] = house
-
-            for tech in techs:
-                print(f'Calculating health benefits for {tech.name}...')
-
-                if not tech.is_base:
-                    tech.adjusted_pm25()
-
-                tech.morbidity(self, mask, 'morb', True)
-                tech.mortality(self, mask, 'mort', True)
-                print(f'Calculating carbon emissions benefits for {tech.name}...')
-                tech.carbon_emissions(self, mask, True)
-                print(f'Calculating time saved benefits for {tech.name}...')
-                tech.time_saved(self, mask, True)
-                print(f'Calculating costs for {tech.name}...')
-                tech.required_energy(self)
-                tech.discounted_om(self, mask, relative = True)
-                tech.discounted_inv(self, mask, relative = True)
-                tech.discount_fuel_cost(self, mask, relative = True)
-                tech.salvage(self, mask, relative = True)
-                print(f'Calculating net benefit for {tech.name}...\n')
-                tech.net_benefit(self, mask)
-
-            print('Getting maximum net benefit technologies...')
-            self.maximum_net_benefit(techs, mask, restriction=restriction)
-            self.gdf = self.gdf.filter(regex='^(?!.*temp).*')
-
-            print('Extracting indicators...')
-            print('    - Deaths avoided')
-            self.extract_lives_saved(yearly=False)
-            print('    - Health costs')
-            self.extract_health_costs_saved(yearly=False)
-            print('    - Time saved')
-            self.extract_time_saved(yearly=False)
-            print('    - Opportunity cost')
-            self.extract_opportunity_cost(yearly=False)
-            print('    - Avoided emissions')
-            self.extract_reduced_emissions(yearly=False)
-            print('    - Avoided emissions costs')
-            self.extract_emissions_costs_saved(yearly=False)
-            print('    - Investment costs')
-            self.extract_investment_costs(yearly=False)
-            print('    - Fuel costs')
-            self.extract_fuel_costs(yearly=False)
-            print('    - OM costs')
-            self.extract_om_costs(yearly=False)
-            print('    - Salvage value')
-            self.extract_salvage(yearly=False)
-
-        print('Done')
+        # self.progression(method='benefits')
+        # # Based on wealth index, minimum wage and a lower an upper range for cost of opportunity
+        # print(f'[{self.specs["country_name"]}] Getting value of time')
+        # self.get_value_of_time()
+        # # Loop through each technology and calculate all benefits and costs
+        # years = self.gdf["year"].copy()
+        # for year in self.years:
+        #     self.year = year
+        #     mask = years == year
+        #     pop, house, increase = self.yearly_pop(self.year)
+        #     self.gdf["Pop"] = pop
+        #     # TODO: make sure that self.gdf["Households"] is used everywhere in the runs, "increase" needs to be an input
+        #     self.gdf["Households"] = house
+        #
+        #     for tech in techs:
+        #         print(f'Calculating health benefits for {tech.name}...')
+        #
+        #         if not tech.is_base:
+        #             tech.adjusted_pm25()
+        #
+        #         tech.morbidity(self, mask, 'morb', True)
+        #         tech.mortality(self, mask, 'mort', True)
+        #         print(f'Calculating carbon emissions benefits for {tech.name}...')
+        #         tech.carbon_emissions(self, mask, True)
+        #         print(f'Calculating time saved benefits for {tech.name}...')
+        #         tech.time_saved(self, mask, True)
+        #         print(f'Calculating costs for {tech.name}...')
+        #         tech.required_energy(self)
+        #         tech.discounted_om(self, mask, relative = True)
+        #         tech.discounted_inv(self, mask, relative = True)
+        #         tech.discount_fuel_cost(self, mask, relative = True)
+        #         tech.salvage(self, mask, relative = True)
+        #         print(f'Calculating net benefit for {tech.name}...\n')
+        #         tech.net_benefit(self, mask)
+        #
+        #     print('Getting maximum net benefit technologies...')
+        #     self.maximum_net_benefit(techs, mask, restriction=restriction)
+        #     self.gdf = self.gdf.filter(regex='^(?!.*temp).*')
+        #
+        #     print('Extracting indicators...')
+        #     print('    - Deaths avoided')
+        #     self.extract_lives_saved(yearly=False)
+        #     print('    - Health costs')
+        #     self.extract_health_costs_saved(yearly=False)
+        #     print('    - Time saved')
+        #     self.extract_time_saved(yearly=False)
+        #     print('    - Opportunity cost')
+        #     self.extract_opportunity_cost(yearly=False)
+        #     print('    - Avoided emissions')
+        #     self.extract_reduced_emissions(yearly=False)
+        #     print('    - Avoided emissions costs')
+        #     self.extract_emissions_costs_saved(yearly=False)
+        #     print('    - Investment costs')
+        #     self.extract_investment_costs(yearly=False)
+        #     print('    - Fuel costs')
+        #     self.extract_fuel_costs(yearly=False)
+        #     print('    - OM costs')
+        #     self.extract_om_costs(yearly=False)
+        #     print('    - Salvage value')
+        #     self.extract_salvage(yearly=False)
+        #
+        # print('Done')
 
     # TODO: check if this function is still needed
     def _get_column_functs(self):

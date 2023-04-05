@@ -230,6 +230,7 @@ class Technology:
             The Population Attributable Fraction for each disease
         """
         paf = (sfu * (rr - 1)) / (sfu * (rr - 1) + 1)
+
         return paf
 
     @staticmethod
@@ -428,8 +429,8 @@ class Technology:
                 paf = f'paf_{disease.lower()}'
                 pop, house, pop_increase = model.yearly_pop(model.year)
                 mor[disease] = pd.Series(0, index=mask.index)
-                mor[disease].loc[start_year] = pop.loc[start_year] * (model.base_fuel[paf].loc[start_year] - self[paf].loc[start_year]) * (
-                        rate / 100000)
+                mor[disease].loc[start_year] = (pop.loc[start_year] * (model.base_fuel[paf].loc[start_year] - self[paf].loc[start_year]) * (
+                        rate / 100000))/house.loc[start_year]
                 cases = np.zeros((len(mask), model.specs["end_year"] - model.specs["start_year"]))
                 costs = np.zeros((len(mask), model.specs["end_year"] - model.specs["start_year"]))
 
@@ -2363,7 +2364,8 @@ class Biogas(Technology):
             model.raster_to_dataframe(self.temperature, name="Temperature", method='read',
                                       fill_nodata_method='interpolate')
             model.gdf.loc[model.gdf["Temperature"] < 10, "available_biogas"] = 0
-            model.gdf.loc[(model.gdf["IsUrban"] > 20), "available_biogas"] = 0
+
+        model.gdf.loc[(model.gdf["IsUrban"] > 20), "available_biogas"] = 0
 
         # Water availability restriction
         if (self.water is not None) and ('Water' not in model.gdf.columns):
