@@ -76,6 +76,7 @@ class Technology:
                  energy_content: float = 0,
                  tech_life: int = 0,
                  inv_cost: float = 0,
+                 inv_change: float = 1,
                  fuel_cost: float = 0,
                  time_of_cooking: float = 0,
                  om_cost: float = 0,
@@ -100,6 +101,7 @@ class Technology:
         self.tech_life = tech_life
         self.fuel_cost = fuel_cost
         self.inv_cost = inv_cost
+        self.inv_change = inv_change
         self.om_cost = om_cost
         self.time_of_cooking = time_of_cooking
         self.efficiency = efficiency
@@ -751,7 +753,7 @@ class Technology:
             self.tech_life = round(self.tech_life)
             for j in range(self.tech_life, proj_life, self.tech_life):
                 if j + model.year - model.specs["start_year"] - 1 < proj_life:
-                    proj_years[mask, j + model.year - model.specs["start_year"] - 1] = 1
+                    proj_years[mask, j + model.year - model.specs["start_year"] - 1] = 1*self.inv_change**j
 
             investments = proj_years * np.array(inv)[:, None]
 
@@ -784,7 +786,7 @@ class Technology:
             self.tech_life = round(self.tech_life)
             for j in range(self.tech_life, proj_life, self.tech_life):
                 if j < proj_life:
-                    proj_years[:, j] = 1
+                    proj_years[:, j] = 1*self.inv_change**j
 
             investments = proj_years * np.array(inv)[:, None]
 
