@@ -788,8 +788,8 @@ class OnStove(DataProcessor):
         self.clean_cooking_access_r = None
         self.electrified_weight = None
 
-        self.specs = {'start_year': 2020, 'inter_year': None,'end_year': 2021,
-                      'inter_year_target': None, 'end_year_target': 1.0, 'meals_per_day': 3.0, 'infra_weight': 1.0,
+        self.specs = {'start_year': 2020, 'end_year': 2021, 'end_year_target': 1.0,
+                      'meals_per_day': 3.0, 'infra_weight': 1.0,
                       'ntl_weight': 1.0, 'pop_weight': 1.0,'discount_rate': 0.03,
                       'health_spillover_parameter': 0.112,
                       'w_costs': 1.0, 'w_environment': 1.0, 'w_health': 1.0,
@@ -1437,17 +1437,6 @@ class OnStove(DataProcessor):
             self.gdf["pop_end_year"] = self.gdf["pop_init_year"]
             self.gdf["households_end"] = self.gdf["households_init"]
 
-        #TODO: do we need this?
-        if self.specs["inter_year"] is not None:
-            if self.specs['inter_year'] < self.specs['start_year']:
-                raise ValueError("The intermediate year needs to come after the start year.")
-            elif self.specs['inter_year'] > self.specs['end_year']:
-                raise ValueError("The intermediate year needs to come before the end year.")
-            else:
-                self.gdf['pop_inter_year'], self.gdf['households_inter'], pop_increase\
-                    = self.yearly_pop(self.specs["inter_year"])
-    
-
     def distance_to_electricity(self, hv_lines: VectorLayer = None, mv_lines: VectorLayer = None,
                                 transformers: VectorLayer = None):
         """ Calculates the distance to electricity infrastructure.
@@ -1727,14 +1716,6 @@ class OnStove(DataProcessor):
         self.gdf.loc[self.gdf["IsUrban"] > 20, 'households_end'] = self.gdf.loc[
                                                                    self.gdf["IsUrban"] > 20, 'pop_end_year'] / \
                                                                self.specs["urban_hh_size"]
-        
-        if 'pop_inter_year' in self.gdf.columns:
-            self.gdf.loc[self.gdf["IsUrban"] < 20, 'households_inter'] = self.gdf.loc[
-                                                                       self.gdf["IsUrban"] < 20, 'pop_inter_year'] / \
-                                                                   self.specs["rural_hh_size"]
-            self.gdf.loc[self.gdf["IsUrban"] > 20, 'households_inter'] = self.gdf.loc[
-                                                                       self.gdf["IsUrban"] > 20, 'pop_inter_year'] / \
-                                                                   self.specs["urban_hh_size"]
 
     def get_value_of_time(self):
         """
