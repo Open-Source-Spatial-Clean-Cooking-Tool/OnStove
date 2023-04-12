@@ -1850,10 +1850,8 @@ class OnStove(DataProcessor):
             self.extract_fuel_costs(yearly=True)
             print('    - OM costs')
             self.extract_om_costs(yearly=True)
-            print('    - Salvage value')
-            self.extract_salvage(yearly=True)
 
-        print('Extracting indicators over the entire preiod')
+        print('Extracting indicators over the entire period')
         print('    - Deaths avoided')
         self.extract_lives_saved(yearly=False)
         print('    - Health costs')
@@ -2103,8 +2101,15 @@ class OnStove(DataProcessor):
         """
         Extracts the total investment costs needed in order to adopt each stove type across the study area.
         """
+        s = pd.Series(0, index=self.gdf.index)
+        setattr(self, f"investment_costs_{self.year}", s)
         if yearly:
-            pass
+            for tech in self.gdf.loc[self.gdf["year"] == self.year, 'max_benefit_tech'].unique():
+                is_tech = ((self.gdf['max_benefit_tech'] == tech) & (self.gdf['year'] == self.year))
+                index = self.gdf.loc[is_tech].index
+                column_name = f"investment_costs_{self.year}"
+                column_value = getattr(self, column_name)
+                column_value.loc[is_tech] = self.techs[tech].discounted_investments[index]
         else:
             for tech in self.gdf['max_benefit_tech'].unique():
                 is_tech = self.gdf['max_benefit_tech'] == tech
@@ -2115,8 +2120,15 @@ class OnStove(DataProcessor):
         """
         Extracts the total operation and maintenance costs needed in order to adopt each stove type across the study area.
         """
+        s = pd.Series(0, index=self.gdf.index)
+        setattr(self, f"om_costs_{self.year}", s)
         if yearly:
-            pass
+            for tech in self.gdf.loc[self.gdf["year"] == self.year, 'max_benefit_tech'].unique():
+                is_tech = ((self.gdf['max_benefit_tech'] == tech) & (self.gdf['year'] == self.year))
+                index = self.gdf.loc[is_tech].index
+                column_name = f"om_costs_{self.year}"
+                column_value = getattr(self, column_name)
+                column_value.loc[is_tech] = self.techs[tech].discounted_om_costs[index]
         else:
             for tech in self.gdf['max_benefit_tech'].unique():
                 is_tech = self.gdf['max_benefit_tech'] == tech
@@ -2127,8 +2139,15 @@ class OnStove(DataProcessor):
         """
         Extracts the total fuel costs needed in order to adopt each stove type across the study area.
         """
+        s = pd.Series(0, index=self.gdf.index)
+        setattr(self, f"fuel_costs_{self.year}", s)
         if yearly:
-            pass
+            for tech in self.gdf.loc[self.gdf["year"] == self.year, 'max_benefit_tech'].unique():
+                is_tech = ((self.gdf['max_benefit_tech'] == tech) & (self.gdf['year'] == self.year))
+                index = self.gdf.loc[is_tech].index
+                column_name = f"fuel_costs_{self.year}"
+                column_value = getattr(self, column_name)
+                column_value.loc[is_tech] = self.techs[tech].discounted_fuel_cost[index]
         else:
             for tech in self.gdf['max_benefit_tech'].unique():
                 is_tech = self.gdf['max_benefit_tech'] == tech

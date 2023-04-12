@@ -748,6 +748,7 @@ class Technology:
             model.base_fuel.tech_life = round(model.base_fuel.tech_life).astype(int)
 
             proj_years[mask, model.year - model.specs["start_year"] - 1] = 1
+            self.tech_life = round(self.tech_life)
             for j in range(self.tech_life, proj_life, self.tech_life):
                 if j + model.year - model.specs["start_year"] - 1 < proj_life:
                     proj_years[mask, j + model.year - model.specs["start_year"] - 1] = 1
@@ -780,6 +781,7 @@ class Technology:
                                                                - model.base_fuel.discounted_investments.loc[start_year]
         else:
             proj_years[:, 0] = 1
+            self.tech_life = round(self.tech_life)
             for j in range(self.tech_life, proj_life, self.tech_life):
                 if j < proj_life:
                     proj_years[:, j] = 1
