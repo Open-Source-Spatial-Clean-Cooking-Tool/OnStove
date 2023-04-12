@@ -39,6 +39,7 @@ from plotnine import (
     after_stat,
     facet_wrap,
     geom_histogram,
+    geom_boxplot,
     facet_grid
 )
 
@@ -2677,10 +2678,10 @@ class OnStove(DataProcessor):
 
         texts_vbox = VPacker(children=[deaths, health, emissions, time], pad=0, sep=6)
 
-        deaths_avoided = summary.loc['total', 'deaths_avoided']
-        health_costs_avoided = summary.loc['total', 'health_costs_avoided'] / 1000
-        reduced_emissions = summary.loc['total', 'reduced_emissions']
-        time_saved = summary.loc['total', 'time_saved']
+        deaths_avoided = summary.loc['Total', 'deaths_avoided']
+        health_costs_avoided = summary.loc['Total', 'health_costs_avoided'] / 1000
+        reduced_emissions = summary.loc['Total', 'reduced_emissions']
+        time_saved = summary.loc['Total', 'time_saved']
 
         deaths = TextArea(f"{deaths_avoided:,.0f} pp/yr", textprops=dict(fontsize=fontsize, color='black'))
         health = TextArea(f"{health_costs_avoided:,.2f} BUSD", textprops=dict(fontsize=fontsize, color='black'))
@@ -2734,8 +2735,8 @@ class OnStove(DataProcessor):
                           'opportunity_cost_gained', 'reduced_emissions', 'emissions_costs_saved',
                           'investment_costs', 'fuel_costs', 'om_costs', 'salvage_value']:
             dff[attribute] *= dff["households_init"]
-        summary = dff.groupby(['max_benefit_tech']).agg({'pop_end_year': lambda row: np.nansum(row) / 1000000,
-                                                         "households_init": lambda row: np.nansum(row) / 1000000,
+        summary = dff.groupby(['max_benefit_tech']).agg({'Pop': lambda row: np.nansum(row) / 1000000,
+                                                         "Households": lambda row: np.nansum(row) / 1000000,
                                                          'maximum_net_benefit': lambda row: np.nansum(row) / 1000000,
                                                          'deaths_avoided': 'sum',
                                                          'health_costs_avoided': lambda row: np.nansum(row) / 1000000,
@@ -2750,15 +2751,15 @@ class OnStove(DataProcessor):
                                                          'salvage_value': lambda row: np.nansum(row) / 1000000,
                                                          }).reset_index()
         if total:
-            total = summary[summary.columns[1:]].sum().rename('total')
-            total['max_benefit_tech'] = 'total'
+            total = summary[summary.columns[1:]].sum().rename('Total')
+            total['max_benefit_tech'] = 'Total'
             summary = pd.concat([summary, total.to_frame().T])
 
-        summary['time_saved'] /= (summary["households_init"] * 1000000 * 365)
+        summary['time_saved'] /= (summary["Households"] * 1000000 * 365)
         if pretty:
             summary.rename(columns={'max_benefit_tech': 'Max benefit technology',
-                                    'pop_end_year': 'Population (Million)',
-                                    "households_init": 'Households (Millions)',
+                                    'Pop': 'Population (Million)',
+                                    "Households": 'Households (Millions)',
                                     'maximum_net_benefit': 'Total net benefit (MUSD)',
                                     'deaths_avoided': 'Total deaths avoided (pp/yr)',
                                     'health_costs_avoided': 'Health costs avoided (MUSD)',
@@ -2775,7 +2776,7 @@ class OnStove(DataProcessor):
 
     def plot_split(self, labels: Optional[dict[str, str]] = None,
                    cmap: Optional[dict[str, str]] = None,
-                   x_variable: str = 'pop_end_year',
+                   x_variable: str = 'Pop',
                    height: float = 1.5, width: float = 2.5,
                    save_as: Optional[bool] = None) -> 'matplotlib.Figure':
         """Displays a bar plot with the population or households share using the technologies with highest net-benefits
@@ -2810,8 +2811,8 @@ class OnStove(DataProcessor):
                ...         'Charcoal ICS': '#d4bdc5',
                ...         'Biogas': '#73AF48'}
 
-        x_variable: str, default 'pop_end_year'
-            The variable to use in the x axis. Two options are available ``pop_end_year`` and ``Households``.
+        x_variable: str, default 'Pop'
+            The variable to use in the x axis. Two options are available ``Pop`` and ``Households``.
         height: float, default 1.5
             The heihg of the figure in inches.
         width: float, default 2.5
@@ -2827,7 +2828,7 @@ class OnStove(DataProcessor):
         """
         df = self.summary(total=False, pretty=False, labels=labels)
 
-        variables = {'pop_end_year': 'Population (Millions)', "households_init": 'Households (Millions)'}
+        variables = {'Pop': 'Population (Millions)', "Households": 'Households (Millions)'}
 
         tech_list = df.sort_values(x_variable)['max_benefit_tech'].tolist()
         ccolor = 'black'
@@ -2917,7 +2918,7 @@ class OnStove(DataProcessor):
                     'Fuel costs': '#f1a340', 'Emissions costs saved': '#998ec3',
                     'Om costs': '#fee0b6', 'Opportunity cost gained': '#d8daeb'}
 
-        tech_list = df.sort_values('pop_end_year')['max_benefit_tech'].tolist()
+        tech_list = df.sort_values('Pop')['max_benefit_tech'].tolist()
         cat_order = ['Health costs avoided',
                      'Emissions costs saved',
                      'Opportunity cost gained',
@@ -3196,12 +3197,12 @@ class OnStove(DataProcessor):
                                                                         'investment_costs',
                                                                         'fuel_costs',
                                                                         'om_costs',
-                                                                        "households_init",
-                                                                        'pop_end_year']].sum()
+                                                                        "Households",
+                                                                        'Pop']].sum()
                 df.reset_index(inplace=True)
                 df = self._re_name(df, labels, 'max_benefit_tech')
-                tech_list = df.groupby('max_benefit_tech')[['pop_end_year']].sum()
-                tech_list = tech_list.reset_index().sort_values('pop_end_year')['max_benefit_tech'].tolist()
+                tech_list = df.groupby('max_benefit_tech')[['Pop']].sum()
+                tech_list = tech_list.reset_index().sort_values('Pop')['max_benefit_tech'].tolist()
                 x = 'max_benefit_tech'
             elif groupby.lower() == 'urban-rural':
                 df = self.gdf.copy()
@@ -3213,8 +3214,8 @@ class OnStove(DataProcessor):
                 if best_mix:
                     df = self.gdf.copy()
                     df = self._re_name(df, labels, 'max_benefit_tech')
-                    tech_list = df.groupby('max_benefit_tech')[['pop_end_year']].sum()
-                    tech_list = tech_list.reset_index().sort_values('pop_end_year')['max_benefit_tech'].tolist()
+                    tech_list = df.groupby('max_benefit_tech')[['Pop']].sum()
+                    tech_list = tech_list.reset_index().sort_values('Pop')['max_benefit_tech'].tolist()
                     x = 'max_benefit_tech'
                     if variable == 'net_benefit':
                         # y = '(health_costs_avoided + opportunity_cost_gained + emissions_costs_saved + salvage_value' + \
@@ -3274,19 +3275,19 @@ class OnStove(DataProcessor):
                                                                     'investment_costs',
                                                                     'fuel_costs',
                                                                     'om_costs',
-                                                                    "households_init",
-                                                                    'pop_end_year']].sum()
+                                                                    "Households",
+                                                                    'Pop']].sum()
             df.reset_index(inplace=True)
 
         if best_mix:
-            df = self.gdf[['max_benefit_tech', 'Calibrated_pop', 'Households', 'maximum_net_benefit',
+            df = self.gdf[['max_benefit_tech', 'Pop', 'Households', 'maximum_net_benefit',
                            'health_costs_avoided', 'opportunity_cost_gained', 'emissions_costs_saved',
                            'investment_costs', 'salvage_value', 'fuel_costs', 'om_costs']].copy()
 
             df = self._re_name(df, labels, 'max_benefit_tech')
             cat = 'max_benefit_tech'
-            tech_list = df.groupby('max_benefit_tech')[['Calibrated_pop']].sum()
-            tech_list = tech_list.reset_index().sort_values('Calibrated_pop')['max_benefit_tech'].tolist()
+            tech_list = df.groupby('max_benefit_tech')[['Pop']].sum()
+            tech_list = tech_list.reset_index().sort_values('Pop')['max_benefit_tech'].tolist()
             if variable == 'net_benefits':
                 df.rename({'maximum_net_benefit': 'net_benefits'}, inplace=True, axis=1)
             elif variable == 'costs':
