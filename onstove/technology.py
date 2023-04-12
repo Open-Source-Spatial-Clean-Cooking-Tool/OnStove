@@ -345,10 +345,7 @@ class Technology:
                 self.decreased_carbon_emissions = pd.Series(0, index=mask.index, dtype='float64')
                 self.decreased_carbon_costs = pd.Series(0, index=mask.index, dtype='float64')
 
-            # TODO: save this one
             decreased_carbon = base_annual_carbon - carbon
-
-
             self.decreased_carbon_emissions.loc[start_year] = decreased_carbon[mask].sum(axis=1)
 
             discounted_carbon = np.array(
@@ -431,6 +428,7 @@ class Technology:
                 mor[disease] = pd.Series(0, index=mask.index)
                 mor[disease].loc[start_year] = (pop.loc[start_year] * (model.base_fuel[paf].loc[start_year] - self[paf].loc[start_year]) * (
                         rate / 100000))/house.loc[start_year]
+
                 cases = np.zeros((len(mask), model.specs["end_year"] - model.specs["start_year"]))
                 costs = np.zeros((len(mask), model.specs["end_year"] - model.specs["start_year"]))
 
@@ -445,8 +443,12 @@ class Technology:
                     else:
                         cl += cl_diseases[disease][i - model.year + 1]
 
+                    # TODO: The line below does not do what we want it to do. The pop_increase increases the population
+                    #       as expected, but should the households not increase with the same ratio? so if pop increases and hh increases
+                    #       it cancels itself out?
                     disease_cases = mor[disease].loc[start_year] * cl * (1 + pop_increase.loc[start_year]) ** (
                             i - model.year)
+
                     cases[mask, i - model.specs["start_year"] - 1] += disease_cases.loc[start_year]
                     costs[mask, i - model.specs["start_year"] - 1] += disease_cases.loc[start_year] * cost
 
@@ -571,7 +573,6 @@ class Technology:
                 self.distributed_morbidity = pd.Series(0, index=mask.index)
 
             self.distributed_morbidity.loc[masky] = pd.Series(discounted_costs, index=mask.index).loc[masky]
-
             self.relative_cases[mask] = cases[mask]
             self.cases_avoided.loc[masky] = \
                 pd.Series(np.array([sum(x) for x in self.relative_cases]), index=mask.index).loc[masky]
@@ -644,7 +645,7 @@ class Technology:
                 idx2 = idx * mask
                 rows = idx2[idx2].index
                 salvage_base[idx2] = model.base_fuel.inv_cost.loc[rows] * remainder / life
-            # TODO: save this one
+
             salvage[mask, (model.year - model.specs["start_year"] - 1)] = salvage_base[mask]
 
             discounted_salvage = np.array([sum(x / discount_rate) for x in salvage])
@@ -692,7 +693,7 @@ class Technology:
             proj_years[mask, (model.year - model.specs["start_year"] - 1):proj_years.shape[1]] = 1
 
             om = proj_years * np.array(operation_and_maintenance)[:, None]
-            # TODO: save this one
+
             om[mask, 0:(model.year - model.specs["start_year"] - 1)] = base_annual_om[mask]
 
             discounted_om = np.array([sum(x / discount_rate) for x in om])
@@ -767,7 +768,7 @@ class Technology:
                             proj_base_year[rows, j] = 1
 
             base_investments = proj_base_year * np.array(model.base_fuel.inv_cost)[:, None]
-            # TODO: save this one
+
             investments = investments + base_investments
 
             investments_discounted = np.array([sum(x / discount_rate) for x in investments])
@@ -833,7 +834,7 @@ class Technology:
             proj_years[mask, (model.year - model.specs["start_year"] - 1):proj_years.shape[1]] = 1
 
             fuel_cost = proj_years * np.array(cost)[:, None]
-            # TODO: save this one
+
             fuel_cost[mask, 0:(model.year - model.specs["start_year"] - 1)] = base_annual_fuel_cost[mask]
 
             fuel_cost_discounted = np.array([sum(x / discount_rate) for x in fuel_cost])
@@ -905,12 +906,10 @@ class Technology:
             time[:, 0:(model.year - model.specs["start_year"] - 1)] = base_annual_time[mask,
                                                                                0:model.year - model.specs[
                                                                                    "start_year"] - 1]
-
             if not isinstance(self.time_value, pd.Series):
                 self.total_time_saved = pd.Series(0, index=mask.index, dtype='float64')
                 self.time_value = pd.Series(0, index=mask.index, dtype='float64')
 
-            # TODO: save this one
             decreased_time = base_annual_time[mask] - time
 
             self.total_time_saved.loc[start_year] = decreased_time.sum(axis=1)
@@ -1320,8 +1319,6 @@ class LPG(Technology):
         proj_years = np.matmul(np.expand_dims(np.ones(mask.shape[0]), axis=1),
                                np.expand_dims(np.zeros(proj_life), axis=0))
 
-        start_year = mask[mask].index
-
         proj_years[mask, -1] = 1
 
         investments = proj_years * np.array(cost)[:, None]
@@ -1675,6 +1672,7 @@ class Biomass(Technology):
         --------
         solar_panel_investment
         """
+        # TODO: This should be done only in relative == True, just like for cylinders/added capacity?
         masky = mask[mask].index
         super().discounted_inv(model, mask, relative=relative)
         if self.draft_type.lower().replace('_', ' ') in ['forced', 'forced draft']:
@@ -1939,17 +1937,6 @@ class Electricity(Technology):
             :class:`onstove.OnStove`.
         """
         self.required_energy(model)
-        if self.tiers_path is None:
-            add_capacity = 1
-        else:
-            # TODO: This is never used, dont worry abt it for now
-            model.raster_to_dataframe(self.tiers_path, name='Electricity_tiers', method='sample')
-            self.tiers = model.gdf['Electricity_tiers'].copy()
-            add_capacity = (self.tiers < 3)
-
-
-        # TODO: update this with the matrix, so that we know where we have inv and salvage. (grid_salvage) and then the code below the if/else (capacity_cost)
-
         self.get_grid_capacity_cost()
         self.get_grid_life()
 
@@ -2030,8 +2017,6 @@ class Electricity(Technology):
         proj_years = np.matmul(np.expand_dims(np.ones(mask.shape[0]), axis=1),
                                np.expand_dims(np.zeros(proj_life), axis=0))
 
-        start_year = mask[mask].index
-
         proj_years[mask, -1] = 1
 
         if single:
@@ -2105,8 +2090,6 @@ class Electricity(Technology):
         """
         super().net_benefit(model, mask)
         model.gdf.loc[model.gdf['Current_elec'] == 0, "net_benefit_{}".format(self.name)] = np.nan
-        #TODO: Everywere where we have model.gdf["pop_init_year"] or model.gdf["pop_end_year"] see if it needs to be
-        #TODO: replaced with the population in the actual year.
         masky = mask[mask].index
         self.factor.loc[masky] = model.elec_pop.loc[masky]
         pop, house, pop_increase = model.yearly_pop(model.year)
