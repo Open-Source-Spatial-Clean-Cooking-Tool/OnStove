@@ -619,7 +619,6 @@ class Technology:
         discount_factor
         """
         discount_rate, proj_life = self.discount_factor(model.specs)
-        inv = self.inv_cost * np.ones(mask.shape[0])
 
         if relative:
             year = model.year
@@ -633,6 +632,8 @@ class Technology:
 
         proj_years[:, -1] = 1
 
+        inv_dec = (proj_years.shape[1] - used_life)
+        inv = self.inv_cost * np.ones(mask.shape[0]) * self.inv_change ** inv_dec
         investments = proj_years * np.array(inv)[:, None]
         salvage = np.array([y * (1 - x / self.tech_life) for x, y in zip(used_life, investments)])
 
@@ -1073,6 +1074,7 @@ class LPG(Technology):
                  om_cost: float = 3.7,
                  efficiency: float = 0.5,  # ratio
                  pm25: float = 43,
+                 inv_change: float = 1,
                  travel_time: Optional[pd.Series] = None,
                  truck_capacity: float = 2000,
                  diesel_cost: float = 1.04,
@@ -1094,6 +1096,7 @@ class LPG(Technology):
         self.friction_path = friction_path
         self.cylinder_cost = cylinder_cost
         self.cylinder_life = cylinder_life
+        self.inv_change = inv_change
         self.discounted_infra_cost = None
 
     def add_travel_time(self, model: 'onstove.OnStove', lpg_path: Optional[str] = None,
@@ -1485,6 +1488,7 @@ class Biomass(Technology):
                  energy_content: float = 16,
                  tech_life: int = 2,
                  inv_cost: float = 0,
+                 inv_change: float = 1,
                  solar_panel_life: float = 2,
                  fuel_cost: float = 0,
                  time_of_cooking: float = 2.9,
@@ -1879,6 +1883,7 @@ class Electricity(Technology):
                  grid_capacity_cost: float = None,
                  fuel_cost: float = 0.1,
                  time_of_cooking: float = 1.8,
+                 inv_change: float = 1.0,
                  om_cost: float = 3.7,  # percentage of investement cost
                  efficiency: float = 0.85,  # ratio
                  pm25: float = 32):
@@ -1893,6 +1898,7 @@ class Electricity(Technology):
         self.tiers_path = None
         self.discounted_capacity_cost = None
         self.capacity_cost = None
+        self.inv_change = inv_change
         self.connection_cost = connection_cost
         self.carbon_intensities = {'coal': 0.090374363, 'natural_gas': 0.050300655,
                                    'crude_oil': 0.070650288, 'heavy_fuel_oil': 0.074687989,
