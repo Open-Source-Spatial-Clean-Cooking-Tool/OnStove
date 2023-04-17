@@ -2361,12 +2361,12 @@ class OnStove(DataProcessor):
         if stats:
             self._add_statistics(ax, stats_position, stats_fontsize, variable=variable, extra_stats=extra_stats)
 
-        raster.plot(cmap=cmap, cumulative_count=cumulative_count,
-                    quantiles=quantiles,
-                    categories=codes, legend_position=legend_position,
-                    admin_layer=admin_layer, title=title, legend=legend,
-                    legend_title=legend_title, legend_cols=legend_cols, rasterized=rasterized,
-                    ax=ax, legend_prop=legend_prop, scale_bar=scale_bar, north_arrow=north_arrow)
+        ax = raster.plot(cmap=cmap, cumulative_count=cumulative_count,
+                         quantiles=quantiles,
+                         categories=codes, legend_position=legend_position,
+                         admin_layer=admin_layer, title=title, legend=legend,
+                         legend_title=legend_title, legend_cols=legend_cols, rasterized=rasterized,
+                         ax=ax, legend_prop=legend_prop, scale_bar=scale_bar, north_arrow=north_arrow)
 
         if save_style:
             if codes:
@@ -2377,6 +2377,8 @@ class OnStove(DataProcessor):
             raster.save_style(os.path.join(self.output_directory, 'Output'),
                               cmap=cmap, quantiles=quantiles, categories=categories,
                               classes=style_classes)
+
+        return ax
 
     def _add_statistics(self, ax, stats_position, fontsize=12, variable='max_benefit_tech', 
                         extra_stats: Optional[dict] = None):  
