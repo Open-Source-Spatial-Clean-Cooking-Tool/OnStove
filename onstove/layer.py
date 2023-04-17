@@ -582,7 +582,7 @@ class VectorLayer(_Layer):
                                                  layer_path, **kwargs))
 
     def plot(self, ax: Optional[matplotlib.axes.Axes] = None, column=None, style: dict = None,
-             legend_kwds=None):
+             legend_kwargs=None):
         """Plots a map of the layer using custom styles.
 
         This is, in principle, a wrapper function for the :doc:`geopandas:docs/reference/api/geopandas.GeoDataFrame.plot`
@@ -597,43 +597,28 @@ class VectorLayer(_Layer):
             accepted by :doc:`geopandas:docs/reference/api/geopandas.GeoDataFrame.plot`. If not defined, then the
             :attr:`style` attribute is used.
         """
-        if legend_kwds is None:
-            legend_kwds = {}
+        if legend_kwargs is None:
+            legend_kwargs = {}
         if style is None:
             style = self.style
+        if isinstance(column, str):
+            if 'label' not in legend_kwargs.keys():
+                legend_kwargs['label'] = column.replace('_', ' ')
 
         if ax is None:
-            ax = self.data.plot(label=self.name, column=column,
-                                legend_kwds=legend_kwds, **style)
-            if column is None:
-                lgnd = ax.legend()
-            else:
-                lgnd = ax.get_legend()
-            ax.add_artist(lgnd)
-            # lgnd = ax.legend(loc="upper right", prop={'size': 12})
-            # lgnd.legendHandles[0]._sizes = [60]
+            ax = self.data.plot(label=self.name, column=column, legend=True,
+                                legend_kwds=legend_kwargs, **style)
         else:
-            # if ax.get_legend() is None:
-            #     handles = []
-            #     labels = []
-            # else:
-            #     handles = ax.get_legend().legendHandles
-            #     labels = [t.get_text() for t in ax.get_legend().get_texts()]
-            #     # ax.legend(handles=handles, labels=labels)
-            ax = self.data.plot(ax=ax, label=self.name, legend_kwds=legend_kwds,
+            ax = self.data.plot(ax=ax, label=self.name, legend_kwds=legend_kwargs,
                                 column=column, legend=True, **style)
 
-            if column is None:
-                lgnd = ax.legend()
-            else:
-                lgnd = ax.get_legend()
-            ax.add_artist(lgnd)
-            # new_handles = ax.get_legend().legendHandles
-            # new_labels = [t.get_text() for t in ax.get_legend().get_texts()]
-            # new_handles, new_labels = ax.get_legend_handles_labels()
-
-            # ax.legend(handles=self.remove_duplicates(handles, new_handles),
-            #           labels=self.remove_duplicates(labels, new_labels))
+        if column is None:
+            lgnd = ax.legend(loc='upper left')
+            if 'bbox_to_anchor' in legend_kwargs.keys():
+                lgnd.set_bbox_to_anchor(legend_kwargs['bbox_to_anchor'])
+            # ax.add_artist(lgnd)
+        # else:
+        #     ax.get_legend()
         return ax
 
     @staticmethod
@@ -1489,6 +1474,8 @@ class RasterLayer(_Layer):
 
         if ax is None:
             fig, ax = plt.subplots(1, 1, figsize=figsize, dpi=dpi)
+        else:
+            fig = plt.gcf()
 
         if isinstance(cmap, dict):
             values = np.sort(np.unique(layer[~np.isnan(layer)]))
@@ -1514,13 +1501,16 @@ class RasterLayer(_Layer):
 
         im = ax.imshow(layer, cmap=cmap, extent=extent, interpolation='none', zorder=1, rasterized=rasterized)
 
+        if title:
+            plt.title(title, loc='left')
+
         if legend:
             if categories:
                 self.category_legend(im, ax, categories, current_handles_labels=(handles, labels),
                                      legend_position=legend_position,
                                      title=legend_title, legend_cols=legend_cols, legend_prop=legend_prop)
             elif colorbar:
-                colorbar_position = {'width': 0.02, 'height': 0.8, 'x': 1, 'y': 0.1}
+                colorbar_position = {'width': 0.02, 'height': 0.8, 'x': 1.02, 'y': 0.1}
                 title_prop = dict(label=self.name.replace('_', ' '), loc='center', labelpad=10, fontweight='normal')
                 if isinstance(colorbar_kwargs, dict):
                     for key in ['x', 'y', 'width', 'height', 'title_prop']:
@@ -1554,8 +1544,6 @@ class RasterLayer(_Layer):
             if admin_layer.crs != self.meta['crs']:
                 admin_layer.to_crs(self.meta['crs'], inplace=True)
             admin_layer.plot(color=to_rgb('#f1f1f1'), linewidth=1, ax=ax, zorder=0, rasterized=rasterized)
-        if title:
-            plt.title(title, loc='left')
 
         ax.get_xaxis().set_visible(False)
         ax.get_yaxis().set_visible(False)
