@@ -28,18 +28,22 @@ from plotnine import (
     aes,
     geom_col,
     geom_text,
+    element_rect,
     ylim,
     scale_x_discrete,
     scale_fill_manual,
     scale_color_manual,
     coord_flip,
     theme_minimal,
+    theme_classic,
     theme,
     labs,
     after_stat,
     facet_wrap,
     geom_histogram,
-    facet_grid, element_blank
+    geom_density,
+    facet_grid, element_blank,
+    guide_legend, guides
 )
 
 from onstove.layer import VectorLayer, RasterLayer
@@ -1759,6 +1763,7 @@ class OnStove(DataProcessor):
             self.gdf.loc[index, f'net_benefit_{tech}_temp'] = np.nan
 
         isna = self.gdf["max_benefit_tech"].isna()
+        print(isna.sum())
         if isna.sum() > 0:
             self.gdf.loc[isna, 'max_benefit_tech'] = self.gdf.loc[isna, temps].idxmax(axis=1).asdtype(str)
         self.gdf['max_benefit_tech'] = self.gdf['max_benefit_tech'].str.replace("net_benefit_", "")
@@ -2078,6 +2083,7 @@ class OnStove(DataProcessor):
             dff[variable] = [s[0:len(s) - 5] for s in dff[variable]]
             if isinstance(labels, dict):
                 dff = self._re_name(dff, labels, variable)
+            dff.loc[dff[variable].isin(['None and None']), variable] = 'None'
             codes = {tech: i for i, tech in enumerate(dff[variable].unique())}
 
             if isinstance(cmap, dict):
@@ -2161,7 +2167,8 @@ class OnStove(DataProcessor):
              legend: bool = True, legend_title: str = '', legend_cols: int = 1,
              legend_position: tuple[float, float] = (1.05, 1),
              legend_prop: dict = {'title': {'size': 12, 'weight': 'bold'}, 'size': 12},
-             stats: bool = False, stats_position: tuple[float, float] = (1.05, 0.5), stats_fontsize: int = 12,
+             stats: bool = False, extra_stats: Optional[dict] = None,
+             stats_position: tuple[float, float] = (1.05, 0.5), stats_fontsize: int = 12,
              scale_bar: Optional[dict] = None, north_arrow: Optional[dict] = None,
              ax: Optional['matplotlib.axes.Axes'] = None,
              figsize: tuple[float, float] = (6.4, 4.8),
@@ -2329,13 +2336,14 @@ class OnStove(DataProcessor):
         elif isinstance(self.mask_layer, VectorLayer):
             admin_layer = self.mask_layer.data
         else:
+            # print('sisas')
             admin_layer = None
 
         if ax is None:
             fig, ax = plt.subplots(1, 1, figsize=figsize, dpi=dpi)
 
         if stats:
-            self._add_statistics(ax, stats_position, stats_fontsize)
+            self._add_statistics(ax, stats_position, stats_fontsize, variable=variable, extra_stats=extra_stats)
 
         raster.plot(cmap=cmap, cumulative_count=cumulative_count,
                     quantiles=quantiles,
@@ -2354,28 +2362,42 @@ class OnStove(DataProcessor):
                               cmap=cmap, quantiles=quantiles, categories=categories,
                               classes=style_classes)
 
-    def _add_statistics(self, ax, stats_position, fontsize=12):
-        summary = self.summary(total=True, pretty=False)
+    def _add_statistics(self, ax, stats_position, fontsize=12, variable='max_benefit_tech', 
+                        extra_stats: Optional[dict] = None):  
+
+        extra_text = []
+        extra_values = []
+        if isinstance(extra_stats, dict):
+            for name, stat in extra_stats.items():
+                extra_text.append(TextArea(name, textprops=dict(fontsize=fontsize, color='black')))
+                extra_values.append(TextArea(stat, textprops=dict(fontsize=fontsize, color='black')))
+                
+        summary = self.summary(total=True, pretty=False, variable=variable, remove_none=True)
         deaths = TextArea("Deaths avoided", textprops=dict(fontsize=fontsize, color='black'))
         health = TextArea("Health costs avoided", textprops=dict(fontsize=fontsize, color='black'))
         emissions = TextArea("Emissions avoided", textprops=dict(fontsize=fontsize, color='black'))
         time = TextArea("Time saved", textprops=dict(fontsize=fontsize, color='black'))
+        # costs = TextArea("Total system cost", textprops=dict(fontsize=fontsize, color='black'))
 
-        texts_vbox = VPacker(children=[deaths, health, emissions, time], pad=0, sep=6)
+        texts_vbox = VPacker(children=[deaths, health, emissions, time, *extra_text], pad=0, sep=6)
 
         deaths_avoided = summary.loc['total', 'deaths_avoided']
         health_costs_avoided = summary.loc['total', 'health_costs_avoided'] / 1000
         reduced_emissions = summary.loc['total', 'reduced_emissions']
         time_saved = summary.loc['total', 'time_saved']
+        # total_costs = (summary.loc['total', 'investment_costs'] + summary.loc['total', 'fuel_costs'] + 
+                       # summary.loc['total', 'om_costs'] - summary.loc['total', 'salvage_value'])
 
+        
         deaths = TextArea(f"{deaths_avoided:,.0f} pp/yr", textprops=dict(fontsize=fontsize, color='black'))
-        health = TextArea(f"{health_costs_avoided:,.2f} BUSD", textprops=dict(fontsize=fontsize, color='black'))
+        health = TextArea(f"{health_costs_avoided:,.2f} BUS$", textprops=dict(fontsize=fontsize, color='black'))
         emissions = TextArea(f"{reduced_emissions:,.2f} Mton", textprops=dict(fontsize=fontsize, color='black'))
         time = TextArea(f"{time_saved:,.2f} h/hh.day", textprops=dict(fontsize=fontsize, color='black'))
+        # costs = TextArea(f"{total_costs:,.2f} MUS$", textprops=dict(fontsize=fontsize, color='black'))
+        
+        values_vbox = VPacker(children=[deaths, health, emissions, time, *extra_values], pad=0, sep=6, align='right')
 
-        values_vbox = VPacker(children=[deaths, health, emissions, time], pad=0, sep=6, align='right')
-
-        hvox = HPacker(children=[texts_vbox, values_vbox], pad=0, sep=6)
+        hvox = HPacker(children=[texts_vbox, values_vbox], pad=0, sep=-12) # sep=6
 
         ab = AnnotationBbox(hvox, stats_position,
                             xycoords='axes fraction',
@@ -2389,7 +2411,8 @@ class OnStove(DataProcessor):
 
     def to_image(self, variable, name=None, type='png', cmap='viridis', cumulative_count=None, quantiles=None,
                  legend_position=(1.05, 1), admin_layer=None, title=None, dpi=300, labels=None, legend=True,
-                 legend_title='', legend_cols=1, rasterized=True, stats=False, stats_position=(1.05, 0.5),
+                 legend_title='', legend_cols=1, rasterized=True, stats=False, 
+                 extra_stats: Optional[dict] = None, stats_position=(1.05, 0.5),
                  stats_fontsize=12, metric='mean', scale_bar=None, north_arrow=None, figsize=(6.4, 4.8),
                  legend_prop={'title': {'size': 12, 'weight': 'bold'}, 'size': 12}):
         raster, codes, cmap = self.create_layer(variable, name=name, labels=labels, cmap=cmap, metric=metric)
@@ -2400,7 +2423,7 @@ class OnStove(DataProcessor):
 
         if stats:
             fig, ax = plt.subplots(1, 1, figsize=figsize, dpi=dpi)
-            self._add_statistics(ax, stats_position, stats_fontsize)
+            self._add_statistics(ax, stats_position, stats_fontsize, variable=variable, extra_stats=extra_stats)
         else:
             fig, ax = plt.subplots(1, 1, figsize=figsize, dpi=dpi)
 
@@ -2412,15 +2435,15 @@ class OnStove(DataProcessor):
 
 
     # TODO: make this a property
-    def summary(self, total=True, pretty=True, labels=None):
+    def summary(self, total=True, pretty=True, labels=None, variable='max_benefit_tech', remove_none=False):
         dff = self.gdf.copy()
         if labels is not None:
-            dff = self._re_name(dff, labels, 'max_benefit_tech')
+            dff = self._re_name(dff, labels, variable)
         for attribute in ['maximum_net_benefit', 'deaths_avoided', 'health_costs_avoided', 'time_saved',
                           'opportunity_cost_gained', 'reduced_emissions', 'emissions_costs_saved',
                           'investment_costs', 'fuel_costs', 'om_costs', 'salvage_value']:
             dff[attribute] *= dff['Households']
-        summary = dff.groupby(['max_benefit_tech']).agg({'Calibrated_pop': lambda row: np.nansum(row) / 1000000,
+        summary = dff.groupby([variable]).agg({'Calibrated_pop': lambda row: np.nansum(row) / 1000000,
                                                          'Households': lambda row: np.nansum(row) / 1000000,
                                                          'maximum_net_benefit': lambda row: np.nansum(row) / 1000000,
                                                          'deaths_avoided': 'sum',
@@ -2434,15 +2457,18 @@ class OnStove(DataProcessor):
                                                          'fuel_costs': lambda row: np.nansum(row) / 1000000,
                                                          'om_costs': lambda row: np.nansum(row) / 1000000,
                                                          'salvage_value': lambda row: np.nansum(row) / 1000000,
-                                                         }).reset_index()
+                                                         })
+        if remove_none:
+            summary.drop('None', errors='ignore', inplace=True)
+        summary.reset_index(inplace=True)
         if total:
             total = summary[summary.columns[1:]].sum().rename('total')
-            total['max_benefit_tech'] = 'total'
+            total[variable] = 'total'
             summary = pd.concat([summary, total.to_frame().T])
 
         summary['time_saved'] /= (summary['Households'] * 1000000 * 365)
         if pretty:
-            summary.rename(columns={'max_benefit_tech': 'Max benefit technology',
+            summary.rename(columns={variable: 'Max benefit technology',
                                     'Calibrated_pop': 'Population (Million)',
                                     'Households': 'Households (Millions)',
                                     'maximum_net_benefit': 'Total net benefit (MUSD)',
@@ -2462,13 +2488,16 @@ class OnStove(DataProcessor):
     def plot_split(self, labels: Optional[dict[str, str]] = None,
                    cmap: Optional[dict[str, str]] = None,
                    x_variable: str = 'Calibrated_pop',
+                   ascending: bool = True,
                    orientation: str = 'horizontal',
                    text_kwargs: Optional[dict] = None,
                    annotation_kwargs: Optional[dict] = None,
                    labs_kwargs: Optional[dict] = None,
                    legend_kwargs: Optional[dict] = None,
+                   theme_name: str = 'minimal',
                    height: float = 1.5, width: float = 2.5,
-                   save_as: Optional[bool] = None) -> 'matplotlib.Figure':
+                   save_as: Optional[bool] = None,
+				   fill='max_benefit_tech') -> 'matplotlib.Figure':
         """Displays a bar plot with the population or households share using the technologies with highest net-benefits
         over the study area.
 
@@ -2531,11 +2560,13 @@ class OnStove(DataProcessor):
         matplotlib.Figure
             Figure object used to plot the technology split.
         """
-        df = self.summary(total=False, pretty=False, labels=labels)
+        df = self.summary(total=False, pretty=False, labels=labels, variable=fill)
+        df['labels'] = df[x_variable] / df[x_variable].sum()
+        df = df.loc[(df[fill]!='None')]
 
         variables = {'Calibrated_pop': 'Population (Millions)', 'Households': 'Households (Millions)'}
 
-        tech_list = df.sort_values(x_variable)['max_benefit_tech'].tolist()
+        tech_list = df.sort_values(x_variable, ascending=ascending)[fill].tolist()
 
         if orientation in ['Horizontal', 'horizontal', 'H', 'h']:
             if annotation_kwargs is None:
@@ -2565,17 +2596,24 @@ class OnStove(DataProcessor):
 
         if legend_kwargs is None:
             legend_kwargs = dict(legend_position='none')
+            
+        if theme_name == 'minimal':
+            theme_name = theme_minimal()
+        elif theme_name == 'classic':
+            theme_name = theme_classic()
 
         p = (ggplot(df)
-             + geom_col(aes(x='max_benefit_tech', y=x_variable, fill='max_benefit_tech'))
-             + geom_text(aes(y=df[x_variable], x='max_benefit_tech',
-                             label=df[x_variable] / df[x_variable].sum()),
+             + geom_col(aes(x=fill, y=x_variable, fill=fill))
+             + geom_text(aes(y=df[x_variable], x=fill,
+                             label=df['labels']),
                          format_string='{:.0%}',
                          **annotation_kwargs)
              + ylim(0, df[x_variable].max() * 1.15)
              + scale_x_discrete(limits=tech_list)
-             + theme_minimal()
-             + theme(**legend_kwargs, **text_kwargs)
+             + theme_name
+             + theme(**legend_kwargs, **text_kwargs,  
+                     panel_background = element_rect(fill=(0,0,0,0)),
+                     plot_background = element_rect(fill=(0,0,0,0), color=(0,0,0,0)))
              + labs(**labs_kwargs)
              )
 
@@ -2594,7 +2632,8 @@ class OnStove(DataProcessor):
     def plot_costs_benefits(self, labels: Optional[dict[str, str]] = None,
                             cmap: Optional[dict[str, str]] = None,
                             height: float = 1.5, width: float = 2.5,
-                            save_as: Optional[bool] = None) -> 'matplotlib.Figure':
+                            save_as: Optional[bool] = None,
+							variable: str = 'max_benefit_tech') -> 'matplotlib.Figure':
         """Displays a stacked bar plot with the aggregated total costs and benefits for the technologies with the
         highest net-benefits over the study area.
 
@@ -2638,7 +2677,7 @@ class OnStove(DataProcessor):
         matplotlib.Figure
             Figure object used to plot the cost and benefits.
         """
-        df = self.summary(total=False, pretty=False, labels=labels)
+        df = self.summary(total=False, pretty=False, labels=labels, variable=variable, remove_none=True)
         df['investment_costs'] -= df['salvage_value']
         df['fuel_costs'] *= -1
         df['investment_costs'] *= -1
@@ -2647,7 +2686,7 @@ class OnStove(DataProcessor):
         value_vars = ['investment_costs', 'fuel_costs', 'om_costs',
                       'health_costs_avoided', 'emissions_costs_saved', 'opportunity_cost_gained']
 
-        dff = df.melt(id_vars=['max_benefit_tech'], value_vars=value_vars)
+        dff = df.melt(id_vars=[variable], value_vars=value_vars)
 
         dff['variable'] = dff['variable'].str.replace('_', ' ').str.capitalize()
 
@@ -2656,7 +2695,7 @@ class OnStove(DataProcessor):
                     'Fuel costs': '#f1a340', 'Emissions costs saved': '#998ec3',
                     'Om costs': '#fee0b6', 'Opportunity cost gained': '#d8daeb'}
 
-        tech_list = df.sort_values('Calibrated_pop')['max_benefit_tech'].tolist()
+        tech_list = df.sort_values('Calibrated_pop')[variable].tolist()
         cat_order = ['Health costs avoided',
                      'Emissions costs saved',
                      'Opportunity cost gained',
@@ -2667,12 +2706,14 @@ class OnStove(DataProcessor):
         dff['variable'] = pd.Categorical(dff['variable'], categories=cat_order, ordered=True)
 
         p = (ggplot(dff)
-             + geom_col(aes(x='max_benefit_tech', y='value/1000', fill='variable'))
+             + geom_col(aes(x=variable, y='value/1000', fill='variable'))
              + scale_x_discrete(limits=tech_list)
              + scale_fill_manual(cmap)
              + coord_flip()
              + theme_minimal()
              + labs(x='', y='Billion USD', fill='Cost / Benefit')
+             # + theme(text=element_text(size=8), legend_position=(0.35, -0.22), legend_direction='horizontal')
+             # + guides(fill=guide_legend(ncol=2))
              )
 
         if save_as is not None:
@@ -2777,9 +2818,10 @@ class OnStove(DataProcessor):
         return df
 
     @staticmethod
-    def _histogram(df: pd.DataFrame, cat: str, x: str, wrap: Union[facet_wrap, facet_grid],
+    def _histogram(df: pd.DataFrame, cat: str, x: str, wrap: Union[facet_wrap, facet_grid] = None,
                    cmap: Optional[dict[str, str]] = None, x_title: str = '', y_title: str = '',
-                   kwargs: Optional[dict] = None, font_args: Optional[dict] = None) -> 'matplotlib.Figure':
+                   kwargs: Optional[dict] = None, font_args: Optional[dict] = None,
+                   theme_name: str = 'minimal') -> 'matplotlib.Figure':
         """Function to plot a histogram of a selected variable divided in facets for each technology.
 
         Parameters
@@ -2818,8 +2860,15 @@ class OnStove(DataProcessor):
             min_val = df[x].min()
             binwidth = (max_val - min_val) * 0.05
             kwargs = dict(binwidth=binwidth, alpha=0.5, size=0.3)
+            
         if font_args is None:
             font_args = dict(size=6)
+            
+        if theme_name == 'minimal':
+            theme_name = theme_minimal()
+        elif theme_name == 'classic':
+            theme_name = theme_classic()    
+        
         p = (ggplot(df)
              + geom_histogram(aes(x=x,
                                   y=after_stat('count'),
@@ -2831,21 +2880,83 @@ class OnStove(DataProcessor):
                               )
              + scale_fill_manual(cmap)
              + scale_color_manual(cmap, guide=False)
-             + theme_minimal()
+             + theme_name
              + theme(subplots_adjust={'wspace': 0.25}, text=element_text(**font_args))
              + wrap
              + labs(x=x_title, y=y_title, fill='Cooking technology')
              )
         return p
+    
+    @staticmethod
+    def _density(df: pd.DataFrame, cat: str, x: str, 
+                 cmap: Optional[dict[str, str]] = None, x_title: str = '', y_title: str = '',
+                 kwargs: Optional[dict] = None, font_args: Optional[dict] = None) -> 'matplotlib.Figure':
+        """Function to plot a density curve of a selected variable divided in facets for each technology.
 
-    def plot_benefit_distribution(self, type: str = 'histogram', groupby: str = 'None',
-                                  variable: str = 'net_benefits', best_mix: bool = True,
-                                  hh_divider: int = 1, var_divider: int = 1,
+        Parameters
+        ----------
+        df: pd.DataFrame
+            Dataframe subset containing the variable of interest ``x`` and the technology categories ``cat``.
+        cat: str
+            Column name of the technology categories.
+        x: str
+            Column name of the variable of interest.
+        wrap: facet_wrap or facet_grid
+            Object used for facetting the plot.
+        cmap: dictionary of str key-value pairs, optional
+            Dictionary with the colors to use for technology.
+        x_title: str, optional
+            Title of the x axis. If `None` is provided, then a default of ``Net benefit per household (USD/yr)`` or
+            ``Costs per household (USD/yr)`` will be used depending on the evaluated variable.
+        y_title: str, default 'Households'
+            Title of the y axis.
+        kwargs: dict, optional.
+            Dictionary of style arguments passed to the plotting function. For ``histrogram`` the default values used
+            are ``dict(binwidth=binwidth, alpha=0.5, size=0.3)``, where ``banwidth`` is calculated as 5% of the range of
+            the data.
+        font_args: dict, optional.
+            Dictionary of font arguments passed to the plotting function. If ``None`` is provided, default values of
+            ``dict(size=6)``. For available options see the :doc:`plotnine:generated/plotnine.themes.element_text`
+            object.
+
+        Returns
+        -------
+        matplotlib.Figure
+            Figure object used to plot the distribution.
+        """
+        if kwargs is None:
+            max_val = df[x].max()
+            min_val = df[x].min()
+            binwidth = (max_val - min_val) * 0.05
+            kwargs = dict(alpha=0.1, size=0.8)
+        if font_args is None:
+            font_args = dict(size=6)
+        p = (ggplot(df)
+             + geom_density(aes(x=x,
+                                  y=after_stat('count'),
+                                  fill=cat,
+                                  color=cat,
+                                  # weight='Households',
+                                  ),
+                              **kwargs
+                              )
+             + scale_fill_manual(cmap)
+             + scale_color_manual(cmap, guide=False)
+             + theme_minimal()
+             + theme(subplots_adjust={'wspace': 0.25}, text=element_text(**font_args))
+             + labs(x=x_title, y=y_title, fill='Cooking technology')
+             )
+        return p
+
+    def plot_benefit_distribution(self, type: str = 'histogram', fill: str = 'max_benefit_tech', 
+                                  groupby: str = 'None', variable: str = 'net_benefits', 
+                                  best_mix: bool = True, hh_divider: int = 1, var_divider: int = 1,
                                   labels: Optional[dict[str, str]] = None,
                                   cmap: Optional[dict[str, str]] = None,
                                   x_title: Optional[str] = None, y_title: str = 'Households',
+                                  wrap_cols: int = 1,
                                   kwargs: Optional[dict] = None,
-                                  font_args: Optional[dict] = None,
+                                  font_args: Optional[dict] = None, theme_name: str = 'minimal',
                                   height: float = 1.5, width: float = 2.5,
                                   save_as: Optional[bool] = None) -> 'matplotlib.Figure':
         """Displays a distribution plot with the net-benefits, benefits or costs for the technologies with the
@@ -2926,17 +3037,21 @@ class OnStove(DataProcessor):
             Figure object used to plot the distribution
         """
         if best_mix:
-            df = self.gdf[['max_benefit_tech', 'Calibrated_pop', 'Households', 'maximum_net_benefit',
+            df = self.gdf[[fill, 'Calibrated_pop', 'Households', 'maximum_net_benefit',
                            'health_costs_avoided', 'opportunity_cost_gained', 'emissions_costs_saved',
-                           'investment_costs', 'salvage_value', 'fuel_costs', 'om_costs']].copy()
-            df = self._re_name(df, labels, 'max_benefit_tech')
-            cat = 'max_benefit_tech'
-            tech_list = df.groupby('max_benefit_tech')[['Calibrated_pop']].sum()
-            tech_list = tech_list.reset_index().sort_values('Calibrated_pop')['max_benefit_tech'].tolist()
+                           'investment_costs', 'salvage_value', 'fuel_costs', 'om_costs', 
+                           'relative_wealth', 'value_of_time']].copy()
+            df = self._re_name(df, labels, fill)
+            cat = fill
+            tech_list = df.groupby(fill)[['Calibrated_pop']].sum()
+            tech_list = tech_list.reset_index().sort_values('Calibrated_pop')[fill].tolist()
             if variable == 'net_benefits':
                 df.rename({'maximum_net_benefit': 'net_benefits'}, inplace=True, axis=1)
             elif variable == 'costs':
                 df['costs'] = df['investment_costs'] - df['salvage_value'] + df['fuel_costs'] + df['om_costs']
+            elif variable == 'affordability':
+                df['costs'] = df['investment_costs'] - df['salvage_value'] + df['fuel_costs'] + df['om_costs']
+                df['affordability'] = df['costs'] / self.specs['minimum_wage']
         else:
             tech_list = []
             for name, tech in self.techs.items():
@@ -2967,8 +3082,10 @@ class OnStove(DataProcessor):
                 df[groupby] = self.gdf[~self.gdf.index.duplicated()].loc[df.index, groupby]
 
             wrap = facet_grid(f'{cat} ~ {groupby}', scales='free_y')
-        else:
+        elif wrap_cols > 1:
             wrap = facet_wrap(cat, ncol=2, scales='free_y')
+        else:
+            wrap = None
 
         if variable == 'net_benefits':
             x = 'net_benefits'
@@ -2978,6 +3095,18 @@ class OnStove(DataProcessor):
             x = 'costs'
             if x_title is None:
                 x_title = 'Costs per household (USD/yr)'
+        elif variable in ['relative_wealth', 'wealth']:
+            x = 'relative_wealth'
+            if x_title is None:
+                x_title = 'Relative wealth index (-)'
+        elif variable in ['value_of_time', 'time_value']:
+            x = 'value_of_time'
+            if x_title is None:
+                x_title = 'Shadow value of time (US$/h)'
+        elif variable in ['affordability']:
+            x = 'affordability'
+            if x_title is None:
+                x_title = 'Total costs over minimum wage (%)'
 
         df['Households'] /= hh_divider
         df[x] /= var_divider
@@ -2986,9 +3115,11 @@ class OnStove(DataProcessor):
         if type.lower() == 'box':
             warn("The box-plot type was deprecated in order to favor accurate representation "
                  "of the data, using 'histogram' instead.", DeprecationWarning, stacklevel=2)
-            p = self._histogram(df, cat, x, wrap, cmap, x_title, y_title, kwargs, font_args)
+            p = self._histogram(df, cat, x, wrap, cmap, x_title, y_title, kwargs, font_args, theme_name)
         elif type.lower() == 'histogram':
-            p = self._histogram(df, cat, x, wrap, cmap, x_title, y_title, kwargs, font_args)
+            p = self._histogram(df, cat, x, wrap, cmap, x_title, y_title, kwargs, font_args, theme_name)
+        elif type.lower() == 'density':
+            p = self._density(df, cat, x, cmap, x_title, y_title, kwargs, font_args)
         elif type.lower() == 'violin':
             raise NotImplementedError('Violin plots are not yet implemented')
             # p = (ggplot(df)
