@@ -430,7 +430,8 @@ class VectorLayer(_Layer):
         elif method == 'travel_time':
             self.travel_time(friction=raster, output_path=output_path, create_raster=True)
 
-    def rasterize(self, attribute: str = None,
+    def rasterize(self, raster: 'RasterLayer' = None, 
+                  attribute: str = None,
                   value: Union[int, float] = 1,
                   width: int = None, height: int = None,
                   transform: 'AffineTransform' = None,
@@ -479,6 +480,10 @@ class VectorLayer(_Layer):
         RasterLayer
             :class:`RasterLayer` with the rasterized dataset of the current :class:`VectorLayer`.
         """
+        if isinstance(raster, RasterLayer):
+            transform = raster.meta['transform']
+            width = raster.meta['width']
+            height = raster.meta['height']
         if transform is None:
             if (width is None) or (height is None):
                 height, width = RasterLayer.shape_from_cell(self.bounds, cell_height, cell_width)
@@ -595,42 +600,32 @@ class VectorLayer(_Layer):
             :attr:`style` attribute is used.
         """
         if legend_kwds is None:
-            legend_kwds = {}
+            legend_kwds = {'loc': 'upper left', 'bbox_to_anchor': (1,1)}
         if style is None:
             style = self.style
 
         if ax is None:
-            ax = self.data.plot(label=self.name, column=column,
+            ax = self.data.plot(label=self.name, column=column, legend=True,
                                 legend_kwds=legend_kwds, **style)
             if column is None:
-                lgnd = ax.legend()
+                if 'facecolor' in style.keys():
+                    artist = mpatches.Patch(**style, 
+                                            label=self.name)
+                    lgnd = ax.legend(handles=[artist], **legend_kwds)
+                else:
+                    lgnd = ax.legend(**legend_kwds)
             else:
                 lgnd = ax.get_legend()
             ax.add_artist(lgnd)
-            # lgnd = ax.legend(loc="upper right", prop={'size': 12})
-            # lgnd.legendHandles[0]._sizes = [60]
         else:
-            # if ax.get_legend() is None:
-            #     handles = []
-            #     labels = []
-            # else:
-            #     handles = ax.get_legend().legendHandles
-            #     labels = [t.get_text() for t in ax.get_legend().get_texts()]
-            #     # ax.legend(handles=handles, labels=labels)
             ax = self.data.plot(ax=ax, label=self.name, legend_kwds=legend_kwds,
                                 column=column, legend=True, **style)
 
             if column is None:
-                lgnd = ax.legend()
+                lgnd = ax.legend(**legend_kwds)
             else:
                 lgnd = ax.get_legend()
             ax.add_artist(lgnd)
-            # new_handles = ax.get_legend().legendHandles
-            # new_labels = [t.get_text() for t in ax.get_legend().get_texts()]
-            # new_handles, new_labels = ax.get_legend_handles_labels()
-
-            # ax.legend(handles=self.remove_duplicates(handles, new_handles),
-            #           labels=self.remove_duplicates(labels, new_labels))
         return ax
 
     @staticmethod
@@ -1070,6 +1065,24 @@ class RasterLayer(_Layer):
             self.distance_raster = distance_raster
         else:
             return distance_raster
+            
+    def proximity(self, value=1):
+        data = self.data.copy()
+        data[self.data==value] = 0
+        data[self.data!=value] = 1
+        data = ndimage.distance_transform_edt(data,
+                                              sampling=[self.meta['transform'][0],
+                                                        -self.meta['transform'][4]])
+
+        distance_raster = RasterLayer(category=self.category,
+                                      name=self.name + '_dist',
+                                      distance_limit=self.distance_limit,
+                                      inverse=self.inverse,
+                                      normalization=self.normalization)
+        distance_raster.data = data
+        distance_raster.meta = self.meta
+        distance_raster.meta.update(dtype=int)
+        return distance_raster
 
     def get_distance_raster(self, method: Optional[str] = None,
                             output_path: Optional[str] = None,
@@ -1424,6 +1437,7 @@ class RasterLayer(_Layer):
              admin_layer: Union[gpd.GeoDataFrame, VectorLayer] = None, title=None, ax=None, dpi=150,
              legend=True, legend_title='', legend_cols=1,
              legend_prop={'title': {'size': 12, 'weight': 'bold'}, 'size': 12},
+             kwargs={},
              rasterized=True, colorbar=True, return_image=False, figsize=(6.4, 4.8),
              scale_bar=None, north_arrow=None):
         """Plots a map of the current raster layer.
@@ -1504,7 +1518,8 @@ class RasterLayer(_Layer):
             handles = []
             labels = []
 
-        cax = ax.imshow(layer, cmap=cmap, extent=extent, interpolation='none', zorder=1, rasterized=rasterized)
+        cax = ax.imshow(layer, cmap=cmap, extent=extent, interpolation='none', zorder=1, rasterized=rasterized,
+                        **kwargs)
 
         if legend:
             if categories:
