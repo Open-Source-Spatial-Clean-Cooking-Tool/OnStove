@@ -7,6 +7,7 @@ import datetime
 import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 import time
 
 import pyproj
@@ -190,6 +191,8 @@ class VectorLayer(_Layer):
                          distance_method=distance_method,
                          distance_limit=distance_limit)
         self.read_layer(path=path, conn=conn, bbox=bbox, query=query)
+        if distance_method is None:
+            self.distance_method = 'proximity'
 
     def __repr__(self):
         return 'Vector' + super().__repr__()
@@ -741,7 +744,7 @@ class RasterLayer(_Layer):
                  path: Optional[str] = None,
                  conn: Optional['sqlalchemy.engine.Connection'] = None,
                  normalization: Optional[str] = 'MinMax', inverse: bool = False,
-                 distance_method:  Optional[str] = 'proximity',
+                 distance_method:  Optional[str] = None,
                  distance_limit: Optional[Callable[[np.ndarray], np.ndarray]] = None,
                  resample: str = 'nearest', window: Optional[windows.Window] = None,
                  rescale: bool = False):
@@ -752,6 +755,7 @@ class RasterLayer(_Layer):
         self.rescale = rescale
         self.meta = {}
         self.normalized = None
+        self.starting_points = None
         super().__init__(category=category, name=name,
                          path=path, conn=conn,
                          normalization=normalization, inverse=inverse,
@@ -1056,7 +1060,7 @@ class RasterLayer(_Layer):
                                       normalization=self.normalization)
         distance_raster.data = layer
         distance_raster.meta = meta
-        distance_raster.mask(mask_layer)
+        distance_raster.mask(mask_layer, crop=False)
 
         if output_path:
             distance_raster.save(output_path)
@@ -1113,16 +1117,13 @@ class RasterLayer(_Layer):
             travel time map (used with the ``travel_time`` method only).
         """
         if method is None:
-            if self.distance_method is None:
-                raise ValueError('Please pass a distance `method` ("log" or "travel time") or define the default '
-                                 'method in the `distance` attribute of the class.')
             method = self.distance_method
 
         if method == 'log':
-            self.distance_raster = self.log(mask_layer=mask_layer, output_path=output_path)
+            self.log(mask_layer=mask_layer, output_path=output_path, create_raster=True)
         elif method == 'travel_time':
             rows, cols = self.start_points(condition=starting_points)
-            self.distance_raster = self.travel_time(rows, cols, output_path=output_path)
+            self.travel_time(rows, cols, output_path=output_path, create_raster=True)
         else:
             self.distance_raster = self
 
@@ -1141,6 +1142,9 @@ class RasterLayer(_Layer):
         """
         if callable(condition):
             return np.where(condition(self.data))
+        elif condition is None:
+            if isinstance(self.starting_points, tuple):
+                return self.starting_points
         else:
             raise TypeError('The condition can only be a callable object.')
 
@@ -1410,6 +1414,7 @@ class RasterLayer(_Layer):
         legend_cols
         legend_prop
         """
+        categories.pop('None', False)
         values = list(categories.values())
         titles = list(categories.keys())
 
@@ -1426,7 +1431,7 @@ class RasterLayer(_Layer):
         #     handles = current_handles_labels[0] + new_handles
         #     labels = current_handles_labels[1] + new_labels
         legend = ax.legend(handles=patches, bbox_to_anchor=legend_position, loc='upper left',
-                           borderaxespad=0., ncol=legend_cols, prop=prop)
+                           borderaxespad=0., ncol=legend_cols, prop=prop, frameon=False)
         legend.set_title(title, prop=legend_prop['title'])
         legend._legend_box.align = "left"
         ax.add_artist(legend)
@@ -1437,8 +1442,7 @@ class RasterLayer(_Layer):
              admin_layer: Union[gpd.GeoDataFrame, VectorLayer] = None, title=None, ax=None, dpi=150,
              legend=True, legend_title='', legend_cols=1,
              legend_prop={'title': {'size': 12, 'weight': 'bold'}, 'size': 12},
-             kwargs={},
-             rasterized=True, colorbar=True, return_image=False, figsize=(6.4, 4.8),
+             rasterized=True, colorbar=True, colorbar_kwargs=None, figsize=(6.4, 4.8),
              scale_bar=None, north_arrow=None):
         """Plots a map of the current raster layer.
 
@@ -1514,33 +1518,55 @@ class RasterLayer(_Layer):
                 handles = ax.get_legend().legendHandles
                 labels = [t.get_text() for t in ax.get_legend().get_texts()]
                 ax.legend(handles=handles, labels=labels)
+            else:
+                handles = []
+                labels = []
         else:
             handles = []
             labels = []
 
-        cax = ax.imshow(layer, cmap=cmap, extent=extent, interpolation='none', zorder=1, rasterized=rasterized,
-                        **kwargs)
+        im = ax.imshow(layer, cmap=cmap, extent=extent, interpolation='none', zorder=1, rasterized=rasterized)
 
         if legend:
             if categories:
-                self.category_legend(cax, ax, categories, current_handles_labels=(handles, labels),
+                self.category_legend(im, ax, categories, current_handles_labels=(handles, labels),
                                      legend_position=legend_position,
                                      title=legend_title, legend_cols=legend_cols, legend_prop=legend_prop)
             elif colorbar:
-                colorbar = dict(shrink=0.8)
+                colorbar_position = {'width': 0.02, 'height': 0.8, 'x': 1, 'y': 0.1}
+                title_prop = dict(label=self.name.replace('_', ' '), loc='center', labelpad=10, fontweight='normal')
+                if isinstance(colorbar_kwargs, dict):
+                    for key in ['x', 'y', 'width', 'height', 'title_prop']:
+                        if key == 'title_prop':
+                            title_prop.update(colorbar_kwargs.pop(key))
+                        if key in colorbar_kwargs.keys():
+                            colorbar_position[key] = colorbar_kwargs.pop(key)
+                    if 'orientation' not in colorbar_kwargs.keys():
+                        colorbar_kwargs['orientation'] = 'vertical'
+                else:
+                    colorbar_kwargs = {'orientation': 'vertical'}
+
                 if ticks:
-                    colorbar['ticks'] = ticks
-                cbar = plt.colorbar(cax, **colorbar)
+                    colorbar_kwargs['ticks'] = ticks
+                x_diff = ax.get_position().x1 - ax.get_position().x0
+                y_diff = ax.get_position().y1 - ax.get_position().y0
+                cax = [ax.get_position().x0 + x_diff * colorbar_position['x'],
+                       ax.get_position().y0 + y_diff * colorbar_position['y'],
+                       ax.get_position().width * colorbar_position['width'],
+                       ax.get_position().height * colorbar_position['height']]
+                cax = fig.add_axes(cax)
+
+                cbar = fig.colorbar(im, cax = cax, **colorbar_kwargs)
 
                 if tick_labels:
-                    cbar.ax.set_yticklabels(tick_labels)
-                cbar.ax.set_ylabel(self.name.replace('_', ' '))
+                    cbar.set_ticklabels(tick_labels)
+                cbar.set_label(**title_prop) # ,
         if isinstance(admin_layer, VectorLayer):
             admin_layer = admin_layer.data
         if isinstance(admin_layer, gpd.GeoDataFrame):
             if admin_layer.crs != self.meta['crs']:
                 admin_layer.to_crs(self.meta['crs'], inplace=True)
-            admin_layer.plot(color=to_rgb('#f1f1f1ff'), linewidth=1, ax=ax, zorder=0, rasterized=rasterized)
+            admin_layer.plot(color=to_rgb('#f1f1f1'), linewidth=1, ax=ax, zorder=0, rasterized=rasterized)
         if title:
             plt.title(title, loc='left')
 
@@ -1554,18 +1580,18 @@ class RasterLayer(_Layer):
 
         if scale_bar is not None:
             if scale_bar == 'default':
-                scale_bar_func()
+                scale_bar_func(ax=ax)
             elif isinstance(scale_bar, dict):
-                scale_bar_func(**scale_bar)
+                scale_bar_func(ax=ax, **scale_bar)
             else:
                 raise ValueError('Parameter `scale_bar` need to be a dictionary with parameter/value pairs, '
                                  'accepted by the `onstove.scale_bar` function.')
 
         if north_arrow is not None:
             if north_arrow == 'default':
-                north_arrow_func()
+                north_arrow_func(ax=ax)
             elif isinstance(north_arrow, dict):
-                north_arrow_func(**north_arrow)
+                north_arrow_func(ax=ax, **north_arrow)
             else:
                 raise ValueError('Parameter `north_arrow` need to be a dictionary with parameter/value pairs, '
                                  'accepted by the `onstove.north_arrow` function.')

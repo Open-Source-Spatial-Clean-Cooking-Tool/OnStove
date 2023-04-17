@@ -1715,6 +1715,9 @@ class MiniGrids(Electricity):
                  stove_power: float = 0.7,
                  capacity_factor: float = 0.8,
                  base_load: float = 0.1,  # in kW
+                 w_pop: float = 0,  # weight of population count to calibrate access to minigrids
+                 w_ntl: float = 0,  # weight of nighttime lights to calibrate access to minigrids
+                 w_mg_dist: float = 1,  # weight of distance to calibrate access to minigrids
                  ):
         super().__init__(name=name, carbon_intensity=carbon_intensity, energy_content=energy_content,
                          tech_life=tech_life, inv_cost=inv_cost, connection_cost=connection_cost,
@@ -1726,6 +1729,9 @@ class MiniGrids(Electricity):
         self.capacity_factor = capacity_factor
         self.stove_power = stove_power
         self.base_load = base_load
+        self.w_pop = w_pop
+        self.w_ntl = w_ntl
+        self.w_mg_dist = w_mg_dist
 
     @property
     def coverage(self) -> RasterLayer:
@@ -1747,12 +1753,7 @@ class MiniGrids(Electricity):
 
     @property
     def distance(self) -> RasterLayer:
-        """:class:`VectorLayer` object containing a vector dataset showing the areas of coverage of the mini-grids.
-
-        This layer must contain the following columns:
-        * `capacity`: installed capacity of the mini-grids
-        * `households`: amount of households served by the mini-grids
-        * `geometry`: polygons showing areas of coverage
+        """:class:`RasterLayer` object containing a raster dataset with the distance to mini-grids in km.
 
         .. seealso::
             :meth:`calculate_potential`
@@ -1765,12 +1766,7 @@ class MiniGrids(Electricity):
 
     @property
     def ntl(self) -> RasterLayer:
-        """:class:`VectorLayer` object containing a vector dataset showing the areas of coverage of the mini-grids.
-
-        This layer must contain the following columns:
-        * `capacity`: installed capacity of the mini-grids
-        * `households`: amount of households served by the mini-grids
-        * `geometry`: polygons showing areas of coverage
+        """:class:`RasterLayer` object containing raster dataset showing the nighttime lights data.
 
         .. seealso::
             :meth:`calculate_potential`
@@ -1795,11 +1791,9 @@ class MiniGrids(Electricity):
         pop_norm = model.normalize('Calibrated_pop')
         ntl_norm = self.normalize('ntl')
         mg_dist_norm = self.normalize('mg_dist', inverse=True)
-        w_pop = 1
-        w_ntl = 1
-        w_mg_dist = 2
-        weights = w_pop + w_ntl + w_mg_dist
-        weight_sum = (w_pop * pop_norm + w_ntl * ntl_norm + w_mg_dist * mg_dist_norm) / weights
+
+        weights = self.w_pop + self.w_ntl + self.w_mg_dist
+        weight_sum = (self.w_pop * pop_norm + self.w_ntl * ntl_norm + self.w_mg_dist * mg_dist_norm) / weights
         self.gdf['mg_acces_weight'] = weight_sum
         self.gdf["current_mg_elec"] = 0
         self.gdf['supported_hh'] = 0
