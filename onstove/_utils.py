@@ -31,7 +31,7 @@ def vector_setter(layer: Union[RasterLayer, str, None],
         raise ValueError('Vector file type or object not recognized.')
 
 
-class Processes():
+class Processes:
     def __init__(self):
         self.gdf = gpd.GeoDataFrame()
 
