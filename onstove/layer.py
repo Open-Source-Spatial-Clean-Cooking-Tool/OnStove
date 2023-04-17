@@ -1492,6 +1492,12 @@ class RasterLayer(_Layer):
 
         if isinstance(cmap, dict):
             values = np.sort(np.unique(layer[~np.isnan(layer)]))
+            key_list_cat = list(categories.keys())
+            val_list_cat = list(categories.values())
+            for i, val in enumerate(values):
+                layer[layer==val] = i
+                position = val_list_cat.index(val)
+                categories[key_list_cat[position]] = i
             cmap = ListedColormap([to_rgb(cmap[i]) for i in values])
 
         if ax.get_legend() is not None:
