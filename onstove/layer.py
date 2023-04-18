@@ -604,26 +604,46 @@ class VectorLayer(_Layer):
         """
         if legend_kwargs is None:
             legend_kwargs = {}
+        _legend_kwargs = dict(frameon=False)
+        _legend_kwargs.update(legend_kwargs)
+        legend_kwargs = _legend_kwargs.copy()
         if style is None:
             style = self.style
         if isinstance(column, str):
-            if 'label' not in legend_kwargs.keys():
-                legend_kwargs['label'] = column.replace('_', ' ')
+            if isinstance(self.data[column].iloc[0], str):
+                if 'title' not in legend_kwargs.keys():
+                    legend_kwargs['title'] = column.replace('_', ' ')
+            else:
+                legend_kwargs.pop('frameon', None)
+                legend_kwargs.pop('bbox_to_anchor', None)
+                if 'label' not in legend_kwargs.keys():
+                    legend_kwargs['label'] = column.replace('_', ' ')
+                    
+        name = self.name.replace('_', ' ')
 
         if ax is None:
-            ax = self.data.plot(label=self.name, column=column, legend=True,
+            ax = self.data.plot(label=name, column=column, legend=True,
                                 legend_kwds=legend_kwargs, **style)
         else:
-            ax = self.data.plot(ax=ax, label=self.name, legend_kwds=legend_kwargs,
+            ax = self.data.plot(ax=ax, label=name, legend_kwds=legend_kwargs,
                                 column=column, legend=True, **style)
 
         if column is None:
-            lgnd = ax.legend(loc='upper left')
-            if 'bbox_to_anchor' in legend_kwargs.keys():
-                lgnd.set_bbox_to_anchor(legend_kwargs['bbox_to_anchor'])
-            # ax.add_artist(lgnd)
-        # else:
-        #     ax.get_legend()
+            if ax.get_legend() is None:
+                patches = mpatches.Patch(facecolor=style['facecolor'], 
+                                         edgecolor=style['edgecolor'],
+                                         label=name)
+                lgnd = ax.legend(handles=[patches], loc='upper left', 
+                                 frameon=_legend_kwargs['frameon'])
+            else:
+                lgnd = ax.legend(loc='upper left', frameon=_legend_kwargs['frameon'])
+            if 'bbox_to_anchor' in _legend_kwargs.keys():
+                lgnd.set_bbox_to_anchor(_legend_kwargs['bbox_to_anchor'])
+        else:
+            lgnd = ax.get_legend()
+        
+        ax.add_artist(lgnd)
+
         return ax
 
     @staticmethod
@@ -1397,7 +1417,7 @@ class RasterLayer(_Layer):
     @staticmethod
     def category_legend(im, ax, categories, current_handles_labels=None,
                         legend_position=(1.05, 1), title='', legend_cols=1,
-                        legend_prop={'title': {'size': 12, 'weight': 'bold'}, 'size': 12}):
+                        legend_prop=None):
         """Creates a category legend for the current plot.
 
         Parameters
@@ -1417,8 +1437,11 @@ class RasterLayer(_Layer):
         # create a patch (proxy artist) for every color
         patches = [mpatches.Patch(color=colors[i], label="{}".format(titles[i])) for i in range(len(values))]
         # put those patched as legend-handles into the legend
-        prop = legend_prop.copy()
+        _legend_prop = {'title': {'size': 12, 'weight': 'bold'}, 'size': 12, 'frameon': False}
+        _legend_prop.update(legend_prop)
+        prop = _legend_prop.copy()
         prop.pop('title')
+        prop.pop('frameon')
         # ax.legend(handles=patches)
         # if current_handles_labels is not None:
         #     new_handles = ax.get_legend().legendHandles
@@ -1426,8 +1449,8 @@ class RasterLayer(_Layer):
         #     handles = current_handles_labels[0] + new_handles
         #     labels = current_handles_labels[1] + new_labels
         legend = ax.legend(handles=patches, bbox_to_anchor=legend_position, loc='upper left',
-                           borderaxespad=0., ncol=legend_cols, prop=prop, frameon=False)
-        legend.set_title(title, prop=legend_prop['title'])
+                           borderaxespad=0., ncol=legend_cols, prop=prop, frameon=_legend_prop['frameon'])
+        legend.set_title(title, prop=_legend_prop['title'])
         legend._legend_box.align = "left"
         ax.add_artist(legend)
 
@@ -1436,9 +1459,9 @@ class RasterLayer(_Layer):
              cumulative_count=None, quantiles=None, categories=None, legend_position=(1.05, 1),
              admin_layer: Union[gpd.GeoDataFrame, VectorLayer] = None, title=None, ax=None, dpi=150,
              legend=True, legend_title='', legend_cols=1,
-             legend_prop={'title': {'size': 12, 'weight': 'bold'}, 'size': 12},
+             legend_prop=None,
              rasterized=True, colorbar=True, colorbar_kwargs=None, figsize=(6.4, 4.8),
-             scale_bar=None, north_arrow=None):
+             scale_bar=None, north_arrow=None, alpha=1):
         """Plots a map of the current raster layer.
 
         Parameters
@@ -1512,9 +1535,10 @@ class RasterLayer(_Layer):
 
         if ax.get_legend() is not None:
             if ax.get_legend().legendHandles is not None:
-                handles = ax.get_legend().legendHandles
-                labels = [t.get_text() for t in ax.get_legend().get_texts()]
-                ax.legend(handles=handles, labels=labels)
+                # handles = ax.get_legend().legendHandles
+                # labels = [t.get_text() for t in ax.get_legend().get_texts()]
+                # ax.legend(handles=handles, labels=labels)
+                pass
             else:
                 handles = []
                 labels = []
@@ -1522,7 +1546,8 @@ class RasterLayer(_Layer):
             handles = []
             labels = []
 
-        im = ax.imshow(layer, cmap=cmap, extent=extent, interpolation='none', zorder=1, rasterized=rasterized)
+        im = ax.imshow(layer, cmap=cmap, extent=extent, alpha=alpha,
+                       interpolation='none', zorder=1, rasterized=rasterized)
 
         if title:
             plt.title(title, loc='left')
