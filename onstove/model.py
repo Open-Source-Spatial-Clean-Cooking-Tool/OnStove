@@ -106,6 +106,12 @@ class DataProcessor:
         self.conn = None
         self.base_layer = None
 
+    def __setitem__(self, idx, value):
+        self.__dict__[idx] = value
+
+    def __getitem__(self, idx):
+        return self.__dict__[idx]
+
     def _get_layers(self, layers: dict[str, list[str]]) -> dict[str, dict[str, 'RasterLayer']]:
         """Gets the ``dict(category: dict(name: layer))`` dictionary from the :attr:`layers` attribute.
 
@@ -1087,8 +1093,8 @@ class OnStove(DataProcessor):
             base_fuel.total_time_yr = pd.Series(0, index = self.gdf.index)
             base_fuel.deaths = np.zeros((len(self.gdf), self.specs["end_year"] - self.specs["start_year"]))
             base_fuel.cases = np.zeros((len(self.gdf), self.specs["end_year"] - self.specs["start_year"]))
-            base_fuel.benefits = pd.Series(0, index = self.gdf.index)
-            base_fuel.costs = pd.Series(0, index=self.gdf.index)
+            base_fuel.benefits = np.zeros((len(self.gdf), self.specs["end_year"] - self.specs["start_year"]))
+            base_fuel.costs = np.zeros((len(self.gdf), self.specs["end_year"] - self.specs["start_year"]))
 
             mask = pd.Series(True, index=self.gdf.index)
 
@@ -1131,31 +1137,38 @@ class OnStove(DataProcessor):
                 if isinstance(tech, LPG):
                     tech.transportation_cost(self)
 
+                shares_array = tech.pop_sqkm.to_numpy()
+                shares_reshaped = shares_array.reshape(-1, 1)
+
                 tech.discounted_inv(self, mask, relative=False)
                 base_fuel.tech_life += tech.tech_life * tech.pop_sqkm
-                base_fuel.discounted_investments += tech.discounted_investments.sum(axis=1) * tech.pop_sqkm
+                base_fuel.tech_life = round(base_fuel.tech_life).astype(int)
+
+                #TODO: This line below may change when inv_change are incorporated
+                base_fuel.inv_cost += tech.inv_cost * tech.pop_sqkm
+                base_fuel.discounted_investments += tech.discounted_investments * shares_reshaped
 
                 tech.discounted_om(self, mask, relative=False)
-                base_fuel.discounted_om_costs += tech.discounted_om_costs.sum(axis=1) * tech.pop_sqkm
+                base_fuel.discounted_om_costs += tech.discounted_om_costs * shares_reshaped
 
                 tech.adjusted_pm25()
                 tech.health_parameters(self)
 
                 tech.discount_fuel_cost(self, mask, relative=False)
-                base_fuel.discounted_fuel_cost += tech.discounted_fuel_cost.sum(axis=1) * tech.pop_sqkm
+                base_fuel.discounted_fuel_cost += tech.discounted_fuel_cost * shares_reshaped
 
                 tech.salvage(self, mask, relative=False)
-                base_fuel.discounted_salvage_cost += tech.discounted_salvage_cost * tech.pop_sqkm
+                base_fuel.discounted_salvage_cost += tech.discounted_salvage_cost * shares_reshaped
 
-                tech.total_costs(mask)
-                base_fuel.costs += tech.costs * tech.pop_sqkm
+                tech.total_costs(self, mask)
+                base_fuel.costs += tech.costs * shares_reshaped
 
                 tech.mortality(self, mask, 'mort', False)
                 tech.morbidity(self, mask, 'morb', False)
                 base_fuel.mort += tech.distributed_mortality * tech.pop_sqkm
                 base_fuel.morb += tech.distributed_morbidity * tech.pop_sqkm
                 base_fuel.deaths += tech.deaths * np.repeat(np.expand_dims(tech.pop_sqkm, axis=1),
-                                       self.specs["end_year"]  - self.specs["start_year"], axis=1)
+                                       self.specs["end_year"] - self.specs["start_year"], axis=1)
 
                 base_fuel.cases += tech.cases * np.repeat(np.expand_dims(tech.pop_sqkm, axis=1),
                                                             self.specs["end_year"] - self.specs["start_year"], axis=1)
@@ -1173,7 +1186,7 @@ class OnStove(DataProcessor):
 
             base_fuel.benefits = base_fuel.time + base_fuel.discounted_carbon_costs + base_fuel.mort + base_fuel.morb
             self.gdf["baseline_benefits"] = base_fuel.benefits
-            self.gdf["baseline_costs"] = base_fuel.costs
+            self.gdf["baseline_costs"] = base_fuel.costs.sum(axis=1)
             self.base_fuel = base_fuel
 
     def read_tech_data(self, path_to_config: str, delimiter=','):
@@ -1815,44 +1828,25 @@ class OnStove(DataProcessor):
 
             print(f'Extracting indicators for the year {self.year}')
             print('    - Deaths avoided')
-            self.extract_lives_saved(year=self.year)
+            self.extract_lives_saved()
             print('    - Health costs')
-            self.extract_health_costs_saved(year=self.year)
+            self.extract_health_costs_saved()
             print('    - Time saved')
-            self.extract_time_saved(year=self.year)
+            self.extract_time_saved()
             print('    - Opportunity cost')
-            self.extract_opportunity_cost(year=self.year)
+            self.extract_opportunity_cost()
             print('    - Avoided emissions')
-            self.extract_reduced_emissions(year=self.year)
+            self.extract_reduced_emissions()
             print('    - Avoided emissions costs')
-            self.extract_emissions_costs_saved(year=self.year)
-            # print('    - Investment costs')
-            # self.extract_investment_costs(yearly=True)
-            # print('    - Fuel costs')
-            # self.extract_fuel_costs(year=True)
+            self.extract_emissions_costs_saved()
+            print('    - Investment costs')
+            self.extract_investment_costs()
+            print('    - Fuel costs')
+            self.extract_fuel_costs()
             print('    - OM costs')
-            self.extract_om_costs(year=True)
+            self.extract_om_costs()
 
-        print('Extracting indicators over the entire period')
-        print('    - Deaths avoided')
-        self.extract_lives_saved()
-        print('    - Health costs')
-        self.extract_health_costs_saved()
-        print('    - Time saved')
-        self.extract_time_saved()
-        print('    - Opportunity cost')
-        self.extract_opportunity_cost()
-        print('    - Avoided emissions')
-        self.extract_reduced_emissions()
-        print('    - Avoided emissions costs')
-        self.extract_emissions_costs_saved()
-        # print('    - Investment costs')
-        # self.extract_investment_costs(yearly=False)
-        # print('    - Fuel costs')
-        # self.extract_fuel_costs(year=False)
-        print('    - OM costs')
-        self.extract_om_costs(year=False)
-        print('    - Salvage value')
+        print('    - Salvage')
         self.extract_salvage()
 
         print('Done')
@@ -1902,15 +1896,15 @@ class OnStove(DataProcessor):
         self.gdf.loc[masky, "maximum_net_benefit"] = self.gdf.loc[masky, temps].max(axis=1)
 
         gdf = gpd.GeoDataFrame()
-        gdf_copy = self.gdf.copy()
-
+        gdf_copy = self.gdf.loc[mask].copy()
 
         for tech in techs:
-            current = (tech.households.loc[masky] < gdf_copy["Households"].loc[masky]) & \
+            current = (tech.factor[mask][:, self.year - 1 - self.specs["start_year"]] < 1) & \
                       (gdf_copy["max_benefit_tech"] == tech.name) & (gdf_copy["year"] == self.year)
-            dff = gdf_copy.loc[current[current].index].copy()
 
             if current.sum() > 0:
+                dff = gdf_copy.loc[current[current].index].copy()
+
                 dff.loc[current[current].index, f'net_benefit_{tech.name}_temp'] = np.nan
 
                 second_benefit_cols = temps.copy()
@@ -1927,19 +1921,34 @@ class OnStove(DataProcessor):
                 dff['max_benefit_tech'] = second_best
                 dff['maximum_net_benefit'] = second_tech_net_benefit
 
-                dff['Pop'] *= (1 - tech.factor.loc[current[current].index])
-                dff['pop_end_year'] *= (1 - tech.factor.loc[current[current].index])
-                dff['pop_init_year'] *= (1 - tech.factor.loc[current[current].index])
-                dff['households_init'] *= (1 - tech.factor.loc[current[current].index])
-                dff['households_end'] *= (1 - tech.factor.loc[current[current].index])
-                dff["Households"] *= (1 - tech.factor.loc[current[current].index])
+                index = np.where(mask)[0][current.tolist()]
+                for sec_tech in second_best.unique():
 
-                self.gdf.loc[current[current].index, 'Pop'] *= tech.factor.loc[current[current].index]
-                self.gdf.loc[current[current].index, "Households"] *= tech.factor.loc[current[current].index]
-                self.gdf.loc[current[current].index,'pop_end_year'] *= tech.factor.loc[current[current].index]
-                self.gdf.loc[current[current].index,'pop_init_year'] *=tech.factor.loc[current[current].index]
-                self.gdf.loc[current[current].index,'households_init'] *= tech.factor.loc[current[current].index]
-                self.gdf.loc[current[current].index,'households_end'] *= tech.factor.loc[current[current].index]
+                    self.techs[sec_tech].factor[index, self.year - 1 - self.specs["start_year"]:]\
+                        = 1 - tech.factor[index, self.year - 1 - self.specs["start_year"]:]
+
+                dff.loc[current[current].index, 'Pop'] *= \
+                    (1 - tech.factor[:, self.year - 1 - self.specs["start_year"]][mask.tolist()][current.tolist()])
+                dff.loc[current[current].index, 'pop_end_year'] *= \
+                    (1 - tech.factor[:, self.year - 1 - self.specs["start_year"]][mask.tolist()][current.tolist()])
+                dff.loc[current[current].index, 'pop_init_year'] *= \
+                    (1 - tech.factor[:, self.year - 1 - self.specs["start_year"]][mask.tolist()][current.tolist()])
+                dff.loc[current[current].index, 'households_init'] *= \
+                    (1 - tech.factor[:, self.year - 1 - self.specs["start_year"]][mask.tolist()][current.tolist()])
+                dff.loc[current[current].index, 'households_end'] *= \
+                    (1 - tech.factor[:, self.year - 1 - self.specs["start_year"]][mask.tolist()][current.tolist()])
+                dff.loc[current[current].index, "Households"] *= \
+                    (1 - tech.factor[:, self.year - 1 - self.specs["start_year"]][mask.tolist()][current.tolist()])
+
+                self.gdf.loc[current[current].index, 'Pop'] -= dff.loc[current[current].index, 'Pop']
+                self.gdf.loc[current[current].index, "Households"] -= dff.loc[current[current].index, 'Households']
+                self.gdf.loc[current[current].index, 'pop_end_year'] -= dff.loc[current[current].index, 'pop_end_year']
+                self.gdf.loc[current[current].index, 'pop_init_year'] -= \
+                    dff.loc[current[current].index, 'pop_init_year']
+                self.gdf.loc[current[current].index, 'households_init'] -= \
+                    dff.loc[current[current].index, 'households_init']
+                self.gdf.loc[current[current].index, 'households_end'] -= \
+                    dff.loc[current[current].index, 'households_end']
 
                 if tech.name == 'Electricity':
                     dff['Elec_pop_calib'] *= 0
@@ -1980,203 +1989,107 @@ class OnStove(DataProcessor):
         self.gdf.drop('index_right', axis=1, inplace=True)
         self.gdf.sort_index(inplace=True)
 
-    def extract_lives_saved(self, year = None):
+    def extract_lives_saved(self):
         """Extracts the number of deaths avoided from adopting each stove type selected across the study area and saves
         the data in the ``deaths_avoided`` column of the :attr:`gdf`.
         """
-        if year == None:
-            for tech in self.gdf['max_benefit_tech'].unique():
-                is_tech = self.gdf['max_benefit_tech'] == tech
-                index = self.gdf.loc[is_tech].index
-                self.gdf.loc[is_tech, "deaths_avoided"] = (self.techs[tech].relative_deaths[index] *
-                                                           self.houses[index]).sum(axis=1)
-        else:
-            s = pd.Series(0, index=self.gdf.index)
-            setattr(self, f"deaths_avoided_{self.year}", s)
-            for tech in self.gdf.loc[self.gdf["year"] == self.year, 'max_benefit_tech'].unique():
-                is_tech = ((self.gdf['max_benefit_tech'] == tech) & (self.gdf['year'] == self.year))
-                index = self.gdf.loc[is_tech].index
-                column_name = f"deaths_avoided_{self.year}"
-                column_value = getattr(self, column_name)
-                column_value.loc[is_tech] = (self.techs[tech].relative_deaths[index] *
-                                                           self.houses[index]).sum(axis=1)
+        for tech in self.gdf.loc[self.gdf["year"] == self.year, 'max_benefit_tech'].unique():
+            is_tech = ((self.gdf['max_benefit_tech'] == tech) & (self.gdf['year'] == self.year))
+            index = is_tech[is_tech].index
+            self.gdf.loc[is_tech, 'deaths_avoided'] = (self.techs[tech].relative_deaths[index] *
+                                                       self.houses[index] * self.techs[tech].factor[index]).sum(axis=1)
 
-
-    def extract_health_costs_saved(self, year = None):
+    def extract_health_costs_saved(self):
         """
         Extracts the health costs avoided from adopting each stove type selected across the study area. The health costs
         includes costs of avoided deaths, sickness and spillovers.
         """
-        if year == None:
-            for tech in self.gdf['max_benefit_tech'].unique():
-                is_tech = self.gdf['max_benefit_tech'] == tech
-                index = self.gdf.loc[is_tech].index
-                self.gdf.loc[is_tech, "health_costs_avoided"] = ((self.techs[tech].relative_cost_mort[index] + \
-                                                                self.techs[tech].relative_cost_morb[index]) * \
-                                                                self.houses[index]).sum(axis=1)
-        else:
-            s = pd.Series(0, index=self.gdf.index)
-            setattr(self, f"health_costs_avoided_{year}", s)
-            for tech in self.gdf.loc[self.gdf["year"] == year, 'max_benefit_tech'].unique():
-                is_tech = ((self.gdf['max_benefit_tech'] == tech) & (self.gdf['year'] == year))
-                index = self.gdf.loc[is_tech].index
-                column_name = f"health_costs_avoided_{year}"
-                column_value = getattr(self, column_name)
-                column_value.loc[is_tech] = ((self.techs[tech].relative_cost_mort[index] + \
-                                                                self.techs[tech].relative_cost_morb[index]) * \
-                                                                self.houses[index]).sum(axis=1)
+        for tech in self.gdf.loc[self.gdf["year"] == self.year, 'max_benefit_tech'].unique():
+            is_tech = ((self.gdf['max_benefit_tech'] == tech) & (self.gdf['year'] == self.year))
+            index = is_tech[is_tech].index
+            self.gdf.loc[is_tech, 'health_costs_avoided'] = ((self.techs[tech].relative_cost_mort[index] + \
+                                                                self.techs[tech].relative_cost_morb[index])  * \
+                                                       self.houses[index] * self.techs[tech].factor[index]).sum(axis=1)
 
-
-    def extract_time_saved(self, year = None):
+    def extract_time_saved(self):
         """
         Extracts the total time saved from adopting each stove type selected across the study area.
         """
-        if year == None:
-            for tech in self.gdf['max_benefit_tech'].unique():
-                is_tech = self.gdf['max_benefit_tech'] == tech
-                index = self.gdf.loc[is_tech].index
-                self.gdf.loc[is_tech, "time_saved"] = (self.techs[tech].total_time_saved[index] *
-                                                       self.houses[index]).sum(axis=1)
-        else:
-            s = pd.Series(0, index=self.gdf.index)
-            setattr(self, f"time_saved_{year}", s)
-            for tech in self.gdf.loc[self.gdf["year"] == year, 'max_benefit_tech'].unique():
-                is_tech = ((self.gdf['max_benefit_tech'] == tech) & (self.gdf['year'] == year))
-                index = self.gdf.loc[is_tech].index
-                column_name = f"time_saved_{year}"
-                column_value = getattr(self, column_name)
-                column_value.loc[is_tech] = (self.techs[tech].total_time_saved[index] * self.houses[index]).sum(axis=1)
+        for tech in self.gdf.loc[self.gdf["year"] == self.year, 'max_benefit_tech'].unique():
+            is_tech = ((self.gdf['max_benefit_tech'] == tech) & (self.gdf['year'] == self.year))
+            index = is_tech[is_tech].index
+            self.gdf.loc[is_tech, 'time_saved'] = (self.techs[tech].total_time_saved[index] *
+                                                self.houses[index] * self.techs[tech].factor[index]).sum(axis=1)/365
 
-
-    def extract_opportunity_cost(self, year = None):
+    def extract_opportunity_cost(self):
         """
         Extracts the opportunity cost of adopting each stove type selected across the study area.
         """
-        if year == None:
-            for tech in self.gdf['max_benefit_tech'].unique():
-                is_tech = self.gdf['max_benefit_tech'] == tech
-                index = self.gdf.loc[is_tech].index
-                self.gdf.loc[is_tech, "opportunity_cost_gained"] = (self.techs[tech].time_value[index]
-                                                                    * self.houses[index]).sum(axis=1)
-        else:
-            s = pd.Series(0, index=self.gdf.index)
-            setattr(self, f"opportunity_cost_gained_{self.year}", s)
-            for tech in self.gdf.loc[self.gdf["year"] == self.year, 'max_benefit_tech'].unique():
-                is_tech = ((self.gdf['max_benefit_tech'] == tech) & (self.gdf['year'] == self.year))
-                index = self.gdf.loc[is_tech].index
-                column_name = f"opportunity_cost_gained_{self.year}"
-                column_value = getattr(self, column_name)
-                column_value.loc[is_tech] = (self.techs[tech].time_value[index] * self.houses[index]).sum(axis=1)
+        for tech in self.gdf.loc[self.gdf["year"] == self.year, 'max_benefit_tech'].unique():
+            is_tech = ((self.gdf['max_benefit_tech'] == tech) & (self.gdf['year'] == self.year))
+            index = is_tech[is_tech].index
+            self.gdf.loc[is_tech, 'opportunity_cost'] = (self.techs[tech].time_value[index] *
+                                                       self.houses[index] * self.techs[tech].factor[index]).sum(axis=1)
 
-    def extract_reduced_emissions(self, year = None):
+    def extract_reduced_emissions(self):
         """
         Extracts the reduced emissions achieved by adopting each stove type selected across the study area.
         """
-        if year == None:
-            for tech in self.gdf['max_benefit_tech'].unique():
-                is_tech = self.gdf['max_benefit_tech'] == tech
-                index = self.gdf.loc[is_tech].index
-                self.gdf.loc[is_tech, "reduced_emissions"] = (self.techs[tech].decreased_carbon_emissions[index] *
-                                                              self.houses[index]).sum(axis=1)
-        else:
-            s = pd.Series(0, index=self.gdf.index)
-            setattr(self, f"reduced_emissions_{self.year}", s)
-            for tech in self.gdf.loc[self.gdf["year"] == self.year, 'max_benefit_tech'].unique():
-                is_tech = ((self.gdf['max_benefit_tech'] == tech) & (self.gdf['year'] == self.year))
-                index = self.gdf.loc[is_tech].index
-                column_name = f"reduced_emissions_{self.year}"
-                column_value = getattr(self, column_name)
-                column_value.loc[is_tech] = (self.techs[tech].decreased_carbon_emissions[index] *
-                                                              self.houses[index]).sum(axis=1)
+        for tech in self.gdf.loc[self.gdf["year"] == self.year, 'max_benefit_tech'].unique():
+            is_tech = ((self.gdf['max_benefit_tech'] == tech) & (self.gdf['year'] == self.year))
+            index = is_tech[is_tech].index
+            self.gdf.loc[is_tech, 'reduced_emissions'] = (self.techs[tech].decreased_carbon_emissions[index] *
+                                                       self.houses[index] * self.techs[tech].factor[index]).sum(axis=1)
 
-    def extract_investment_costs(self, yearly = False):
+    def extract_investment_costs(self):
         """
         Extracts the total investment costs needed in order to adopt each stove type across the study area.
         """
-        s = pd.Series(0, index=self.gdf.index)
-        setattr(self, f"investment_costs_{self.year}", s)
-        if yearly:
-            for tech in self.gdf.loc[self.gdf["year"] == self.year, 'max_benefit_tech'].unique():
-                is_tech = ((self.gdf['max_benefit_tech'] == tech) & (self.gdf['year'] == self.year))
-                index = self.gdf.loc[is_tech].index
-                column_name = f"investment_costs_{self.year}"
-                column_value = getattr(self, column_name)
-                column_value.loc[is_tech] = self.techs[tech].discounted_investments[index]
-        else:
-            for tech in self.gdf['max_benefit_tech'].unique():
-                is_tech = self.gdf['max_benefit_tech'] == tech
-                index = self.gdf.loc[is_tech].index
-                self.gdf.loc[is_tech, "investment_costs"] = self.techs[tech].discounted_investments[index]
+        for tech in self.gdf.loc[self.gdf["year"] == self.year, 'max_benefit_tech'].unique():
+            is_tech = ((self.gdf['max_benefit_tech'] == tech) & (self.gdf['year'] == self.year))
+            index = is_tech[is_tech].index
+            self.gdf.loc[is_tech, 'investment_costs'] = (self.techs[tech].discounted_investments[index] *
+                                                       self.houses[index] * self.techs[tech].factor[index]).sum(axis=1)
 
-    def extract_om_costs(self, year = None):
+    def extract_om_costs(self):
         """
         Extracts the total operation and maintenance costs needed in order to adopt each stove type across the study area.
         """
-        if year == None:
-            for tech in self.gdf['max_benefit_tech'].unique():
-                is_tech = self.gdf['max_benefit_tech'] == tech
-                index = self.gdf.loc[is_tech].index
-                self.gdf.loc[is_tech, "om_costs"] = (self.techs[tech].discounted_om_costs * self.houses[index]).sum(axis=1)
-        else:
-            s = pd.Series(0, index=self.gdf.index)
-            setattr(self, f"om_costs_{self.year}", s)
-            for tech in self.gdf.loc[self.gdf["year"] == self.year, 'max_benefit_tech'].unique():
-                is_tech = ((self.gdf['max_benefit_tech'] == tech) & (self.gdf['year'] == self.year))
-                index = self.gdf.loc[is_tech].index
-                column_name = f"om_costs_{self.year}"
-                column_value = getattr(self, column_name)
-                column_value.loc[is_tech] = (self.techs[tech].discounted_om_costs * self.houses[index]).sum(axis=1)
+        for tech in self.gdf.loc[self.gdf["year"] == self.year, 'max_benefit_tech'].unique():
+            is_tech = ((self.gdf['max_benefit_tech'] == tech) & (self.gdf['year'] == self.year))
+            index = is_tech[is_tech].index
+            self.gdf.loc[is_tech, 'om_costs'] = (self.techs[tech].discounted_om_costs[index] *
+                                                       self.houses[index] * self.techs[tech].factor[index]).sum(axis=1)
 
-    def extract_fuel_costs(self, year = None):
+    def extract_fuel_costs(self):
         """
         Extracts the total fuel costs needed in order to adopt each stove type across the study area.
         """
-        if year == None:
-            for tech in self.gdf['max_benefit_tech'].unique():
-                is_tech = self.gdf['max_benefit_tech'] == tech
-                index = self.gdf.loc[is_tech].index
-                self.gdf.loc[is_tech, "fuel_costs"] = (self.techs[tech].fuel_cost_discounted[index] *
-                                                       self.houses[index]).sum(axis=1)
-        else:
-            s = pd.Series(0, index=self.gdf.index)
-            setattr(self, f"fuel_costs_{self.year}", s)
-            for tech in self.gdf.loc[self.gdf["year"] == self.year, 'max_benefit_tech'].unique():
-                is_tech = ((self.gdf['max_benefit_tech'] == tech) & (self.gdf['year'] == self.year))
-                index = self.gdf.loc[is_tech].index
-                column_name = f"fuel_costs_{self.year}"
-                column_value = getattr(self, column_name)
-                column_value.loc[is_tech] = (self.techs[tech].fuel_cost_discounted[index] *
-                                                       self.houses[index]).sum(axis=1)
+        for tech in self.gdf.loc[self.gdf["year"] == self.year, 'max_benefit_tech'].unique():
+            is_tech = ((self.gdf['max_benefit_tech'] == tech) & (self.gdf['year'] == self.year))
+            index = is_tech[is_tech].index
+            self.gdf.loc[is_tech, 'fuel_costs'] = (self.techs[tech].discounted_fuel_cost[index] *
+                                                       self.houses[index] * self.techs[tech].factor[index]).sum(axis=1)
 
     def extract_salvage(self):
         """
         Extracts the total salvage costs in order to adopt each stove type across the study area.
         """
-        for tech in self.gdf['max_benefit_tech'].unique():
-            is_tech = self.gdf['max_benefit_tech'] == tech
-            index = self.gdf.loc[is_tech].index
-            self.gdf.loc[is_tech, "salvage_value"] = self.techs[tech].discounted_salvage_cost[index]
+        for tech in self.gdf.loc[self.gdf["year"] == self.year, 'max_benefit_tech'].unique():
+            is_tech = ((self.gdf['max_benefit_tech'] == tech) & (self.gdf['year'] == self.year))
+            index = is_tech[is_tech].index
+            self.gdf.loc[is_tech, 'salvage_cost'] = (self.techs[tech].discounted_salvage_cost[index] *
+                                                       self.houses[index] * self.techs[tech].factor[index]).sum(axis=1)
 
-    def extract_emissions_costs_saved(self, year = None):
+    def extract_emissions_costs_saved(self):
         """
         Extracts the economic value of the emissions by adopt each stove type across the study area.
         """
-        if year == None:
-            for tech in self.gdf['max_benefit_tech'].dropna().unique():
-                is_tech = self.gdf['max_benefit_tech'] == tech
-                index = self.gdf.loc[is_tech].index
-                self.gdf.loc[is_tech, "emissions_costs_saved"] = (self.techs[tech].decreased_carbon_costs[index] *
-                                                                  self.houses[index]).sum(axis=1)
-        else:
-            s = pd.Series(0, index=self.gdf.index)
-            setattr(self, f"emissions_costs_saved_{self.year}", s)
-            for tech in self.gdf.loc[self.gdf["year"] == self.year, 'max_benefit_tech'].unique():
-                is_tech = ((self.gdf['max_benefit_tech'] == tech) & (self.gdf['year'] == self.year))
-                index = self.gdf.loc[is_tech].index
-                column_name = f"emissions_costs_saved_{self.year}"
-                column_value = getattr(self, column_name)
-                column_value.loc[is_tech] = (self.techs[tech].decreased_carbon_costs[index] *
-                                             self.houses[index]).sum(axis=1)
+        for tech in self.gdf.loc[self.gdf["year"] == self.year, 'max_benefit_tech'].unique():
+            is_tech = ((self.gdf['max_benefit_tech'] == tech) & (self.gdf['year'] == self.year))
+            index = is_tech[is_tech].index
+            self.gdf.loc[is_tech, 'emissions_costs_avoided'] = (self.techs[tech].decreased_carbon_costs[index] *
+                                                       self.houses[index] * self.techs[tech].factor[index]).sum(axis=1)
 
     def extract_wealth_index(self, wealth_index, file_type="csv", x_column="longitude", y_column="latitude",
                              wealth_column="rwi"):
@@ -2695,22 +2608,13 @@ class OnStove(DataProcessor):
             health_costs_avoided = 0
             reduced_emissions = 0
             time_saved = 0
-            households = 0
-            for i in range(self.specs["start_year"] + 1, year + 1):
-                deaths = getattr(self, f'deaths_avoided_{i}')
-                time = getattr(self, f'time_saved_{i}')
-                emissions = getattr(self, f'reduced_emissions_{i}')
-                health_costs = getattr(self, f'health_costs_avoided_{i}')
-                hh = getattr(self, f'households_{i}')
-
-                deaths_avoided += (deaths * hh).sum()
-                health_costs_avoided += (health_costs * hh).sum()
-                reduced_emissions += (emissions * hh).sum()
-                time_saved += (time*hh).sum()
-                households += hh.sum()
+            for i, y in enumerate(range(self.specs["start_year"] + 1, year + 1)):
+                deaths_avoided += self.gdf.loc[self.gdf['year'] == y, 'deaths_avoided'].sum()
+                health_costs_avoided += self.gdf.loc[self.gdf['year'] == y, 'health_costs_avoided'].sum()
+                reduced_emissions += self.gdf.loc[self.gdf['year'] == y, 'reduced_emissions'].sum()
+                time_saved += self.gdf.loc[self.gdf['year'] == y, 'time_saved'].sum() / self.houses[:, i].sum()
             health_costs_avoided = health_costs_avoided / 1000000000
             reduced_emissions = reduced_emissions / 1000000000
-            time_saved = time_saved / households
         else:
             deaths_avoided = (getattr(self, f'deaths_avoided_{year}') * getattr(self, f"households_{year}")).sum()
             health_costs_avoided = (getattr(self, f'health_costs_avoided_{year}') * getattr(self, f"households_{year}")).sum() \
@@ -2762,19 +2666,14 @@ class OnStove(DataProcessor):
                           legend=legend, legend_title=legend_title, legend_cols=legend_cols, rasterized=rasterized,
                           scale_bar=scale_bar, north_arrow=north_arrow, legend_prop=legend_prop)
 
-
-    # TODO: make this a property
     def summary(self, total=True, pretty=True, labels=None):
         dff = self.gdf.copy()
         if labels is not None:
             dff = self._re_name(dff, labels, 'max_benefit_tech')
-        for attribute in ['maximum_net_benefit', 'deaths_avoided', 'health_costs_avoided', 'time_saved',
-                          'opportunity_cost_gained', 'reduced_emissions', 'emissions_costs_saved',
-                          'investment_costs', 'fuel_costs', 'om_costs', 'salvage_value']:
-
-            for i in dff["year"].unique():
-                idx = dff[dff["year"] == i].index
-                dff.loc[idx, attribute] *= getattr(self, f'households_{i}').loc[idx]
+        for i, year in enumerate(range(self.specs['start_year'] + 1, self.specs['end_year'] + 1)):
+            mask = (dff['year'] == year)
+            index = mask[mask].index
+            dff.loc[mask, 'maximum_net_benefit'] *= self.houses[index, i]
 
         summary = dff.groupby(['max_benefit_tech']).agg({'Pop': lambda row: np.nansum(row) / 1000000,
                                                          "Households": lambda row: np.nansum(row) / 1000000,
@@ -2782,21 +2681,22 @@ class OnStove(DataProcessor):
                                                          'deaths_avoided': 'sum',
                                                          'health_costs_avoided': lambda row: np.nansum(row) / 1000000000,
                                                          'time_saved': 'sum',
-                                                         'opportunity_cost_gained': lambda row: np.nansum(
+                                                         'opportunity_cost': lambda row: np.nansum(
                                                              row) / 1000000000,
                                                          'reduced_emissions': lambda row: np.nansum(row) / 1000000000,
-                                                         'emissions_costs_saved': lambda row: np.nansum(row) / 1000000000,
+                                                         'emissions_costs_avoided': lambda row: np.nansum(row) / 1000000000,
                                                          'investment_costs': lambda row: np.nansum(row) / 1000000000,
                                                          'fuel_costs': lambda row: np.nansum(row) / 1000000000,
                                                          'om_costs': lambda row: np.nansum(row) / 1000000000,
-                                                         'salvage_value': lambda row: np.nansum(row) / 1000000000,
+                                                         'salvage_cost': lambda row: np.nansum(row) / 1000000000,
                                                          }).reset_index()
         if total:
             total = summary[summary.columns[1:]].sum().rename('Total')
             total['max_benefit_tech'] = 'Total'
             summary = pd.concat([summary, total.to_frame().T])
 
-        summary["time_saved"] /= (summary["Households"] * 1000000)
+        summary["time_saved"] *= (summary['Households']/(dff["Households"].sum() *
+                                  (self.specs['end_year'] - self.specs['start_year'])))
 
         if pretty:
             summary.rename(columns={'max_benefit_tech': 'Max benefit technology',
@@ -2805,14 +2705,14 @@ class OnStove(DataProcessor):
                                     'maximum_net_benefit': 'Total net benefit (BUSD)',
                                     'deaths_avoided': 'Total deaths avoided',
                                     'health_costs_avoided': 'Health costs avoided (BUSD)',
-                                    'time_saved': 'hours/hh.day',
-                                    'opportunity_cost_gained': 'Opportunity cost avoided (BUSD)',
+                                    'time_saved': 'hours/hh.day.year',
+                                    'opportunity_cost': 'Opportunity cost avoided (BUSD)',
                                     'reduced_emissions': 'Reduced emissions (Mton CO2eq)',
-                                    'emissions_costs_saved': 'Emissions costs saved (BUSD)',
+                                    'emissions_costs_avoided': 'Emissions costs saved (BUSD)',
                                     'investment_costs': 'Investment costs (BUSD)',
                                     'fuel_costs': 'Fuel costs (BUSD)',
                                     'om_costs': 'O&M costs (BUSD)',
-                                    'salvage_value': 'Salvage value (BUSD)'}, inplace=True)
+                                    'salvage_cost': 'Salvage value (BUSD)'}, inplace=True)
 
         return summary
 
