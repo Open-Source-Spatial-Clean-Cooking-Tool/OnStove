@@ -2611,20 +2611,22 @@ class OnStove(DataProcessor):
             reduced_emissions = 0
             time_saved = 0
             for i, y in enumerate(range(self.specs["start_year"] + 1, year + 1)):
-                deaths_avoided += self.gdf.loc[self.gdf['year'] == y, 'deaths_avoided'].sum()
-                health_costs_avoided += self.gdf.loc[self.gdf['year'] == y, 'health_costs_avoided'].sum()
-                reduced_emissions += self.gdf.loc[self.gdf['year'] == y, 'reduced_emissions'].sum()
-                time_saved += self.gdf.loc[self.gdf['year'] == y, 'time_saved'].sum() / self.houses[:, i].sum()
+                mask = (self.gdf['year'] == y)
+                index = mask[mask].index
+                deaths_avoided += self.gdf.loc[mask, 'deaths_avoided'].sum()
+                health_costs_avoided += self.gdf.loc[mask, 'health_costs_avoided'].sum()
+                reduced_emissions += self.gdf.loc[mask, 'reduced_emissions'].sum()
+                time_saved += (self.gdf.loc[mask, 'time_saved'] * self.houses[index, i]).sum() / \
+                              self.houses[index, i].sum()
             health_costs_avoided = health_costs_avoided / 1000000000
             reduced_emissions = reduced_emissions / 1000000000
         else:
-            deaths_avoided = (getattr(self, f'deaths_avoided_{year}') * getattr(self, f"households_{year}")).sum()
-            health_costs_avoided = (getattr(self, f'health_costs_avoided_{year}') * getattr(self, f"households_{year}")).sum() \
-                                   / 1000000000
-            reduced_emissions = (getattr(self, f'reduced_emissions_{year}') * getattr(self, f"households_{year}")).sum() \
-                                / 1000000000
-            time_saved = (getattr(self, f'time_saved_{year}') * getattr(self, f"households_{year}")).sum()
-            time_saved = time_saved / (getattr(self, f"households_{year}").sum())
+            mask = (self.gdf['year'] == y)
+            index = mask[mask].index
+            deaths_avoided = self.gdf.loc[mask, 'deaths_avoided'].sum()
+            health_costs_avoided = self.gdf.loc[mask, 'health_costs_avoided'].sum() / 1000000000
+            reduced_emissions = self.gdf.loc[mask, 'reduced_emissions'].sum() / 1000000000
+            time_saved = (self.gdf.loc[mask, 'time_saved'] * self.houses[index, i]).sum() / self.houses[index, i].sum()
 
         deaths = TextArea(f"{deaths_avoided:,.0f}", textprops=dict(fontsize=fontsize, color='black'))
         health = TextArea(f"{health_costs_avoided:,.2f} BUSD", textprops=dict(fontsize=fontsize, color='black'))
