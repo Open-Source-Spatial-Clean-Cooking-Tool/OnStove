@@ -17,6 +17,7 @@ from matplotlib.colors import ListedColormap, to_rgb, to_hex
 from scipy import ndimage
 from typing import Optional, Callable, Union
 from warnings import warn
+from copy import deepcopy
 
 from onstove.plotting_utils import scale_bar as scale_bar_func
 from onstove.plotting_utils import north_arrow as north_arrow_func
@@ -68,6 +69,9 @@ class _Layer:
 
     def read_layer(self, layer_path, conn=None):
         pass
+    
+    def copy(self):
+        return deepcopy(self)
 
     @property
     def friction(self) -> 'RasterLayer':
@@ -618,6 +622,8 @@ class VectorLayer(_Layer):
                 legend_kwargs.pop('bbox_to_anchor', None)
                 if 'label' not in legend_kwargs.keys():
                     legend_kwargs['label'] = column.replace('_', ' ')
+                
+            
                     
         name = self.name.replace('_', ' ')
 
@@ -639,10 +645,12 @@ class VectorLayer(_Layer):
                 lgnd = ax.legend(loc='upper left', frameon=_legend_kwargs['frameon'])
             if 'bbox_to_anchor' in _legend_kwargs.keys():
                 lgnd.set_bbox_to_anchor(_legend_kwargs['bbox_to_anchor'])
+            ax.add_artist(lgnd)
         else:
             lgnd = ax.get_legend()
         
-        ax.add_artist(lgnd)
+            if isinstance(self.data[column].iloc[0], str):
+                ax.add_artist(lgnd)
 
         return ax
 
@@ -783,7 +791,7 @@ class RasterLayer(_Layer):
 
     def __str__(self):
         return 'Raster' + super().__str__()
-
+        
     @property
     def bounds(self) -> list[float]:
         """Wrapper property to get the  west, south, east, north bounds of the dataset using the
@@ -1432,6 +1440,9 @@ class RasterLayer(_Layer):
         categories.pop('None', False)
         values = list(categories.values())
         titles = list(categories.keys())
+        
+        if not isinstance(legend_prop, dict):
+            legend_prop = {}
 
         colors = [im.cmap(im.norm(value)) for value in values]
         # create a patch (proxy artist) for every color
@@ -1527,6 +1538,8 @@ class RasterLayer(_Layer):
             values = np.sort(np.unique(layer[~np.isnan(layer)]))
             key_list_cat = list(categories.keys())
             val_list_cat = list(categories.values())
+            print(key_list_cat)
+            print(val_list_cat)
             for i, val in enumerate(values):
                 layer[layer==val] = i
                 position = val_list_cat.index(val)
