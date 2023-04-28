@@ -1376,6 +1376,8 @@ class RasterLayer(_Layer):
         -----
         Refer to :doc:`numpy:reference/generated/numpy.quantile` for more information.
         """
+        if isinstance(quantiles, float) or isinstance(quantiles, int):
+            quantiles = [quantiles]
         x = self.data.astype('float64').copy()
         x[x == self.meta['nodata']] = np.nan
         x = x.flat
@@ -1401,6 +1403,8 @@ class RasterLayer(_Layer):
         --------
         get_quantiles
         """
+        if isinstance(quantiles, float) or isinstance(quantiles, int):
+            quantiles = [quantiles]
         qs = self.get_quantiles(quantiles)
         layer = self.data.copy()
         layer[layer == self.meta['nodata']] = np.nan
@@ -1409,17 +1413,15 @@ class RasterLayer(_Layer):
         layer = layer - min_val
         qs = qs - min_val
         new_layer = layer.copy()
-        while i < (len(qs)):
+        while i < len(qs):
             if i == 0:
-                new_layer[(layer >= 0) & (layer < qs[i])] = 0
+                new_layer[(layer >= 0) & (layer < qs[i])] = quantiles[i] * 100
             else:
-                new_layer[(layer >= qs[i - 1]) & (layer < qs[i])] = quantiles[i - 1] * 100
+                new_layer[(layer >= qs[i - 1]) & (layer < qs[i])] = quantiles[i] * 100
             i += 1
-        # if quantiles[i - 1] >= 1:
-        #     new_layer[layer >= qs[i - 2]] = 100
-        # else:
-        new_layer[(layer >= qs[i - 2]) & (layer <= qs[i - 1])] = quantiles[i - 2] * 100
-        new_layer[layer > qs[i - 1]] = np.nan
+        if len(qs) > 1:
+            new_layer[(layer >= qs[-2]) & (layer <= qs[-1])] = quantiles[-1] * 100
+        new_layer[layer > qs[-1]] = np.nan
         return new_layer
 
     @staticmethod
@@ -1510,6 +1512,8 @@ class RasterLayer(_Layer):
         if cumulative_count:
             layer = self.cumulative_count(cumulative_count)
         elif quantiles is not None:
+            if isinstance(quantiles, float) or isinstance(quantiles, int):
+                quantiles = [quantiles]
             layer = self.quantiles(quantiles)
             qs = self.get_quantiles(quantiles)
             categories = {}
