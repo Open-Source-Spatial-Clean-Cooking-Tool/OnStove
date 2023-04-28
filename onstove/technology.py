@@ -973,11 +973,7 @@ class Technology:
         model.gdf.loc[masky, "costs_{}".format(self.name)] = self.costs[mask].sum(axis=1)
         model.gdf.loc[masky, "benefits_{}".format(self.name)] = self.benefits.loc[masky]
         model.gdf.loc[masky, "net_benefit_{}".format(self.name)] = self.net_benefits.loc[masky]
-        #self.factor = pd.Series(np.ones(mask.shape[0]), index=mask.index)
-        self.factor[mask] = 1# pd.Series(np.ones(mask.shape[0]), index=mask.index)
-        #pop, house, pop_increase = model.yearly_pop(model.year)
-        #self.households.loc[masky] = house.loc[masky]
-
+        self.factor[mask, model.year - model.specs["start_year"] -1:] = 1
 
 class LPG(Technology):
     """LPG technology class used to model LPG stoves.
@@ -2089,12 +2085,9 @@ class Electricity(Technology):
         """
         super().net_benefit(model, mask)
         model.gdf.loc[model.gdf['Current_elec'] == 0, "net_benefit_{}".format(self.name)] = np.nan
-        #masky = mask[mask].index
         shares_array = model.elec_pop.to_numpy()
         shares_reshaped = shares_array.reshape(-1, 1)
-        self.factor[mask.index] = shares_reshaped[mask.index]
-        #pop, house, pop_increase = model.yearly_pop(model.year)
-        #self.households.loc[masky] = model.elec_pop.loc[masky] * house.loc[masky]
+        self.factor[mask.index, model.year - model.specs["start_year"] - 1:] = shares_reshaped[mask.index]
 
 class MiniGrids(Electricity):
     """Mini-grids technology class used to model electrical stoves powered by mini-grids.
@@ -2432,7 +2425,6 @@ class Biogas(Technology):
         --------
         net_benefit
         """
-        #masky = mask[mask].index
         super().net_benefit(model, mask)
         required_energy_hh = self.required_energy_hh(model)
         model.gdf.loc[(model.gdf['biogas_energy'] < required_energy_hh), "benefits_{}".format(self.name)] = np.nan
@@ -2442,6 +2434,5 @@ class Biogas(Technology):
         factor[factor > 1] = 1
         shares_array = factor.to_numpy()
         shares_reshaped = shares_array.reshape(-1, 1)
-        self.factor[mask.index] = shares_reshaped[mask.index]
-        #pop, house, pop_increase = model.yearly_pop(model.year)
-        #self.households.loc[masky] = house.loc[masky] * factor.loc[masky]
+        self.factor[mask.index, model.year - model.specs["start_year"] - 1:] = shares_reshaped[mask.index]
+
