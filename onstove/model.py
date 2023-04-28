@@ -2019,7 +2019,9 @@ class OnStove(DataProcessor):
             is_tech = ((self.gdf['max_benefit_tech'] == tech) & (self.gdf['year'] == self.year))
             index = is_tech[is_tech].index
             self.gdf.loc[is_tech, 'time_saved'] = (self.techs[tech].total_time_saved[index] *
-                                                self.houses[index] * self.techs[tech].factor[index]).sum(axis=1)/365
+                                                   self.houses[index] *
+                                                   self.techs[tech].factor[index]).sum(axis=1) / \
+                                                  (365 * (self.specs['end_year'] - self.specs['start_year']))
 
     def extract_opportunity_cost(self):
         """
@@ -2675,12 +2677,15 @@ class OnStove(DataProcessor):
             index = mask[mask].index
             dff.loc[mask, 'maximum_net_benefit'] *= self.houses[index, i]
 
+        tot_hh = dff['max_benefit_tech'].map(dff.groupby('max_benefit_tech')['Households'].sum())
+        dff['time_weighted'] = dff['time_saved'] * dff['Households'] / tot_hh
+
         summary = dff.groupby(['max_benefit_tech']).agg({'Pop': lambda row: np.nansum(row) / 1000000,
                                                          "Households": lambda row: np.nansum(row) / 1000000,
                                                          'maximum_net_benefit': lambda row: np.nansum(row) / 1000000000,
                                                          'deaths_avoided': 'sum',
                                                          'health_costs_avoided': lambda row: np.nansum(row) / 1000000000,
-                                                         'time_saved': 'sum',
+                                                         'time_weighted': 'sum',
                                                          'opportunity_cost': lambda row: np.nansum(
                                                              row) / 1000000000,
                                                          'reduced_emissions': lambda row: np.nansum(row) / 1000000000,
@@ -2693,10 +2698,8 @@ class OnStove(DataProcessor):
         if total:
             total = summary[summary.columns[1:]].sum().rename('Total')
             total['max_benefit_tech'] = 'Total'
-            summary = pd.concat([summary, total.to_frame().T])
-
-        summary["time_saved"] *= (summary['Households']/(dff["Households"].sum() *
-                                  (self.specs['end_year'] - self.specs['start_year'])))
+            total['time_weighted'] = summary['time_weighted'] * summary['Households'] / total['Households']
+            summary = pd.concat([summary, total.to_frame().T]))
 
         if pretty:
             summary.rename(columns={'max_benefit_tech': 'Max benefit technology',
@@ -2705,7 +2708,7 @@ class OnStove(DataProcessor):
                                     'maximum_net_benefit': 'Total net benefit (BUSD)',
                                     'deaths_avoided': 'Total deaths avoided',
                                     'health_costs_avoided': 'Health costs avoided (BUSD)',
-                                    'time_saved': 'hours/hh.day.year',
+                                    'time_weighted': 'Time saved (hours/hh.day)',
                                     'opportunity_cost': 'Opportunity cost avoided (BUSD)',
                                     'reduced_emissions': 'Reduced emissions (Mton CO2eq)',
                                     'emissions_costs_avoided': 'Emissions costs saved (BUSD)',
