@@ -29,6 +29,10 @@ from plotnine import (
     scale_x_discrete,
     scale_fill_manual,
     scale_color_manual,
+    geom_col,
+    geom_text,
+    ylim,
+    element_rect,
     coord_flip,
     theme_minimal,
     theme_classic,
@@ -1010,6 +1014,7 @@ class OnStove(DataProcessor):
         #create series for biogas same size as dataframe with zeros 
         tech_dict["Biogas"].pop_sqkm = pd.Series(np.zeros(self.gdf.shape[0]))
         #allocate remaining population to biogas in rural areas where there's potential
+        # TODO: Change these to np.nans ("inf")
         biogas_factor = tech_dict["Biogas"].population_cooking_rural / (self.gdf["pop_init_year"].loc[(tech_dict["Biogas"].time_of_collection!=float('inf')) & ~isurban].sum())
         tech_dict["Biogas"].pop_sqkm.loc[(~isurban) & (tech_dict["Biogas"].time_of_collection!=float('inf'))] = self.gdf["pop_init_year"] * biogas_factor
         pop_diff = (tech_dict["Biogas"].pop_sqkm + tech_dict["Electricity"].pop_sqkm) > self.gdf["pop_init_year"]
@@ -1186,8 +1191,8 @@ class OnStove(DataProcessor):
                 base_fuel.discounted_carbon_costs += tech.discounted_carbon_costs * tech.pop_sqkm
 
                 tech.time_saved(self, mask, False)
-                base_fuel.time += tech.discounted_time_value * tech.pop_sqkm
-                base_fuel.total_time_yr += tech.total_time_yr * tech.pop_sqkm
+                base_fuel.time += tech.discounted_time_value.replace(float("inf"), 0) * tech.pop_sqkm
+                base_fuel.total_time_yr += tech.total_time_yr.replace(float("inf"), 0) * tech.pop_sqkm
 
                 for paf in ['paf_alri', 'paf_copd', 'paf_ihd', 'paf_lc', 'paf_stroke']:
                     base_fuel[paf] += tech[paf] * tech.pop_sqkm

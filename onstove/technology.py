@@ -2368,9 +2368,9 @@ class Biogas(Technology):
         friction = self.read_friction(model, self.friction_path)
 
         time_of_collection = required_energy_hh * friction / (model.gdf["biogas_energy"] / 1000000) / 365
-        # time_of_collection[time_of_collection == float('inf')] = np.nan
-        # mean_value = time_of_collection.mean()
-        # time_of_collection[time_of_collection.isna()] = mean_value
+        time_of_collection[time_of_collection == float('inf')] = np.nan
+        #mean_value = time_of_collection.mean()
+        #time_of_collection[time_of_collection.isna()] = mean_value
         self.time_of_collection = time_of_collection
 
     def available_biogas(self, model: 'onstove.OnStove'):
