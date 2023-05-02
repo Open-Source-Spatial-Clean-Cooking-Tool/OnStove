@@ -175,5 +175,5 @@ def test_process_data():
     data.layers['Biomass']['Forest'].data /= factor
     data.layers['Biomass']['Forest'].data *= 100
     data.layers['Biomass']['Forest'].data[data.layers['Biomass']['Forest'].data > 100] = 100
-    data.layers['Biomass']['Forest'].save(f'{data.output_directory}/Biomass/Forest')
+    data.save_datasets(datasets='all')
     assert True

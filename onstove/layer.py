@@ -7,7 +7,10 @@ import datetime
 import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
+import matplotlib.lines as mplines
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 import time
+import shapely
 
 import pyproj
 import rasterio
@@ -15,6 +18,8 @@ from rasterio import warp, features, windows, transform
 from matplotlib.colors import ListedColormap, to_rgb, to_hex
 from scipy import ndimage
 from typing import Optional, Callable, Union
+from warnings import warn
+from copy import deepcopy
 
 from onstove.plotting_utils import scale_bar as scale_bar_func
 from onstove.plotting_utils import north_arrow as north_arrow_func
@@ -38,7 +43,7 @@ class _Layer:
     """Template Layer initializing all common needed attributes.
     """
 
-    def __init__(self, category: Optional[str] = None, name: Optional[str] = None,
+    def __init__(self, category: Optional[str] = None, name: Optional[str] = '',
                  path: Optional[str] = None, conn: Optional[str] = None,
                  normalization: Optional[str] = 'MinMax', inverse: bool = False,
                  distance_method:  Optional[str] = 'proximity', distance_limit: Optional[float] = None):
@@ -66,6 +71,9 @@ class _Layer:
 
     def read_layer(self, layer_path, conn=None):
         pass
+    
+    def copy(self):
+        return deepcopy(self)
 
     @property
     def friction(self) -> 'RasterLayer':
@@ -170,7 +178,7 @@ class VectorLayer(_Layer):
     """
 
     def __init__(self, category: Optional[str] = None,
-                 name: Optional[str] = None,
+                 name: Optional[str] = '',
                  path: Optional[str] = None,
                  conn: Optional['sqlalchemy.engine.Connection'] = None,
                  query: Optional[str] = None,
@@ -183,12 +191,15 @@ class VectorLayer(_Layer):
         Initializes the class with user defined or default parameters.
         """
         self.style = {}
+        self._type = 'Generic'
         super().__init__(category=category, name=name,
                          path=path, conn=conn,
                          normalization=normalization, inverse=inverse,
                          distance_method=distance_method,
                          distance_limit=distance_limit)
         self.read_layer(path=path, conn=conn, bbox=bbox, query=query)
+        if distance_method is None:
+            self.distance_method = 'proximity'
 
     def __repr__(self):
         return 'Vector' + super().__repr__()
@@ -244,7 +255,7 @@ class VectorLayer(_Layer):
                 self.data = self.data.query(query)
         self.path = path
 
-    def mask(self, mask_layer: gpd.GeoDataFrame, output_path: str = None):
+    def mask(self, mask_layer: gpd.GeoDataFrame, output_path: str = None, keep_geom_type=False):
         """Wrapper for the :doc:`geopandas:docs/reference/api/geopandas.GeoDataFrame.clip` method.
 
         Clip points, lines, or polygon geometries to the mask extent.
@@ -256,7 +267,7 @@ class VectorLayer(_Layer):
         output_path: str, optional
             A folder path where to save the output dataset. If not defined then the clipped dataset is not saved.
         """
-        self.data = gpd.clip(self.data, mask_layer.data.to_crs(self.data.crs))
+        self.data = gpd.clip(self.data, mask_layer.data.to_crs(self.data.crs), keep_geom_type=keep_geom_type)
         if isinstance(output_path, str):
             self.save(output_path)
 
@@ -429,7 +440,8 @@ class VectorLayer(_Layer):
         elif method == 'travel_time':
             self.travel_time(friction=raster, output_path=output_path, create_raster=True)
 
-    def rasterize(self, attribute: str = None,
+    def rasterize(self, raster: 'RasterLayer' = None, 
+                  attribute: str = None,
                   value: Union[int, float] = 1,
                   width: int = None, height: int = None,
                   transform: 'AffineTransform' = None,
@@ -478,6 +490,10 @@ class VectorLayer(_Layer):
         RasterLayer
             :class:`RasterLayer` with the rasterized dataset of the current :class:`VectorLayer`.
         """
+        if isinstance(raster, RasterLayer):
+            transform = raster.meta['transform']
+            width = raster.meta['width']
+            height = raster.meta['height']
         if transform is None:
             if (width is None) or (height is None):
                 height, width = RasterLayer.shape_from_cell(self.bounds, cell_height, cell_width)
@@ -577,8 +593,29 @@ class VectorLayer(_Layer):
                                                  self.name + f' - restriction{i}',
                                                  layer_path, **kwargs))
 
+    @property
+    def style(self) -> dict:
+        """Wrapper property to get the  west, south, east, north bounds of the dataset using the ``total_bounds``
+        property of ``Pandas``.
+        """
+        vector_type = self.data['geometry'].iloc[0]
+        if isinstance(vector_type, shapely.geometry.linestring.LineString):
+            self._type = 'Line'
+            if 'color' not in self._style.keys():
+                self._style.update(color='black')
+        else:
+            if 'facecolor' not in self._style.keys():
+                self._style.update(facecolor='lightblue')
+            if 'edgecolor' not in self._style.keys():
+                self._style.update(edgecolor='None')
+        return self._style
+
+    @style.setter
+    def style(self, style: dict):
+        self._style = style
+
     def plot(self, ax: Optional[matplotlib.axes.Axes] = None, column=None, style: dict = None,
-             legend_kwds=None):
+             legend_kwargs=None):
         """Plots a map of the layer using custom styles.
 
         This is, in principle, a wrapper function for the :doc:`geopandas:docs/reference/api/geopandas.GeoDataFrame.plot`
@@ -593,43 +630,63 @@ class VectorLayer(_Layer):
             accepted by :doc:`geopandas:docs/reference/api/geopandas.GeoDataFrame.plot`. If not defined, then the
             :attr:`style` attribute is used.
         """
-        if legend_kwds is None:
-            legend_kwds = {}
-        if style is None:
+        if legend_kwargs is None:
+            legend_kwargs = {}
+        _legend_kwargs = dict(frameon=False, bbox_to_anchor=(1, 1))
+        _legend_kwargs.update(legend_kwargs)
+        legend_kwargs = _legend_kwargs.copy()
+        if (style is None):
             style = self.style
 
-        if ax is None:
-            ax = self.data.plot(label=self.name, column=column,
-                                legend_kwds=legend_kwds, **style)
-            if column is None:
-                lgnd = ax.legend()
+        if column is not None:
+            style.pop('facecolor', False)
+            style.pop('color', False)
+
+        if isinstance(column, str):
+            if isinstance(self.data[column].iloc[0], str):
+                legend_kwargs['loc'] = 'upper left'
+                if 'title' not in legend_kwargs.keys():
+                    legend_kwargs['title'] = column.replace('_', ' ')
             else:
-                lgnd = ax.get_legend()
-            ax.add_artist(lgnd)
-            # lgnd = ax.legend(loc="upper right", prop={'size': 12})
-            # lgnd.legendHandles[0]._sizes = [60]
+                legend_kwargs.pop('frameon', None)
+                legend_kwargs.pop('bbox_to_anchor', None)
+                if 'label' not in legend_kwargs.keys():
+                    legend_kwargs['label'] = column.replace('_', ' ')
+                    
+        name = self.name.replace('_', ' ')
+
+        if ax is None:
+            ax = self.data.plot(label=name, column=column, legend=True,
+                                legend_kwds=legend_kwargs, **style)
         else:
-            # if ax.get_legend() is None:
-            #     handles = []
-            #     labels = []
-            # else:
-            #     handles = ax.get_legend().legendHandles
-            #     labels = [t.get_text() for t in ax.get_legend().get_texts()]
-            #     # ax.legend(handles=handles, labels=labels)
-            ax = self.data.plot(ax=ax, label=self.name, legend_kwds=legend_kwds,
+            ax = self.data.plot(ax=ax, label=name, legend_kwds=legend_kwargs,
                                 column=column, legend=True, **style)
 
-            if column is None:
-                lgnd = ax.legend()
+        if column is None:
+            # if ax.get_legend() is None:
+            if self._type == 'Line':
+                patches = mplines.Line2D([], [],
+                                         color=style['color'],
+                                         label=name)
             else:
-                lgnd = ax.get_legend()
+                patches = mpatches.Patch(facecolor=style['facecolor'],
+                                         edgecolor=style['edgecolor'],
+                                         label=name)
+            lgnd = ax.legend(handles=[patches], loc='upper left',
+                             frameon=_legend_kwargs['frameon'])
+            # else:
+            #     lgnd = ax.legend(loc='upper left', frameon=_legend_kwargs['frameon'])
+            lgnd.set_bbox_to_anchor(_legend_kwargs['bbox_to_anchor'])
             ax.add_artist(lgnd)
-            # new_handles = ax.get_legend().legendHandles
-            # new_labels = [t.get_text() for t in ax.get_legend().get_texts()]
-            # new_handles, new_labels = ax.get_legend_handles_labels()
+        else:
+            if isinstance(self.data[column].iloc[0], str):
+                lgnd = ax.get_legend()
+                if lgnd is None:
+                    lgnd = ax.legend(loc='upper left')
 
-            # ax.legend(handles=self.remove_duplicates(handles, new_handles),
-            #           labels=self.remove_duplicates(labels, new_labels))
+                lgnd.set(bbox_to_anchor=_legend_kwargs['bbox_to_anchor'])
+                ax.add_artist(lgnd)
+
         return ax
 
     @staticmethod
@@ -741,11 +798,11 @@ class RasterLayer(_Layer):
     """
 
     def __init__(self, category: Optional[str] = None,
-                 name: Optional[str] = None,
+                 name: Optional[str] = '',
                  path: Optional[str] = None,
                  conn: Optional['sqlalchemy.engine.Connection'] = None,
                  normalization: Optional[str] = 'MinMax', inverse: bool = False,
-                 distance_method:  Optional[str] = 'proximity',
+                 distance_method:  Optional[str] = None,
                  distance_limit: Optional[Callable[[np.ndarray], np.ndarray]] = None,
                  resample: str = 'nearest', window: Optional[windows.Window] = None,
                  rescale: bool = False):
@@ -756,6 +813,7 @@ class RasterLayer(_Layer):
         self.rescale = rescale
         self.meta = {}
         self.normalized = None
+        self.starting_points = None
         super().__init__(category=category, name=name,
                          path=path, conn=conn,
                          normalization=normalization, inverse=inverse,
@@ -768,7 +826,7 @@ class RasterLayer(_Layer):
 
     def __str__(self):
         return 'Raster' + super().__str__()
-
+        
     @property
     def bounds(self) -> list[float]:
         """Wrapper property to get the  west, south, east, north bounds of the dataset using the
@@ -815,19 +873,19 @@ class RasterLayer(_Layer):
                     self.meta = src.meta
 
             if self.meta['nodata'] is None:
-                if self.data.dtype == int:
+                if self.data.dtype in [int, 'int32']:
                     self.meta['nodata'] = 0
-                    raise Warning(f"The {self.name} layer do not have a defined nodata value, thus 0 was assigned. "
-                                  f"You can change this defining the nodata value in the metadata of the variable as: "
-                                  f"variable.meta['nodata'] = value")
-                elif self.data.dtype == float:
+                    warn(f"The {self.name} layer do not have a defined nodata value, thus 0 was assigned. "
+                         f"You can change this defining the nodata value in the metadata of the variable as: "
+                         f"variable.meta['nodata'] = value")
+                elif self.data.dtype in [float, 'float32', 'float64']:
                     self.meta['nodata'] = np.nan
-                    raise Warning(f"The {self.name} layer do not have a defined nodata value, thus np.nan was assigned."
-                                  f" You can change this defining the nodata value in the metadata of the variable as: "
-                                  f"variable.meta['nodata'] = value")
+                    warn(f"The {self.name} layer do not have a defined nodata value, thus np.nan was assigned."
+                         f" You can change this defining the nodata value in the metadata of the variable as: "
+                         f"variable.meta['nodata'] = value")
                 else:
-                    raise Warning(f"The {self.name} layer do not have a defined nodata value, please define the nodata "
-                                  f"value in the metadata of the variable with: variable.meta['nodata'] = value")
+                    warn(f"The {self.name} layer do not have a defined nodata value, please define the nodata "
+                         f"value in the metadata of the variable with: variable.meta['nodata'] = value")
         self.path = path
 
     @staticmethod
@@ -960,6 +1018,7 @@ class RasterLayer(_Layer):
         return t, w, h
 
     def travel_time(self, rows: np.ndarray, cols: np.ndarray,
+                    include_starting_cells: bool = False,
                     output_path: Optional[str] = None,
                     create_raster: Optional[bool] = True) -> 'RasterLayer':
         """Calculates a travel time map using the raster data as cost surface and specific cells as starting points.
@@ -996,9 +1055,11 @@ class RasterLayer(_Layer):
         # TODO: create method for restricted areas
         if len(pointlist) > 0:
             cumulative_costs, traceback = mcp.find_costs(starts=pointlist)
+            if include_starting_cells:
+                cumulative_costs += layer
             cumulative_costs[np.where(cumulative_costs == float('inf'))] = np.nan
         else:
-            cumulative_costs = np.full(self.data.shape, 2.0)
+            cumulative_costs = np.full(self.data.shape, 7.0)
 
         distance_raster = RasterLayer(self.category,
                                       'traveltime',
@@ -1057,7 +1118,7 @@ class RasterLayer(_Layer):
                                       normalization=self.normalization)
         distance_raster.data = layer
         distance_raster.meta = meta
-        distance_raster.mask(mask_layer)
+        distance_raster.mask(mask_layer, crop=False)
 
         if output_path:
             distance_raster.save(output_path)
@@ -1066,8 +1127,26 @@ class RasterLayer(_Layer):
             self.distance_raster = distance_raster
         else:
             return distance_raster
+            
+    def proximity(self, value=1):
+        data = self.data.copy()
+        data[self.data==value] = 0
+        data[self.data!=value] = 1
+        data = ndimage.distance_transform_edt(data,
+                                              sampling=[self.meta['transform'][0],
+                                                        -self.meta['transform'][4]])
 
-    def get_distance_raster(self, method: Optional[str] = 'log',
+        distance_raster = RasterLayer(category=self.category,
+                                      name=self.name + '_dist',
+                                      distance_limit=self.distance_limit,
+                                      inverse=self.inverse,
+                                      normalization=self.normalization)
+        distance_raster.data = data
+        distance_raster.meta = self.meta
+        distance_raster.meta.update(dtype=int)
+        return distance_raster
+
+    def get_distance_raster(self, method: Optional[str] = None,
                             output_path: Optional[str] = None,
                             mask_layer: Optional[VectorLayer] = None,
                             starting_points: Optional[Callable[[np.ndarray], np.ndarray]] = None):
@@ -1096,16 +1175,13 @@ class RasterLayer(_Layer):
             travel time map (used with the ``travel_time`` method only).
         """
         if method is None:
-            if self.distance_method is None:
-                raise ValueError('Please pass a distance `method` ("log" or "travel time") or define the default '
-                                 'method in the `distance` attribute of the class.')
             method = self.distance_method
 
         if method == 'log':
-            self.distance_raster = self.log(mask_layer=mask_layer, output_path=output_path)
+            self.log(mask_layer=mask_layer, output_path=output_path, create_raster=True)
         elif method == 'travel_time':
             rows, cols = self.start_points(condition=starting_points)
-            self.distance_raster = self.travel_time(rows, cols, output_path=output_path)
+            self.travel_time(rows, cols, output_path=output_path, create_raster=True)
         else:
             self.distance_raster = self
 
@@ -1124,6 +1200,9 @@ class RasterLayer(_Layer):
         """
         if callable(condition):
             return np.where(condition(self.data))
+        elif condition is None:
+            if isinstance(self.starting_points, tuple):
+                return self.starting_points
         else:
             raise TypeError('The condition can only be a callable object.')
 
@@ -1151,7 +1230,7 @@ class RasterLayer(_Layer):
             :class:`RasterLayer` with the normalized data.
         """
         if self.normalization == 'MinMax':
-            raster = self.raster.copy()
+            raster = self.data.copy()
             nodata = self.meta['nodata']
             meta = self.meta
             if callable(self.distance_limit):
@@ -1169,7 +1248,7 @@ class RasterLayer(_Layer):
                 if not buffer:
                     raster[np.isnan(raster)] = 0
 
-            raster[self.raster == nodata] = np.nan
+            raster[self.data == nodata] = np.nan
             meta.update(nodata=np.nan, dtype='float32')
 
             normalized = RasterLayer(category=self.category,
@@ -1332,6 +1411,8 @@ class RasterLayer(_Layer):
         -----
         Refer to :doc:`numpy:reference/generated/numpy.quantile` for more information.
         """
+        if isinstance(quantiles, float) or isinstance(quantiles, int):
+            quantiles = [quantiles]
         x = self.data.astype('float64').copy()
         x[x == self.meta['nodata']] = np.nan
         x = x.flat
@@ -1357,6 +1438,8 @@ class RasterLayer(_Layer):
         --------
         get_quantiles
         """
+        if isinstance(quantiles, float) or isinstance(quantiles, int):
+            quantiles = [quantiles]
         qs = self.get_quantiles(quantiles)
         layer = self.data.copy()
         layer[layer == self.meta['nodata']] = np.nan
@@ -1365,23 +1448,21 @@ class RasterLayer(_Layer):
         layer = layer - min_val
         qs = qs - min_val
         new_layer = layer.copy()
-        while i < (len(qs)):
+        while i < len(qs):
             if i == 0:
-                new_layer[(layer >= 0) & (layer < qs[i])] = 0
+                new_layer[(layer >= 0) & (layer < qs[i])] = quantiles[i] * 100
             else:
-                new_layer[(layer >= qs[i - 1]) & (layer < qs[i])] = quantiles[i - 1] * 100
+                new_layer[(layer >= qs[i - 1]) & (layer < qs[i])] = quantiles[i] * 100
             i += 1
-        # if quantiles[i - 1] >= 1:
-        #     new_layer[layer >= qs[i - 2]] = 100
-        # else:
-        new_layer[(layer >= qs[i - 2]) & (layer <= qs[i - 1])] = quantiles[i - 2] * 100
-        new_layer[layer > qs[i - 1]] = np.nan
+        if len(qs) > 1:
+            new_layer[(layer >= qs[-2]) & (layer <= qs[-1])] = quantiles[-1] * 100
+        new_layer[layer > qs[-1]] = np.nan
         return new_layer
 
     @staticmethod
     def category_legend(im, ax, categories, current_handles_labels=None,
                         legend_position=(1.05, 1), title='', legend_cols=1,
-                        legend_prop={'title': {'size': 12, 'weight': 'bold'}, 'size': 12}):
+                        legend_prop=None):
         """Creates a category legend for the current plot.
 
         Parameters
@@ -1393,15 +1474,22 @@ class RasterLayer(_Layer):
         legend_cols
         legend_prop
         """
+        categories.pop('None', False)
         values = list(categories.values())
         titles = list(categories.keys())
+        
+        if not isinstance(legend_prop, dict):
+            legend_prop = {}
 
         colors = [im.cmap(im.norm(value)) for value in values]
         # create a patch (proxy artist) for every color
         patches = [mpatches.Patch(color=colors[i], label="{}".format(titles[i])) for i in range(len(values))]
         # put those patched as legend-handles into the legend
-        prop = legend_prop.copy()
+        _legend_prop = {'title': {'size': 12, 'weight': 'bold'}, 'size': 12, 'frameon': False}
+        _legend_prop.update(legend_prop)
+        prop = _legend_prop.copy()
         prop.pop('title')
+        prop.pop('frameon')
         # ax.legend(handles=patches)
         # if current_handles_labels is not None:
         #     new_handles = ax.get_legend().legendHandles
@@ -1409,8 +1497,8 @@ class RasterLayer(_Layer):
         #     handles = current_handles_labels[0] + new_handles
         #     labels = current_handles_labels[1] + new_labels
         legend = ax.legend(handles=patches, bbox_to_anchor=legend_position, loc='upper left',
-                           borderaxespad=0., ncol=legend_cols, prop=prop)
-        legend.set_title(title, prop=legend_prop['title'])
+                           borderaxespad=0., ncol=legend_cols, prop=prop, frameon=_legend_prop['frameon'])
+        legend.set_title(title, prop=_legend_prop['title'])
         legend._legend_box.align = "left"
         ax.add_artist(legend)
 
@@ -1419,9 +1507,9 @@ class RasterLayer(_Layer):
              cumulative_count=None, quantiles=None, categories=None, legend_position=(1.05, 1),
              admin_layer: Union[gpd.GeoDataFrame, VectorLayer] = None, title=None, ax=None, dpi=150,
              legend=True, legend_title='', legend_cols=1,
-             legend_prop={'title': {'size': 12, 'weight': 'bold'}, 'size': 12},
-             rasterized=True, colorbar=True, return_image=False, figsize=(6.4, 4.8),
-             scale_bar=None, north_arrow=None):
+             legend_prop=None,
+             rasterized=True, colorbar=True, colorbar_kwargs=None, figsize=(6.4, 4.8),
+             scale_bar=None, north_arrow=None, alpha=1):
         """Plots a map of the current raster layer.
 
         Parameters
@@ -1459,17 +1547,27 @@ class RasterLayer(_Layer):
         if cumulative_count:
             layer = self.cumulative_count(cumulative_count)
         elif quantiles is not None:
+            if not isinstance(legend_prop, dict):
+                legend_prop = {}
+            if isinstance(quantiles, float) or isinstance(quantiles, int):
+                quantiles = [quantiles]
             layer = self.quantiles(quantiles)
             qs = self.get_quantiles(quantiles)
             categories = {}
             for i, j in enumerate(quantiles):
+                if 'decimals' in legend_prop.keys():
+                    decimals = legend_prop['decimals']
+                else:
+                    decimals = 2
                 if i == 0:
-                    categories[f'$<{int(qs[i])}$'] = j * 100
+                    categories[f'$<{qs[i]:0.{decimals}f}$'] = j * 100
                 elif j >= 1:
-                    categories[f'$\geq{int(qs[i - 1])}$'] = j * 100
+                    categories[f'$\geq{qs[i - 1]:0.{decimals}f}$'] = j * 100
                 elif i < len(qs):
-                    categories[f'${int(qs[i - 1])}$' + ' to ' + f'${int(qs[i])}$'] = j * 100
+                    categories[f'${qs[i - 1]:0.{decimals}f}$' + ' to ' +
+                               f'${qs[i]:0.{decimals}f}$'] = j * 100
             legend = True
+            legend_prop.pop('decimals', None)
             if legend_title is None:
                 legend_title = 'Quantiles'
         else:
@@ -1480,44 +1578,80 @@ class RasterLayer(_Layer):
 
         if ax is None:
             fig, ax = plt.subplots(1, 1, figsize=figsize, dpi=dpi)
+        else:
+            fig = plt.gcf()
 
         if isinstance(cmap, dict):
             values = np.sort(np.unique(layer[~np.isnan(layer)]))
+            key_list_cat = list(categories.keys())
+            val_list_cat = list(categories.values())
+            print(key_list_cat)
+            print(val_list_cat)
+            for i, val in enumerate(values):
+                layer[layer==val] = i
+                position = val_list_cat.index(val)
+                categories[key_list_cat[position]] = i
             cmap = ListedColormap([to_rgb(cmap[i]) for i in values])
 
         if ax.get_legend() is not None:
             if ax.get_legend().legendHandles is not None:
-                handles = ax.get_legend().legendHandles
-                labels = [t.get_text() for t in ax.get_legend().get_texts()]
-                ax.legend(handles=handles, labels=labels)
+                # handles = ax.get_legend().legendHandles
+                # labels = [t.get_text() for t in ax.get_legend().get_texts()]
+                # ax.legend(handles=handles, labels=labels)
+                pass
+            else:
+                handles = []
+                labels = []
         else:
             handles = []
             labels = []
 
-        cax = ax.imshow(layer, cmap=cmap, extent=extent, interpolation='none', zorder=1, rasterized=rasterized)
+        im = ax.imshow(layer, cmap=cmap, extent=extent, alpha=alpha,
+                       interpolation='none', zorder=1, rasterized=rasterized)
+
+        if title:
+            plt.title(title, loc='left')
 
         if legend:
             if categories:
-                self.category_legend(cax, ax, categories, current_handles_labels=(handles, labels),
+                self.category_legend(im, ax, categories, current_handles_labels=(handles, labels),
                                      legend_position=legend_position,
                                      title=legend_title, legend_cols=legend_cols, legend_prop=legend_prop)
             elif colorbar:
-                colorbar = dict(shrink=0.8)
+                colorbar_position = {'width': 0.02, 'height': 0.8, 'x': 1.02, 'y': 0.1}
+                title_prop = dict(label=self.name.replace('_', ' '), loc='center', labelpad=10, fontweight='normal')
+                if isinstance(colorbar_kwargs, dict):
+                    for key in ['x', 'y', 'width', 'height', 'title_prop']:
+                        if key == 'title_prop':
+                            title_prop.update(colorbar_kwargs.pop(key))
+                        if key in colorbar_kwargs.keys():
+                            colorbar_position[key] = colorbar_kwargs.pop(key)
+                    if 'orientation' not in colorbar_kwargs.keys():
+                        colorbar_kwargs['orientation'] = 'vertical'
+                else:
+                    colorbar_kwargs = {'orientation': 'vertical'}
+
                 if ticks:
-                    colorbar['ticks'] = ticks
-                cbar = plt.colorbar(cax, **colorbar)
+                    colorbar_kwargs['ticks'] = ticks
+                x_diff = ax.get_position().x1 - ax.get_position().x0
+                y_diff = ax.get_position().y1 - ax.get_position().y0
+                cax = [ax.get_position().x0 + x_diff * colorbar_position['x'],
+                       ax.get_position().y0 + y_diff * colorbar_position['y'],
+                       ax.get_position().width * colorbar_position['width'],
+                       ax.get_position().height * colorbar_position['height']]
+                cax = fig.add_axes(cax)
+
+                cbar = fig.colorbar(im, cax = cax, **colorbar_kwargs)
 
                 if tick_labels:
-                    cbar.ax.set_yticklabels(tick_labels)
-                cbar.ax.set_ylabel(self.name.replace('_', ' '))
+                    cbar.set_ticklabels(tick_labels)
+                cbar.set_label(**title_prop) # ,
         if isinstance(admin_layer, VectorLayer):
             admin_layer = admin_layer.data
         if isinstance(admin_layer, gpd.GeoDataFrame):
             if admin_layer.crs != self.meta['crs']:
                 admin_layer.to_crs(self.meta['crs'], inplace=True)
-            admin_layer.plot(color=to_rgb('#f1f1f1ff'), linewidth=1, ax=ax, zorder=0, rasterized=rasterized)
-        if title:
-            plt.title(title, loc='left')
+            admin_layer.plot(color=to_rgb('#f1f1f1'), linewidth=1, ax=ax, zorder=0, rasterized=rasterized)
 
         ax.get_xaxis().set_visible(False)
         ax.get_yaxis().set_visible(False)
@@ -1529,18 +1663,18 @@ class RasterLayer(_Layer):
 
         if scale_bar is not None:
             if scale_bar == 'default':
-                scale_bar_func()
+                scale_bar_func(ax=ax)
             elif isinstance(scale_bar, dict):
-                scale_bar_func(**scale_bar)
+                scale_bar_func(ax=ax, **scale_bar)
             else:
                 raise ValueError('Parameter `scale_bar` need to be a dictionary with parameter/value pairs, '
                                  'accepted by the `onstove.scale_bar` function.')
 
         if north_arrow is not None:
             if north_arrow == 'default':
-                north_arrow_func()
+                north_arrow_func(ax=ax)
             elif isinstance(north_arrow, dict):
-                north_arrow_func(**north_arrow)
+                north_arrow_func(ax=ax, **north_arrow)
             else:
                 raise ValueError('Parameter `north_arrow` need to be a dictionary with parameter/value pairs, '
                                  'accepted by the `onstove.north_arrow` function.')
