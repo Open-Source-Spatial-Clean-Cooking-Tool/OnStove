@@ -3,10 +3,11 @@
 import os
 import numpy as np
 import pandas as pd
+import geopandas as gpd
 from typing import Optional, Callable
 from math import exp
 
-from onstove._utils import raster_setter, vector_setter
+from onstove._utils import raster_setter, vector_setter, Processes
 from onstove.layer import VectorLayer, RasterLayer
 
 
@@ -62,6 +63,8 @@ class Technology:
     epsilon: float, default 0.71
         Emissions adjustment factor multiplied with the PM25 emissions.
     """
+
+    normalize = Processes.normalize
 
     def __init__(self,
                  name: Optional[str] = None,
@@ -121,6 +124,7 @@ class Technology:
         self.discounted_investments = 0
         self.benefits = None
         self.net_benefits = None
+        self.gdf = gpd.GeoDataFrame()
 
     def __setitem__(self, idx, value):
         self.__dict__[idx] = value
@@ -705,7 +709,7 @@ class LPG(Technology):
        Stove life in year.
     inv_cost: float, default 44
        Investment cost of the stove in USD.
-    fuel_cost: float, default 1.04
+    fuel_cost: float, default 0.73
        Fuel cost in USD/kg.
     time_of_cooking: float, default 2
        Daily average time spent for cooking with this stove in hours.
@@ -1194,9 +1198,9 @@ class Biomass(Technology):
 
         self.forest.friction = self.friction
         rows, cols = self.forest.start_points(condition=self.forest_condition)
-        self.forest.travel_time(rows=rows, cols=cols, create_raster=True)
+        self.friction.travel_time(rows=rows, cols=cols, include_starting_cells=True, create_raster=True)
 
-        travel_time = 2 * model.raster_to_dataframe(self.forest.distance_raster,
+        travel_time = 2 * model.raster_to_dataframe(self.friction.distance_raster,
                                                     fill_nodata_method='interpolate', method='read')
         travel_time[travel_time > 7] = 7  # cap to max travel time based on literature
         self.travel_time = travel_time
@@ -1607,6 +1611,7 @@ class Electricity(Technology):
 
             salvage = sum(salvage_values)
 
+        # TODO: vectorize this
         return salvage / discount_rate[0]
 
     def carb(self, model: 'onstove.OnStove'):
@@ -1681,6 +1686,7 @@ class Electricity(Technology):
         """
         super().net_benefit(model, w_health, w_spillovers, w_environment, w_time, w_costs)
         model.gdf.loc[model.gdf['Current_elec'] == 0, "net_benefit_{}".format(self.name)] = np.nan
+        self.net_benefits.loc[model.gdf['Current_elec'] == 0] = np.nan
         factor = model.gdf['Elec_pop_calib'] / model.gdf['Calibrated_pop']
         factor[factor > 1] = 1
         self.factor = factor
@@ -1702,10 +1708,17 @@ class MiniGrids(Electricity):
                  connection_cost: float = 0,  # cost of additional infrastructure
                  grid_capacity_cost: float = None,
                  fuel_cost: float = 0.1,
-                 time_of_cooking: float = 1.8,
-                 om_cost: float = 3.7,  # percentage of investement cost
+                 time_of_cooking: float = 2.5,
+                 om_cost: float = 3.7,
                  efficiency: float = 0.85,  # ratio
-                 pm25: float = 32):
+                 pm25: float = 32,
+                 stove_power: float = 0.7,
+                 capacity_factor: float = 0.8,
+                 base_load: float = 0.1,  # in kW
+                 w_pop: float = 0,  # weight of population count to calibrate access to minigrids
+                 w_ntl: float = 0,  # weight of nighttime lights to calibrate access to minigrids
+                 w_mg_dist: float = 1,  # weight of distance to calibrate access to minigrids
+                 ):
         super().__init__(name=name, carbon_intensity=carbon_intensity, energy_content=energy_content,
                          tech_life=tech_life, inv_cost=inv_cost, connection_cost=connection_cost,
                          grid_capacity_cost=grid_capacity_cost, fuel_cost=fuel_cost,
@@ -1713,6 +1726,12 @@ class MiniGrids(Electricity):
 
         self.coverage = None
         self.potential = None
+        self.capacity_factor = capacity_factor
+        self.stove_power = stove_power
+        self.base_load = base_load
+        self.w_pop = w_pop
+        self.w_ntl = w_ntl
+        self.w_mg_dist = w_mg_dist
 
     @property
     def coverage(self) -> RasterLayer:
@@ -1732,18 +1751,87 @@ class MiniGrids(Electricity):
     def coverage(self, layer):
         self._coverage = vector_setter(layer)
 
-    def calculate_potential(self):
+    @property
+    def distance(self) -> RasterLayer:
+        """:class:`RasterLayer` object containing a raster dataset with the distance to mini-grids in km.
+
+        .. seealso::
+            :meth:`calculate_potential`
+        """
+        return self._distance
+
+    @distance.setter
+    def distance(self, layer):
+        self._distance = raster_setter(layer)
+
+    @property
+    def ntl(self) -> RasterLayer:
+        """:class:`RasterLayer` object containing raster dataset showing the nighttime lights data.
+
+        .. seealso::
+            :meth:`calculate_potential`
+        """
+        return self._ntl
+
+    @ntl.setter
+    def ntl(self, layer):
+        self._ntl = raster_setter(layer)
+
+    def calculate_potential(self, model):
         """Calculates the potential of each mini-grid for supporting eCooking in each area.
         """
-        pass
+        leftover = np.maximum(self.capacity_factor * self.coverage.data['capacity'] -
+                              self.coverage.data['households'] * self.base_load, 0)
+        self.coverage.data['potential_hh'] = leftover / self.stove_power  # in number of households
+
+        self.gdf = model.gdf[['geometry']].sjoin(self.coverage.data, how='left')
+        self.gdf['mg_dist'] = model.raster_to_dataframe(self.distance, method='read')
+        self.gdf['ntl'] = model.raster_to_dataframe(self.ntl, method='read')
+
+        pop_norm = model.normalize('Calibrated_pop')
+        ntl_norm = self.normalize('ntl')
+        mg_dist_norm = self.normalize('mg_dist', inverse=True)
+
+        weights = self.w_pop + self.w_ntl + self.w_mg_dist
+        weight_sum = (self.w_pop * pop_norm + self.w_ntl * ntl_norm + self.w_mg_dist * mg_dist_norm) / weights
+        self.gdf['mg_acces_weight'] = weight_sum
+        self.gdf["current_mg_elec"] = 0
+        self.gdf['supported_hh'] = 0
+        self.gdf['supported_pop'] = 0
+        for municipality, group in self.gdf.groupby('municipality'):
+            hh_access = group['potential_hh'].mean()
+            weights = sorted(group['mg_acces_weight'], reverse=True)
+            elec_hh = 0
+            i = 0
+
+            while elec_hh < hh_access:
+                muni_vec = (self.gdf['municipality'] == municipality)
+                not_grid = (model.gdf['Current_elec'] == 0)
+                bool_vec = muni_vec & not_grid & (self.gdf['mg_acces_weight'] >= weights[i])
+                elec_hh = model.gdf.loc[bool_vec, "Households"].sum()
+
+                self.gdf.loc[bool_vec, 'supported_hh'] = model.gdf.loc[bool_vec, "Households"]
+                self.gdf.loc[bool_vec, 'current_mg_elec'] = 1
+                self.gdf.loc[bool_vec, 'supported_pop'] = model.gdf.loc[bool_vec, "Calibrated_pop"]
+                i += 1
+                if i == len(weights):
+                    break
 
     def discounted_inv(self, model: 'onstove.OnStove', relative: bool = True):
-        pass
+        super(Electricity, self).discounted_inv(model, relative=relative)
+        self.discounted_investments += self.connection_cost
 
     def net_benefit(self, model: 'onstove.OnStove', w_health: int = 1, w_spillovers: int = 1,
                     w_environment: int = 1, w_time: int = 1, w_costs: int = 1):
-        super().net_benefit(model, w_health, w_spillovers, w_environment, w_time, w_costs)
-        model.gdf.loc[self.potential == 0, "net_benefit_{}".format(self.name)] = np.nan
+        super(Electricity, self).net_benefit(model, w_health, w_spillovers, w_environment, w_time, w_costs)
+        self.calculate_potential(model)
+        self.households = self.gdf['supported_hh']
+        model.gdf.loc[self.households == 0, "net_benefit_{}".format(self.name)] = np.nan
+        self.net_benefits.loc[self.households == 0] = np.nan
+        # factor = self.gdf['Elec_pop_calib'] / self.gdf['Calibrated_pop']
+        factor = np.ones(self.households.shape[0])
+        factor[self.households == 0] = 0
+        self.factor = factor
 
 
 class Biogas(Technology):
@@ -1783,7 +1871,7 @@ class Biogas(Technology):
     oc_intensity: float, default 0.0091
         The organic carbon emissions in kg/GJ of burned fuel.
     energy_content: float, default 22.8
-        Energy content of the fuel in MJ/kg.
+        Energy content of the fuel in MJ/m3.
     tech_life: int, default 20
         Stove life in year.
     inv_cost: float, default 550
@@ -1792,15 +1880,15 @@ class Biogas(Technology):
         Fuel cost in USD/kg if any.
     time_of_cooking: float, default 2
         Daily average time spent for cooking with this stove in hours.
-    time_of_collection: float, default 3
-        Time spent collecting biomass on a single trip (excluding travel time) in hours.
+    manure_feed_time: float, default 3
+        Time spent collecting and feeding manure to the digester (excluding travel time) in hours.
     om_cost: float, default 3.7
         Operation and maintenance cost in USD/year.
     efficiency: float, default 0.4
         Efficiency of the stove.
     pm25: float, default 43
         Particulate Matter emissions (PM25) in mg/kg of fuel.
-    digestor_eff: float, default 0.4
+    digester_eff: float, default 0.4
         Efficiency of the digestor.
     friction_path: str, optional
         Path to the friction raster file describing the time needed (in minutes) to travel one meter within each
@@ -1821,11 +1909,11 @@ class Biogas(Technology):
                  inv_cost: float = 550,  # in USD
                  fuel_cost: float = 0,
                  time_of_cooking: float = 2,
-                 time_of_collection: float = 3,
+                 manure_feed_time: float = 0.5,
                  om_cost: float = 3.7,
                  efficiency: float = 0.4,  # ratio
                  pm25: float = 43,
-                 digestor_eff: float = 0.4,
+                 digester_eff: float = 0.4,
                  friction_path: Optional[str] = None):
         super().__init__(name, carbon_intensity, co2_intensity, ch4_intensity,
                          n2o_intensity, co_intensity, bc_intensity, oc_intensity,
@@ -1833,9 +1921,10 @@ class Biogas(Technology):
                          inv_cost, fuel_cost, time_of_cooking,
                          om_cost, efficiency, pm25, is_clean=True)
 
-        self.digestor_eff = digestor_eff
+        self.digester_eff = digester_eff
         self.friction_path = friction_path
-        self.time_of_collection = time_of_collection
+        self.manure_feed_time = manure_feed_time
+        self.time_of_collection = None
         self.water = None
         self.temperature = None
 
@@ -1874,10 +1963,10 @@ class Biogas(Technology):
         """
 
         self.required_energy(model)
-        return self.energy / self.digestor_eff
+        return self.energy / self.digester_eff
 
     def get_collection_time(self, model: 'onstove.OnStove'):
-        """Caluclates the daily time of collection based on friction (hour/meter), the available biogas energy from
+        """Calculates the daily time of collection based on friction (hour/meter), the available biogas energy from
         each cell (MJ/yr/meter, 1000000 represents meters per km2) and the required energy per household (MJ/yr)
 
         Parameters
@@ -1893,9 +1982,9 @@ class Biogas(Technology):
         friction = self.read_friction(model, self.friction_path)
 
         time_of_collection = required_energy_hh * friction / (model.gdf["biogas_energy"] / 1000000) / 365
-        time_of_collection[time_of_collection == float('inf')] = np.nan
-        mean_value = time_of_collection.mean()
-        time_of_collection[time_of_collection.isna()] = mean_value
+        # time_of_collection[time_of_collection == float('inf')] = np.nan
+        # mean_value = time_of_collection.mean()
+        # time_of_collection[time_of_collection.isna()] = mean_value
         self.time_of_collection = time_of_collection
 
     def available_biogas(self, model: 'onstove.OnStove'):
@@ -1929,7 +2018,7 @@ class Biogas(Technology):
         from_poultry = model.gdf["Poultry"] * 0.12 * 0.25 * 0.75 * 450
 
         model.gdf["available_biogas"] = ((from_cattle + from_buffalo + from_goat + from_pig + from_poultry +
-                                          from_sheep) * self.digestor_eff / 1000) * 365
+                                          from_sheep) * self.digester_eff / 1000) * 365
 
         # Temperature restriction
         if self.temperature is not None:
@@ -2004,6 +2093,7 @@ class Biogas(Technology):
         """
         self.get_collection_time(model)
         super().total_time(model)
+        self.total_time_yr += (self.manure_feed_time * 365)
 
     def net_benefit(self, model: 'onstove.OnStove', w_health: int = 1, w_spillovers: int = 1,
                     w_environment: int = 1, w_time: int = 1, w_costs: int = 1):
@@ -2038,6 +2128,7 @@ class Biogas(Technology):
         required_energy_hh = self.required_energy_hh(model)
         model.gdf.loc[(model.gdf['biogas_energy'] < required_energy_hh), "benefits_{}".format(self.name)] = np.nan
         model.gdf.loc[(model.gdf['biogas_energy'] < required_energy_hh), "net_benefit_{}".format(self.name)] = np.nan
+        self.net_benefits = model.gdf["benefits_{}".format(self.name)].copy()
         factor = model.gdf['biogas_energy'] / (required_energy_hh * model.gdf['Households'])
         factor[factor > 1] = 1
         self.factor = factor
