@@ -1,19 +1,21 @@
 name: onstove-tests
 channels:
   - conda-forge
+  - defaults
 dependencies:
   - boto3
   - dill
-  - flake8
+  #- flake8
   - geopandas
   - matplotlib<=3.5.2
   - plotnine
   - psutil
   - psycopg2
   - pyproj<=3.3.1
+  - python>=3.10
   - python-decouple
   - pytest
-  - pytest-order
+  #- pytest-order
   - rasterio
   - scikit-image
   - svgpathtools
