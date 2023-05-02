@@ -1441,7 +1441,7 @@ class OnStove(DataProcessor):
                 nodata = np.nan
             layer = layer.data.copy()
             if fill_nodata_method:
-                mask = layer.copy()
+                mask = layer.copy().astype(float)
                 mask[mask == nodata] = np.nan
                 if np.isnan(mask[self.rows, self.cols]).sum() > 0:
                     mask[~np.isnan(mask)] = 1
@@ -2178,6 +2178,7 @@ class OnStove(DataProcessor):
              cmap: Union[dict[str, str], str] = 'viridis',
              cumulative_count: Optional[tuple[float, float]] = None,
              quantiles: Optional[tuple[float]] = None,
+             nodata: Union[float, int] = np.nan,
              admin_layer: Optional[Union[gpd.GeoDataFrame, VectorLayer]] = None,
              title: Optional[str] = None,
              legend: bool = True, legend_title: str = '', legend_cols: int = 1,
@@ -2346,7 +2347,8 @@ class OnStove(DataProcessor):
         RasterLayer.plot
         VectorLayer.plot
         """
-        raster, codes, cmap = self.create_layer(variable, labels=labels, cmap=cmap, metric=metric)
+        raster, codes, cmap = self.create_layer(variable, labels=labels, cmap=cmap, 
+                                                metric=metric, nodata=nodata)
         if isinstance(admin_layer, gpd.GeoDataFrame):
             admin_layer = admin_layer
         elif isinstance(self.mask_layer, VectorLayer):

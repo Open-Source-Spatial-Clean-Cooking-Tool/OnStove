@@ -7,8 +7,10 @@ import datetime
 import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
+import matplotlib.lines as mplines
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 import time
+import shapely
 
 import pyproj
 import rasterio
@@ -189,6 +191,7 @@ class VectorLayer(_Layer):
         Initializes the class with user defined or default parameters.
         """
         self.style = {}
+        self._type = 'Generic'
         super().__init__(category=category, name=name,
                          path=path, conn=conn,
                          normalization=normalization, inverse=inverse,
@@ -590,6 +593,27 @@ class VectorLayer(_Layer):
                                                  self.name + f' - restriction{i}',
                                                  layer_path, **kwargs))
 
+    @property
+    def style(self) -> dict:
+        """Wrapper property to get the  west, south, east, north bounds of the dataset using the ``total_bounds``
+        property of ``Pandas``.
+        """
+        vector_type = self.data['geometry'].iloc[0]
+        if isinstance(vector_type, shapely.geometry.linestring.LineString):
+            self._type = 'Line'
+            if 'color' not in self._style.keys():
+                self._style.update(color='black')
+        else:
+            if 'facecolor' not in self._style.keys():
+                self._style.update(facecolor='lightblue')
+            if 'edgecolor' not in self._style.keys():
+                self._style.update(edgecolor='None')
+        return self._style
+
+    @style.setter
+    def style(self, style: dict):
+        self._style = style
+
     def plot(self, ax: Optional[matplotlib.axes.Axes] = None, column=None, style: dict = None,
              legend_kwargs=None):
         """Plots a map of the layer using custom styles.
@@ -608,13 +632,19 @@ class VectorLayer(_Layer):
         """
         if legend_kwargs is None:
             legend_kwargs = {}
-        _legend_kwargs = dict(frameon=False)
+        _legend_kwargs = dict(frameon=False, bbox_to_anchor=(1, 1))
         _legend_kwargs.update(legend_kwargs)
         legend_kwargs = _legend_kwargs.copy()
-        if style is None:
+        if (style is None):
             style = self.style
+
+        if column is not None:
+            style.pop('facecolor', False)
+            style.pop('color', False)
+
         if isinstance(column, str):
             if isinstance(self.data[column].iloc[0], str):
+                legend_kwargs['loc'] = 'upper left'
                 if 'title' not in legend_kwargs.keys():
                     legend_kwargs['title'] = column.replace('_', ' ')
             else:
@@ -622,8 +652,6 @@ class VectorLayer(_Layer):
                 legend_kwargs.pop('bbox_to_anchor', None)
                 if 'label' not in legend_kwargs.keys():
                     legend_kwargs['label'] = column.replace('_', ' ')
-                
-            
                     
         name = self.name.replace('_', ' ')
 
@@ -635,21 +663,28 @@ class VectorLayer(_Layer):
                                 column=column, legend=True, **style)
 
         if column is None:
-            if ax.get_legend() is None:
-                patches = mpatches.Patch(facecolor=style['facecolor'], 
+            # if ax.get_legend() is None:
+            if self._type == 'Line':
+                patches = mplines.Line2D([], [],
+                                         color=style['color'],
+                                         label=name)
+            else:
+                patches = mpatches.Patch(facecolor=style['facecolor'],
                                          edgecolor=style['edgecolor'],
                                          label=name)
-                lgnd = ax.legend(handles=[patches], loc='upper left', 
-                                 frameon=_legend_kwargs['frameon'])
-            else:
-                lgnd = ax.legend(loc='upper left', frameon=_legend_kwargs['frameon'])
-            if 'bbox_to_anchor' in _legend_kwargs.keys():
-                lgnd.set_bbox_to_anchor(_legend_kwargs['bbox_to_anchor'])
+            lgnd = ax.legend(handles=[patches], loc='upper left',
+                             frameon=_legend_kwargs['frameon'])
+            # else:
+            #     lgnd = ax.legend(loc='upper left', frameon=_legend_kwargs['frameon'])
+            lgnd.set_bbox_to_anchor(_legend_kwargs['bbox_to_anchor'])
             ax.add_artist(lgnd)
         else:
-            lgnd = ax.get_legend()
-        
             if isinstance(self.data[column].iloc[0], str):
+                lgnd = ax.get_legend()
+                if lgnd is None:
+                    lgnd = ax.legend(loc='upper left')
+
+                lgnd.set(bbox_to_anchor=_legend_kwargs['bbox_to_anchor'])
                 ax.add_artist(lgnd)
 
         return ax
@@ -1512,19 +1547,27 @@ class RasterLayer(_Layer):
         if cumulative_count:
             layer = self.cumulative_count(cumulative_count)
         elif quantiles is not None:
+            if not isinstance(legend_prop, dict):
+                legend_prop = {}
             if isinstance(quantiles, float) or isinstance(quantiles, int):
                 quantiles = [quantiles]
             layer = self.quantiles(quantiles)
             qs = self.get_quantiles(quantiles)
             categories = {}
             for i, j in enumerate(quantiles):
+                if 'decimals' in legend_prop.keys():
+                    decimals = legend_prop['decimals']
+                else:
+                    decimals = 2
                 if i == 0:
-                    categories[f'$<{int(qs[i])}$'] = j * 100
+                    categories[f'$<{qs[i]:0.{decimals}f}$'] = j * 100
                 elif j >= 1:
-                    categories[f'$\geq{int(qs[i - 1])}$'] = j * 100
+                    categories[f'$\geq{qs[i - 1]:0.{decimals}f}$'] = j * 100
                 elif i < len(qs):
-                    categories[f'${int(qs[i - 1])}$' + ' to ' + f'${int(qs[i])}$'] = j * 100
+                    categories[f'${qs[i - 1]:0.{decimals}f}$' + ' to ' +
+                               f'${qs[i]:0.{decimals}f}$'] = j * 100
             legend = True
+            legend_prop.pop('decimals', None)
             if legend_title is None:
                 legend_title = 'Quantiles'
         else:
