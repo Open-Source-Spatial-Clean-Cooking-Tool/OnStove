@@ -133,11 +133,11 @@ class Technology:
         self.epsilon = epsilon
         for paf in ['paf_alri', 'paf_copd', 'paf_ihd', 'paf_lc', 'paf_stroke']:
             self[paf] = 0
-        self.discounted_fuel_cost = 0
+        self.fuel_costs = 0
         self.factor = None
-        self.discounted_investments = 0
-        self.discounted_om_costs = 0
-        self.discounted_salvage_cost = 0
+        self.investments = 0
+        self.om_costs = 0
+        self.salvage_cost = 0
         self.decreased_carbon_costs = 0
         self.clean_cooking_access = 0
         self.sfu = 0
@@ -361,15 +361,10 @@ class Technology:
                 self.decreased_carbon_costs = np.zeros(
                     (len(mask), model.specs["end_year"] - model.specs["start_year"]))
 
-                #self.decreased_carbon_emissions = pd.Series(0, index=mask.index, dtype='float64')
-                #self.decreased_carbon_costs = pd.Series(0, index=mask.index, dtype='float64')
 
             decreased_carbon = base_annual_carbon - carbon
-            #self.decreased_carbon_emissions.loc[start_year] = decreased_carbon[mask].sum(axis=1)
             self.decreased_carbon_emissions[mask] = decreased_carbon[mask]
 
-            #discounted_carbon = np.array(
-            #    [sum(x * model.specs["cost_of_carbon_emissions"] / (1000 * discount_rate)) for x in decreased_carbon])
             discounted_carbon = np.array(
                 [x * model.specs["cost_of_carbon_emissions"] / (1000 * discount_rate) for x in decreased_carbon])
 
@@ -673,24 +668,22 @@ class Technology:
 
             for life in model.base_fuel.tech_life.unique():
                 remainder = (model.year - model.specs["start_year"]) % life
+                base_inv_dec = proj_years.shape[1] - (life - remainder)
                 idx = model.base_fuel.tech_life == life
                 idx2 = idx * mask
                 rows = idx2[idx2].index
-                salvage_base[idx2] = model.base_fuel.inv_cost.loc[rows] * remainder / life
+                salvage_base[idx2] = model.base_fuel.inv_cost.loc[rows] * model.base_fuel.inv_change.loc[rows] ** \
+                                     base_inv_dec * remainder / life
 
             salvage[mask, (model.year - model.specs["start_year"] - 1)] = salvage_base[mask]
 
-            discounted_salvage = np.array([x / discount_rate for x in salvage])
+            if not isinstance(self.salvage_cost, np.ndarray):
+                self.salvage_cost = np.zeros(len(mask), model.specs["end_year"] - model.specs["start_year"])
 
-            if not isinstance(self.discounted_salvage_cost, np.ndarray):
-                self.discounted_salvage_cost = np.zeros(len(mask), model.specs["end_year"] - model.specs["start_year"])
-
-            self.discounted_salvage_cost[mask] = \
-                discounted_salvage[mask] - model.base_fuel.discounted_salvage_cost[mask]
+            self.salvage_cost[mask] = \
+                salvage[mask] - model.base_fuel.salvage_cost[mask]
         else:
-            self.discounted_salvage_cost = np.array([x / discount_rate for x in salvage])
-
-
+            self.salvage_cost = salvage
 
     def discounted_om(self, model: 'onstove.OnStove', mask: pd.Series, relative: bool = True):
         """
@@ -718,18 +711,18 @@ class Technology:
 
             om = proj_years * np.array(operation_and_maintenance)[:, None]
 
-            om[mask, 0:(model.year - model.specs["start_year"] - 1)] = model.base_fuel.discounted_om_costs[mask,
+            om[mask, 0:(model.year - model.specs["start_year"] - 1)] = model.base_fuel.om_costs[mask,
                                                                        :(model.year-model.specs["start_year"]-1)]
-            relative_om = om[mask] - model.base_fuel.discounted_om_costs[mask]
+            relative_om = om[mask] - model.base_fuel.om_costs[mask]
 
-            if not isinstance(self.discounted_om_costs, np.ndarray):
-                self.discounted_om_costs = np.zeros(len(mask), model.specs["end_year"] - model.specs["start_year"])
+            if not isinstance(self.om_costs, np.ndarray):
+                self.om_costs = np.zeros(len(mask), model.specs["end_year"] - model.specs["start_year"])
 
-            self.discounted_om_costs[mask] = np.array([x / discount_rate for x in relative_om])
+            self.om_costs[mask] = relative_om
         else:
             proj_years[:] = 1
             om = proj_years * np.array(operation_and_maintenance)[:, None]
-            self.discounted_om_costs = np.array([x / discount_rate for x in om])
+            self.om_costs = om
 
     def discounted_inv(self, model: 'onstove.OnStove', mask: pd.Series, relative: bool):
         """
@@ -767,16 +760,16 @@ class Technology:
 
             investments = proj_years * np.array(inv)[:, None]
 
-            investments[mask, 0:(model.year - model.specs["start_year"] - 1)] = model.base_fuel.discounted_investments[mask,
+            investments[mask, 0:(model.year - model.specs["start_year"] - 1)] = model.base_fuel.investments[mask,
                                                                               :(model.year - model.specs[
                                                                                   "start_year"] - 1)]
 
-            relative_investments = investments[mask] - model.base_fuel.discounted_investments[mask]
+            relative_investments = investments[mask] - model.base_fuel.investments[mask]
 
-            if not isinstance(self.discounted_investments, np.ndarray):
-                self.discounted_investments = np.zeros(len(mask), model.specs["end_year"] - model.specs["start_year"])
+            if not isinstance(self.investments, np.ndarray):
+                self.investments = np.zeros(len(mask), model.specs["end_year"] - model.specs["start_year"])
 
-            self.discounted_investments[mask] = np.array([x / discount_rate for x in relative_investments])
+            self.investments[mask] = relative_investments
         else:
             proj_years[:, 0] = 1
             self.tech_life = round(self.tech_life)
@@ -786,7 +779,7 @@ class Technology:
 
             investments = proj_years * np.array(inv)[:, None]
 
-            self.discounted_investments = np.array([x / discount_rate for x in investments])
+            self.investments = investments
 
 
     def discount_fuel_cost(self, model: 'onstove.OnStove', mask: pd.Series, relative: bool = True):
@@ -827,18 +820,18 @@ class Technology:
 
             fuel_cost = proj_years * np.array(cost)[:, None]
 
-            fuel_cost[mask, 0:(model.year - model.specs["start_year"] - 1)] = model.base_fuel.discounted_fuel_cost[mask,
+            fuel_cost[mask, 0:(model.year - model.specs["start_year"] - 1)] = model.base_fuel.fuel_costs[mask,
                                                                        :(model.year-model.specs["start_year"]-1)]
-            relative_fuel_cost = fuel_cost[mask] - model.base_fuel.discounted_fuel_cost[mask]
+            relative_fuel_cost = fuel_cost[mask] - model.base_fuel.fuel_costs[mask]
 
-            if not isinstance(self.discounted_fuel_cost, np.ndarray):
-                self.discounted_fuel_cost = np.zeros(len(mask), model.specs["end_year"] - model.specs["start_year"])
+            if not isinstance(self.fuel_costs, np.ndarray):
+                self.fuel_costs = np.zeros(len(mask), model.specs["end_year"] - model.specs["start_year"])
 
-            self.discounted_fuel_cost[mask] = np.array([x / discount_rate for x in relative_fuel_cost])
+            self.fuel_costs[mask] = relative_fuel_cost
         else:
             proj_years[:] = 1
             fuel_cost = proj_years * np.array(cost)[:, None]
-            self.discounted_fuel_cost = np.array([x / discount_rate for x in fuel_cost])
+            self.fuel_costs = fuel_cost
 
 
     def total_time(self, model: 'onstove.OnStove', mask):
@@ -933,8 +926,8 @@ class Technology:
         if not isinstance(self.costs, np.ndarray):
             self.costs = np.zeros((len(mask), model.specs["end_year"] - model.specs["start_year"]))
 
-        self.costs[mask] = (self.discounted_fuel_cost[mask] + self.discounted_investments[mask] +
-                      self.discounted_om_costs[mask] - self.discounted_salvage_cost[mask])
+        self.costs[mask] = (self.fuel_costs[mask] + self.investments[mask] +
+                            self.om_costs[mask] - self.salvage_cost[mask])
 
     def net_benefit(self, model: 'onstove.OnStove', mask):
 
@@ -952,6 +945,7 @@ class Technology:
         """
 
         self.total_costs(model, mask)
+        discount_rate, proj_life = self.discount_factor(model.specs)
         masky = mask[mask].index
         if not isinstance(self.benefits, pd.Series):
             self.benefits = pd.Series(0, index=mask.index, dtype='float64')
@@ -963,7 +957,8 @@ class Technology:
                         model.specs["w_environment"] * self.decreased_carbon_costs[mask].sum(axis=1) \
                                    + model.specs["w_time"] * self.time_value[mask].sum(axis=1)
 
-        self.net_benefits.loc[masky] = self.benefits.loc[masky] - model.specs["w_costs"] * self.costs[mask].sum(axis=1)
+        self.net_benefits.loc[masky] = self.benefits.loc[masky] - model.specs["w_costs"] * \
+                                       np.array([sum(x / discount_rate) for x in self.costs[mask]])
 
         if "costs_{}".format(self.name) not in model.gdf.columns:
             model.gdf["costs_{}".format(self.name)] = np.nan
@@ -1081,7 +1076,7 @@ class LPG(Technology):
         self.cylinder_cost = cylinder_cost
         self.cylinder_life = cylinder_life
         self.inv_change = inv_change
-        self.discounted_infra_cost = None
+        self.infra_cost = None
 
     def add_travel_time(self, model: 'onstove.OnStove', lpg_path: Optional[str] = None,
                         friction_path: Optional[str] = None, align: bool = False):
@@ -1265,8 +1260,6 @@ class LPG(Technology):
         proj_years = np.matmul(np.expand_dims(np.ones(mask.shape[0]), axis=1),
                                np.expand_dims(np.zeros(proj_life), axis=0))
 
-        start_year = mask[mask].index
-
         proj_years[mask, model.year - model.specs["start_year"] - 1] = 1
         for j in range(self.cylinder_life, proj_life, self.cylinder_life):
             if j + model.year - model.specs["start_year"] - 1 < proj_life:
@@ -1274,14 +1267,12 @@ class LPG(Technology):
 
         costs = proj_years * np.array(cost)[:, None]
 
-        if not isinstance(self.discounted_infra_cost, np.ndarray):
-            self.discounted_infra_cost = np.zeros((len(mask), model.specs["end_year"] - model.specs["start_year"]))
-
-        costs_discounted = np.array([x / discount_rate for x in costs])
+        if not isinstance(self.infra_cost, np.ndarray):
+            self.infra_cost = np.zeros((len(mask), model.specs["end_year"] - model.specs["start_year"]))
 
         salvage = self.infrastructure_salvage(model, cost, mask)
 
-        self.discounted_infra_cost[mask] = costs_discounted[mask] - salvage[mask]
+        self.infra_cost[mask] = costs[mask] - salvage[mask]
 
     def infrastructure_salvage(self, model: 'onstove.OnStove', cost: float, mask: pd.Series):
         """Calculates the salvaged cylinder cost. The function calls ``discount_factor``.
@@ -1315,9 +1306,7 @@ class LPG(Technology):
         investments = proj_years * np.array(cost)[:, None]
         salvage = np.array([y * (1 - x / self.cylinder_life) for x, y in zip(used_life, investments)])
 
-        discounted_salvage = np.array([x / discount_rate for x in salvage])
-
-        return discounted_salvage
+        return salvage
 
     def discounted_inv(self, model: 'onstove.OnStove', mask: pd.Series, relative: bool = True):
         """This method expands :meth:`Technology.discounted_inv` by adding the cylinder cost for households currently
@@ -1342,7 +1331,7 @@ class LPG(Technology):
 
         if relative:
             self.infrastructure_cost(model, mask)
-            self.discounted_investments[mask] += (self.discounted_infra_cost[mask] * (1 - shares_reshaped[mask]))
+            self.investments[mask] += (self.infra_cost[mask] * (1 - shares_reshaped[mask]))
 
 class Biomass(Technology):
     """Biomass technology class used to model traditional and improved stoves.
@@ -1505,7 +1494,7 @@ class Biomass(Technology):
         self.inv_change = inv_change
         self.friction_path = friction_path
         self.collection_capacity = collection_capacity
-        self.discounted_solar_panel_cost = discounted_solar_panel_cost
+        self.solar_panel_cost = discounted_solar_panel_cost
         self.draft_type = draft_type
         self.solar_panel_life = solar_panel_life
         self.solar_panel_cost = solar_panel_cost
@@ -1631,12 +1620,10 @@ class Biomass(Technology):
 
             investments = proj_years * np.array(inv)[:, None]
 
-            investments_discounted = np.array([x / discount_rate for x in investments])
+            if not isinstance(self.solar_panel_cost, np.ndarray):
+                self.solar_panel_cost = np.zeros((len(mask), model.specs["end_year"] - model.specs["start_year"]))
 
-            if not isinstance(self.discounted_solar_panel_cost, np.ndarray):
-                self.discounted_solar_panel_cost = np.zeros((len(mask), model.specs["end_year"] - model.specs["start_year"]))
-
-            self.discounted_solar_panel_cost[mask] = investments_discounted[mask]
+            self.solar_panel_cost[mask] = investments[mask]
         else:
             proj_years[:, 0] = 1
             for j in range(self.solar_panel_life, proj_life, self.solar_panel_life):
@@ -1645,7 +1632,7 @@ class Biomass(Technology):
 
             investments = proj_years * np.array(inv)[:, None]
 
-            self.discounted_solar_panel_cost = np.array([x / discount_rate for x in investments])
+            self.solar_panel_cost = investments
 
     def discounted_inv(self, model: 'onstove.OnStove', mask: pd.Series, relative: bool = True):
         """This method expands :meth:`Technology.discounted_inv` by adding the solar panel cost in unlectrified areas.
@@ -1667,7 +1654,7 @@ class Biomass(Technology):
         super().discounted_inv(model, mask, relative=relative)
         if self.draft_type.lower().replace('_', ' ') in ['forced', 'forced draft']:
             self.solar_panel_investment(model, mask, relative)
-            self.discounted_investments[mask] += self.discounted_solar_panel_cost[mask]
+            self.investments[mask] += self.solar_panel_cost[mask]
 
 
 class Charcoal(Technology):
@@ -1881,7 +1868,7 @@ class Electricity(Technology):
         self.capacities = {}
         self.grid_capacity_cost = grid_capacity_cost
         self.tiers_path = None
-        self.discounted_capacity_cost = None
+        self.per_unit_capacity_cost = None
         self.capacity_cost = None
         self.inv_change = inv_change
         self.connection_cost = connection_cost
@@ -1950,20 +1937,18 @@ class Electricity(Technology):
 
         costs = proj_years * np.array(cost)[:, None]
 
-        if not isinstance(self.discounted_capacity_cost, np.ndarray):
-            self.discounted_capacity_cost = np.zeros((len(mask), model.specs["end_year"] - model.specs["start_year"]))
-
-        discounted_capacity_cost = np.array([x / discount_rate for x in costs])
+        if not isinstance(self.per_unit_capacity_cost, np.ndarray):
+            self.per_unit_capacity_cost = np.zeros((len(mask), model.specs["end_year"] - model.specs["start_year"]))
 
         salvage = self.grid_salvage(model, mask, cost)
 
-        self.discounted_capacity_cost[mask] = discounted_capacity_cost[mask] - salvage[mask]
+        self.per_unit_capacity_cost[mask] = costs[mask] - salvage[mask]
 
         self.capacity = self.energy / (3.6 * self.time_of_cooking * 365)
         if not isinstance(self.capacity_cost, pd.Series):
             self.capacity_cost = np.zeros((len(mask), model.specs["end_year"] - model.specs["start_year"]))
 
-        self.capacity_cost[mask] = self.capacity * self.discounted_capacity_cost[mask]
+        self.capacity_cost[mask] = self.capacity * self.per_unit_capacity_cost[mask]
 
     def get_carbon_intensity(self, model: 'onstove.OnStove'):
         """This function determines the carbon intensity of generated electricity based on the power plant mix in the
@@ -2013,14 +1998,12 @@ class Electricity(Technology):
 
         if single:
             used_life = proj_life % self.grid_life
-            discounted_salvage = self.grid_capacity_cost * (1 - used_life / self.grid_life)
+            salvage = self.grid_capacity_cost * (1 - used_life / self.grid_life)
         else:
             investments = proj_years * np.array(cost)[:, None]
             salvage = np.array([y * (1 - x / self.grid_life) for x, y in zip(used_life, investments)])
 
-            discounted_salvage = np.array([x / discount_rate for x in salvage])
-
-        return discounted_salvage
+        return salvage
 
     def carb(self, model: 'onstove.OnStove', mask):
         """This method expands :meth:`Technology.carbon` when electricity is the fuel used
@@ -2063,11 +2046,11 @@ class Electricity(Technology):
         if relative:
             self.get_capacity_cost(model, mask)
             if isinstance(self.connection_cost, np.ndarray):
-                self.discounted_investments[mask] += (self.connection_cost[mask] + self.discounted_capacity_cost[mask]
-                                                      * (1 - shares_reshaped[mask]))
+                self.investments[mask] += (self.connection_cost[mask] + self.per_unit_capacity_cost[mask]
+                                           * (1 - shares_reshaped[mask]))
             else:
-                self.discounted_investments[mask] += (
-                        self.connection_cost + self.discounted_capacity_cost[mask] * (1 - shares_reshaped[mask]))
+                self.investments[mask] += (
+                        self.connection_cost + self.per_unit_capacity_cost[mask] * (1 - shares_reshaped[mask]))
 
     def net_benefit(self, model: 'onstove.OnStove', mask):
         """This method expands :meth:`Technology.net_benefit` by taking into account electricity availability
