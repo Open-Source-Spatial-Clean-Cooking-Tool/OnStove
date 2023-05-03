@@ -2378,6 +2378,7 @@ class OnStove(DataProcessor):
         return raster, codes, cmap
 
     def to_raster(self, variable: str,
+                  year: int = None, cumulative_stats: bool = True,
                   labels: Optional[dict[str, str]] = None,
                   cmap: Optional[dict[str, str]] = None,
                   metric: str = 'mean'):
@@ -2397,7 +2398,10 @@ class OnStove(DataProcessor):
             Metric to use to aggregate data. It is only used for non-categorical data. For available metrics see
             :meth:`create_layer`.
         """
-        raster, codes, cmap = self.create_layer(variable, labels=labels, cmap=cmap, metric=metric)
+        if year is None:
+            year = self.specs["end_year"]
+        raster, codes, cmap = self.create_layer(variable, year=year, cumulative_stats=cumulative_stats, labels=labels,
+                                                cmap=cmap, metric=metric)
         raster.save(os.path.join(self.output_directory, 'Rasters'))
         print(f'Layer saved in {os.path.join(self.output_directory, "Rasters", raster.name + ".tif")}\n')
         if codes and cmap:
