@@ -887,7 +887,9 @@ class Technology:
 
             proj_years[mask, (model.year - model.specs["start_year"] - 1):proj_years.shape[1]] = 1
 
-            time = proj_years[mask] * np.array(self.total_time_yr.loc[start_year])[:, None]
+            with np.errstate(invalid='ignore'):
+                time = proj_years[mask] * np.array(self.total_time_yr.loc[start_year])[:, None]
+
             time[:, 0:(model.year - model.specs["start_year"] - 1)] = base_annual_time[mask,
                                                                                0:model.year - model.specs[
                                                                                    "start_year"] - 1]
@@ -2368,7 +2370,7 @@ class Biogas(Technology):
         friction = self.read_friction(model, self.friction_path)
 
         time_of_collection = required_energy_hh * friction / (model.gdf["biogas_energy"] / 1000000) / 365
-        time_of_collection[time_of_collection == float('inf')] = np.nan
+        #time_of_collection[time_of_collection == float('inf')] = np.nan
         #mean_value = time_of_collection.mean()
         #time_of_collection[time_of_collection.isna()] = mean_value
         self.time_of_collection = time_of_collection
