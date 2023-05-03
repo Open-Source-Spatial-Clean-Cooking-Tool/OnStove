@@ -1,7 +1,9 @@
 import os
+import pytest
 
 from onstove import OnStove
 
+@pytest.mark.order(after="test_model_run.py::test_run_model")
 def test_plot_maps():
     # 1. Reading results
     country = 'Rwanda'
@@ -54,6 +56,7 @@ def test_plot_maps():
                      rasterized=True, type='pdf')
     assert True
     
+@pytest.mark.order(after="test_model_run.py::test_run_model")    
 def test_plot_stats():
     # 1. Reading results
     country = 'Rwanda'

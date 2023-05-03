@@ -15,7 +15,7 @@ dependencies:
   - python=>3.10
   - python-decouple
   - pytest
-  # - pytest-order
+  - pytest-order
   - rasterio
   - scikit-image
   - svgpathtools
