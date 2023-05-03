@@ -1014,7 +1014,7 @@ class OnStove(DataProcessor):
         #create series for biogas same size as dataframe with zeros 
         tech_dict["Biogas"].pop_sqkm = pd.Series(np.zeros(self.gdf.shape[0]))
         #allocate remaining population to biogas in rural areas where there's potential
-        # TODO: Change these to np.nans ("inf")
+
         biogas_factor = tech_dict["Biogas"].population_cooking_rural / (self.gdf["pop_init_year"].loc[(tech_dict["Biogas"].time_of_collection!=float('inf')) & ~isurban].sum())
         tech_dict["Biogas"].pop_sqkm.loc[(~isurban) & (tech_dict["Biogas"].time_of_collection!=float('inf'))] = self.gdf["pop_init_year"] * biogas_factor
         pop_diff = (tech_dict["Biogas"].pop_sqkm + tech_dict["Electricity"].pop_sqkm) > self.gdf["pop_init_year"]
@@ -1838,9 +1838,8 @@ class OnStove(DataProcessor):
             self.extract_fuel_costs()
             print('    - OM costs')
             self.extract_om_costs()
-
-        print('    - Salvage')
-        self.extract_salvage()
+            print('    - Salvage')
+            self.extract_salvage()
 
         for i, y in enumerate(range(self.specs['start_year'] + 1, self.specs['end_year'] + 1)):
             mask = (self.gdf['year'] == y)
