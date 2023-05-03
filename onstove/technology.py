@@ -1626,10 +1626,10 @@ class Biomass(Technology):
 
             investments = proj_years * np.array(inv)[:, None]
 
-            if not isinstance(self.solar_panel_cost, np.ndarray):
-                self.solar_panel_cost = np.zeros((len(mask), model.specs["end_year"] - model.specs["start_year"]))
+            if not isinstance(self.solar_panel_costs, np.ndarray):
+                self.solar_panel_costs = np.zeros((len(mask), model.specs["end_year"] - model.specs["start_year"]))
 
-            self.solar_panel_cost[mask] = investments[mask]
+            self.solar_panel_costs[mask] = investments[mask]
         else:
             proj_years[:, 0] = 1
             for j in range(self.solar_panel_life, proj_life, self.solar_panel_life):
@@ -1638,7 +1638,7 @@ class Biomass(Technology):
 
             investments = proj_years * np.array(inv)[:, None]
 
-            self.solar_panel_cost = investments
+            self.solar_panel_costs = investments
 
     def discounted_inv(self, model: 'onstove.OnStove', mask: pd.Series, relative: bool = True):
         """This method expands :meth:`Technology.discounted_inv` by adding the solar panel cost in unlectrified areas.
@@ -1660,7 +1660,7 @@ class Biomass(Technology):
         super().discounted_inv(model, mask, relative=relative)
         if self.draft_type.lower().replace('_', ' ') in ['forced', 'forced draft']:
             self.solar_panel_investment(model, mask, relative)
-            self.investments[mask] += self.solar_panel_cost[mask]
+            self.investments[mask] += self.solar_panel_costs[mask]
 
 
 class Charcoal(Technology):
