@@ -448,8 +448,12 @@ class DataProcessor:
         Saves all layers that have not been previously saved
         """
         datasets = self._get_layers(datasets)
-        datasets[self.mask_layer.category] = {self.mask_layer.name: self.mask_layer}
-        datasets[self.base_layer.category] = {self.base_layer.name: self.base_layer}
+        if self.mask_layer.category not in datasets.keys():
+            datasets[self.mask_layer.category] = {}
+        datasets[self.mask_layer.category][self.mask_layer.name] = self.mask_layer
+        if self.base_layer.category not in datasets.keys():
+            datasets[self.base_layer.category] = {}
+        datasets[self.base_layer.category][self.base_layer.name] = self.base_layer
         for category, layers in datasets.items():
             for name, layer in layers.items():
                 output_path = os.path.join(self.output_directory,
