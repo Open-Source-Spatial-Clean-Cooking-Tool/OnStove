@@ -1,7 +1,9 @@
 import os
+import pytest
 
 from onstove import VectorLayer, RasterLayer, OnStove
 
+@pytest.mark.order(after="test_data_processing.py::test_process_data")
 def test_prepare_model():
     # 1. Create an OnStove model
     output_directory = os.path.join('onstove', 'tests', 'output')
