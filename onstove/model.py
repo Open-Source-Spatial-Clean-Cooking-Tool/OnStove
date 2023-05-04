@@ -313,6 +313,8 @@ class DataProcessor:
         postgres: bool, default False
             Whether to use a PostgreSQL database connection to read the layer from. The connection needs be already
             created and stored in the :attr:`conn` attribute using the :meth:`set_postgres` method.
+        save_layer: bool default False
+            Whether to save the dataset to disk or not
         """
         if postgres:
             self.mask_layer = VectorLayer(category, name, path, self.conn, query)
@@ -342,6 +344,8 @@ class DataProcessor:
         ----------
         datasets: dictionary of ``category``-``list of layer names`` pairs, default 'all'
             Specifies which dataset(s) to clip.
+        save_layers: boolean, default False
+            Wheter to save the layer to disc or not.
 
         See also
         ----------
@@ -376,6 +380,8 @@ class DataProcessor:
         ----------
         datasets: dictionary of ``category``-``list of layer names`` pairs, default 'all'
             Specifies which dataset(s) to align.
+        save_layers: boolean, default False
+            Wheter to save the layer to disc or not.
 
         See also
         ----------
@@ -403,6 +409,8 @@ class DataProcessor:
         ----------
         datasets: dictionary of ``category``-``list of layer names`` pairs, default 'all'
             Specifies which dataset(s) to reproject.
+        save_layers: boolean, default False
+            Wheter to save the layer to disc or not.
 
         See also
         --------
