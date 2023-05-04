@@ -18,8 +18,8 @@ Morb_COPD,1119.55,float,"Cases/100,000"
 Morb_IHD,977.35,float,"Cases/100,000"
 Morb_LC,4.55,float,"Cases/100,000"
 Morb_ALRI,7160.02,float,"Cases/100,000"
-Rural_HHsize,8,float,People/household
-Urban_HHsize,6.7,float,People/household
+rural_hh_size,8,float,People/household
+urban_hh_size,6.7,float,People/household
 Meals_per_day,3,float,Meals/day/person
 infra_weight,2,float,-
 NTL_weight,1,float,-

@@ -1622,6 +1622,9 @@ class OnStove(DataProcessor):
         self.check_scenario_data()
         print(f'[{self.specs["country_name"]}] Calculating clean cooking access')
         self.get_clean_cooking_access()
+        # Based on wealth index, minimum wage and a lower an upper range for cost of opportunity
+        print(f'[{self.specs["country_name"]}] Getting value of time')
+        self.get_value_of_time()
         if self.base_fuel is None:
             print(f'[{self.specs["country_name"]}] Calculating base fuel properties')
 
@@ -1633,9 +1636,6 @@ class OnStove(DataProcessor):
         else:
             raise ValueError("technologies must be 'all' or a list of strings with the technology names to run.")
 
-        # Based on wealth index, minimum wage and a lower an upper range for cost of opportunity
-        print(f'[{self.specs["country_name"]}] Getting value of time')
-        self.get_value_of_time()
         # Loop through each technology and calculate all benefits and costs
         for tech in techs:
             print(f'Calculating health benefits for {tech.name}...')
