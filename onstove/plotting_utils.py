@@ -85,11 +85,11 @@ class ScaleBar(matplotlib.offsetbox.AnchoredOffsetbox):
 
         self.vpac = matplotlib.offsetbox.HPacker(children=[size_bar, size_units],
                                                  align="center", pad=0, sep=sep)
-        matplotlib.offsetbox.AnchoredOffsetbox.__init__(self, loc, pad=pad, borderpad=borderpad,
+        matplotlib.offsetbox.AnchoredOffsetbox.__init__(self, loc, pad=pad, borderpad=borderpad, 
                                                         child=self.vpac, prop=prop, frameon=frameon, **kwargs)
 
 
-def scale_bar(style='single', size=100000, extent=0.02, loc='lower right', ax=None,
+def scale_bar(style='single', size=100000, extent=0.02, loc='lower left', location=(1,0), ax=None,
               borderpad=0.5, sep=4, frameon=False, linekw=None, textprops=None):
     """Function to create a :class:`ScaleBar` object and add it to a specified or current axes.
 
@@ -136,6 +136,12 @@ def scale_bar(style='single', size=100000, extent=0.02, loc='lower right', ax=No
     scalebar = ScaleBar(style=style, size=size, loc=loc, frameon=frameon,
                         borderpad=borderpad, sep=sep, linekw=linekw, ax=ax,
                         textprops=textprops, extent=extent)
+    extente_x = max(ax.get_xlim()) - min(ax.get_xlim())
+    x = min(ax.get_xlim()) + extente_x * location[0]
+
+    y = location[1]
+    
+    scalebar.set_bbox_to_anchor((x, y), transform=ax.get_xaxis_transform())           
     ax.add_artist(scalebar)
 
 
@@ -176,7 +182,7 @@ def add_svg(path, ax=None, location=(0.95, 0.95), size=30, color='black', linewi
     extente_y = max(ax.get_ylim()) - min(ax.get_ylim())
     y = min(ax.get_ylim()) + extente_y * location[1]
 
-    ax.plot(x, y, marker=svg_marker, markeredgewidth=linewidth,
+    ax.plot(x, y, marker=svg_marker, markeredgewidth=linewidth, 
             markersize=size, color=color)
 
 

@@ -95,6 +95,25 @@ class _Layer:
             self._friction = None
         else:
             raise ValueError('Raster file type or object not recognized.')
+    
+    def _set_scale_and_arrow(self, ax, scale_bar=None, north_arrow=None):
+        if scale_bar is not None:
+            if scale_bar == 'default':
+                scale_bar_func(ax=ax)
+            elif isinstance(scale_bar, dict):
+                scale_bar_func(ax=ax, **scale_bar)
+            else:
+                raise ValueError('Parameter `scale_bar` need to be a dictionary with parameter/value pairs, '
+                                 'accepted by the `onstove.scale_bar` function.')
+
+        if north_arrow is not None:
+            if north_arrow == 'default':
+                north_arrow_func(ax=ax)
+            elif isinstance(north_arrow, dict):
+                north_arrow_func(ax=ax, **north_arrow)
+            else:
+                raise ValueError('Parameter `north_arrow` need to be a dictionary with parameter/value pairs, '
+                                 'accepted by the `onstove.north_arrow` function.')
 
 
 class VectorLayer(_Layer):
@@ -191,7 +210,6 @@ class VectorLayer(_Layer):
         Initializes the class with user defined or default parameters.
         """
         self.style = {}
-        self._type = 'Generic'
         super().__init__(category=category, name=name,
                          path=path, conn=conn,
                          normalization=normalization, inverse=inverse,
@@ -594,16 +612,23 @@ class VectorLayer(_Layer):
                                                  layer_path, **kwargs))
 
     @property
+    def _type(self):
+        vector_type = self.data['geometry'].iloc[0]
+        if isinstance(vector_type, shapely.geometry.linestring.LineString):
+            return 'Line'
+        else:
+            return 'Generic'
+        return 
+    
+    @property
     def style(self) -> dict:
         """Wrapper property to get the  west, south, east, north bounds of the dataset using the ``total_bounds``
         property of ``Pandas``.
         """
-        vector_type = self.data['geometry'].iloc[0]
-        if isinstance(vector_type, shapely.geometry.linestring.LineString):
-            self._type = 'Line'
+        if self._type == 'Line':
             if 'color' not in self._style.keys():
-                self._style.update(color='black')
-        else:
+                self._style.update(color='blue')
+        elif self._type == 'Generic':
             if 'facecolor' not in self._style.keys():
                 self._style.update(facecolor='lightblue')
             if 'edgecolor' not in self._style.keys():
@@ -615,7 +640,7 @@ class VectorLayer(_Layer):
         self._style = style
 
     def plot(self, ax: Optional[matplotlib.axes.Axes] = None, column=None, style: dict = None,
-             legend_kwargs=None):
+             legend_kwargs=None, scale_bar=None, north_arrow=None):
         """Plots a map of the layer using custom styles.
 
         This is, in principle, a wrapper function for the :doc:`geopandas:docs/reference/api/geopandas.GeoDataFrame.plot`
@@ -635,12 +660,12 @@ class VectorLayer(_Layer):
         _legend_kwargs = dict(frameon=False, bbox_to_anchor=(1, 1))
         _legend_kwargs.update(legend_kwargs)
         legend_kwargs = _legend_kwargs.copy()
-        if (style is None):
-            style = self.style
+        if style is not None:
+            self.style.update(style)
 
         if column is not None:
-            style.pop('facecolor', False)
-            style.pop('color', False)
+            self.style.pop('facecolor', False)
+            self.style.pop('color', False)
 
         if isinstance(column, str):
             if isinstance(self.data[column].iloc[0], str):
@@ -657,26 +682,25 @@ class VectorLayer(_Layer):
 
         if ax is None:
             ax = self.data.plot(label=name, column=column, legend=True,
-                                legend_kwds=legend_kwargs, **style)
+                                legend_kwds=legend_kwargs, **self.style)
         else:
             ax = self.data.plot(ax=ax, label=name, legend_kwds=legend_kwargs,
-                                column=column, legend=True, **style)
+                                column=column, legend=True, **self.style)
 
         if column is None:
-            # if ax.get_legend() is None:
             if self._type == 'Line':
                 patches = mplines.Line2D([], [],
-                                         color=style['color'],
+                                         color=self.style['color'],
                                          label=name)
             else:
-                patches = mpatches.Patch(facecolor=style['facecolor'],
-                                         edgecolor=style['edgecolor'],
+                patches = mpatches.Patch(facecolor=self.style['facecolor'],
+                                         edgecolor=self.style['edgecolor'],
                                          label=name)
             lgnd = ax.legend(handles=[patches], loc='upper left',
                              frameon=_legend_kwargs['frameon'])
-            # else:
-            #     lgnd = ax.legend(loc='upper left', frameon=_legend_kwargs['frameon'])
+
             lgnd.set_bbox_to_anchor(_legend_kwargs['bbox_to_anchor'])
+            lgnd._legend_box.align = "left"
             ax.add_artist(lgnd)
         else:
             if isinstance(self.data[column].iloc[0], str):
@@ -685,7 +709,18 @@ class VectorLayer(_Layer):
                     lgnd = ax.legend(loc='upper left')
 
                 lgnd.set(bbox_to_anchor=_legend_kwargs['bbox_to_anchor'])
+                lgnd._legend_box.align = "left"
                 ax.add_artist(lgnd)
+                
+        self._set_scale_and_arrow(ax=ax, scale_bar=scale_bar, north_arrow=north_arrow)
+        
+        ax.get_xaxis().set_visible(False)
+        ax.get_yaxis().set_visible(False)
+
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.spines['bottom'].set_visible(False)
+        ax.spines['left'].set_visible(False)
 
         return ax
 
@@ -1585,8 +1620,6 @@ class RasterLayer(_Layer):
             values = np.sort(np.unique(layer[~np.isnan(layer)]))
             key_list_cat = list(categories.keys())
             val_list_cat = list(categories.values())
-            print(key_list_cat)
-            print(val_list_cat)
             for i, val in enumerate(values):
                 layer[layer==val] = i
                 position = val_list_cat.index(val)
@@ -1618,7 +1651,7 @@ class RasterLayer(_Layer):
                                      legend_position=legend_position,
                                      title=legend_title, legend_cols=legend_cols, legend_prop=legend_prop)
             elif colorbar:
-                colorbar_position = {'width': 0.02, 'height': 0.8, 'x': 1.02, 'y': 0.1}
+                colorbar_position = {'width': 0.05, 'height': 0.8, 'x': 1.04, 'y': 0.1}
                 title_prop = dict(label=self.name.replace('_', ' '), loc='center', labelpad=10, fontweight='normal')
                 if isinstance(colorbar_kwargs, dict):
                     for key in ['x', 'y', 'width', 'height', 'title_prop']:
@@ -1661,23 +1694,7 @@ class RasterLayer(_Layer):
         ax.spines['bottom'].set_visible(False)
         ax.spines['left'].set_visible(False)
 
-        if scale_bar is not None:
-            if scale_bar == 'default':
-                scale_bar_func(ax=ax)
-            elif isinstance(scale_bar, dict):
-                scale_bar_func(ax=ax, **scale_bar)
-            else:
-                raise ValueError('Parameter `scale_bar` need to be a dictionary with parameter/value pairs, '
-                                 'accepted by the `onstove.scale_bar` function.')
-
-        if north_arrow is not None:
-            if north_arrow == 'default':
-                north_arrow_func(ax=ax)
-            elif isinstance(north_arrow, dict):
-                north_arrow_func(ax=ax, **north_arrow)
-            else:
-                raise ValueError('Parameter `north_arrow` need to be a dictionary with parameter/value pairs, '
-                                 'accepted by the `onstove.north_arrow` function.')
+        self._set_scale_and_arrow(ax=ax, scale_bar=scale_bar, north_arrow=north_arrow)
 
         return ax
 
@@ -1685,7 +1702,9 @@ class RasterLayer(_Layer):
                    cumulative_count=None, categories=None, legend_position=(1.05, 1), figsize=(6.4, 4.8),
                    admin_layer=None, title=None, ax=None, dpi=300, quantiles=None,
                    legend_prop={'title': {'size': 12, 'weight': 'bold'}, 'size': 12},
-                   legend=True, legend_title='', legend_cols=1, rasterized=True, scale_bar=None, north_arrow=None):
+                   legend=True, legend_title='', legend_cols=1, rasterized=True, 
+                   colorbar=True, colorbar_kwargs=None,
+                   scale_bar=None, north_arrow=None):
         """Saves the raster as an image map in the specified format.
         """
         os.makedirs(output_path, exist_ok=True)
@@ -1695,7 +1714,9 @@ class RasterLayer(_Layer):
                   categories=categories, legend_position=legend_position, rasterized=rasterized,
                   admin_layer=admin_layer, title=title, ax=ax, dpi=dpi, quantiles=quantiles,
                   legend=legend, legend_title=legend_title, legend_cols=legend_cols,
-                  scale_bar=scale_bar, north_arrow=north_arrow, figsize=figsize, legend_prop=legend_prop)
+                  scale_bar=scale_bar, north_arrow=north_arrow, 
+                  colorbar=colorbar, colorbar_kwargs=colorbar_kwargs,
+                  figsize=figsize, legend_prop=legend_prop)
 
         plt.savefig(output_file, dpi=dpi, bbox_inches='tight', transparent=True)
         plt.close()
