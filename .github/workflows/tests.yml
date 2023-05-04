@@ -1,8 +1,5 @@
 name: OnStove tests
 on:
-  push:
-    branches: ['main']
-    paths: ['onstove/*', 'onstove/tests/*']
   pull_request:
     branches: ['main']
     paths: ['onstove/*', 'onstove/tests/*']
