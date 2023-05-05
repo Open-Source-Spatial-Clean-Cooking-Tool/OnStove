@@ -313,6 +313,8 @@ class DataProcessor:
         postgres: bool, default False
             Whether to use a PostgreSQL database connection to read the layer from. The connection needs be already
             created and stored in the :attr:`conn` attribute using the :meth:`set_postgres` method.
+        save_layer: bool default False
+            Whether to save the dataset to disk or not
         """
         if postgres:
             self.mask_layer = VectorLayer(category, name, path, self.conn, query)
@@ -342,6 +344,8 @@ class DataProcessor:
         ----------
         datasets: dictionary of ``category``-``list of layer names`` pairs, default 'all'
             Specifies which dataset(s) to clip.
+        save_layers: boolean, default False
+            Wheter to save the layer to disc or not.
 
         See also
         ----------
@@ -376,6 +380,8 @@ class DataProcessor:
         ----------
         datasets: dictionary of ``category``-``list of layer names`` pairs, default 'all'
             Specifies which dataset(s) to align.
+        save_layers: boolean, default False
+            Wheter to save the layer to disc or not.
 
         See also
         ----------
@@ -403,6 +409,8 @@ class DataProcessor:
         ----------
         datasets: dictionary of ``category``-``list of layer names`` pairs, default 'all'
             Specifies which dataset(s) to reproject.
+        save_layers: boolean, default False
+            Wheter to save the layer to disc or not.
 
         See also
         --------
@@ -1614,6 +1622,9 @@ class OnStove(DataProcessor):
         self.check_scenario_data()
         print(f'[{self.specs["country_name"]}] Calculating clean cooking access')
         self.get_clean_cooking_access()
+        # Based on wealth index, minimum wage and a lower an upper range for cost of opportunity
+        print(f'[{self.specs["country_name"]}] Getting value of time')
+        self.get_value_of_time()
         if self.base_fuel is None:
             print(f'[{self.specs["country_name"]}] Calculating base fuel properties')
 
@@ -1625,9 +1636,6 @@ class OnStove(DataProcessor):
         else:
             raise ValueError("technologies must be 'all' or a list of strings with the technology names to run.")
 
-        # Based on wealth index, minimum wage and a lower an upper range for cost of opportunity
-        print(f'[{self.specs["country_name"]}] Getting value of time')
-        self.get_value_of_time()
         # Loop through each technology and calculate all benefits and costs
         for tech in techs:
             print(f'Calculating health benefits for {tech.name}...')
@@ -1767,7 +1775,7 @@ class OnStove(DataProcessor):
             self.gdf.loc[index, f'net_benefit_{tech}_temp'] = np.nan
 
         isna = self.gdf["max_benefit_tech"].isna()
-        print(isna.sum())
+
         if isna.sum() > 0:
             self.gdf.loc[isna, 'max_benefit_tech'] = self.gdf.loc[isna, temps].idxmax(axis=1).asdtype(str)
         self.gdf['max_benefit_tech'] = self.gdf['max_benefit_tech'].str.replace("net_benefit_", "")

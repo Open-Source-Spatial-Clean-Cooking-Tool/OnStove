@@ -154,3 +154,6 @@ example/*
 onstove/tests/data/*
 !onstove/tests/data/.gitkeep
 onstove/tests/output
+example/soc_specs.csv
+example/soc_specs.csv
+example/soc_specs.csv
