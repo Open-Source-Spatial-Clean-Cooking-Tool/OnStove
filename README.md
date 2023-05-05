@@ -30,15 +30,23 @@ OnStove produces scenarios depicting the “true” cost of clean cooking. The s
 
 **Installation** 
 
-Through the jupyter_env.yaml in the env-folder using [Anaconda](https://www.anaconda.com/distribution/). 
+Install a python distribution using 
+[Anaconda](https://www.anaconda.com/distribution/) or 
+[Miniconda](https://docs.conda.io/en/latest/miniconda.html#).
+
+Then open an `Anaconda Prompt` or a `Command Prompt` and use 
+the `jupyter_env.yaml` in the `envs` folder to install the environment by writing:
 
 ```
 > conda install git
 > git clone https://github.com/Open-Source-Spatial-Clean-Cooking-Tool/OnStove.git
 > cd ..\OnStove\envs
-> conda env create --name onstove --file jupyter_env.yaml
+> conda env create --name onstove --file envs/jupyter_env.yaml
 > conda activate onstove
 ```
+
+Now your environment `onstove` is available to use. Note that you need to activate it
+always before conducting any analysis. 
 
 ## Changelog
 **22-June-2022**: Original code base (v0.1.0) published
