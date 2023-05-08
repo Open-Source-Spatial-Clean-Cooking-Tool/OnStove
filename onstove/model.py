@@ -49,7 +49,7 @@ from plotnine import (
 from onstove.layer import VectorLayer, RasterLayer
 from onstove.technology import Technology, LPG, Biomass, Electricity, Biogas, Charcoal, MiniGrids
 from onstove.raster import sample_raster
-from onstove._utils import Processes
+from onstove._utils import Processes, raster_setter
 
 
 def timeit(func):
@@ -284,6 +284,9 @@ class DataProcessor:
                                     output_path=output_path,
                                     cell_width=self.cell_size[0],
                                     cell_height=self.cell_size[1])
+
+                if isinstance(self.mask_layer, VectorLayer):
+                    layer.mask(self.mask_layer)
 
                 self.base_layer = layer
 
@@ -1485,7 +1488,8 @@ class OnStove(DataProcessor):
         GHS_path: str
             Path to the GHS dataset
         """
-        self.raster_to_dataframe(GHS_path, name="IsUrban", method='sample')
+        ghs = raster_setter(GHS_path)
+        self.raster_to_dataframe(ghs, name="IsUrban", method='read', fill_nodata_method='interpolate')
 
         self.calibrate_current_pop()
 
