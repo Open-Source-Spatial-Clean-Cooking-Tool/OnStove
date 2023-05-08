@@ -22,6 +22,7 @@ from matplotlib.offsetbox import (TextArea, AnnotationBbox, VPacker, HPacker)
 from rasterio import features
 from rasterio.fill import fillnodata
 from rasterio.warp import transform_bounds
+from scipy.interpolate import griddata
 from plotnine import (
     ggplot,
     element_text,
@@ -1454,19 +1455,30 @@ class OnStove(DataProcessor):
                 nodata = layer.meta['nodata']
             else:
                 nodata = np.nan
-            layer = layer.data.copy()
+            layer = layer.data.copy().astype(float)
             if fill_nodata_method is not None:
-                mask = layer.copy().astype(float)
-                mask[mask == nodata] = np.nan
-                if np.isnan(mask[self.rows, self.cols]).sum() > 0:
-                    mask[~np.isnan(mask)] = 1
-                    mask[np.isnan(mask)] = 0
+                layer[layer == nodata] = np.nan
+                if np.isnan(layer[self.rows, self.cols]).sum() > 0:
                     if fill_nodata_method == 'interpolate':
-                        layer = fillnodata(layer, mask=mask,
-                                           max_search_distance=100)
+                        mask = ~np.isnan(layer)
+                        layer = fillnodata(layer, mask=mask, max_search_distance=100)
+                        layer[(~mask) & (np.isnan(layer))] = fill_default_value
+                    elif fill_nodata_method == 'nearest':
+                        nodata_mask = np.isnan(layer)
+                        x, y = np.meshgrid(np.arange(layer.shape[1]), np.arange(layer.shape[0]))
+                        x_flat = x.flatten()
+                        y_flat = y.flatten()
+                        data_flat = layer.flatten()
+                        x_interpolate = x_flat[~nodata_mask.flatten()]
+                        y_interpolate = y_flat[~nodata_mask.flatten()]
+                        data_interpolate = data_flat[~nodata_mask.flatten()]
+                        data_interpolated = griddata((x_interpolate, y_interpolate),
+                                                     data_interpolate,
+                                                     (x, y),
+                                                     method='nearest')
+                        layer = np.where(nodata_mask, data_interpolated, layer)
                     else:
                         raise NotImplementedError('fill_nodata can only be None or "interpolate"')
-                    layer[(mask == 0) & (np.isnan(layer))] = fill_default_value
 
             data = layer[self.rows, self.cols]
         if name:
@@ -1489,7 +1501,7 @@ class OnStove(DataProcessor):
             Path to the GHS dataset
         """
         ghs = raster_setter(GHS_path)
-        self.raster_to_dataframe(ghs, name="IsUrban", method='read', fill_nodata_method='interpolate')
+        self.raster_to_dataframe(ghs, name="IsUrban", method='read', fill_nodata_method='nearest')
 
         self.calibrate_current_pop()
 
