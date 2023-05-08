@@ -814,7 +814,7 @@ class OnStove(DataProcessor):
         self.specs = {'startyear': 2020, 'endyear': 2020,
                       'endyeartarget': 1.0, 'mealsperday': 3.0, 'infraweight': 1.0,
                       'ntlweight': 1.0, 'popweight': 1.0,'discountrate': 0.03,
-                      'healthspilloverparameter': 0.112,
+                      'healthspilloversparameter': 0.112,
                       'wcosts': 1.0, 'wenvironment': 1.0, 'whealth': 1.0,
                       'wspillover': 1.0, 'wtime': 1.0}
 
@@ -858,7 +858,7 @@ class OnStove(DataProcessor):
             'infraweight': 'infra_weight',
             'ntlweight': 'ntl_weight',
             'popweight': 'pop_weight',
-            'discountrate': 'discountrate',
+            'discountrate': 'discount_rate',
             'healthspilloversparameter': 'health_spillovers_parameter',
             'wcosts': 'w_costs',
             'wenvironment': 'w_environment',
