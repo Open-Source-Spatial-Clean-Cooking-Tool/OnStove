@@ -273,15 +273,15 @@ class VectorLayer(_Layer):
                 self.data = self.data.query(query)
         self.path = path
 
-    def mask(self, mask_layer: gpd.GeoDataFrame, output_path: str = None, keep_geom_type=False):
+    def mask(self, mask_layer: 'VectorLayer', output_path: str = None, keep_geom_type=False):
         """Wrapper for the :doc:`geopandas:docs/reference/api/geopandas.GeoDataFrame.clip` method.
 
         Clip points, lines, or polygon geometries to the mask extent.
 
         Parameters
         ----------
-        mask_layer: GeoDataFrame
-            A :doc:`geopandas:docs/reference/api/geopandas.GeoDataFrame` object.
+        mask_layer: VectorLayer
+            A :class:`VectorLayer` object.
         output_path: str, optional
             A folder path where to save the output dataset. If not defined then the clipped dataset is not saved.
         """
@@ -964,6 +964,10 @@ class RasterLayer(_Layer):
              Include a pixel in the mask if it touches any of the shapes. If False, include a pixel only if its center
              is within one of the shapes, or if it is selected by Bresenham’s line algorithm.
         """
+        if mask_layer.data.crs != self.meta['crs']:
+            mask_layer = mask_layer.copy()
+            mask_layer.reproject(self.meta['crs'])
+
         rasterized_mask = mask_layer.rasterize(value=1, transform=self.meta['transform'],
                                                width=self.meta['width'], height=self.meta['height'],
                                                nodata=0, all_touched=all_touched)
