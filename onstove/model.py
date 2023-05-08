@@ -859,11 +859,11 @@ class OnStove(DataProcessor):
             'ntlweight': 'ntl_weight',
             'popweight': 'pop_weight',
             'discountrate': 'discountrate',
-            'healthspilloverparameter': 'health_spillover_parameter',
+            'healthspilloversparameter': 'health_spillovers_parameter',
             'wcosts': 'w_costs',
             'wenvironment': 'w_environment',
             'whealth': 'w_health',
-            'wspillover': 'w_spillover',
+            'wspillovers': 'w_spillovers',
             'wtime': 'w_time',
             'countryname': 'country_name',
             'countrycode': 'country_code',
@@ -894,8 +894,7 @@ class OnStove(DataProcessor):
             'fnrb': 'fnrb',
             'vsl': 'vsl',
             'costofcarbonemissions': 'cost_of_carbon_emissions',
-            'minimumwage': 'minimum_wage',
-            'wspillovers': 'w_spillovers'}
+            'minimumwage': 'minimum_wage'}
 
         for row in replace_dict.keys():
             if row not in self.specs:
