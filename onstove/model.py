@@ -811,12 +811,12 @@ class OnStove(DataProcessor):
         self.clean_cooking_access_r = None
         self.electrified_weight = None
 
-        self.specs = {'start_year': 2020, 'end_year': 2030,
-                      'end_year_target': 1.0, 'meals_per_day': 3.0, 'infra_weight': 1.0,
-                      'ntl_weight': 1.0, 'pop_weight': 1.0,'discount_rate': 0.03,
-                      'health_spillover_parameter': 0.112,
-                      'w_costs': 1.0, 'w_environment': 1.0, 'w_health': 1.0,
-                      'w_spillover': 1.0, 'w_time': 1.0}
+        self.specs = {'startyear': 2020, 'endyear': 2020,
+                      'endyeartarget': 1.0, 'mealsperday': 3.0, 'infraweight': 1.0,
+                      'ntlweight': 1.0, 'popweight': 1.0,'discountrate': 0.03,
+                      'healthspilloverparameter': 0.112,
+                      'wcosts': 1.0, 'wenvironment': 1.0, 'whealth': 1.0,
+                      'wspillover': 1.0, 'wtime': 1.0}
 
         self.gdf = gpd.GeoDataFrame()
 
@@ -829,18 +829,20 @@ class OnStove(DataProcessor):
             config_file = list(reader)
             for row in config_file:
                 if row['Value'] is not None:
+                    param = row['Param'].replace('_', '').replace(' ', '').lower()
                     if row['data_type'] == 'int':
-                        config[row['Param'].lower()] = int(row['Value'])
+                        config[param] = int(row['Value'])
                     elif row['data_type'] == 'float':
-                        config[row['Param'].lower()] = float(row['Value'])
+                        config[param] = float(row['Value'])
                     elif row['data_type'] == 'string':
-                        config[row['Param'].lower()] = str(row['Value'])
+                        config[param] = str(row['Value'])
                     elif row['data_type'] == 'bool':
-                        config[row['Param'].lower()] = str(row['Value']).lower() in ['true', 't', 'yes', 'y', '1']
+                        config[param] = str(row['Value']).lower() in ['true', 't', 'yes', 'y', '1']
                     else:
                         raise ValueError("Config file data type not recognised.")
 
         self.specs.update(config)
+        self.check_scenario_data()
 
     def check_scenario_data(self):
         """This function checks goes through all rows without default values needed in the socio-economic specification
@@ -848,15 +850,57 @@ class OnStove(DataProcessor):
         be raised.
         """
 
-        rows = ['country_name', 'country_code', 'population_start_year', 'population_end_year', 'urban_start',
-                'urban_end', 'elec_rate', 'rural_elec_rate', 'urban_elec_rate', 'mort_copd', 'mort_ihd', 'mort_lc',
-                'mort_alri', 'morb_copd','morb_ihd', 'morb_lc', 'morb_alri', 'rural_hh_size', 'urban_hh_size',
-                'mort_stroke', 'morb_stroke', 'fnrb','coi_alri', 'coi_copd', 'coi_ihd', 'coi_lc', 'coi_stroke',
-                'cost_of_carbon_emissions', 'minimum_wage', 'vsl']
+        replace_dict = {
+            'startyear': 'start_year',
+            'endyear': 'end_year',
+            'endyeartarget': 'end_year_target',
+            'mealsperday': 'meals_per_day',
+            'infraweight': 'infra_weight',
+            'ntlweight': 'ntl_weight',
+            'popweight': 'pop_weight',
+            'discountrate': 'discountrate',
+            'healthspilloversparameter': 'health_spillovers_parameter',
+            'wcosts': 'w_costs',
+            'wenvironment': 'w_environment',
+            'whealth': 'w_health',
+            'wspillovers': 'w_spillovers',
+            'wtime': 'w_time',
+            'countryname': 'country_name',
+            'countrycode': 'country_code',
+            'populationstartyear': 'population_start_year',
+            'populationendyear': 'population_end_year',
+            'urbanstart': 'urban_start',
+            'urbanend': 'urban_start',
+            'elecrate': 'elec_rate',
+            'ruralelecrate': 'rural_elec_rate',
+            'urbanelecrate': 'urban_elec_rate',
+            'mortcopd': 'mort_copd',
+            'mortihd': 'mort_ihd',
+            'mortlc': 'mort_lc',
+            'mortalri': 'mort_alri',
+            'morbcopd': 'morb_copd',
+            'morbihd': 'morb_ihd',
+            'morblc': 'morb_lc',
+            'morbalri': 'morb_alri',
+            'ruralhhsize': 'rural_hh_size',
+            'urbanhhsize': 'urban_hh_size',
+            'mortstroke': 'mort_stroke',
+            'morbstroke': 'morb_stroke',
+            'coialri': 'coi_alri',
+            'coicopd': 'coi_copd',
+            'coiihd': 'coi_ihd',
+            'coilc': 'coi_lc',
+            'coistroke': 'coi_stroke',
+            'fnrb': 'fnrb',
+            'vsl': 'vsl',
+            'costofcarbonemissions': 'cost_of_carbon_emissions',
+            'minimumwage': 'minimum_wage'}
 
-        for row in rows:
+        for row in replace_dict.keys():
             if row not in self.specs:
                 raise ValueError("The socio-economic file has to include the " + row + " row")
+
+        self.specs = {replace_dict.get(k, k): v for k, v in self.specs.copy().items()}
 
     def techshare_sumtoone(self):
         """
