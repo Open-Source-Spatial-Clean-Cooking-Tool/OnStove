@@ -1452,19 +1452,16 @@ class OnStove(DataProcessor):
             else:
                 nodata = np.nan
             layer = layer.data.copy()
-            if fill_nodata_method:
+            if fill_nodata_method is not None:
                 mask = layer.copy().astype(float)
                 mask[mask == nodata] = np.nan
                 if np.isnan(mask[self.rows, self.cols]).sum() > 0:
                     mask[~np.isnan(mask)] = 1
-                    base = self.base_layer.data.copy()
-                    base[base == self.base_layer.meta['nodata']] = np.nan
-                    rows, cols = np.where(np.isnan(mask) & ~np.isnan(base))
-                    mask[rows, cols] = 0
+                    mask[np.isnan(mask)] = 0
                     if fill_nodata_method == 'interpolate':
                         layer = fillnodata(layer, mask=mask,
                                            max_search_distance=100)
-                    elif fill_nodata_method is not None:
+                    else:
                         raise NotImplementedError('fill_nodata can only be None or "interpolate"')
                     layer[(mask == 0) & (np.isnan(layer))] = fill_default_value
 
