@@ -100,7 +100,7 @@ class DataProcessor:
     """
 
     def __init__(self, project_crs: Optional[Union['pyproj.CRS', int]] = None,
-                 cell_size: tuple[float] = None, output_directory: str = 'output'):
+                 cell_size: tuple[float] = None, output_directory: str = '.'):
         """
         Initializes the class and sets an empty layers dictionaries.
         """
@@ -798,7 +798,7 @@ class OnStove(DataProcessor):
     normalize = Processes.normalize
 
     def __init__(self, project_crs: Optional[Union['pyproj.CRS', int]] = None,
-                 cell_size: float = None, output_directory: str = 'output'):
+                 cell_size: float = None, output_directory: str = '.'):
         """
         Initializes the class and sets an empty layers dictionaries.
         """
@@ -1487,6 +1487,7 @@ class OnStove(DataProcessor):
             radius (currently of 100) if the ``interpolate`` method is selected, and for all the nodata values if
             ``None`` is used as method.
         """
+        layer = raster_setter(layer)
         data = None
         if method == 'sample':
             with rasterio.open(layer) as src:
