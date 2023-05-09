@@ -99,7 +99,7 @@ class DataProcessor:
     """
 
     def __init__(self, project_crs: Optional[Union['pyproj.CRS', int]] = None,
-                 cell_size: tuple[float] = None, output_directory: str = 'output'):
+                 cell_size: tuple[float] = None, output_directory: str = '.'):
         """
         Initializes the class and sets an empty layers dictionaries.
         """
@@ -794,7 +794,7 @@ class OnStove(DataProcessor):
     normalize = Processes.normalize
 
     def __init__(self, project_crs: Optional[Union['pyproj.CRS', int]] = None,
-                 cell_size: float = None, output_directory: str = 'output'):
+                 cell_size: float = None, output_directory: str = '.'):
         """
         Initializes the class and sets an empty layers dictionaries.
         """
@@ -816,7 +816,7 @@ class OnStove(DataProcessor):
                       'ntlweight': 1.0, 'popweight': 1.0,'discountrate': 0.03,
                       'healthspilloverparameter': 0.112,
                       'wcosts': 1.0, 'wenvironment': 1.0, 'whealth': 1.0,
-                      'wspillover': 1.0, 'wtime': 1.0}
+                      'wspillovers': 1.0, 'wtime': 1.0}
 
         self.gdf = gpd.GeoDataFrame()
 
@@ -850,7 +850,7 @@ class OnStove(DataProcessor):
         be raised.
         """
 
-        replace_dict = {
+        self._replace_dict = {
             'startyear': 'start_year',
             'endyear': 'end_year',
             'endyeartarget': 'end_year_target',
@@ -896,11 +896,7 @@ class OnStove(DataProcessor):
             'costofcarbonemissions': 'cost_of_carbon_emissions',
             'minimumwage': 'minimum_wage'}
 
-        for row in replace_dict.keys():
-            if row not in self.specs:
-                raise ValueError("The socio-economic file has to include the " + row + " row")
-
-        self.specs = {replace_dict.get(k, k): v for k, v in self.specs.copy().items()}
+        self.specs = {self._replace_dict.get(k, k): v for k, v in self.specs.copy().items()}
 
     def techshare_sumtoone(self):
         """
@@ -1483,6 +1479,7 @@ class OnStove(DataProcessor):
             radius (currently of 100) if the ``interpolate`` method is selected, and for all the nodata values if
             ``None`` is used as method.
         """
+        layer = raster_setter(layer)
         data = None
         if method == 'sample':
             with rasterio.open(layer) as src:
@@ -1660,7 +1657,9 @@ class OnStove(DataProcessor):
         extract_om_costs
         extract_salvage
         """
-        self.check_scenario_data()
+        for row in self._replace_dict.values():
+            if row not in self.specs:
+                raise ValueError("The socio-economic file has to include the " + row + " row")
         print(f'[{self.specs["country_name"]}] Calculating clean cooking access')
         self.get_clean_cooking_access()
         # Based on wealth index, minimum wage and a lower an upper range for cost of opportunity
