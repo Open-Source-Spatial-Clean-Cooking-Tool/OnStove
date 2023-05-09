@@ -1659,7 +1659,8 @@ class OnStove(DataProcessor):
         """
         for row in self._replace_dict.values():
             if row not in self.specs:
-                raise ValueError("The socio-economic file has to include the " + row + " row")
+                raise ValueError("The socio-economic data has to include the " + row + " field. " + \
+				 "See the read_scenario_data method for more information.")
         print(f'[{self.specs["country_name"]}] Calculating clean cooking access')
         self.get_clean_cooking_access()
         # Based on wealth index, minimum wage and a lower an upper range for cost of opportunity
