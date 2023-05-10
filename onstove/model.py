@@ -50,7 +50,7 @@ from plotnine import (
 from onstove.layer import VectorLayer, RasterLayer
 from onstove.technology import Technology, LPG, Biomass, Electricity, Biogas, Charcoal, MiniGrids
 from onstove.raster import sample_raster
-from onstove._utils import Processes, raster_setter
+from onstove._utils import Processes, raster_setter, deep_update
 
 
 def timeit(func):
@@ -2251,10 +2251,10 @@ class OnStove(DataProcessor):
              admin_layer: Optional[Union[gpd.GeoDataFrame, VectorLayer]] = None,
              title: Optional[str] = None,
              legend: bool = True, legend_title: str = '', legend_cols: int = 1,
-             legend_position: tuple[float, float] = (1.05, 1),
+             legend_position: tuple[float, float] = (1.02, 0.7),
              legend_prop: dict = {'title': {'size': 12, 'weight': 'bold'}, 'size': 12},
-             stats: bool = False, extra_stats: Optional[dict] = None,
-             stats_position: tuple[float, float] = (1.05, 0.5), stats_fontsize: int = 12,
+             stats: bool = False,
+             stats_kwargs: Optional[dict] = None,
              scale_bar: Optional[dict] = None, north_arrow: Optional[dict] = None,
              ax: Optional['matplotlib.axes.Axes'] = None,
              figsize: tuple[float, float] = (6.4, 4.8),
@@ -2430,7 +2430,7 @@ class OnStove(DataProcessor):
             fig, ax = plt.subplots(1, 1, figsize=figsize, dpi=dpi)
 
         if stats:
-            self._add_statistics(ax, stats_position, stats_fontsize, variable=variable, extra_stats=extra_stats)
+            self._add_statistics(ax, variable=variable, kwargs=stats_kwargs)
 
         ax = raster.plot(cmap=cmap, cumulative_count=cumulative_count,
                          quantiles=quantiles,
@@ -2451,25 +2451,30 @@ class OnStove(DataProcessor):
 
         if isinstance(save_as, str):
             plt.savefig(save_as, dpi=dpi, bbox_inches='tight', transparent=True)
-
         return ax
 
-    def _add_statistics(self, ax, stats_position, fontsize=12, variable='max_benefit_tech', 
-                        extra_stats: Optional[dict] = None):  
+    def _add_statistics(self, ax, variable='max_benefit_tech', kwargs: Optional[dict] = None):
+        _kwargs = {'extra_stats': None, 'stats_position': (1.02, 0.9), 'pad': 0, 'sep': 6,
+                   'fontsize': 10, 'fontcolor': 'black', 'fontweight': 'normal',
+                   'box_props': dict(boxstyle='round', facecolor='#f1f1f1ff', edgecolor='lightgray')}
+        if kwargs is not None:
+            _kwargs = deep_update(_kwargs, kwargs)
+
+        font_props = dict(fontsize=_kwargs['fontsize'], color=kwargs['fontcolor'], weight=kwargs['fontweight'])
 
         extra_text = []
         extra_values = []
-        if isinstance(extra_stats, dict):
-            for name, stat in extra_stats.items():
-                extra_text.append(TextArea(name, textprops=dict(fontsize=fontsize, color='black')))
-                extra_values.append(TextArea(stat, textprops=dict(fontsize=fontsize, color='black')))
+        if isinstance(_kwargs['extra_stats'], dict):
+            for name, stat in _kwargs['extra_stats'].items():
+                extra_text.append(TextArea(name, textprops=font_props))
+                extra_values.append(TextArea(stat, textprops=font_props))
                 
         summary = self.summary(total=True, pretty=False, variable=variable, remove_none=True)
-        deaths = TextArea("Deaths avoided", textprops=dict(fontsize=fontsize, color='black'))
-        health = TextArea("Health costs avoided", textprops=dict(fontsize=fontsize, color='black'))
-        emissions = TextArea("Emissions avoided", textprops=dict(fontsize=fontsize, color='black'))
-        time = TextArea("Time saved", textprops=dict(fontsize=fontsize, color='black'))
-        # costs = TextArea("Total system cost", textprops=dict(fontsize=fontsize, color='black'))
+        deaths = TextArea("Deaths avoided", textprops=font_props)
+        health = TextArea("Health costs avoided", textprops=font_props)
+        emissions = TextArea("Emissions avoided", textprops=font_props)
+        time = TextArea("Time saved", textprops=font_props)
+        # costs = TextArea("Total system cost", textprops=font_props)
 
         texts_vbox = VPacker(children=[deaths, health, emissions, time, *extra_text], pad=0, sep=6)
 
@@ -2481,23 +2486,21 @@ class OnStove(DataProcessor):
                        # summary.loc['total', 'om_costs'] - summary.loc['total', 'salvage_value'])
 
         
-        deaths = TextArea(f"{deaths_avoided:,.0f} pp/yr", textprops=dict(fontsize=fontsize, color='black'))
-        health = TextArea(f"{health_costs_avoided:,.2f} BUS$", textprops=dict(fontsize=fontsize, color='black'))
-        emissions = TextArea(f"{reduced_emissions:,.2f} Mton", textprops=dict(fontsize=fontsize, color='black'))
-        time = TextArea(f"{time_saved:,.2f} h/hh.day", textprops=dict(fontsize=fontsize, color='black'))
-        # costs = TextArea(f"{total_costs:,.2f} MUS$", textprops=dict(fontsize=fontsize, color='black'))
+        deaths = TextArea(f"{deaths_avoided:,.0f} pp/yr", textprops=font_props)
+        health = TextArea(f"{health_costs_avoided:,.2f} BUS$", textprops=font_props)
+        emissions = TextArea(f"{reduced_emissions:,.2f} Mton", textprops=font_props)
+        time = TextArea(f"{time_saved:,.2f} h/hh.day", textprops=font_props)
+        # costs = TextArea(f"{total_costs:,.2f} MUS$", textprops=font_props)
         
         values_vbox = VPacker(children=[deaths, health, emissions, time, *extra_values], pad=0, sep=6, align='right')
 
-        hvox = HPacker(children=[texts_vbox, values_vbox], pad=0, sep=-12) # sep=6
+        hvox = HPacker(children=[texts_vbox, values_vbox], pad=_kwargs['pad'], sep=_kwargs['sep'])
 
-        ab = AnnotationBbox(hvox, stats_position,
+        ab = AnnotationBbox(hvox, _kwargs['stats_position'],
                             xycoords='axes fraction',
                             box_alignment=(0, 1),
                             pad=0.0,
-                            bboxprops=dict(boxstyle='round',
-                                           facecolor='#f1f1f1ff',
-                                           edgecolor='lightgray'))
+                            bboxprops=_kwargs['box_props'])
 
         ax.add_artist(ab)
 
