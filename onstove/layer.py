@@ -1616,7 +1616,7 @@ class RasterLayer(_Layer):
 
 
         if ax is None:
-            fig, ax = plt.subplots(1, 1, figsize=figsize, dpi=dpi)
+            fig, ax = plt.subplots(1, 1, figsize=figsize)
         else:
             fig = plt.gcf()
 

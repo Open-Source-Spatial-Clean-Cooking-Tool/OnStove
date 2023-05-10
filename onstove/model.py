@@ -44,8 +44,10 @@ from plotnine import (
     geom_histogram,
     geom_density,
     facet_grid, element_blank,
-    guide_legend, guides
+    guide_legend, guides,
+    geom_vline
 )
+from plotnine.stats.stat_boxplot import weighted_percentile
 
 from onstove.layer import VectorLayer, RasterLayer
 from onstove.technology import Technology, LPG, Biomass, Electricity, Biogas, Charcoal, MiniGrids
@@ -2427,7 +2429,7 @@ class OnStove(DataProcessor):
             admin_layer = None
 
         if ax is None:
-            fig, ax = plt.subplots(1, 1, figsize=figsize, dpi=dpi)
+            fig, ax = plt.subplots(1, 1, figsize=figsize)
 
         if stats:
             self._add_statistics(ax, variable=variable, kwargs=stats_kwargs)
@@ -2714,9 +2716,15 @@ class OnStove(DataProcessor):
         if cmap is not None:
             p += scale_fill_manual(cmap)
 
+        p = p.draw()
+        plt.close()
+
+        p.set_size_inches(width, height)
+        # p.set_dpi(dpi)
+
         if save_as is not None:
             file = os.path.join(self.output_directory, f'{save_as}')
-            p.save(file, height=height, width=width, dpi=dpi)
+            p.savefig(file, bbox_inches='tight', transparent=True, dpi=dpi)
         return p
 
     def plot_costs_benefits(self, labels: Optional[dict[str, str]] = None,
@@ -2817,9 +2825,16 @@ class OnStove(DataProcessor):
              + theme(text=element_text(**_font_args), **_legend_args)
              )
 
+        p = p.draw()
+        plt.close()
+
+        p.set_size_inches(width, height)
+        # p.set_dpi(dpi)
+
         if save_as is not None:
             file = os.path.join(self.output_directory, f'{save_as}')
-            p.save(file, height=height, width=width, dpi=dpi)
+            p.savefig(file, bbox_inches='tight', transparent=True, dpi=dpi)
+
         return p
 
     @staticmethod
@@ -2963,6 +2978,30 @@ class OnStove(DataProcessor):
              )
         return p
 
+    def _plot_quantiles(self, hist, x_variable: str = 'relative_wealth', y_variable: str = 'Households'):
+        # Add quantile lines
+        q1, q3 = weighted_percentile(a=self.gdf[x_variable].values, q=(25, 75),
+                                     weights=self.gdf[y_variable].values)
+        line1 = geom_vline(xintercept=q1, color="#4D4D4D", size=0.8, linetype="dashed")
+        line3 = geom_vline(xintercept=q3, color="#4D4D4D", size=0.8, linetype="dashed")
+
+        hist = hist + line1 + line3
+
+        # get figure to annotate
+        fig = hist.draw()  # get the matplotlib figure object
+        plt.close()
+        ax = fig.axes[0]  # get the matplotlib axes (more than one if faceted)
+
+        # annotate quantiles
+        trans = ax.get_xaxis_transform()
+        ax.annotate('Q1', xy=(q1, 1.05), xycoords=trans,
+                    horizontalalignment='center',
+                    color='#4D4D4D', weight="bold")
+        ax.annotate('Q3', xy=(q3, 1.05), xycoords=trans,
+                    horizontalalignment='center',
+                    color='#4D4D4D', weight="bold")
+        return fig
+
     def plot_distribution(self, type: str = 'histogram', fill: str = 'max_benefit_tech',
                           groupby: str = 'None', variable: str = 'wealth',
                           best_mix: bool = True, hh_divider: int = 1, var_divider: int = 1,
@@ -2970,6 +3009,7 @@ class OnStove(DataProcessor):
                           cmap: Optional[dict[str, str]] = None,
                           x_title: Optional[str] = None, y_title: str = 'Households',
                           groupby_kwargs: Optional[dict] = None,
+                          quantiles: bool = False,
                           kwargs: Optional[dict] = None,
                           font_args: Optional[dict] = None, theme_name: str = 'minimal',
                           height: float = 1.5, width: float = 2.5,
@@ -3148,9 +3188,19 @@ class OnStove(DataProcessor):
         else:
             p += theme(legend_position="none")
 
+        if quantiles:
+            p = self._plot_quantiles(p, x_variable=x, y_variable='Households')
+        else:
+            p = p.draw()
+            plt.close()
+
+        p.set_size_inches(width, height)
+        # p.set_dpi(dpi)
+
         if save_as is not None:
             file = os.path.join(self.output_directory, f'{save_as}')
-            p.save(file, height=height, width=width, dpi=dpi)
+            p.savefig(file, bbox_inches='tight', transparent=True, dpi=dpi)
+
         return p
 
     def to_csv(self, name: str):
