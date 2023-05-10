@@ -2585,14 +2585,14 @@ class OnStove(DataProcessor):
                    x_variable: str = 'Calibrated_pop',
                    ascending: bool = True,
                    orientation: str = 'horizontal',
-                   text_kwargs: Optional[dict] = None,
+                   font_args: Optional[dict] = None,
                    annotation_kwargs: Optional[dict] = None,
                    labs_kwargs: Optional[dict] = None,
                    legend_kwargs: Optional[dict] = None,
                    theme_name: str = 'minimal',
                    height: float = 1.5, width: float = 2.5,
                    save_as: Optional[str] = None,
-				   fill: str ='max_benefit_tech',
+                   fill: str ='max_benefit_tech',
                    dpi: int = 150) -> 'matplotlib.Figure':
         """Displays a bar plot with the population or households share using the technologies with highest net-benefits
         over the study area.
@@ -2630,7 +2630,7 @@ class OnStove(DataProcessor):
             The variable to use in the x axis. Two options are available ``Calibrated_pop`` and ``Households``.
         orientation: str, default 'horizontal'
             It defines the orientation of the bar plot, takes as options 'horizontal' or 'vertical'.
-        text_kwargs: dict, optional
+        font_args: dict, optional
             Dictionary with arguments for the general text of the plot such as text size. It defaults to
             ``text_kwargs=dict(text=dict(size=9))``.
         annotation_kwargs: dict, optional
@@ -2674,14 +2674,9 @@ class OnStove(DataProcessor):
             raise ValueError('The value provided to the orientation parameter is not valid. Please choose between '
                              '"horizontal" and "vertical"')
 
-        if text_kwargs is None:
-            text_kwargs = dict(text=element_text(size=9))
-        else:
-            for item, value in text_kwargs.items():
-                if isinstance(value, dict):
-                    text_kwargs[item] = element_text(**value)
-                elif value is None:
-                    text_kwargs[item] = element_blank()
+        _font_args = dict(size=10)
+        if font_args is not None:
+            _font_args = deep_update(_font_args, font_args)
 
         if labs_kwargs is None:
             labs_kwargs = dict(x='Stove share', y=variables[x_variable], fill='Cooking technology')
@@ -2707,7 +2702,7 @@ class OnStove(DataProcessor):
              + ylim(0, df[x_variable].max() * 1.15)
              + scale_x_discrete(limits=tech_list)
              + theme_name
-             + theme(**legend_kwargs, **text_kwargs,  
+             + theme(**legend_kwargs, text=element_text(**_font_args),
                      panel_background = element_rect(fill=(0,0,0,0)),
                      plot_background = element_rect(fill=(0,0,0,0), color=(0,0,0,0)))
              + labs(**labs_kwargs)
@@ -2726,6 +2721,8 @@ class OnStove(DataProcessor):
 
     def plot_costs_benefits(self, labels: Optional[dict[str, str]] = None,
                             cmap: Optional[dict[str, str]] = None,
+                            font_args: Optional[dict] = None,
+                            legend_args: Optional[dict] = None,
                             height: float = 1.5, width: float = 2.5,
                             save_as: Optional[str] = None,
 							variable: str = 'max_benefit_tech',
@@ -2791,6 +2788,14 @@ class OnStove(DataProcessor):
                     'Fuel costs': '#f1a340', 'Emissions costs saved': '#998ec3',
                     'Om costs': '#fee0b6', 'Opportunity cost gained': '#d8daeb'}
 
+        _font_args = dict(size=10)
+        if font_args is not None:
+            _font_args = deep_update(_font_args, font_args)
+
+        _legend_args = dict(legend_direction='vertical', ncol=1)
+        if legend_args is not None:
+            _legend_args = deep_update(_legend_args, legend_args)
+
         tech_list = df.sort_values('Calibrated_pop')[variable].tolist()
         cat_order = ['Health costs avoided',
                      'Emissions costs saved',
@@ -2808,8 +2813,8 @@ class OnStove(DataProcessor):
              + coord_flip()
              + theme_minimal()
              + labs(x='', y='Billion USD', fill='Cost / Benefit')
-             # + theme(text=element_text(size=8), legend_position=(0.35, -0.22), legend_direction='horizontal')
-             # + guides(fill=guide_legend(ncol=2))
+             + guides(fill=guide_legend(ncol=_legend_args.pop('ncol')))
+             + theme(text=element_text(**_font_args), **_legend_args)
              )
 
         if save_as is not None:
@@ -2864,14 +2869,16 @@ class OnStove(DataProcessor):
         matplotlib.Figure
             Figure object used to plot the distribution.
         """
-        if kwargs is None:
-            max_val = df[x].max()
-            min_val = df[x].min()
-            binwidth = (max_val - min_val) * 0.05
-            kwargs = dict(binwidth=binwidth, alpha=0.5, size=0.3)
-            
-        if font_args is None:
-            font_args = dict(size=6)
+        max_val = df[x].max()
+        min_val = df[x].min()
+        binwidth = (max_val - min_val) * 0.05
+        _kwargs = dict(binwidth=binwidth, alpha=0.8, size=0.3, color='white')
+        if kwargs is not None:
+            _kwargs = deep_update(_kwargs, kwargs)
+
+        _font_args = dict(size=10)
+        if font_args is not None:
+            _font_args = deep_update(_font_args, font_args)
             
         if theme_name == 'minimal':
             theme_name = theme_minimal()
@@ -2882,15 +2889,14 @@ class OnStove(DataProcessor):
              + geom_histogram(aes(x=x,
                                   y=after_stat('count'),
                                   fill=cat,
-                                  color=cat,
                                   weight='Households',
                                   ),
-                              **kwargs
+                              **_kwargs
                               )
              + scale_fill_manual(cmap)
              + scale_color_manual(cmap, guide=False)
              + theme_name
-             + theme(subplots_adjust={'wspace': 0.25}, text=element_text(**font_args))
+             + theme(subplots_adjust={'wspace': 0.25}, text=element_text(**_font_args))
              + wrap
              + labs(x=x_title, y=y_title, fill='Cooking technology')
              )
@@ -2963,7 +2969,7 @@ class OnStove(DataProcessor):
                           labels: Optional[dict[str, str]] = None,
                           cmap: Optional[dict[str, str]] = None,
                           x_title: Optional[str] = None, y_title: str = 'Households',
-                          wrap_cols: int = 1,
+                          groupby_kwargs: Optional[dict] = None,
                           kwargs: Optional[dict] = None,
                           font_args: Optional[dict] = None, theme_name: str = 'minimal',
                           height: float = 1.5, width: float = 2.5,
@@ -3082,6 +3088,10 @@ class OnStove(DataProcessor):
             tech_list = df.groupby(cat)[[x]].mean()
             tech_list = tech_list.reset_index().sort_values(x)[cat].tolist()
 
+        _groupby_kwargs = dict(ncol=1, scales='fixed')
+        if groupby_kwargs is not None:
+            _groupby_kwargs = deep_update(_groupby_kwargs, groupby_kwargs)
+
         if (groupby in self.gdf.columns) or (groupby.lower() in ['urban-rural', 'rural-urban']):
             if groupby.lower() == 'urban-rural':
                 groupby = 'Urban'
@@ -3090,10 +3100,10 @@ class OnStove(DataProcessor):
                 df[groupby].replace({True: 'Urban', False: 'Rural'}, inplace=True)
             else:
                 df[groupby] = self.gdf[~self.gdf.index.duplicated()].loc[df.index, groupby]
-
-            wrap = facet_grid(f'{cat} ~ {groupby}', scales='free_y')
-        elif wrap_cols > 1:
-            wrap = facet_wrap(cat, ncol=2, scales='free_y')
+            _groupby_kwargs.pop('ncol')
+            wrap = facet_grid(f'{cat} ~ {groupby}', **_groupby_kwargs)
+        elif _groupby_kwargs['ncol'] > 1:
+            wrap = facet_wrap(cat, **_groupby_kwargs)
         else:
             wrap = None
 
@@ -3129,30 +3139,9 @@ class OnStove(DataProcessor):
         elif type.lower() == 'histogram':
             p = self._histogram(df, cat, x, wrap, cmap, x_title, y_title, kwargs, font_args, theme_name)
         elif type.lower() == 'density':
-            p = self._density(df, cat, x, cmap, x_title, y_title, kwargs, font_args)
+            raise NotImplementedError('Violin plots are not yet implemented')
         elif type.lower() == 'violin':
             raise NotImplementedError('Violin plots are not yet implemented')
-            # p = (ggplot(df)
-            #      + geom_violin(aes(y=x,
-            #                        x=cat_1,
-            #                        fill=cat_1,
-            #                        color=cat_1,
-            #                        weight='Households',
-            #                        ),
-            #                    alpha=0.5,
-            #                    stat='count',
-            #                    # size=0.3,
-            #                    # raster=True
-            #                    )
-            #      + scale_fill_manual(cmap)
-            #      + scale_color_manual(cmap, guide=False)
-            #      + theme_minimal()
-            #      # + theme(subplots_adjust={'wspace':0.25}, text=element_text(size=6))
-            #      # + facet_wrap(cat_1, ncol=1, scales='free_y')#, as_table=False)
-            #      # + scale_x_continuous(labels=scientific_format())
-            #      + coord_flip()
-            #      + labs(y=x_title, x=y_title, fill='Cooking technology')
-            #      )
 
         if groupby.lower() == 'urbanrural':
             p += labs(x='Settlement')
