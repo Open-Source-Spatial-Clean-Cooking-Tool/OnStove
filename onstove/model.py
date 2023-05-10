@@ -2259,7 +2259,7 @@ class OnStove(DataProcessor):
              ax: Optional['matplotlib.axes.Axes'] = None,
              figsize: tuple[float, float] = (6.4, 4.8),
              rasterized: bool = True,
-             dpi: float = 150,
+             dpi: float = 150, save_as: Optional[str] = None,
              save_style: bool = False, style_classes: int = 5):
         """Plots a map from a desired column ``variable`` from the :attr:`gdf`.
 
@@ -2449,6 +2449,9 @@ class OnStove(DataProcessor):
                               cmap=cmap, quantiles=quantiles, categories=categories,
                               classes=style_classes)
 
+        if isinstance(save_as, str):
+            plt.savefig(save_as, dpi=dpi, bbox_inches='tight', transparent=True)
+
         return ax
 
     def _add_statistics(self, ax, stats_position, fontsize=12, variable='max_benefit_tech', 
@@ -2585,8 +2588,9 @@ class OnStove(DataProcessor):
                    legend_kwargs: Optional[dict] = None,
                    theme_name: str = 'minimal',
                    height: float = 1.5, width: float = 2.5,
-                   save_as: Optional[bool] = None,
-				   fill='max_benefit_tech') -> 'matplotlib.Figure':
+                   save_as: Optional[str] = None,
+				   fill: str ='max_benefit_tech',
+                   dpi: int = 150) -> 'matplotlib.Figure':
         """Displays a bar plot with the population or households share using the technologies with highest net-benefits
         over the study area.
 
@@ -2713,16 +2717,16 @@ class OnStove(DataProcessor):
             p += scale_fill_manual(cmap)
 
         if save_as is not None:
-            file = os.path.join(self.output_directory, f'{save_as}.pdf')
-            p.save(file, height=height, width=width)
-        else:
-            return p
+            file = os.path.join(self.output_directory, f'{save_as}')
+            p.save(file, height=height, width=width, dpi=dpi)
+        return p
 
     def plot_costs_benefits(self, labels: Optional[dict[str, str]] = None,
                             cmap: Optional[dict[str, str]] = None,
                             height: float = 1.5, width: float = 2.5,
-                            save_as: Optional[bool] = None,
-							variable: str = 'max_benefit_tech') -> 'matplotlib.Figure':
+                            save_as: Optional[str] = None,
+							variable: str = 'max_benefit_tech',
+                            dpi: int = 150) -> 'matplotlib.Figure':
         """Displays a stacked bar plot with the aggregated total costs and benefits for the technologies with the
         highest net-benefits over the study area.
 
@@ -2806,96 +2810,9 @@ class OnStove(DataProcessor):
              )
 
         if save_as is not None:
-            file = os.path.join(self.output_directory, f'{save_as}.pdf')
-            p.save(file, height=height, width=width)
-        else:
-            return p
-
-    # TODO: test this method
-    # def plot_costs_benefits_unit(self, technologies, area='urban', cmap=None, save=False, height=1.5, width=2.5):
-    #     df = pd.DataFrame({'Settlement': [], 'Technology': [], 'investment_costs': [], 'fuel_costs': [],
-    #                        'om_costs': [], 'health_costs_avoided': [],
-    #                        'emissions_costs_saved': [], 'opportunity_cost_gained': []})
-    #
-    #     if area.lower() == 'urban':
-    #         settlement = self.gdf.reset_index().groupby('index').agg({'IsUrban': 'first'})['IsUrban'] > 20
-    #         set_type = 'Urban'
-    #     elif area.lower() == 'rural':
-    #         settlement = self.gdf.reset_index().groupby('index').agg({'IsUrban': 'first'})['IsUrban'] < 20
-    #         set_type = 'Rural'
-    #
-    #     for name in technologies:
-    #         tech = self.techs[name]
-    #         total_hh = tech.households[settlement].sum()
-    #         inv = np.nansum((tech.discounted_investments[settlement] -
-    #                          tech.discounted_salvage_cost[settlement]) * tech.households[settlement]) / total_hh
-    #         fuel = np.nansum(tech.discounted_fuel_cost[settlement] * tech.households[settlement]) / total_hh
-    #         om = np.nansum(tech.discounted_om_costs[settlement] * tech.households[settlement]) / total_hh
-    #         health = np.nansum((tech.distributed_morbidity[settlement] +
-    #                             tech.distributed_mortality[settlement] +
-    #                             tech.distributed_spillovers_morb[settlement] +
-    #                             tech.distributed_spillovers_mort[settlement]) * tech.households[settlement]) / total_hh
-    #         ghg = np.nansum(tech.decreased_carbon_costs[settlement] * tech.households[settlement]) / total_hh
-    #         time = np.nansum(tech.time_value[settlement] * tech.households[settlement]) / total_hh
-    #
-    #         df = pd.concat([df, pd.DataFrame({'Settlement': [set_type],
-    #                                           'Technology': [name],
-    #                                           'Investment costs': [inv],
-    #                                           'Fuel costs': [fuel],
-    #                                           'O&M costs': [om],
-    #                                           'Health costs avoided': [health],
-    #                                           'Emissions costs saved': [ghg],
-    #                                           'Opportunity cost gained': [time]})])
-    #
-    #     df['Fuel costs'] *= -1
-    #     df['Investment costs'] *= -1
-    #     df['O&M costs'] *= -1
-    #
-    #     if cmap is None:
-    #         cmap = {'Health costs avoided': '#542788', 'Investment costs': '#b35806',
-    #                 'Fuel costs': '#f1a340', 'Emissions costs saved': '#998ec3',
-    #                 'O&M costs': '#fee0b6', 'Opportunity cost gained': '#d8daeb'}
-    #
-    #     value_vars = ['Health costs avoided',
-    #                   'Emissions costs saved',
-    #                   'Opportunity cost gained',
-    #                   'Investment costs',
-    #                   'Fuel costs',
-    #                   'O&M costs']
-    #
-    #     df['net_benefit'] = df['Health costs avoided'] + df['Emissions costs saved'] + df['Opportunity cost gained'] + \
-    #                         df['Investment costs'] + df['Fuel costs'] + df['O&M costs']
-    #     dff = df.melt(id_vars=['Technology', 'Settlement', 'net_benefit'], value_vars=value_vars)
-    #
-    #     tech_list = list(dict.fromkeys(dff.sort_values(['Settlement', 'net_benefit'])['Technology'].tolist()))
-    #     dff['Technology_cat'] = pd.Categorical(dff['Technology'], categories=tech_list)
-    #     cat_order = ['Health costs avoided',
-    #                  'Emissions costs saved',
-    #                  'Opportunity cost gained',
-    #                  'Investment costs',
-    #                  'Fuel costs',
-    #                  'O&M costs']
-    #
-    #     dff['variable'] = pd.Categorical(dff['variable'], categories=cat_order, ordered=True)
-    #
-    #     p = (ggplot(dff)
-    #          + geom_col(aes(x='Technology_cat', y='value', fill='variable'))
-    #          + geom_point(aes(x='Technology_cat', y='net_benefit'), fill='white', color='grey', shape='D')
-    #          + scale_fill_manual(cmap)
-    #          + coord_flip()
-    #          + theme_minimal()
-    #          + labs(x='', y='USD', fill='Cost / Benefit')
-    #          + facet_wrap('Settlement',
-    #                       nrow=2,
-    #                       # scales='free'
-    #                       )
-    #          )
-    #
-    #     if save:
-    #         file = os.path.join(self.output_directory, 'benefits_costs.pdf')
-    #         p.save(file, height=height, width=width)
-    #     else:
-    #         return p
+            file = os.path.join(self.output_directory, f'{save_as}')
+            p.save(file, height=height, width=width, dpi=dpi)
+        return p
 
     @staticmethod
     def _reindex_df(df, weight_col):
@@ -3037,17 +2954,18 @@ class OnStove(DataProcessor):
              )
         return p
 
-    def plot_benefit_distribution(self, type: str = 'histogram', fill: str = 'max_benefit_tech', 
-                                  groupby: str = 'None', variable: str = 'net_benefits', 
-                                  best_mix: bool = True, hh_divider: int = 1, var_divider: int = 1,
-                                  labels: Optional[dict[str, str]] = None,
-                                  cmap: Optional[dict[str, str]] = None,
-                                  x_title: Optional[str] = None, y_title: str = 'Households',
-                                  wrap_cols: int = 1,
-                                  kwargs: Optional[dict] = None,
-                                  font_args: Optional[dict] = None, theme_name: str = 'minimal',
-                                  height: float = 1.5, width: float = 2.5,
-                                  save_as: Optional[bool] = None) -> 'matplotlib.Figure':
+    def plot_distribution(self, type: str = 'histogram', fill: str = 'max_benefit_tech',
+                          groupby: str = 'None', variable: str = 'wealth',
+                          best_mix: bool = True, hh_divider: int = 1, var_divider: int = 1,
+                          labels: Optional[dict[str, str]] = None,
+                          cmap: Optional[dict[str, str]] = None,
+                          x_title: Optional[str] = None, y_title: str = 'Households',
+                          wrap_cols: int = 1,
+                          kwargs: Optional[dict] = None,
+                          font_args: Optional[dict] = None, theme_name: str = 'minimal',
+                          height: float = 1.5, width: float = 2.5,
+                          save_as: Optional[str] = None,
+                          dpi: int = 150) -> 'matplotlib.Figure':
         """Displays a distribution plot with the net-benefits, benefits or costs for the technologies with the
         highest net-benefits throughout the households of the study area.
 
@@ -3239,10 +3157,9 @@ class OnStove(DataProcessor):
             p += theme(legend_position="none")
 
         if save_as is not None:
-            file = os.path.join(self.output_directory, f'{save_as}.pdf')
-            p.save(file, height=height, width=width, dpi=600)
-        else:
-            return p
+            file = os.path.join(self.output_directory, f'{save_as}')
+            p.save(file, height=height, width=width, dpi=dpi)
+        return p
 
     def to_csv(self, name: str):
         """Saves the main GeoDataFrame :attr:`gdf` as a ``.csv`` file into the :attr:`output_directory`.
