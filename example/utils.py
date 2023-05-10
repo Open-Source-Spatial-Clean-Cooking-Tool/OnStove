@@ -1,7 +1,7 @@
 import requests, zipfile, yaml
 
 def download_data(country):
-    path = "https://data.mendeley.com/api/datasets/c922hsm3b5/draft/files/62efdc10-2093-48a0-a717-081d983574f1?a=8fcd4fad-f8fe-4cca-8f4b-3a468eb8df50"
+    path = "https://data.mendeley.com/api/datasets/c922hsm3b5/draft/files/3eb3c912-dc12-4ae5-9db6-aa260794e5e4?a=8fcd4fad-f8fe-4cca-8f4b-3a468eb8df50"
     response = requests.get(path)
     open("country_dict.yaml", "wb").write(response.content)
 
