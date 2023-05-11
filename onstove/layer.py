@@ -117,18 +117,18 @@ class _Layer:
 
 
 class VectorLayer(_Layer):
-    """A ``VectorLayer`` is an object used to read, manipulate and visualize GIS vector data.
+    """``VectorLayer`` is an object used to read, manipulate and visualize GIS vector data.
 
     It uses a :doc:`GeoDataFrame<geopandas:docs/reference/geodataframe>` object  to store the georeferenced data in a
     tabular format. It also stores metadata as ``category`` and `name` of the layer, ``normalization`` and ``distance``
-    algorithms to use among others. This data structure is used in both the ``MCA`` and the
-    :class:`OnStove<onstove.OnStove>` models and the :class:`onstove.DataProcessor` object.
+    algorithms to use etc. This data structure is used in both the :class:`MCA<onstove.MCA>` and the
+    :class:`OnStove<onstove.OnStove>` models and the :class:`DataProcessor<onstove.DataProcessor>` object.
 
     Parameters
     ----------
     category: str, optional
         Category of the layer. This parameter is useful to group the data into logical categories such as
-        "Demographics", "Resources" and "Infrastructure" or "Demand", "Supply" and "Others". This categories are
+        "Demographics", "Resources" and "Infrastructure" or "Demand", "Supply" and "Others". These categories are
         particularly relevant for the ``MCA`` analysis.
     name: str, optional
         Name of the dataset. This name will be used as default in the :meth:`save` method as the name of the file.
@@ -251,7 +251,7 @@ class VectorLayer(_Layer):
             PostgreSQL connection if the layer needs to be read from a database. This accepts any connection type used by
             :doc:`geopandas:docs/reference/api/geopandas.read_postgis`.
         bbox: tuple, GeoDataFrame, GeoSeries or shapely Geometry, optional
-            Filter features by given bounding box, GeoSeries, GeoDataFrame or a shapely geometry. For more information
+            Filter features by a given bounding box, GeoSeries, GeoDataFrame or a shapely geometry. For more information
             refer to :doc:`geopandas:docs/reference/api/geopandas.read_file`.
         query: str, optional
             A query string to filter the data. For more information refer to
@@ -284,6 +284,9 @@ class VectorLayer(_Layer):
             A :class:`VectorLayer` object.
         output_path: str, optional
             A folder path where to save the output dataset. If not defined then the clipped dataset is not saved.
+        keep_geom_type: bool, default False
+            Determines whether single geometries are split in case of intersection during masking.
+
         """
         self.data = gpd.clip(self.data, mask_layer.data.to_crs(self.data.crs), keep_geom_type=keep_geom_type)
         if isinstance(output_path, str):
@@ -298,7 +301,7 @@ class VectorLayer(_Layer):
             The value can be anything accepted by :doc:`geopandas:docs/reference/api/geopandas.GeoDataFrame.to_crs`,
             such as an authority string (eg “EPSG:4326”), a WKT string or an EPSG int.
         output_path: str, optional
-            A folder path where to save the output dataset. If not defined then the clipped dataset is not saved.
+            A folder path where to save the output dataset. If not defined then the reprojected dataset is not saved.
         """
         if self.data.crs != crs:
             self.data.to_crs(crs, inplace=True)
@@ -308,7 +311,7 @@ class VectorLayer(_Layer):
     def proximity(self, base_layer: Optional[Union[str, 'RasterLayer']],
                   output_path: Optional[str] = None,
                   create_raster: Optional[bool] = True) -> 'RasterLayer':
-        """Calculates a proximity distance raster taking as starting points the vectors of the layer.
+        """Calculates a euclidean proximity distance raster based on the given vector layer.
 
         It uses the ``scipy.ndimage.distance_transform_edt`` function to calculate an exact Euclidean distance
         transform.
@@ -318,7 +321,7 @@ class VectorLayer(_Layer):
         base_layer: str or RasterLayer
             Raster layer used as a template to calculate the proximity of the vectors to each grid cell in the
             base layer. The ``base_layer`` must be either a str of the path to a raster file or a :class:`RasterLayer`
-            object.
+            object. The metadata of the base layer will become the metadata of the proximity raster.
         output_path: str, optional
             A folder path where to save the output dataset. If not defined then the proximity dataset is not saved.
         create_raster: bool, default True
@@ -403,6 +406,7 @@ class VectorLayer(_Layer):
         For more information on surface friction layers see the
         `Malarian Atlas Project <https://malariaatlas.org/explorer>`_.
         """
+        # TODO: it would be good if this worked for all vector types
         if not isinstance(friction, RasterLayer):
             if not isinstance(self.friction, RasterLayer):
                 raise ValueError('A friction `RasterLayer` is needed to calculate the travel time distance raster. '
@@ -434,7 +438,7 @@ class VectorLayer(_Layer):
         Parameters
         ----------
         method: str, optional
-            name of the method to use for the distance calculation. It can take "proximity", "travel_time" or None as
+            Name of the method to use for the distance calculation. It can take "proximity", "travel_time" or None as
             options. If "proximity" is used, then the :meth:`proximity` method is called and a :class:`RasterLayer`
             needs to be passed to the ``raster`` parameter as base layer to use for the calculation. If "travel_time"
             is used, then the :meth:`travel_time` method is called and a friction layer can be passed to the ``raster``
@@ -622,8 +626,7 @@ class VectorLayer(_Layer):
     
     @property
     def style(self) -> dict:
-        """Wrapper property to get the  west, south, east, north bounds of the dataset using the ``total_bounds``
-        property of ``Pandas``.
+        """Dictionary with the styles properties when visualizing vector files.
         """
         if self._type == 'Line':
             if 'color' not in self._style.keys():
@@ -639,8 +642,8 @@ class VectorLayer(_Layer):
     def style(self, style: dict):
         self._style = style
 
-    def plot(self, ax: Optional[matplotlib.axes.Axes] = None, column=None, style: dict = None,
-             legend_kwargs=None, scale_bar=None, north_arrow=None):
+    def plot(self, ax: Optional[matplotlib.axes.Axes] = None, column: Optional[str] = None, style: Optional[dict] = None,
+             legend_kwargs: Optional[dict] =None, scale_bar: Optional[dict]=None, north_arrow: Optional[dict]=None):
         """Plots a map of the layer using custom styles.
 
         This is, in principle, a wrapper function for the :doc:`geopandas:docs/reference/api/geopandas.GeoDataFrame.plot`
@@ -650,10 +653,19 @@ class VectorLayer(_Layer):
         ----------
         ax: matplotlib axes instance
             A matplotlib axes instance can be passed in order to overlay layers in the same axes.
+        column: str
+            Determines the column to visualize. If the column is discrete the style is categorical, otherwise it is
+            continuous and creates a color ramp
         style: dict, optional
             Dictionary containing all custom styles wanted for the map. This dictionary can contain any input that is
             accepted by :doc:`geopandas:docs/reference/api/geopandas.GeoDataFrame.plot`. If not defined, then the
             :attr:`style` attribute is used.
+        legend_kwargs: dict, optional
+            Dictionary to style and position the legend
+        scale_bar: dict, optional
+            Dictionary to style and position the scale bar
+        north_arrow: dict, optional
+            Dictionary to style and position the north arrow
         """
         if legend_kwargs is None:
             legend_kwargs = {}
