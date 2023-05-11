@@ -88,13 +88,13 @@ def test_plot_stats():
               'Biomass Forced Draft': 'Biomass ICS (FD)',
               'Pellets Forced Draft': 'Pellets ICS (FD)'}
               
-    results.plot_split(cmap=cmap, labels=labels, save_as='tech_split', 
+    results.plot_split(cmap=cmap, labels=labels, save_as='tech_split.pdf', 
                        height=1.5, width=3.5)
-    results.plot_costs_benefits(labels=labels, save_as='benefits_costs', 
-                                height=1.5, width=2)
-    results.plot_benefit_distribution(type='histogram', groupby='None',
-                                      hh_divider=1000,
-                                      y_title='Households (thousands)', cmap=cmap,
-                                      labels=labels, save_as='max_benefits_hist',
-                                      height=1.5, width=3.5)
+    results.plot_costs_benefits(labels=labels, save_as='benefits_costs.png', 
+                                height=1.5, width=2, dpi=300)
+    results.plot_distribution(type='histogram', groupby='None',
+                              hh_divider=1000,
+                              y_title='Households (thousands)', cmap=cmap,
+                              labels=labels, save_as='max_benefits_hist.svg',
+                              height=1.5, width=3.5)
     assert True
