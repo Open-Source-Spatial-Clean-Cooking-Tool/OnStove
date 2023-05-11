@@ -785,16 +785,35 @@ class OnStove(DataProcessor):
 
     Attributes
     ----------
-    rows
-    cols
-    specs
-    techs
-    base_fuel
-    energy_per_meal
-    gwp
-    clean_cooking_access_u
-    clean_cooking_access_r
-    electrified_weight
+    gdf: gpd.GeoDataFrame
+        GeoDataFrame containing the georeferenced information for every populated square kilometer of the study area.
+        This attribute gets created when calling the :meth:`population_to_dataframe` method.
+    rows: np.ndarray
+        Array containing the row indexes of each row of the :attr:`gdf` in relation to the spatial grid of the data.
+        Indicates the horizontal position of each data point.
+    cols: np.ndarray
+        Array containing the column indexes of each row of the :attr:`gdf` in relation to spatial grid of the data.
+        Indicates the vertical position of each data point.
+    specs: dict
+        Dictionary containing the socio-economic information of the study area. It gets created when reading the
+        `scenario file <https://onstove-documentation.readthedocs.io/en/latest/onstove_tool.html#socio-economic-data>`_
+        using the :meth:`read_scenario_data` method.
+    techs: dict of dict
+        Dictionary containing the technology names and classes. It gets created when reading the
+        `technology file <https://onstove-documentation.readthedocs.io/en/latest/onstove_tool.html#techno-economic-data>`_
+        using the :meth:`read_tech_data` method.
+    base_fuel: Technology
+        :class:`Technology` class containing information on the current technologies used in the study area. It gets
+        created using information from the :attr:`techs` and when the :meth:`set_base_fuel` method gets called.
+    energy_per_meal: float
+        Average energy required for cooking a standard meal (MJ).
+    gwp: dict
+        Dictionary containing values of Global Warming Potential (GWP) of relevant pollutants. Default values are for
+        100 year potential: ``{'co2': 1, 'ch4': 25, 'n2o': 298, 'co': 2, 'bc': 900, 'oc': -46}``.
+    clean_cooking_access_u: float
+        Percentage of clean cooking acces in urban settlements.
+    clean_cooking_access_r: float
+        Percentage of clean cooking acces in rural settlements.
     """
 
     normalize = Processes.normalize
@@ -811,7 +830,6 @@ class OnStove(DataProcessor):
         self.base_fuel = None
         self.i = {}
         self.energy_per_meal = 3.64  # MJ
-        # TODO: remove from here and make it an input in the specs file
         self.gwp = {'co2': 1, 'ch4': 25, 'n2o': 298, 'co': 2, 'bc': 900, 'oc': -46}
         self.clean_cooking_access_u = None
         self.clean_cooking_access_r = None
@@ -1626,7 +1644,7 @@ class OnStove(DataProcessor):
         Time is monetized using the minimum wage in the study area, defined in the :attr:`specs` dictionary, and a
         geospatial representation of wealth, which can be either a relative wealth index or a poverty layer (see the
         :meth:`extract_wealth_index` method). The minimum wage value is then distributed spatially using an upper limit
-        of 0.5 times the minimung wage in the wealthier regions and an lower limit of 0.2 in the poorest regions.
+        of 0.5 times the minimung wage in the wealthier regions and a lower limit of 0.2 in the poorest regions.
         """
         min_value = np.nanmin(self.gdf['relative_wealth'])
         max_value = np.nanmax(self.gdf['relative_wealth'])
