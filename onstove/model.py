@@ -300,9 +300,9 @@ class DataProcessor:
 
     def add_mask_layer(self, category: str, name: str, path: str,
                        query: str = None, postgres: bool = False, save_layer: bool = False):
-        """
-        Adds a vector layer to self.mask_layer, which will be used to mask all
-        other layers into is boundaries
+        """Adds a vector layer to self.mask_layer.
+
+        This layer is used to mask all other layers.
 
         Parameters
         ----------
@@ -321,6 +321,10 @@ class DataProcessor:
             created and stored in the :attr:`conn` attribute using the :meth:`set_postgres` method.
         save_layer: bool default False
             Whether to save the dataset to disk or not
+
+        See also
+        ----------
+        mask_layer
         """
         if postgres:
             self.mask_layer = VectorLayer(category, name, path, self.conn, query)
@@ -343,15 +347,22 @@ class DataProcessor:
         return output_path
 
     def mask_layers(self, datasets: dict[str, list[str]] = 'all', crop: bool = True, save_layers: bool = False):
-        """
-        Uses the a mask layer in ``self.mask_layer`` to mask all other layers to its boundaries.
+        """Uses the mask layer in ``self.mask_layer`` to mask layers to its boundaries.
 
         Parameters
         ----------
         datasets: dictionary of ``category``-``list of layer names`` pairs, default 'all'
             Specifies which dataset(s) to clip.
+
+            .. code-block::
+                :caption: Example
+
+                datasets={'category_1': ['layer_1', 'layer_2'], 'category_2': [...]}
+
+        crop: boolean, default True
+            Determines whether to crop the masked layers extent to the mask layers extent.
         save_layers: boolean, default False
-            Wheter to save the layer to disc or not.
+            Determines whether to save the reprojected layer to disc or not.
 
         See also
         ----------
@@ -379,15 +390,20 @@ class DataProcessor:
                     layer.distance_raster.mask(self.mask_layer, output_path, crop=crop)
 
     def align_layers(self, datasets: dict[str, list[str]] = 'all', save_layers=False):
-        """
-        Ensures that the coordinate system and resolution of the raster is the same as the base layer
+        """Ensures that the coordinate system and resolution of the raster is the same as the base layer
 
         Parameters
         ----------
         datasets: dictionary of ``category``-``list of layer names`` pairs, default 'all'
             Specifies which dataset(s) to align.
+
+             .. code-block::
+                :caption: Example
+
+                datasets={'category_1': ['layer_1', 'layer_2'], 'category_2': [...]}
+
         save_layers: boolean, default False
-            Wheter to save the layer to disc or not.
+            Determines whether to save the reprojected layer to disc or not.
 
         See also
         ----------
@@ -408,15 +424,20 @@ class DataProcessor:
                         layer.friction.align(base_layer=self.base_layer, output_path=output_path)
 
     def reproject_layers(self, datasets: dict[str, list[str]] = 'all', save_layers=False):
-        """
-        Reprojects the layers specified by the user.
+        """Reprojects all layers entered.
 
         Parameters
         ----------
         datasets: dictionary of ``category``-``list of layer names`` pairs, default 'all'
             Specifies which dataset(s) to reproject.
+
+            .. code-block::
+                :caption: Example
+
+                datasets={'category_1': ['layer_1', 'layer_2'], 'category_2': [...]}
+
         save_layers: boolean, default False
-            Wheter to save the layer to disc or not.
+            Determines whether to save the reprojected layer to disc or not.
 
         See also
         --------
@@ -431,9 +452,29 @@ class DataProcessor:
                 if isinstance(layer.friction, RasterLayer):
                     layer.friction.reproject(self.project_crs, output_path)
 
-    def get_distance_rasters(self, datasets='all', save_layers=False):
-        """
-        Goes through all layer and call their `.distance_raster` method
+    def get_distance_rasters(self, datasets: Union[str, dict] = "all", save_layers: bool =False):
+        """Calls the `.distance_raster` method of all the layers entered.
+
+        The function calculates the distance either as proximity or as traveltime see `RasterLayer.get_distance_raster`
+        or `VectorLayer.get_distance_raster`
+
+        Parameters
+        ----------
+        datasets: str or dict, default "all"
+            Defines the datasets to be normalized. Can be entered as either a string or a dictionary.
+
+            .. code-block::
+                :caption: Example
+
+                datasets={'category_1': ['layer_1', 'layer_2'], 'category_2': [...]}
+
+        save_layer: bool, default False
+            Determines whether to save the distance raster to disc or not.
+
+        See also
+        --------
+        RasterLayer.get_distance_raster
+        VectorLayer.get_distance_raster
         """
         datasets = self._get_layers(datasets)
         for category, layers in datasets.items():
@@ -446,9 +487,31 @@ class DataProcessor:
                     layer.get_distance_raster(output_path=output_path, mask_layer=self.mask_layer)
 
 
-    def normalize_rasters(self, datasets='all', buffer=False, save_layers=False):
-        """
-        Goes through all layer and call their `.normalize` method
+    def normalize_rasters(self, datasets: Union[str, dict] = "all", buffer: bool =False, save_layers: bool =False):
+        """Calls the `.normalize` method of all the layers entered.
+
+        Normlaizes all input rasters using a ´MinMax´ normalization.
+
+        Parameters
+        ----------
+        datasets: str or dict, default "all"
+            Defines the datasets to be normalized. Can be entered as either a string or a dictionary.
+
+            .. code-block::
+                :caption: Example
+
+                datasets={'category_1': ['layer_1', 'layer_2'], 'category_2': [...]}
+
+        buffer: bool, default False
+            Whether to exclude the areas outside the ``distance_limit`` attribute and make them `np.nan`. The ``distance_limit``
+            is an attribute of the datasets
+        save_layer: bool, default False
+            Determines whether to save the normalized dataset to disc or not.
+
+        See also
+        --------
+        RasterLayer.normalize
+        RasterLayer.mask
         """
         datasets = self._get_layers(datasets)
         for category, layers in datasets.items():
@@ -457,9 +520,21 @@ class DataProcessor:
                 layer.mask(self.mask_layer, crop=False, all_touched=False)
                 layer.normalize(output_path, buffer=buffer, inverse=layer.inverse)
 
-    def save_datasets(self, datasets='all'):
-        """
-        Saves all layers that have not been previously saved
+    def save_datasets(self, datasets: Union[str, dict] = "all"):
+        """Saves layers.
+
+        Saves any layer that is given as input in parameter ``datasets``
+
+        Parameters
+        ----------
+        datasets: str or dict, default "all"
+            Defines the datasets to be saved. Can be entered as either a string or a dictionary.
+
+            .. code-block::
+                :caption: Example
+
+                datasets={'category_1': ['layer_1', 'layer_2'], 'category_2': [...]}
+
         """
         datasets = self._get_layers(datasets)
         if self.mask_layer.category not in datasets.keys():
@@ -484,7 +559,12 @@ class DataProcessor:
 
     @classmethod
     def read_model(cls, path):
-        """Reads a model from a pickle"""
+        """Reads a model from a pickle
+
+        Returns
+        -------
+        OnStove instance
+        """
         with open(path, "rb") as f:
             model = dill.load(f)
         return model
@@ -827,7 +907,13 @@ class OnStove(DataProcessor):
         self.gdf = gpd.GeoDataFrame()
 
     def read_scenario_data(self, path_to_config: str, delimiter=','):
-        """Reads the scenario data into a dictionary
+        """Reads the scenario data into a dictionary.
+
+        The scenario data (specifically the `Param` and `Value` columns)
+        are saved in a :attr:`specs` attribute of the OnStove class which is called with `model.specs` (model is substituted
+        for the name that you gave the model instance). The attribute is in the form of a dictionary where the keys are
+        the names given in the `Param` and the value is taken from the `Value`. See
+        `example <https://onstove-documentation.readthedocs.io/en/latest/onstove_tool.html#socio-economic-data>`_.
         """
         config = {}
         with open(path_to_config, 'r') as csvfile:
@@ -848,9 +934,9 @@ class OnStove(DataProcessor):
                         raise ValueError("Config file data type not recognised.")
 
         self.specs.update(config)
-        self.check_scenario_data()
+        self._check_scenario_data()
 
-    def check_scenario_data(self):
+    def _check_scenario_data(self):
         """This function checks goes through all rows without default values needed in the socio-economic specification
         file to check whether they are included or not. If they are included nothing happens, otherwise a ValueError will
         be raised.
@@ -904,7 +990,7 @@ class OnStove(DataProcessor):
 
         self.specs = {self._replace_dict.get(k, k): v for k, v in self.specs.copy().items()}
 
-    def techshare_sumtoone(self):
+    def _techshare_sumtoone(self):
         """
         Checks if the sum of shares in the technology dictionary is 1.0. 
         If it is not, it will adjust the shares to make the sum 1.0.
@@ -934,7 +1020,7 @@ class OnStove(DataProcessor):
             for name,tech in self.techs.items():
                 print(name,tech.current_share_urban)
 
-    def ecooking_adjustment(self):
+    def _ecooking_adjustment(self):
         """
         Checks whether the share of the population cooking with electricity
         is higher than the electrification rate in either rural and/or urban areas. If it is higher in rural 
@@ -987,7 +1073,7 @@ class OnStove(DataProcessor):
             for name,tech in self.techs.items():
                 print(name,tech.current_share_urban)
 
-    def biogas_adjustment(self):
+    def _biogas_adjustment(self):
         """
         Checks whether the share of the population cooking with biogas entered in the tech specs
         is higher than what OnStove predicts is feasible given biogas availability. If it is higher, then the share of the population cooking 
@@ -1022,7 +1108,7 @@ class OnStove(DataProcessor):
             for name, tech in self.techs.items():
                 print(name, tech.current_share_rural)
 
-    def pop_tech(self):
+    def _pop_tech(self):
         """
         Calculates the number of people cooking with each fuel in rural and urban areas
         based upon the technology shares and population in rural and urban areas. These values are then added
@@ -1035,7 +1121,7 @@ class OnStove(DataProcessor):
             tech.population_cooking_rural = tech.current_share_rural * self.gdf.loc[~isurban, 'Calibrated_pop'].sum()
             tech.population_cooking_urban = tech.current_share_urban * self.gdf.loc[isurban, 'Calibrated_pop'].sum()
     
-    def techshare_allocation(self, tech_dict):
+    def _techshare_allocation(self, tech_dict):
         """
         Calculates the baseline population cooking with each technology in each urban and rural square kilometer.
         The function takes a stepwise approach to allocating population to each cooking technology:
@@ -1108,12 +1194,24 @@ class OnStove(DataProcessor):
             tech.pop_sqkm = tech.pop_sqkm / self.gdf["Calibrated_pop"]
         
     def set_base_fuel(self, techs: list = None):
-        """
-        Defines the base fuel properties according to the technologies
-        tagged as is_base = True or a list of technologies as input.
-        If no technologies are passed as input and no technologies are tagged
-        as is_base = True, then it calculates the base fuel properties considering
-        all technologies in the model
+        """Defines the base fuel properties according to the technologies currently used in the study area.
+
+        The user can either set `is_base = True` to a subclass of the technology class (e.g. biogas or LPG).
+        This would then assume that everyone in the study area use said technology currently. If no `is_base = True` is
+        given the base fuel stoves are calculated using the `current_share_urban` and `current_share_rural` attributes
+        of each subclass.
+
+        Once the current share of each technology in the base year is determined, the current situation is determined
+        in regard to costs, carbon emissions and health related emissions.
+
+        See also
+        --------
+        Technology.discounted_inv
+        LPG.transportation_cost
+        Technology.total_time
+        Technology.required_energy_hh
+        Technology.health_parameters
+        Technology.discount_fuel_cost
         """
         if techs is None:
             techs = list(self.techs.values())
@@ -1145,17 +1243,17 @@ class OnStove(DataProcessor):
 
             # base_tech_types = [type(tech) for tech in base_fuels.values()]
 
-            self.techshare_sumtoone()
-            self.ecooking_adjustment()
+            self._techshare_sumtoone()
+            self._ecooking_adjustment()
             base_fuels["Biogas"].total_time(self)
             required_energy_hh = base_fuels["Biogas"].required_energy_hh(self)
             factor = self.gdf['biogas_energy'] / (required_energy_hh * self.gdf['Households'])
             factor[factor > 1] = 1
             base_fuels["Biogas"].factor = factor
             base_fuels["Biogas"].households = self.gdf['Households'] * factor
-            self.biogas_adjustment()
-            self.pop_tech()
-            self.techshare_allocation(base_fuels)
+            self._biogas_adjustment()
+            self._pop_tech()
+            self._techshare_allocation(base_fuels)
 
             for name, tech in base_fuels.items():
 
@@ -1191,8 +1289,15 @@ class OnStove(DataProcessor):
             self.base_fuel = base_fuel
 
     def read_tech_data(self, path_to_config: str, delimiter=','):
-        """
-        Reads the technology data from a csv file into a dictionary
+        """Reads the technology data from a csv file into a dictionary of dictionaries.
+
+        The techno-economic data (specifically the `Fuel`, `Param` and `Value` columns)
+        are saved in a :attr:`techs` attribute of the OnStove class which is called with `model.techs` (model is substituted
+        for the name that you gave the model instance). The attribute is in the form of a dictionary of dictionaries
+        where the first level is defined by the data in the `Fuel` columns (e.g. Biogas, called with
+        `model.techs['Biogas']`). Each sub-dictionary in turns has keys and values from the `Param` and `Value` columns
+        (e.g. `model.techs['Biogas'].inv_cost`). See
+        `example <https://onstove-documentation.readthedocs.io/en/latest/onstove_tool.html#techno-economic-data>`_
         """
         techs = {}
         with open(path_to_config, 'r') as csvfile:
@@ -1368,8 +1473,10 @@ class OnStove(DataProcessor):
 
     def calibrate_current_pop(self):
         """Calibrates the spatial population in each cell according to the user defined population in the start year
-        (``Population_start_year`` in the :attr:`specs` dictionary) and saves it in the ``Calibrated_pop`` column of
-        the main GeoDataFrame (:attr:`gdf`).
+        (``Population_start_year`` in the :attr:`specs` dictionary).
+
+        The function does not return anything but the resulting calibration is saved in a column of the
+        main GeoDataFrame (:attr:`gdf`) (``Calibrated_pop``).
 
         See also
         --------
@@ -1463,27 +1570,29 @@ class OnStove(DataProcessor):
 
         It uses the coordinates of the population points (previously extracted with the :meth:`population_to_dataframe`
         method) to either sample the values from the dataset (if ``sample`` is used) or read the :attr:`rows` and
-        :attr:`cols` from the array (if ``read`` is used). The further requires that the raster dataset is aligned with
+        :attr:`cols` from the array (if ``read`` is used). The latter requires that the raster dataset is aligned with
         the used population layer.
 
         Parameters
         ----------
         layer: RasterLayer or path to the raster
-            Raster layer to extract values from. If the method ``sample`` is used, the layer must be provided as the
+            Raster layer to extract values from. If the method ``sample`` is used, this must be provided as the
             path to the raster file.
         name: str, optional
-            Name to use for the column of the extracted data in the :attr:`gdf`.
+            Name to use for the column of the extracted data in the :attr:`gdf`. If name is not given the raster data
+            will be returned as a numpy array.
         method: str, default 'sample'
             Method to use when extracting the data. If ``sample``, the values will be sampled using the coordinates of
-            the point of the GeoDataFrame (:attr:`gdf`), which have been previously defined by the population layer. if
-            ``read``, the values are extracted using the the :attr:`rows` and :attr:`cols` attributes, which have been
+            the point of the GeoDataFrame (:attr:`gdf`), which have been previously defined by the population layer.If
+            ``read``, the values are extracted using the :attr:`rows` and :attr:`cols` attributes, which have been
             previously extracted using the population layer.
         fill_nodata_method: str, optional
-            Method to use to fill the no data. Currently only ``interpolate`` is available.
+            Method to use to fill the no data cells. Current options are ``interpolate`` and ``nearest``. ``nearest`` is
+            best suited for discrete data where values between the discrete classes are not allowed.
         fill_default_value: float or int, default 0
             Default value to use to fill in the no data. This will be used for cells that fall outside the search
-            radius (currently of 100) if the ``interpolate`` method is selected, and for all the nodata values if
-            ``None`` is used as method.
+            radius (currently 100) if the ``interpolate`` method is selected, ignored if ``nearest`` is selected
+            and for all the nodata values if ``None`` is used as method.
         """
         layer = raster_setter(layer)
         data = None
@@ -1535,13 +1644,18 @@ class OnStove(DataProcessor):
 
         The GHS dataset is used to determine which settlements are urban and which are rural in the analysis. Areas
         that have coding of either 30, 23 or 22 are considered urban, while the rest are rural. It saves the
-        binary (1 for urban, 0 for rural) classification as a column in the main GeoDataFrame (:attr:`gdf`) with the
-        name of ``IsUrban``.
+        values of the dataset in the ``IsUrban`` column of the main GeoDataFrame (:attr:`gdf`). The urban - rural
+        calibration is important when determining current stove uses as well as whe calibrating population.
 
         Parameters
         ----------
         GHS_path: str
             Path to the GHS dataset
+
+        See also
+        --------
+        calibrate_current_pop
+        number_of_households
         """
         ghs = raster_setter(GHS_path)
         self.raster_to_dataframe(ghs, name="IsUrban", method='read', fill_nodata_method='nearest')
@@ -1565,7 +1679,7 @@ class OnStove(DataProcessor):
 
         self.number_of_households()
 
-    def calibrate_urban_manual(self):
+    def _calibrate_urban_manual(self):
         """Calibrates the urban rural split based on population density.
 
         It uses the ``Calibrated_pop`` column of the main GeoDataFrame (:attr:`gdf`) and the current national urban
@@ -1642,11 +1756,11 @@ class OnStove(DataProcessor):
         """Runs the model using the defined ``technologies`` as options to cook with.
 
         It loops through the ``technologies`` and calculates all costs, benefit and the net-benefit of cooking with
-        such technology relative to the current situation in every grid cell of the study area. Then, it calls the
-        :meth:`maximum_net_benefit` method to get the technology with highest net-benefit in each cell (and saves it
-        in the ``max_benefit_tech`` column of the :attr:`gdf`). Finally, it extracts indicators such as lives saved,
-        time saved, avoided emissions, health costs saved, opportunity cost gained, investment costs, fuel costs, and
-        O&M costs.
+        each technology relative to the current situation in every grid cell of the study area (the base line).
+        Then, it calls the :meth:`maximum_net_benefit` method to get the technology with highest net-benefit in each
+        cell (and saves it in the ``max_benefit_tech`` column of the :attr:`gdf`). Finally, it extracts indicators such
+        as lives saved, time saved, avoided emissions, health costs saved, opportunity cost gained, investment costs,
+        fuel costs, and O&M costs.
 
         Parameters
         ----------
@@ -1656,13 +1770,17 @@ class OnStove(DataProcessor):
 
             .. Note::
                All technology names passed need to match the names of technologies in the :attr:`techs` dictionary.
+               Note that it is not enough to only add the technology names in the techno-economic specs, they have to
+               be added here as well. There is also no requirement to have all of the stoves in techno-economic file
+               included in the run (some may only be relevant for the base line)
 
         restriction: bool, default True
-            Whether to have the restriction to only select technologies that produce a positive benefit compared to the
-            baseline.
+            Whether to have the restriction of only selecting technologies producing a positive benefit compared to the
+            baseline. This avoids selecting stoves simply due to them being cheaper.
 
         See also
         --------
+        set_base_fuel
         maximum_net_benefit
         extract_lives_saved
         extract_health_costs_saved
@@ -1753,7 +1871,7 @@ class OnStove(DataProcessor):
         """Extracts the technology or technology combinations producing the highest net-benefit in each cell.
 
         It saves the technology with highest net-benefit in the ``max_benefi_tech`` column of the :attr:`gdf`
-        GeoDataframe.
+        GeoDataframe. This also dictates the benefits and costs extracted in the extract functions.
 
         Parameters
         ----------
@@ -1761,12 +1879,22 @@ class OnStove(DataProcessor):
             Technologies to compare and select the one, or combination of two, that produces the highest net-benefit in
             each cell.
         restriction: bool, default True
-            Whether to have the restriction to only select technologies that produce a positive benefit compared to the
-            baseline.
+            Whether to have the restriction of only selecting technologies producing a positive benefit compared to the
+            baseline. This avoids selecting stoves simply due to them being cheaper.
 
         See also
         --------
         run
+        extract_lives_saved
+        extract_health_costs_saved
+        extract_time_saved
+        extract_opportunity_cost
+        extract_reduced_emissions
+        extract_emissions_costs_saved
+        extract_investment_costs
+        extract_fuel_costs
+        extract_om_costs
+        extract_salvage
         """
         net_benefit_cols = [col for col in self.gdf if 'net_benefit_' in col]
         benefits_cols = [col for col in self.gdf if 'benefits_' in col]
@@ -1946,8 +2074,32 @@ class OnStove(DataProcessor):
             index = self.gdf.loc[is_tech].index
             self.gdf.loc[is_tech, "emissions_costs_saved"] = self.techs[tech].decreased_carbon_costs[index]
 
-    def extract_wealth_index(self, wealth_index, file_type="csv", x_column="longitude", y_column="latitude",
-                             wealth_column="rwi"):
+    def extract_wealth_index(self, wealth_index: str, file_type: str = "csv", x_column: str =  "longitude",
+                             y_column: str = "latitude", wealth_column: str = "rwi"):
+
+        """Extracts the relative wealth index to a column called relative wealth in the :attr:`gdf`.
+
+        The relative wealth index is used to determine the value of time and the value of time saved in subsequent
+        calculations.
+
+        Parameters
+        ----------
+        wealth_index: str
+            The path to the wealth index data used
+        file_type: str, default "csv"
+            The file_type of the wealth index. The allowed file types are `csv`. `point`, `polygon` or `raster`
+        x_column: str, default "longitude"
+            The name of the column containing x-coordinates, only relevant when `file_type = csv`
+        y_column: str, default "latitude"
+            The name of the column containing y-coordinates, only relevant when `file_type = csv`
+        wealth_column: str, default "latitude"
+            The name of the column containing the wealth index, only relevant when file type is either `csv`, `point`
+            or `polygon`
+
+        See also
+        --------
+        get_value_of_time
+        """
 
         if file_type == "csv":
             df = pd.read_csv(wealth_index)
@@ -2128,6 +2280,8 @@ class OnStove(DataProcessor):
             * ``total``: the total value of the data accounting for all households in the cell.
             * ``per_100k``: the values are calculated per 100 thousand population withing each cell.
             * ``per_household``: average value per househol in each cell.
+        nodata: float or int
+            Defines nodata values to be ignored by the function.
 
         Returns
         -------
