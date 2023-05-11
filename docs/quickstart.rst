@@ -57,7 +57,7 @@ To use OnStove the following python modules are needed: `contextily <https://con
 
 5. Navigate to the folder that you downloaded and unzipped by typing *cd PATH/envs*. Where *PATH* is the path on your computer to the unzipped folder. This will bring you to the *envs* folder of the repository.
 
-6. Once in the correct path, type *conda env create --name onstove --file jupyter_env.yaml*. 
+6. Once in the correct path, type `conda env create --name onstove --file jupyter_env.yaml`. 
 
 .. note::
 
