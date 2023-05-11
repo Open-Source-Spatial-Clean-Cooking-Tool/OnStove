@@ -1702,7 +1702,7 @@ class RasterLayer(_Layer):
 
         return ax
 
-    def save_image(self, output_path, type='png', cmap='viridis', ticks=None, tick_labels=None,
+    def save_image(self, name, cmap='viridis', ticks=None, tick_labels=None,
                    cumulative_count=None, categories=None, legend_position=(1.05, 1), figsize=(6.4, 4.8),
                    admin_layer=None, title=None, ax=None, dpi=300, quantiles=None,
                    legend_prop={'title': {'size': 12, 'weight': 'bold'}, 'size': 12},
@@ -1711,9 +1711,6 @@ class RasterLayer(_Layer):
                    scale_bar=None, north_arrow=None):
         """Saves the raster as an image map in the specified format.
         """
-        os.makedirs(output_path, exist_ok=True)
-        output_file = os.path.join(output_path,
-                                   self.name + f'.{type}')
         self.plot(cmap=cmap, ticks=ticks, tick_labels=tick_labels, cumulative_count=cumulative_count,
                   categories=categories, legend_position=legend_position, rasterized=rasterized,
                   admin_layer=admin_layer, title=title, ax=ax, dpi=dpi, quantiles=quantiles,
@@ -1722,7 +1719,7 @@ class RasterLayer(_Layer):
                   colorbar=colorbar, colorbar_kwargs=colorbar_kwargs,
                   figsize=figsize, legend_prop=legend_prop)
 
-        plt.savefig(output_file, dpi=dpi, bbox_inches='tight', transparent=True)
+        plt.savefig(name, dpi=dpi, bbox_inches='tight', transparent=True)
         plt.close()
 
     def save_style(self, output_path, cmap='magma', quantiles=None,

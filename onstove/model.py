@@ -2262,15 +2262,20 @@ class OnStove(DataProcessor):
              figsize: tuple[float, float] = (6.4, 4.8),
              rasterized: bool = True,
              dpi: float = 150, save_as: Optional[str] = None,
-             save_style: bool = False, style_classes: int = 5):
+             save_style: bool = False, style_classes: int = 5) -> matplotlib.axes.Axes:
         """Plots a map from a desired column ``variable`` from the :attr:`gdf`.
+
+        The map can be for categorical or continuous data. If categorical, a legend will be created with the colors
+        of the categories. If continuous, a color bar will be created with the range of the data. For continuous data a
+        ``metric`` parameter can be passed indicating the desired statistic to be visualized. Moreover, contonuous
+        data can be presented using ``cumulative_count`` or ``quantiles``.
 
         Parameters
         ----------
         variable: str
-            The column name from the :attr:`gdf` to use.
+            The column name from the :attr:`gdf` to plot.
         metric: str, default 'mean'
-            Metric to use to aggregate data. It is only used for non-categorical data. For available metrics see
+            Metric to use to aggregate data. It is only used for continuous data. For available metrics see
             :meth:`create_layer`.
         labels: dictionary of str key-value pairs, optional
             Dictionary with the keys-value pairs to use for the data categories. It is only used for categorical data---
@@ -2287,16 +2292,18 @@ class OnStove(DataProcessor):
                :meth:`RasterLayer.cumulative_count`
 
         quantiles: array-like of float, optional
-            Quantile or sequence of quantiles to compute, which must be between 0 and 1 inclusive. If defined the map
-            will be displayed with the quantiles representation of the data.
+            Quantile or sequence of quantiles to compute, which must be between 0 and 1 inclusive
+            (``quantiles=(0.25, 0.5, 0.75, 1)``). If defined the map will be displayed with the quantiles
+            representation of the data.
 
             .. seealso::
                :meth:`RasterLayer.quantiles`
 
+        nodata: float or int, default ```np.nan`
+            Defines nodata values to be ignored when plotting.
         admin_layer: gpd.GeoDataFrame or VectorLayer, optional
             The administrative boundaries to plot as background. If no ``admin_layer`` is provided then the
-            :attr:``mask_layer`` will be used if available, if not then no boundaries will be ploted.
-
+            :attr:``mask_layer`` will be used if available, if not then no boundaries will be plotted.
         title: str, optional
             The title of the plot.
         legend: bool, default False
@@ -2313,10 +2320,23 @@ class OnStove(DataProcessor):
             defaults to ``{'title': {'size': 12, 'weight': 'bold'}, 'size': 12}``.
         stats: bool, default False
             Whether to display the statistics of the analysis in the map.
-        stats_position: array-like of float, default (1.05, 1)
-            Position of the upper-left corner of the statistics box measured in fraction of `x` and `y` axis.
-        stats_fontsize: int, default 12
-            The font size of the statistics text.
+        stats_kwargs: dictionary, optional
+            Dictionary of arguments to control the position and style of the statistics box.
+
+            .. code-block::
+                :captio: Default arguments
+
+                ``stats_kwargs={'extra_stats': None, 'stats_position': (1.02, 0.9), 'pad': 0, 'sep': 6, 'fontsize': 10,
+                                'fontcolor': 'black', 'fontweight': 'normal', 'box_props': dict(boxstyle='round',
+                                facecolor='#f1f1f1ff', edgecolor='lightgray')}``
+
+            .. code-block::
+                :captio: Other options
+
+                ``stats_kwargs={'extra_stats': None, 'fontsize': 10, 'stats_position': (1, 0.9), 'pad': 2, 'sep': 0,
+                                'fontcolor': 'black', 'fontweight': 'normal', 'box_props': dict(facecolor='lightyellow',
+                                 edgecolor='black', alpha=1, boxstyle="sawtooth")}``
+
         scale_bar: dict, optional
             Dictionary with the parameters needed to create a :class:`ScaleBar`. If not defined, no scale bar will be
             displayed.
@@ -2324,7 +2344,7 @@ class OnStove(DataProcessor):
             .. code-block::
                :caption: Scale bar dictionary example
 
-               dict(size=1000000, style='double', textprops=dict(size=8),
+               dict(size=1000000, style='double', textprops=dict(size=8), location=(1, 0),
                     linekw=dict(lw=1, color='black'), extent=0.01)
 
             .. Note::
@@ -2352,10 +2372,18 @@ class OnStove(DataProcessor):
             :doc:`matplotlib:gallery/misc/rasterization_demo`.
         dpi: int, default 150
             The resolution of the figure in dots per inch.
+        save_as: str, optional
+            If a string is passed, then the map will be saved with that name and extension file in
+            the:attr:`output_directory` as ``name.pdf``, ``name.png``, ``name.svg``, etc.
         save_style: bool, default False
             Whether to save the style of the plot as a ``.sld`` file---see :meth:`onstove.RasterLayer.save_style`.
         style_classes: int, default 5
             number of classes to include in the ``.sld`` style.
+
+        Returns
+        -------
+        matplotlib.axes.Axes
+            The axes of the figure.
 
         Examples
         --------
@@ -2398,7 +2426,7 @@ class OnStove(DataProcessor):
         >>> north_arow_prop = dict(size=30, location=(0.92, 0.92), linewidth=0.5)
         ...
         >>> africa.plot('max_benefit_tech', labels=labels, cmap=cmap,
-        ...             stats=True, stats_position=(-0.002, 0.61), stats_fontsize=10,
+        ...             stats=True,
         ...             legend=True, legend_position=(0.03, 0.47),
         ...             legend_title='Maximum benefit cooking technology',
         ...             legend_prop={'title': {'size': 10, 'weight': 'bold'}, 'size': 10},
@@ -2487,7 +2515,6 @@ class OnStove(DataProcessor):
         # total_costs = (summary.loc['total', 'investment_costs'] + summary.loc['total', 'fuel_costs'] + 
                        # summary.loc['total', 'om_costs'] - summary.loc['total', 'salvage_value'])
 
-        
         deaths = TextArea(f"{deaths_avoided:,.0f} pp/yr", textprops=font_props)
         health = TextArea(f"{health_costs_avoided:,.2f} BUS$", textprops=font_props)
         emissions = TextArea(f"{reduced_emissions:,.2f} Mton", textprops=font_props)
@@ -2506,33 +2533,192 @@ class OnStove(DataProcessor):
 
         ax.add_artist(ab)
 
-    def to_image(self, variable, name=None, type='png', cmap='viridis', cumulative_count=None, quantiles=None,
-                 legend_position=(1.05, 1), admin_layer=None, title=None, dpi=300, labels=None, legend=True,
-                 legend_title='', legend_cols=1, rasterized=True, stats=False, 
-                 extra_stats: Optional[dict] = None, stats_position=(1.05, 0.5),
-                 stats_fontsize=12, metric='mean', scale_bar=None, north_arrow=None, figsize=(6.4, 4.8),
-                 legend_prop={'title': {'size': 12, 'weight': 'bold'}, 'size': 12}):
-        raster, codes, cmap = self.create_layer(variable, name=name, labels=labels, cmap=cmap, metric=metric)
+    def to_image(self, variable: str, name: str, metric='mean',
+             labels: Optional[dict[str, str]] = None,
+             cmap: Union[dict[str, str], str] = 'viridis',
+             cumulative_count: Optional[tuple[float, float]] = None,
+             quantiles: Optional[tuple[float]] = None,
+             nodata: Union[float, int] = np.nan,
+             admin_layer: Optional[Union[gpd.GeoDataFrame, VectorLayer]] = None,
+             title: Optional[str] = None,
+             legend: bool = True, legend_title: str = '', legend_cols: int = 1,
+             legend_position: tuple[float, float] = (1.02, 0.7),
+             legend_prop: dict = {'title': {'size': 12, 'weight': 'bold'}, 'size': 12},
+             stats: bool = False,
+             stats_kwargs: Optional[dict] = None,
+             scale_bar: Optional[dict] = None, north_arrow: Optional[dict] = None,
+             figsize: tuple[float, float] = (6.4, 4.8),
+             rasterized: bool = True,
+             dpi: float = 150):
+        """Saves a map from a desired column ``variable`` from the :attr:`gdf` into an image file.
+
+        The map can be for categorical or continuous data. If categorical, a legend will be created with the colors
+        of the categories. If continuous, a color bar will be created with the range of the data. For continuous data a
+        ``metric`` parameter can be passed indicating the desired statistic to be visualized. Moreover, contonuous
+        data can be presented using ``cumulative_count`` or ``quantiles``.
+
+        Parameters
+        ----------
+        variable: str
+            The column name from the :attr:`gdf` to plot.
+        name: str
+            The map will be saved with that name and extension file in
+            the:attr:`output_directory` as ``name.pdf``, ``name.png``, ``name.svg``, etc.
+        metric: str, default 'mean'
+            Metric to use to aggregate data. It is only used for continuous data. For available metrics see
+            :meth:`create_layer`.
+        labels: dictionary of str key-value pairs, optional
+            Dictionary with the keys-value pairs to use for the data categories. It is only used for categorical data---
+            see :meth:`create_layer`.
+        cmap: dictionary of str key-value pairs or str, default 'viridis'
+            Dictionary with the colors to use for each data category if the data is categorical---see
+            :meth:`create_layer`. If the data is continuous, then a name af a color scale accepted y
+            :doc:`matplotlib<matplotlib:tutorials/colors/colormaps>` should be passed.
+        cumulative_count: array-like of float, optional
+            List of lower and upper limits to consider for the cumulative count. If defined the map will be displayed
+            with the cumulative count representation of the data.
+
+            .. seealso::
+               :meth:`RasterLayer.cumulative_count`
+
+        quantiles: array-like of float, optional
+            Quantile or sequence of quantiles to compute, which must be between 0 and 1 inclusive
+            (``quantiles=(0.25, 0.5, 0.75, 1)``). If defined the map will be displayed with the quantiles
+            representation of the data.
+
+            .. seealso::
+               :meth:`RasterLayer.quantiles`
+
+        nodata: float or int, default ```np.nan`
+            Defines nodata values to be ignored when plotting.
+        admin_layer: gpd.GeoDataFrame or VectorLayer, optional
+            The administrative boundaries to plot as background. If no ``admin_layer`` is provided then the
+            :attr:``mask_layer`` will be used if available, if not then no boundaries will be plotted.
+        title: str, optional
+            The title of the plot.
+        legend: bool, default False
+            Whether to display a legend---only applicable for categorical data.
+        legend_title: str, default ''
+            Title of the legend.
+        legend_cols: int, default 1
+            Number of columns to divide the rows of the legend.
+        legend_position: array-like of float, default (1.05, 1)
+            Position of the upper-left corner of the legend measured in fraction of `x` and `y` axis.
+        legend_prop: dict
+            Dictionary with the font properties of the legend. It can contain any property accepted by the ``prop``
+            parameter from :doc:`matplotlib.pyplot.legend<matplotlib:api/_as_gen/matplotlib.pyplot.legend>`. It
+            defaults to ``{'title': {'size': 12, 'weight': 'bold'}, 'size': 12}``.
+        stats: bool, default False
+            Whether to display the statistics of the analysis in the map.
+        stats_kwargs: dictionary, optional
+            Dictionary of arguments to control the position and style of the statistics box.
+
+            .. code-block::
+                :captio: Default arguments
+
+                ``stats_kwargs={'extra_stats': None, 'stats_position': (1.02, 0.9), 'pad': 0, 'sep': 6, 'fontsize': 10,
+                                'fontcolor': 'black', 'fontweight': 'normal', 'box_props': dict(boxstyle='round',
+                                facecolor='#f1f1f1ff', edgecolor='lightgray')}``
+
+            .. code-block::
+                :captio: Other options
+
+                ``stats_kwargs={'extra_stats': None, 'fontsize': 10, 'stats_position': (1, 0.9), 'pad': 2, 'sep': 0,
+                                'fontcolor': 'black', 'fontweight': 'normal', 'box_props': dict(facecolor='lightyellow',
+                                 edgecolor='black', alpha=1, boxstyle="sawtooth")}``
+
+        scale_bar: dict, optional
+            Dictionary with the parameters needed to create a :class:`ScaleBar`. If not defined, no scale bar will be
+            displayed.
+
+            .. code-block::
+               :caption: Scale bar dictionary example
+
+               dict(size=1000000, style='double', textprops=dict(size=8), location=(1, 0),
+                    linekw=dict(lw=1, color='black'), extent=0.01)
+
+            .. Note::
+               See :func:`onstove.scale_bar` for more details
+
+        north_arrow: dict, optional
+            Dictionary with the parameters needed to create a north arrow icon in the map. If not defined, the north
+            icon won't be displayed.
+
+            .. code-block::
+               :caption: North arrow dictionary example
+
+               dict(size=30, location=(0.92, 0.92), linewidth=0.5)
+
+            .. Note::
+               See :func:`onstove.north_arrow` for more details
+
+        figsize: tuple of floats, default (6.4, 4.8)
+            The size of the figure in inches.
+        rasterized: bool, default True
+            Whether to rasterize the output.It converts vector graphics into a raster image (pixels). It can speed up
+            rendering and produce smaller files for large data sets---see more at
+            :doc:`matplotlib:gallery/misc/rasterization_demo`.
+        dpi: int, default 150
+            The resolution of the figure in dots per inch.
+        """
+        raster, codes, cmap = self.create_layer(variable, name=name, labels=labels, cmap=cmap, metric=metric,
+                                                nodata=nodata)
         if isinstance(admin_layer, gpd.GeoDataFrame):
             admin_layer = admin_layer
         elif not admin_layer:
             admin_layer = self.mask_layer.data
 
+        fig, ax = plt.subplots(1, 1, figsize=figsize, dpi=dpi)
         if stats:
-            fig, ax = plt.subplots(1, 1, figsize=figsize, dpi=dpi)
-            self._add_statistics(ax, stats_position, stats_fontsize, variable=variable, extra_stats=extra_stats)
-        else:
-            fig, ax = plt.subplots(1, 1, figsize=figsize, dpi=dpi)
+            self._add_statistics(ax, variable=variable, kwargs=stats_kwargs)
 
-        raster.save_image(self.output_directory, type=type, cmap=cmap, cumulative_count=cumulative_count,
+        raster.save_image(name=name, cmap=cmap, cumulative_count=cumulative_count,
                           quantiles=quantiles, categories=codes, legend_position=legend_position,
                           admin_layer=admin_layer, title=title, ax=ax, dpi=dpi,
                           legend=legend, legend_title=legend_title, legend_cols=legend_cols, rasterized=rasterized,
                           scale_bar=scale_bar, north_arrow=north_arrow, legend_prop=legend_prop)
 
+    def summary(self, total: bool = True, pretty: bool = True, labels: Optional[dict] = None,
+                variable: str = 'max_benefit_tech', remove_none: bool = False) -> pd.DataFrame:
+        """Creates a summary of the results grouped by the selected categorical `variable`.
 
-    # TODO: make this a property
-    def summary(self, total=True, pretty=True, labels=None, variable='max_benefit_tech', remove_none=False):
+        The method uses the categorical `variable` provided to group selected results of the :attr:`gdf` dataframe. It
+        produces summary values for the 'Calibrated_pop', 'Households', 'maximum_net_benefit', 'deaths_avoided',
+        'health_costs_avoided', 'time_saved', 'opportunity_cost_gained', 'reduced_emissions', 'emissions_costs_saved',
+        'investment_costs', 'fuel_costs', 'om_costs' and 'salvage_value' columns of the :attr:`gdf`.
+
+        Parameters
+        ----------
+        total: boolean, default `True`
+            If `True` it will include a 'Total' row in the summary dataframe, with totals for all parameters.
+        pretty: boolean, default `True`
+            If `True` the names of the columns in hte summary will be presented with enhanced names. Tha names will be:
+            'Max benefit technology', 'Population (Million)', 'Households (Millions)', 'Total net benefit (MUSD)',
+            'Total deaths avoided (pp/yr)', 'Health costs avoided (MUSD)', 'hours/hh.day',
+            'Opportunity cost avoided (MUSD)', 'Reduced emissions (Mton CO2eq)', 'Emissions costs saved (MUSD)',
+            'Investment costs (MUSD)', 'Fuel costs (MUSD)', 'O&M costs (MUSD)'and 'Salvage value (MUSD)'.
+        labels: dictionary of str key-value pairs, optional
+            Dictionary with the keys-value pairs to use for the data categories.
+
+            .. code-block:: python
+               :caption: Example of labels dictionary
+
+               >>> labels = {'Collected Traditional Biomass': 'Biomass',
+               ...           'Collected Improved Biomass': 'Biomass ICS (ND)',
+               ...           'Traditional Charcoal': 'Charcoal',
+               ...           'Biomass Forced Draft': 'Biomass ICS (FD)',
+               ...           'Pellets Forced Draft': 'Pellets ICS (FD)'}
+
+        variable: str, defalut 'max_benefit_tech'
+            Categorical variable used to group and summarize the data.
+        remove_none: boolean, default `False`
+            If `True` ```na`` and ``None`` values are ignored.
+
+        Returns
+        -------
+        pd.DataFrame
+            A dataframe containing the summary information grouped by the selected `variable`.
+        """
         dff = self.gdf.copy()
         if labels is not None:
             dff = self._re_name(dff, labels, variable)
@@ -2585,6 +2771,7 @@ class OnStove(DataProcessor):
     def plot_split(self, labels: Optional[dict[str, str]] = None,
                    cmap: Optional[dict[str, str]] = None,
                    x_variable: str = 'Calibrated_pop',
+                   fill: str = 'max_benefit_tech',
                    ascending: bool = True,
                    orientation: str = 'horizontal',
                    font_args: Optional[dict] = None,
@@ -2594,7 +2781,6 @@ class OnStove(DataProcessor):
                    theme_name: str = 'minimal',
                    height: float = 1.5, width: float = 2.5,
                    save_as: Optional[str] = None,
-                   fill: str ='max_benefit_tech',
                    dpi: int = 150) -> 'matplotlib.Figure':
         """Displays a bar plot with the population or households share using the technologies with highest net-benefits
         over the study area.
@@ -2630,11 +2816,15 @@ class OnStove(DataProcessor):
 
         x_variable: str, default 'Calibrated_pop'
             The variable to use in the x axis. Two options are available ``Calibrated_pop`` and ``Households``.
+        fill: str, default 'max_benefit_tech'
+            Categorical variable used to color and group the bars.
+        ascending: boolean, default `True`
+            If `True` it will order the bars in ascending order from left to right.
         orientation: str, default 'horizontal'
             It defines the orientation of the bar plot, takes as options 'horizontal' or 'vertical'.
         font_args: dict, optional
             Dictionary with arguments for the general text of the plot such as text size. It defaults to
-            ``text_kwargs=dict(text=dict(size=9))``.
+            ``font_args=dict(size=10)``.
         annotation_kwargs: dict, optional
             Dictionary with arguments for the annotations text of the plot such as text size, color, vertical and
             horizontal alignment. It defaults to
@@ -2645,13 +2835,18 @@ class OnStove(DataProcessor):
         legend_kwargs: dict, optional
             Dictionary with arguments for the legend such as the legend position. It defaults to
             ``legend_kwargs=dict(legend_position='none')``.
+        theme_name: str, default 'minimal'
+            Theme to use for the plot. Available options are 'minimal' and 'classic' from the
+            :doc:`plotnine:generated/plotnine.themes` package.
         height: float, default 1.5
             The heihg of the figure in inches.
         width: float, default 2.5
             The width of the figure in inches.
         save_as: str, optional
-            If a string is passed, then the plot will be saved with that name as a ``pdf`` file in the
-            :attr:`output_directory`.
+            If a string is passed, then the plot will be saved with that name and extension file in
+            the:attr:`output_directory` as ``name.pdf``, ``name.png``, ``name.svg``, etc.
+        dpi: int, default 150
+            The resolution of the figure in dots per inch.
 
         Returns
         -------
@@ -2727,19 +2922,21 @@ class OnStove(DataProcessor):
             p.savefig(file, bbox_inches='tight', transparent=True, dpi=dpi)
         return p
 
-    def plot_costs_benefits(self, labels: Optional[dict[str, str]] = None,
+    def plot_costs_benefits(self, variable: str = 'max_benefit_tech',
+                            labels: Optional[dict[str, str]] = None,
                             cmap: Optional[dict[str, str]] = None,
                             font_args: Optional[dict] = None,
                             legend_args: Optional[dict] = None,
                             height: float = 1.5, width: float = 2.5,
                             save_as: Optional[str] = None,
-							variable: str = 'max_benefit_tech',
                             dpi: int = 150) -> 'matplotlib.Figure':
         """Displays a stacked bar plot with the aggregated total costs and benefits for the technologies with the
         highest net-benefits over the study area.
 
         Parameters
         ----------
+        variable: str, default 'max_benefit_tech'
+            Categorical variable to use to calculate the costs and benefits for (one stacked bar for each technology).
         labels: dictionary of str key-value pairs, optional
             Dictionary with the keys-value pairs to use for the technology categories.
 
@@ -2765,13 +2962,21 @@ class OnStove(DataProcessor):
                ...         'Om costs': '#fee0b6',
                ...         'Opportunity cost gained': '#d8daeb'}
 
+        font_args: dictionary, optional
+            A dictionary with font arguments. Default to ``font_args=dict(size=10, color='black')``.
+        legend_args: dictionary, optional
+            A dictionary with legend arguments. Default to ``legend_args=dict(legend_direction='vertical', ncol=1)``,
+            but you can give options as ``legend_args=dict(legend_position=(0.5, -0.6), legend_direction='horizontal',
+            ncol=2)``.
         height: float, default 1.5
             The heihg of the figure in inches.
         width: float, default 2.5
             The width of the figure in inches.
         save_as: str, optional
-            If a string is passed, then the plot will be saved with that name as a ``pdf`` file in the
-            :attr:`output_directory`.
+            If a string is passed, then the plot will be saved with that name and extension file in
+            the:attr:`output_directory` as ``name.pdf``, ``name.png``, ``name.svg``, etc.
+        dpi: int, default 150
+            The resolution of the figure in dots per inch.
 
         Returns
         -------
@@ -2979,6 +3184,7 @@ class OnStove(DataProcessor):
         return p
 
     def _plot_quantiles(self, hist, x_variable: str = 'relative_wealth', y_variable: str = 'Households'):
+        """Plots vertical lines in quantiles 1 and 3 of the histogram distribution"""
         # Add quantile lines
         q1, q3 = weighted_percentile(a=self.gdf[x_variable].values, q=(25, 75),
                                      weights=self.gdf[y_variable].values)
@@ -3015,8 +3221,10 @@ class OnStove(DataProcessor):
                           height: float = 1.5, width: float = 2.5,
                           save_as: Optional[str] = None,
                           dpi: int = 150) -> 'matplotlib.Figure':
-        """Displays a distribution plot with the net-benefits, benefits or costs for the technologies with the
-        highest net-benefits throughout the households of the study area.
+        """Displays a distribution plot of the stove mix in relation to a variable.
+
+        The distribution plot will show the count of househols using each stove-type in relation to the net-benefits,
+        benefits, costs or wealth over the study area.
 
         Parameters
         ----------
@@ -3027,18 +3235,24 @@ class OnStove(DataProcessor):
                 The ``box`` plot option is deprecated from version 0.1.3 to favor accurate representation of data.
                 Use ``histrogram`` instead.
 
+        fill: str, default 'max_benefit_tech'
+            The categorical variable to use for the color of the histogram bars. It is normally 'max_benefit_tech' as
+            we want to show the distribution of the optimal mix of stoves selected under the cost-benefit analisys.
         groupby: str, default 'None'
             Groups the results by urban/rural split. Available options are ``None``, ``isurban`` and ``urban-rural``.
-        variable: str, default 'net_benefit'
-            Variable to use for the distribution. Available options are ``net_benefit``, ``benefits`` and ``costs``.
+        variable: str, default 'wealth'
+            Variable to use for the distribution. Available options are ``net_benefit``, ``benefits``, ``costs`` and
+            ``wealth``.
         best_mix: bool, default True
-            Whether to plot only results for the highest net-benefit technologies, or all technologies.
+            Whether to plot only results for the highest net-benefit technologies, or all technologies evaluated.
         hh_divider: int, default 1
             Value used to scale the number of households. For example, if ``1000000`` is used, then the households will
-            be shown as millions.
+            be shown as millions (remember to change the `y_title` parameters in order to reflect this as
+            `y_title='Households (millions)'`).
         var_divider: int, default 1
             Value used to scale the analysed value. For example, if ``1000`` is used, then the variable will be divided
-            by ``1000``, this is useful to denote units in thousands.
+            by ``1000``, this is useful to denote units in thousands (remember to change the `x_title` parameters in
+            order to reflect this as `x_title='Costs (thousands)'`).
         labels: dictionary of str key-value pairs, optional
             Dictionary with the keys-value pairs to use for each technology.
 
@@ -3067,25 +3281,37 @@ class OnStove(DataProcessor):
                ...         'Biogas': '#73AF48'}
 
         x_title: str, optional
-            Title of the x axis. If `None` is provided, then a default of ``Net benefit per household (USD/yr)`` or
-            ``Costs per household (USD/yr)`` will be used depending on the evaluated variable.
+            Title of the x axis. If `None` is provided, then a default of ``Net benefit per household (USD/yr)``,
+            ``Costs per household (USD/yr)`` and ``Relative wealth index (-)`` will be used depending on the evaluated
+            variable.
         y_title: str, default 'Households'
             Title of the y axis.
+        groupby_kwargs: dict, optional.
+            Dictionary of properties of the groups. You can adjust the `scales` making them fixed or free and, if `None`
+            is used as `groupby`, the number of colums to split the results per category (`fill`). It defaults to
+            ``groupby_kwargs=dict(ncol=1, scales='fixed')``.
+        quantiles: boolean, default `False`.
+            Boolean to indicate wheter to plot the quantile lines (for Q1 and Q3 only).
         kwargs: dict, optional.
-            Dictionary of style arguments passed to the plotting function. For ``histrogram`` the default values used
-            are ``dict(binwidth=binwidth, alpha=0.5, size=0.3)``, where ``banwidth`` is calculated as 5% of the range of
+            Dictionary of style arguments passed to the plotting function. The default values used are
+            ``dict(binwidth=binwidth, alpha=0.8, size=0.3)``, where ``binwidth`` is calculated as 5% of the range of
             the data.
         font_args: dict, optional.
-            Dictionary of font arguments passed to the plotting function. If ``None`` is provided, default values of
+            Dictionary of font arguments passed to the plotting function. If ``None`` is provided, defaults to
             ``dict(size=6)``. For available options see the :doc:`plotnine:generated/plotnine.themes.element_text`
             object.
+        theme_name: str, default 'minimal'
+            Theme to use for the plot. Available options are 'minimal' and 'classic' from the
+            :doc:`plotnine:generated/plotnine.themes` package.
         height: float, default 1.5
             The heihg of the figure in inches.
         width: float, default 2.5
             The width of the figure in inches.
         save_as: str, optional
-            If a string is passed, then the plot will be saved with that name as a ``pdf`` file in the
-            :attr:`output_directory`.
+            If a string is passed, then the plot will be saved with that name and extension file in
+            the:attr:`output_directory` as ``name.pdf``, ``name.png``, ``name.svg``, etc.
+        dpi: int, default 150
+            The resolution of the figure in dots per inch.
 
         Returns
         -------
