@@ -170,14 +170,13 @@ class DataProcessor:
                   normalization: str = 'MinMax', inverse: bool = False, distance_method: Optional[str] = None,
                   distance_limit: Optional[Callable[[np.ndarray], np.ndarray]] = None,
                   window: Optional[bool] = False, rescale: bool = False):
-        """
-        Adds a new layer (type VectorLayer or RasterLayer) to the DataProcessor class
+        """Adds a new layer (type VectorLayer or RasterLayer) to the DataProcessor class
 
         Parameters
         ----------
         category: str
             Category of the layer. This parameter is useful to group the data into logical categories such as
-            "Demographics", "Resources" and "Infrastructure" or "Demand", "Supply" and "Others". This categories are
+            "Demographics", "Resources" and "Infrastructure" or "Demand", "Supply" and "Others". These categories are
             particularly relevant for the ``MCA`` analysis.
         name: str
             Name of the dataset.
@@ -193,8 +192,8 @@ class DataProcessor:
                Only applicable for the `vector` ``layer_type``.
 
         postgres: bool, default False
-            Whether to use a PostgreSQL database connection to read the layer from. The connection needs be already
-            created and stored in the :attr:`conn` attribute using the :meth:`set_postgres` method.
+            Whether to use a PostgreSQL database connection to read the layer. The connection has to already exist
+            and be stored in the :attr:`conn` attribute using the :meth:`set_postgres` method.
         base_layer: bool, default False
             Whether the layer should be used as a :attr:`base_layer` for the data processing.
         resample: str, default 'nearest'
@@ -236,6 +235,13 @@ class DataProcessor:
             See the ``window`` parameter of :class:`RasterLayer` and the ``bbox`` parameter of :class:`VectorLayer`.
         rescale: bool, default False
             Sets the default value for the ``rescale`` attribute. See the ``rescale`` parameter of :class:`RasterLayer`.
+
+        See also
+        ----------
+        set_postgres
+        get_distance_raster
+        VectorLayer
+        RasterLayer
         """
         if layer_type == 'vector':
             if postgres:
@@ -307,11 +313,11 @@ class DataProcessor:
         Parameters
         ----------
         category: str
-            Category name of the dataset.
+            Category the dataset.
         name: str
-            name of the dataset.
+            Name of the dataset.
         path: str
-            The relative path to the datafile. This file can be of any type that is accepted by
+            The relative path of the datafile. This file can be of any type that is accepted by
             :doc:`geopandas:docs/reference/api/geopandas.read_file`.
         query: str, optional
             A query string to filter the data. For more information refer to
@@ -320,7 +326,7 @@ class DataProcessor:
             Whether to use a PostgreSQL database connection to read the layer from. The connection needs be already
             created and stored in the :attr:`conn` attribute using the :meth:`set_postgres` method.
         save_layer: bool default False
-            Whether to save the dataset to disk or not
+            Whether to save the dataset to disc or not
 
         See also
         ----------
