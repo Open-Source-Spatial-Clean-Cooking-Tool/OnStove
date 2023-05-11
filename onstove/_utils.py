@@ -43,7 +43,6 @@ def deep_update(mapping: Dict[KeyType, Any], *updating_mappings: Dict[KeyType, A
                 updated_mapping[k] = v
     return updated_mapping
 
-
 class Processes:
     def __init__(self):
         self.gdf = gpd.GeoDataFrame()
