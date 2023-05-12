@@ -1060,8 +1060,12 @@ class OnStove(DataProcessor):
         isurban = self.gdf["IsUrban"] > 20
         urban_factor = tech_dict["Electricity"].population_cooking_urban / sum(isurban * self.gdf["Elec_pop_calib"])
         tech_dict["Electricity"].pop_sqkm = (isurban) * (self.gdf["Elec_pop_calib"] * urban_factor)
-        #allocate population in each rural cell to electricity 
-        rural_factor = tech_dict["Electricity"].population_cooking_rural / sum(~isurban * self.gdf["Elec_pop_calib"])
+        #allocate population in each rural cell to electricity
+        rural_factor = np.divide(tech_dict["Electricity"].population_cooking_rural,
+                                 sum(~isurban * self.gdf["Elec_pop_calib"]),
+                                 out=np.zeros_like(tech_dict["Electricity"].population_cooking_rural),
+                                 where=sum(~isurban * self.gdf["Elec_pop_calib"]) != 0)
+        #rural_factor = tech_dict["Electricity"].population_cooking_rural / sum(~isurban * self.gdf["Elec_pop_calib"])
         tech_dict["Electricity"].pop_sqkm.loc[~isurban] = (self.gdf["Elec_pop_calib"] * rural_factor)
         #create series for biogas same size as dataframe with zeros 
         tech_dict["Biogas"].pop_sqkm = pd.Series(np.zeros(self.gdf.shape[0]))
