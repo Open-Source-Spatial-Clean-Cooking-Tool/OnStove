@@ -23,6 +23,7 @@ from copy import deepcopy
 
 from onstove.plotting_utils import scale_bar as scale_bar_func
 from onstove.plotting_utils import north_arrow as north_arrow_func
+from onstove._utils import deep_update
 from .raster import *
 
 
@@ -73,6 +74,13 @@ class _Layer:
         pass
     
     def copy(self):
+        '''Wrapper class to the ``deepcopy`` function of the copy module. It creates a complete copy of the layer.
+
+        Returns
+        -------
+        RasterLayer or VectorLayer
+            A copy of the current layer
+        '''
         return deepcopy(self)
 
     @property
@@ -736,13 +744,6 @@ class VectorLayer(_Layer):
 
         return ax
 
-    @staticmethod
-    def remove_duplicates(list1, list2):
-        for i in list1:
-            if i in list2:
-                del i
-        return list1 + list2
-
 
 class RasterLayer(_Layer):
     """A ``RasterLayer`` is an object used to read, manipulate and visualize GIS raster data.
@@ -834,12 +835,6 @@ class RasterLayer(_Layer):
     weight
         Value to weigh the layer's "importance" on the ``MCA`` model. It is initialized with a default value of 1.
     bounds
-    style
-        Contains the default style parameters for visualizing the layer.
-
-        .. seealso:
-           :meth:`plot`
-
     data
         :class:`numpy.ndarray<numpy:reference/arrays.ndarray> containing the data of the raster layer.
     """
@@ -896,8 +891,12 @@ class RasterLayer(_Layer):
             The relative path to the datafile. This file can be of any type that is accepted by
             :doc:`geopandas:docs/reference/api/geopandas.read_file`.
         conn: sqlalchemy.engine.Connection or sqlalchemy.engine.Engine, optional
-            PostgreSQL connection if the layer needs to be read from a database. This accepts any connection type used by
-            :doc:`geopandas:docs/reference/api/geopandas.read_postgis`.
+            PostgreSQL connection if the layer needs to be read from a database.
+
+            .. warning::
+               The PostgreSQL database connection is under development for the :class:`RasterLayer` class and it will be
+               available in future releases.
+
         window: instance of rasterio.windows.Window
             A :doc:`Window<rasterio:api/rasterio.windows>` is a view from a rectangular subset of a raster. It is used to
             perform :doc:`windowed reading<rasterio:topics/windowed-rw>` of raster layers. This is useful when working with
@@ -936,7 +935,7 @@ class RasterLayer(_Layer):
         self.path = path
 
     @staticmethod
-    def shape_from_cell(bounds: list[float], cell_height: float, cell_width: float):
+    def shape_from_cell(bounds: list[float], cell_height: float, cell_width: float) -> tuple[int, int]:
         """Gets the shape (width and height) of the raster layer based on the bounds and a cell size.
 
         Parameters
@@ -951,6 +950,11 @@ class RasterLayer(_Layer):
             The cell height in units consistent with the raster's crs.
         cell_width: float
             The cell width in units consistent with the raster's crs.
+
+        Returns
+        -------
+        tuple pair of int
+            The height and width of the dataset in pixels
         """
         height = int((bounds[3] - bounds[1]) / cell_height)
         width = int((bounds[2] - bounds[0]) / cell_width)
@@ -1006,12 +1010,6 @@ class RasterLayer(_Layer):
 
         if output_path:
             self.save(output_path)
-
-        # output_file = os.path.join(output_path,
-        #                            self.name + '.tif')
-        # mask_raster(self.path, mask_layer.to_crs(self.meta['crs']),
-        #             output_file, self.meta['nodata'], 'DEFLATE', all_touched=all_touched)
-        # self.read_layer(output_file)
 
     def reproject(self, crs: rasterio.crs.CRS, output_path: Optional[str] = None,
                   cell_width: Optional[float] = None, cell_height: Optional[float] = None):
@@ -1084,6 +1082,8 @@ class RasterLayer(_Layer):
             Row indexes of the cells to consider as starting points.
         cols: np.ndarray
             Column indexes of the cells to consider as starting points.
+        include_starting_cells: boolean, default `False`
+            Indicates whether to include the cost of the starting cells in the least cost path calculation.
         output_path: str, optional
             A folder path where to save the output dataset. If not defined then the travel time dataset is not saved
             to disk.
@@ -1179,7 +1179,25 @@ class RasterLayer(_Layer):
         else:
             return distance_raster
             
-    def proximity(self, value=1):
+    def proximity(self, value: Union[int, float] = 1) -> 'RasterLayer':
+        """Calculates an  euclidean distance raster taking as starting points cells of the value indicated by the
+        `value` parameter.
+
+        Parameters
+        ----------
+        value: int or float, default 1
+            The value of the cells to consider starting points for the proximity calculation.
+
+        Returns
+        -------
+        RasterLayer
+            :class:`RasterLayer` containing the distance to the nearest cell of the `value` of the current
+            :class:`RasterLayer`.
+
+        See also
+        --------
+        get_distance_raster
+        """
         data = self.data.copy()
         data[self.data==value] = 0
         data[self.data!=value] = 1
@@ -1214,7 +1232,7 @@ class RasterLayer(_Layer):
             needs to be passed to the ``mask_layer`` parameter to be used for the calculation. If "travel_time"
             is used, then the :meth:`travel_time` method is called and the ``starting_points`` `need to be passed.
             If None is used, then the predefined ``distance_method`` attribute of the :class:`RasterLayer` class
-            is used instead. If the previous is also None, then the raster it self is used as a distance raster.
+            is used instead. If the previous is also None, then the raster itself is used as a distance raster.
         output_path: str, optional
             A folder path where to save the output dataset. If not defined then the distance raster dataset is not
             saved.
@@ -1236,7 +1254,7 @@ class RasterLayer(_Layer):
         else:
             self.distance_raster = self
 
-    def start_points(self, condition: Optional[Callable[[np.ndarray], np.ndarray]]):
+    def start_points(self, condition: Optional[Callable[[np.ndarray], np.ndarray]]) -> tuple[np.ndarray, np.ndarray]:
         """Gets the rows and columns of the cells tha fulfil a condition.
 
         Parameters
@@ -1357,14 +1375,14 @@ class RasterLayer(_Layer):
               rescale: Optional[bool] = None,
               output_path: Optional[str] = None,
               inplace: bool = True) -> 'RasterLayer':
-        """Aligns the rasters gridded data with grid of an input raster.
+        """Aligns the raster's gridded data with the grid of an input raster.
 
         Parameters
         ----------
         base_layer: RasterLater or str path to file
             Raster layer to use as base for the grid alignment.
         rescale: bool, optional
-            Whether to rescale the values proportionally to the the cell size difference between the
+            Whether to rescale the values proportionally to the cell size difference between the
             ``base_layer`` and the current raster. If not defined then the ``rescale`` attribute is used.
         output_path: str, optional
             A folder path where to save the output dataset. If not defined then the aligned raster is not saved
@@ -1411,10 +1429,10 @@ class RasterLayer(_Layer):
             return raster
 
     def cumulative_count(self, min_max: list[float, float] = [0.02, 0.98]) -> np.ndarray:
-        """Calculates a new data array flattening the raster's data values that fall in in either of the lower or upper
-        specified percentile.
+        """Calculates a new data array flattening the raster's data values that fall in either of the specified lower
+        or upper percentile.
 
-        For example, a if we use a ``min_max`` of ``[0.02, 0.98]``, the array will be first ordered in ascending
+        For example, if we use a ``min_max`` of ``[0.02, 0.98]``, the array will be first ordered in ascending
         order and then all values that fall inside the lowest 2% will be "flattened" giving them the value of the
         highest number inside that 2%. The same is done for the upper bound, where all data values that fall in the
         highest 2% will be given the value of the lowest number within that 2%.
@@ -1511,19 +1529,33 @@ class RasterLayer(_Layer):
         return new_layer
 
     @staticmethod
-    def category_legend(im, ax, categories, current_handles_labels=None,
-                        legend_position=(1.05, 1), title='', legend_cols=1,
-                        legend_prop=None):
+    def category_legend(im: matplotlib.image.AxesImage, ax: matplotlib.axes.Axes, categories: dict,
+                        legend_position: tuple[float, float] = (1.05, 1), title: str = '', legend_cols: int = 1,
+                        legend_prop: Optional[dict] = None):
         """Creates a category legend for the current plot.
+
+        This method creates matplotlib patches for each category found in the raster, matching the color specified in
+        the ``categories`` dictionary. It adds the legend as an artist to the defined axes ``ax``.
 
         Parameters
         ----------
-        im
-        categories
-        legend_position
-        title
-        legend_cols
-        legend_prop
+        im: matplotlib.image.AxesImage
+            Matplotlib ``AxesImage`` produced by an ``.imshow`` method.
+        ax: matplotlib.axes.Axes
+            Matplotlib axes object where the legend should be drawn.
+        categories: dictionary
+            Dictionary containing as keys the names of the categories and as values the values of the raster
+            representing the categories.
+        legend_position: tuple of two floats, default ``(1.05, 1)``
+            Indicates where to position the legend in therms of fraction of axis x abd y respectively. The position is
+            measured from the upper left corner.
+        title: str, default ``''``
+            The desired title of the legend.
+        legend_cols: int, default 1
+            Number of columns to split the legend categories.
+        legend_prop: dictionary, optional
+            A dictionary containing properties for the legend, it defaults to
+            ``legend_prop={'title': {'size': 12, 'weight': 'bold'}, 'size': 12, 'frameon': False}``
         """
         categories.pop('None', False)
         values = list(categories.values())
@@ -1537,7 +1569,7 @@ class RasterLayer(_Layer):
         patches = [mpatches.Patch(color=colors[i], label="{}".format(titles[i])) for i in range(len(values))]
         # put those patched as legend-handles into the legend
         _legend_prop = {'title': {'size': 12, 'weight': 'bold'}, 'size': 12, 'frameon': False}
-        _legend_prop.update(legend_prop)
+        _legend_prop = deep_update(_legend_prop, legend_prop)
         prop = _legend_prop.copy()
         prop.pop('title')
         prop.pop('frameon')
@@ -1554,42 +1586,156 @@ class RasterLayer(_Layer):
         ax.add_artist(legend)
 
 
-    def plot(self, cmap='viridis', ticks=None, tick_labels=None,
-             cumulative_count=None, quantiles=None, categories=None, legend_position=(1.05, 1),
-             admin_layer: Union[gpd.GeoDataFrame, VectorLayer] = None, title=None, ax=None, dpi=150,
-             legend=True, legend_title='', legend_cols=1,
-             legend_prop=None,
-             rasterized=True, colorbar=True, colorbar_kwargs=None, figsize=(6.4, 4.8),
-             scale_bar=None, north_arrow=None, alpha=1):
-        """Plots a map of the current raster layer.
+    def plot(self, cmap: Union[dict[str, str], str] = 'viridis',
+             ticks: list = None,
+             tick_labels: list = None,
+             cumulative_count: Optional[tuple[float, float]] = None,
+             quantiles: Optional[tuple[float]] = None,
+             categories: Optional[dict] = None,
+             admin_layer: Optional[Union[gpd.GeoDataFrame, VectorLayer]] = None,
+             title: Optional[str] = None,
+             ax: Optional['matplotlib.axes.Axes'] = None,
+             legend: bool = True, legend_title: str = '', legend_cols: int = 1,
+             legend_position: tuple[float, float] = (1.02, 0.7),
+             legend_prop: Optional[dict] = None,
+             rasterized: bool = True,
+             colorbar: bool = True,
+             colorbar_kwargs: Optional[dict] = None,
+             figsize: tuple[float, float] = (6.4, 4.8),
+             scale_bar: Optional[dict] = None,
+             north_arrow: Optional[dict] = None,
+             alpha: float = 1):
+        """Plots a map of the raster data.
+
+        The map can be for categorical or continuous data. If categorical, you need to pass a ``categories`` dictionary
+        defining the categories of the data values. In such case, a legend will be created with the colors
+        of the categories following the colors provided in ``cmap``, otherwise a default colormap will be used.
+        If continuous, a color bar will be created with the range of the data. Continuous data can also be presented
+        using ``cumulative_count`` or ``quantiles``.
 
         Parameters
         ----------
-        cmap
-        ticks
-        tick_labels
-        cumulative_count
-        quantiles
-        categories
-        legend_position
-        admin_layer
-        title
-        ax
-        dpi
-        legend
-        legend_title
-        legend_cols
-        legend_prop
-        rasterized
-        colorbar
-        return_image
-        fig_size
-        scale_bar
-        north_arrow
+        cmap: dictionary of key-value pairs or str, default 'viridis'
+            Dictionary with the colors to use for each data category if the data is categorical. If the data is
+            continuous, then a name of a color scale accepted by
+            :doc:`matplotlib<matplotlib:tutorials/colors/colormaps>` should be passed (e.g. ``viridis``, ``magma``,
+            ``Spectral``, etc.).
+
+            .. code-block::
+                :caption: ``cmap`` examples for categorical data
+
+                cmap={0: 'lightblue', 1: 'Brown',
+                      2: 'Yellow', 3: 'Gray',
+                      4: 'aquamarine', 5: 'Green',
+                      6: 'Black'}
+                cmap='tab10' # to use the tab10 pallet
+
+        ticks: list, optional
+            A list of values where ticks should be defined in the colorbar. Applicable only for continuous data.
+        tick_labels: list, optional
+            List of labels to show in every tick. The dimension and order should match the ``tick`` ones.
+        cumulative_count: array-like of float, optional
+            List of lower and upper limits to consider for the cumulative count. If defined the map will be displayed
+            with the cumulative count representation of the data.
+
+            .. seealso::
+               :meth:`RasterLayer.cumulative_count`
+
+        quantiles: array-like of float, optional
+            Quantile or sequence of quantiles to compute, which must be between 0 and 1 inclusive
+            (``quantiles=(0.25, 0.5, 0.75, 1)``). If defined the map will be displayed with the quantiles
+            representation of the data.
+
+            .. seealso::
+               :meth:`RasterLayer.quantiles`
+
+        categories: dictionary, optional
+            Dictionary containing as keys the raster values representing the categories and as values the names of the
+            raster of each category. Applicable only for categorical data.
+
+            .. code-block::
+                :caption: ``categories`` examples for categorical data
+
+                categories={'Electricity': 0., 'LPG': 1,
+                            'Biogas': 2, 'Biomass': 3,
+                            'Charcoal': 4, 'ICS': 5,
+                            'Mini Grids': 6}
+
+        admin_layer: gpd.GeoDataFrame or VectorLayer, optional
+            The administrative boundaries to plot as background.
+        title: str, optional
+            The title of the plot.
+        ax: matplotlib.axes.Axes, optional
+            A matplotlib axes instance can be passed in order to overlay layers in the same axes.
+        legend: bool, default False
+            Whether to display a legend---only applicable for categorical data.
+        legend_title: str, default ''
+            Title of the legend.
+        legend_cols: int, default 1
+            Number of columns to divide the rows of the legend.
+        legend_position: array-like of float, default (1.05, 1)
+            Position of the upper-left corner of the legend measured in fraction of `x` and `y` axis.
+        legend_prop: dict
+            Dictionary with the font properties of the legend. It can contain any property accepted by the ``prop``
+            parameter from :doc:`matplotlib.pyplot.legend<matplotlib:api/_as_gen/matplotlib.pyplot.legend>`. It
+            defaults to ``{'title': {'size': 12, 'weight': 'bold'}, 'size': 12, 'frameon': False}``.
+        rasterized: bool, default True
+            Whether to rasterize the output.It converts vector graphics into a raster image (pixels). It can speed up
+            rendering and produce smaller files for large data sets---see more at
+            :doc:`matplotlib:gallery/misc/rasterization_demo`.
+        colorbar: bool, default False
+            Indicates whether to display the colorbar or not. Applicable only for continuous data.
+        colorbar_kwargs: dict, optional
+            Arguments used to position and style the colorbar. For example
+
+            .. code-block::
+               :caption: ``colorbar_kwargs`` example
+
+                dict(title_prop=dict(label='Distance (meters)',
+                                     loc='center', labelpad=10,
+                                     fontweight='normal'),
+                     width=0.05, height=0.8, x=1.04, y=0.1)
+
+        figsize: tuple of floats, default (6.4, 4.8)
+            The size of the figure in inches.
+        scale_bar: dict, optional
+            Dictionary with the parameters needed to create a :class:`ScaleBar`. If not defined, no scale bar will be
+            displayed.
+
+            .. code-block::
+               :caption: Scale bar dictionary example
+
+               dict(size=1000000, style='double',
+                    textprops=dict(size=8),
+                    location=(1, 0),
+                    linekw=dict(lw=1, color='black'),
+                    extent=0.01)
+
+            .. Note::
+               See :func:`onstove.scale_bar` for more details
+
+        north_arrow: dict, optional
+            Dictionary with the parameters needed to create a north arrow icon in the map. If not defined, the north
+            icon won't be displayed.
+
+            .. code-block::
+               :caption: North arrow dictionary example
+
+               north_arrow=dict(size=30,
+                                location=(0.92, 0.92),
+                                linewidth=0.5)
+
+            .. Note::
+               See :func:`onstove.north_arrow` for more details
+
+        alpha: float, default 1
+            Value used to set the transparency of the plot. It should be a value between 0 and 1, being 1 no
+            transparency and 0 complete transparency.
 
         Returns
         -------
-        matplotlib image
+        matplotlib.axes.Axes
+            The axes of the figure.
         """
 
         extent = [self.bounds[0], self.bounds[2],
@@ -1714,29 +1860,218 @@ class RasterLayer(_Layer):
 
         return ax
 
-    def save_image(self, name, cmap='viridis', ticks=None, tick_labels=None,
-                   cumulative_count=None, categories=None, legend_position=(1.05, 1), figsize=(6.4, 4.8),
-                   admin_layer=None, title=None, ax=None, dpi=300, quantiles=None,
-                   legend_prop={'title': {'size': 12, 'weight': 'bold'}, 'size': 12},
-                   legend=True, legend_title='', legend_cols=1, rasterized=True, 
-                   colorbar=True, colorbar_kwargs=None,
-                   scale_bar=None, north_arrow=None):
+    def save_image(self, name: str,
+                   cmap: Union[dict[str, str], str] = 'viridis',
+                   ticks: list = None,
+                   tick_labels: list = None,
+                   cumulative_count: Optional[tuple[float, float]] = None,
+                   quantiles: Optional[tuple[float]] = None,
+                   categories: Optional[dict] = None,
+                   admin_layer: Optional[Union[gpd.GeoDataFrame, VectorLayer]] = None,
+                   title: Optional[str] = None,
+                   ax: Optional['matplotlib.axes.Axes'] = None,
+                   legend: bool = True, legend_title: str = '', legend_cols: int = 1,
+                   legend_position: tuple[float, float] = (1.02, 0.7),
+                   legend_prop: Optional[dict] = None,
+                   rasterized: bool = True,
+                   colorbar: bool = True,
+                   colorbar_kwargs: Optional[dict] = None,
+                   figsize: tuple[float, float] = (6.4, 4.8),
+                   scale_bar: Optional[dict] = None,
+                   north_arrow: Optional[dict] = None,
+                   alpha: float = 1,
+                   dpi=150):
         """Saves the raster as an image map in the specified format.
+
+        The map can be for categorical or continuous data. If categorical, you need to pass a ``categories`` dictionary
+        defining the categories of the data values. In such case, a legend will be created with the colors
+        of the categories following the colors provided in ``cmap``, otherwise a default colormap will be used.
+        If continuous, a color bar will be created with the range of the data. Continuous data can also be presented
+        using ``cumulative_count`` or ``quantiles``.
+
+        Parameters
+        ----------
+        name: str
+            Name of the file to save the image. The name should contain the extension as 'name.pdf', 'name.png',
+            'name.svg', ect.
+        cmap: dictionary of key-value pairs or str, default 'viridis'
+            Dictionary with the colors to use for each data category if the data is categorical. If the data is
+            continuous, then a name of a color scale accepted by
+            :doc:`matplotlib<matplotlib:tutorials/colors/colormaps>` should be passed (e.g. ``viridis``, ``magma``,
+            ``Spectral``, etc.).
+
+            .. code-block::
+                :caption: ``cmap`` examples for categorical data
+
+                cmap={0: 'lightblue', 1: 'Brown',
+                      2: 'Yellow', 3: 'Gray',
+                      4: 'aquamarine', 5: 'Green',
+                      6: 'Black'}
+                cmap='tab10' # to use the tab10 pallet
+
+        ticks: list, optional
+            A list of values where ticks should be defined in the colorbar. Applicable only for continuous data.
+        tick_labels: list, optional
+            List of labels to show in every tick. The dimension and order should match the ``tick`` ones.
+        cumulative_count: array-like of float, optional
+            List of lower and upper limits to consider for the cumulative count. If defined the map will be displayed
+            with the cumulative count representation of the data.
+
+            .. seealso::
+               :meth:`RasterLayer.cumulative_count`
+
+        quantiles: array-like of float, optional
+            Quantile or sequence of quantiles to compute, which must be between 0 and 1 inclusive
+            (``quantiles=(0.25, 0.5, 0.75, 1)``). If defined the map will be displayed with the quantiles
+            representation of the data.
+
+            .. seealso::
+               :meth:`RasterLayer.quantiles`
+
+        categories: dictionary, optional
+            Dictionary containing as keys the raster values representing the categories and as values the names of the
+            raster of each category. Applicable only for categorical data.
+
+            .. code-block::
+                :caption: ``categories`` examples for categorical data
+
+                categories={'Electricity': 0., 'LPG': 1,
+                            'Biogas': 2, 'Biomass': 3,
+                            'Charcoal': 4, 'ICS': 5,
+                            'Mini Grids': 6}
+
+        admin_layer: gpd.GeoDataFrame or VectorLayer, optional
+            The administrative boundaries to plot as background.
+        title: str, optional
+            The title of the plot.
+        ax: matplotlib.axes.Axes, optional
+            A matplotlib axes instance can be passed in order to overlay layers in the same axes.
+        legend: bool, default False
+            Whether to display a legend---only applicable for categorical data.
+        legend_title: str, default ''
+            Title of the legend.
+        legend_cols: int, default 1
+            Number of columns to divide the rows of the legend.
+        legend_position: array-like of float, default (1.05, 1)
+            Position of the upper-left corner of the legend measured in fraction of `x` and `y` axis.
+        legend_prop: dict
+            Dictionary with the font properties of the legend. It can contain any property accepted by the ``prop``
+            parameter from :doc:`matplotlib.pyplot.legend<matplotlib:api/_as_gen/matplotlib.pyplot.legend>`. It
+            defaults to ``{'title': {'size': 12, 'weight': 'bold'}, 'size': 12, 'frameon': False}``.
+        rasterized: bool, default True
+            Whether to rasterize the output.It converts vector graphics into a raster image (pixels). It can speed up
+            rendering and produce smaller files for large data sets---see more at
+            :doc:`matplotlib:gallery/misc/rasterization_demo`.
+        colorbar: bool, default False
+            Indicates whether to display the colorbar or not. Applicable only for continuous data.
+        colorbar_kwargs: dict, optional
+            Arguments used to position and style the colorbar.
+
+            .. code-block::
+               :caption: ``colorbar_kwargs`` example
+
+               dict(title_prop=dict(label='Distance (meters)',
+                                    loc='center', labelpad=10,
+                                    fontweight='normal'),
+                    width=0.05, height=0.8, x=1.04, y=0.1)
+
+        figsize: tuple of floats, default (6.4, 4.8)
+            The size of the figure in inches.
+        scale_bar: dict, optional
+            Dictionary with the parameters needed to create a :class:`ScaleBar`. If not defined, no scale bar will be
+            displayed.
+
+            .. code-block::
+               :caption: Scale bar dictionary example
+
+               dict(size=1000000, style='double',
+                    textprops=dict(size=8), location=(1, 0),
+                    linekw=dict(lw=1, color='black'),
+                    extent=0.01)
+
+            .. Note::
+               See :func:`onstove.scale_bar` for more details
+
+        north_arrow: dict, optional
+            Dictionary with the parameters needed to create a north arrow icon in the map. If not defined, the north
+            icon won't be displayed.
+
+            .. code-block::
+               :caption: North arrow dictionary example
+
+               north_arrow=dict(size=30,
+                                location=(0.92, 0.92), l
+                                linewidth=0.5)
+
+            .. Note::
+               See :func:`onstove.north_arrow` for more details
+
+        alpha: float, default 1
+            Value used to set the transparency of the plot. It should be a value between 0 and 1, being 1 no
+            transparency and 0 complete transparency.
+        dpi: int, default 150
+            The resolution of the figure in dots per inch.
         """
         self.plot(cmap=cmap, ticks=ticks, tick_labels=tick_labels, cumulative_count=cumulative_count,
                   categories=categories, legend_position=legend_position, rasterized=rasterized,
-                  admin_layer=admin_layer, title=title, ax=ax, dpi=dpi, quantiles=quantiles,
+                  admin_layer=admin_layer, title=title, ax=ax, quantiles=quantiles,
                   legend=legend, legend_title=legend_title, legend_cols=legend_cols,
                   scale_bar=scale_bar, north_arrow=north_arrow, 
                   colorbar=colorbar, colorbar_kwargs=colorbar_kwargs,
-                  figsize=figsize, legend_prop=legend_prop)
+                  figsize=figsize, legend_prop=legend_prop, alpha=alpha)
 
         plt.savefig(name, dpi=dpi, bbox_inches='tight', transparent=True)
         plt.close()
 
-    def save_style(self, output_path, cmap='magma', quantiles=None,
-                   categories=None, classes=5):
-        """Saves the colormap used for the raster as a sld style."""
+    def save_style(self, name: str,
+                   cmap: str = 'magma',
+                   quantiles: Optional[tuple[float]] = None,
+                   categories: Optional[dict] = None,
+                   classes: int = 5):
+        """Saves the colormap used for the raster as a sld style.
+
+        Parameters
+        ----------
+        name: str
+            name to use to savel the ``.sld`` file.
+        cmap: dictionary of key-value pairs or str, default 'viridis'
+            Dictionary with the colors to use for each data category if the data is categorical. If the data is
+            continuous, then a name of a color scale accepted by
+            :doc:`matplotlib<matplotlib:tutorials/colors/colormaps>` should be passed (e.g. ``viridis``, ``magma``,
+            ``Spectral``, etc.).
+
+            .. code-block::
+                :caption: ``cmap`` examples for categorical data
+
+                cmap={0: 'lightblue', 1: 'Brown',
+                      2: 'Yellow', 3: 'Gray',
+                      4: 'aquamarine', 5: 'Green',
+                      6: 'Black'}
+                cmap='tab10' # to use the tab10 pallet
+
+        quantiles: array-like of float, optional
+            Quantile or sequence of quantiles to compute, which must be between 0 and 1 inclusive
+            (``quantiles=(0.25, 0.5, 0.75, 1)``). If defined the map will be displayed with the quantiles
+            representation of the data.
+
+            .. seealso::
+               :meth:`RasterLayer.quantiles`
+
+        categories: dictionary, optional
+            Dictionary containing as keys the raster values representing the categories and as values the names of the
+            raster of each category. Applicable only for categorical data.
+
+            .. code-block::
+                :caption: ``categories`` examples for categorical data
+
+                categories={'Electricity': 0., 'LPG': 1,
+                            'Biogas': 2, 'Biomass': 3,
+                            'Charcoal': 4, 'ICS': 5,
+                            'Mini Grids': 6}
+
+        classes: int, default 5
+            Number of classes in which to split the colormap. Applicable for continuous data only.
+        """
         if categories is not None:
             colors = cmap
         else:
@@ -1780,5 +2115,5 @@ class RasterLayer(_Layer):
   </UserLayer>
 </StyledLayerDescriptor>
 """
-        with open(os.path.join(output_path, f'{self.name}.sld'), 'w') as f:
+        with open(os.path.join(name, f'{self.name}.sld'), 'w') as f:
             f.write(string)

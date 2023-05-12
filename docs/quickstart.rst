@@ -72,14 +72,15 @@ The following section of the manual includes different examples using the OnStov
 
 Jupyter example
 ***************
-On the official repository of OnStove there is an example run of OnStove using Jupyter notebook. The notebook downloads the necessary datasets from a Mendeley database and runs an instance of the OnStove. The example goes through the entire workflow from start to finish. This includes GIS-processing, calibration of the baseline, calculating the net-benefits, visualizing and saving the results. The different steps are described more in depth in the notebook. The notebook can be found `here <https://github.com/Open-Source-Spatial-Clean-Cooking-Tool/OnStove/tree/main/example>`_
+On the official repository of OnStove there is an example run of OnStove using Jupyter notebook. The notebook downloads the necessary datasets from a Mendeley database and runs an instance of the OnStove model. The example goes through the entire workflow from start to finish. This includes GIS-processing, calibration of the baseline, calculating the net-benefits, visualizing and saving the results. The different steps are described more in depth in the notebook. The notebook can be found `here <https://github.com/Open-Source-Spatial-Clean-Cooking-Tool/OnStove/tree/main/example>`_
 
-Binder example
-**************
-Try the binder version of OnStove yourself in an online Jupyter notebook:
+.. 
+	Binder example
+	**************
+	Try the binder version of OnStove yourself in an online Jupyter notebook:
 
-.. image:: https://mybinder.org/badge_logo.svg
-    :target: https://mybinder.org/v2/gh/Open-Source-Spatial-Clean-Cooking-Tool/OnStove/main?labpath=%2Fexample%2FOnStove_notebook.ipynb
+	.. image:: https://mybinder.org/badge_logo.svg
+		:target: https://mybinder.org/v2/gh/Open-Source-Spatial-Clean-Cooking-Tool/OnStove/main?labpath=%2Fexample%2FOnStove_notebook.ipynb
  
 
 

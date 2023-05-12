@@ -7,7 +7,8 @@ import geopandas as gpd
 from typing import Optional, Callable
 from math import exp
 
-from onstove._utils import raster_setter, vector_setter, Processes
+from onstove._layer_utils import raster_setter, vector_setter
+from onstove._utils import Processes
 from onstove.layer import VectorLayer, RasterLayer
 
 
