@@ -52,7 +52,8 @@ from plotnine.stats.stat_boxplot import weighted_percentile
 from onstove.layer import VectorLayer, RasterLayer
 from onstove.technology import Technology, LPG, Biomass, Electricity, Biogas, Charcoal, MiniGrids
 from onstove.raster import sample_raster
-from onstove._utils import Processes, raster_setter, deep_update
+from onstove._utils import Processes, deep_update
+from onstove._layer_utils import raster_setter
 
 
 def timeit(func):
@@ -357,7 +358,8 @@ class DataProcessor:
             .. code-block::
                 :caption: Example
 
-                datasets={'category_1': ['layer_1', 'layer_2'], 'category_2': [...]}
+                datasets={'category_1': ['layer_1', 'layer_2'],
+                          'category_2': [...]}
 
         crop: boolean, default True
             Determines whether to crop the masked layers extent to the mask layers extent.
@@ -397,17 +399,18 @@ class DataProcessor:
         datasets: dictionary of ``category``-``list of layer names`` pairs, default 'all'
             Specifies which dataset(s) to align.
 
-             .. code-block::
-                :caption: Example
+            .. code-block::
+               :caption: Example
 
-                datasets={'category_1': ['layer_1', 'layer_2'], 'category_2': [...]}
+               datasets={'category_1': ['layer_1', 'layer_2'],
+                         'category_2': [...]}
 
         save_layers: boolean, default False
             Determines whether to save the reprojected layer to disc or not.
 
         See also
         ----------
-        add_layer
+        RasterLayer.align
         """
 
         datasets = self._get_layers(datasets)
@@ -434,7 +437,8 @@ class DataProcessor:
             .. code-block::
                 :caption: Example
 
-                datasets={'category_1': ['layer_1', 'layer_2'], 'category_2': [...]}
+                datasets={'category_1': ['layer_1', 'layer_2'],
+                          'category_2': [...]}
 
         save_layers: boolean, default False
             Determines whether to save the reprojected layer to disc or not.
@@ -466,7 +470,8 @@ class DataProcessor:
             .. code-block::
                 :caption: Example
 
-                datasets={'category_1': ['layer_1', 'layer_2'], 'category_2': [...]}
+                datasets={'category_1': ['layer_1', 'layer_2'],
+                          'category_2': [...]}
 
         save_layer: bool, default False
             Determines whether to save the distance raster to disc or not.
@@ -500,7 +505,8 @@ class DataProcessor:
             .. code-block::
                 :caption: Example
 
-                datasets={'category_1': ['layer_1', 'layer_2'], 'category_2': [...]}
+                datasets={'category_1': ['layer_1', 'layer_2'],
+                          'category_2': [...]}
 
         buffer: bool, default False
             Whether to exclude the areas outside the ``distance_limit`` attribute and make them `np.nan`. The ``distance_limit``
@@ -533,7 +539,8 @@ class DataProcessor:
             .. code-block::
                 :caption: Example
 
-                datasets={'category_1': ['layer_1', 'layer_2'], 'category_2': [...]}
+                datasets={'category_1': ['layer_1', 'layer_2'],
+                          'category_2': [...]}
 
         """
         datasets = self._get_layers(datasets)
@@ -574,17 +581,18 @@ class MCA(DataProcessor):
     """The ``MCA`` class is used to conduct a spatial Multicriteria Analysis in order to prioritize areas of action for
     clean cooking access.
 
-    The MCA model is based in the methods of the Energy Access Explorer (EAE) and the Clean Cooking Explorer (CCE). It
+    The MCA model is based in the methods of the `Energy Access Explorer (EAE) <https://www.energyaccessexplorer.org/>`_
+    and the `Clean Cooking Explorer (CCE) <https://cleancookingexplorer.org/>`_. It
     focuses on identifying potential areas where clean cooking can be quickly adopted, areas where markets for
     clean cooking technologies can be expanded or areas in need of financial assistance or lack of infrastructure.
     In brief, it identifies priority areas of action from the user perspective.
 
     .. note::
-       The ``OnStove`` class inherits all functionalities from the :class:`DataProcessor` class.
+       The :class:`MCA` class inherits all functionalities from the :class:`DataProcessor` class.
 
     Parameters
     ----------
-    **kwargs: dict of parameters
+    **kwargs: dictionary of parameters
         Parameters from the :class:`DataProcessor` parent class.
 
     Attributes
@@ -603,26 +611,26 @@ class MCA(DataProcessor):
         self.assistance_need_index = None
 
     @property
-    def demand_index(self):
+    def demand_index(self) -> RasterLayer:
         """The Demand Index highlights the potential demand for clean cooking in different parts of the study area. It
         shows where demand is comparatively higher or lower.
 
-        The demand index is generated by calling the :meth:`get_demand_index` method, which normalizes and weights all
+        The demand index is generated by calling the :meth:`set_demand_index` method, which normalizes and weights all
         relevant demand datasets and combines them.
 
         See also
         --------
-        get_demand_index
+        set_demand_index
         supply_index
-        get_supply_index
+        set_supply_index
         clean_cooking_index
-        get_clean_cooking_index
+        set_clean_cooking_index
         assistance_need_index
-        get_assistance_need_index
+        set_assistance_need_index
         """
         if self._demand_index is None:
             raise ValueError('No `demand_index` was found, please calculate a demand index by calling the '
-                             '`get_demand_index()` method with the relevant list of `datasets`.')
+                             '`set_demand_index()` method with the relevant list of `datasets`.')
         return self._demand_index
 
     @demand_index.setter
@@ -635,28 +643,28 @@ class MCA(DataProcessor):
             raise ValueError('The demand index needs to be of class `RasterLayer`, but {type(raster)} was provided.')
 
     @property
-    def supply_index(self):
+    def supply_index(self) -> RasterLayer:
         """The Supply Index highlights the potential for clean cooking supply in different parts of the study area. It
         shows where supply is comparatively better or worst.
 
-        This index is generated by calling the :meth:`get_supply_index` method, which normalizes and weights all
+        This index is generated by calling the :meth:`set_supply_index` method, which normalizes and weights all
         relevant demand datasets and combines them. The supply index can show where the supply potential is better
         for different types of stoves, e.g. biogas, LPG or electricity and Improved Cook Stoves (ICS), or where supply
         is more easily accessible.
 
         See also
         --------
-        get_supply_index
+        set_supply_index
         demand_index
-        get_demand_index
+        set_demand_index
         clean_cooking_index
-        get_clean_cooking_index
+        set_clean_cooking_index
         assistance_need_index
-        get_assistance_need_index
+        set_assistance_need_index
         """
         if self._supply_index is None:
             raise ValueError('No `supply_index` was found, please calculate a supply index by calling the '
-                             '`get_supply_index()` method with the relevant list of `datasets`.')
+                             '`set_supply_index()` method with the relevant list of `datasets`.')
         return self._supply_index
 
     @supply_index.setter
@@ -669,26 +677,26 @@ class MCA(DataProcessor):
             raise ValueError(f'The supply index needs to be of class `RasterLayer`, but {type(raster)} was provided.')
 
     @property
-    def clean_cooking_index(self):
+    def clean_cooking_index(self) -> RasterLayer:
         """The Clean Cooking Index measures where demand and supply are simultaneously higher.
 
-        This index is generated by calling the :meth:`get_clean_cooking_index` method, which produces an aggregated
+        This index is generated by calling the :meth:`set_clean_cooking_index` method, which produces an aggregated
         measure of the :attr:`demand_index` and the :attr:`supply_index`. Areas with high demand and high supply get
         a higher clean cooking index.
 
         See also
         --------
-        get_clean_cooking_index
+        set_clean_cooking_index
         demand_index
-        get_demand_index
+        set_demand_index
         supply_index
-        get_supply_index
+        set_supply_index
         assistance_need_index
-        get_assistance_need_index
+        set_assistance_need_index
         """
         if self._clean_cooking_index is None:
             raise ValueError('No `clean_cooking_index` was found, please calculate a clean cooking index by calling '
-                             'the `get_clean_cooking_index()` method with the relevant list of `datasets`.')
+                             'the `set_clean_cooking_index()` method with the relevant list of `datasets`.')
         return self._clean_cooking_index
 
     @clean_cooking_index.setter
@@ -702,22 +710,22 @@ class MCA(DataProcessor):
                              'provided.')
 
     @property
-    def assistance_need_index(self):
-        """The Clean Cooking Index measures where demand and supply are simultaneously higher.
+    def assistance_need_index(self) -> RasterLayer:
+        """The Assistance Need Index measures where demand and supply are simultaneously higher.
 
-        This index is generated by calling the :meth:`get_clean_cooking_index` method, which produces an aggregated
-        measure of the :attr:`demand_index` and the :attr:`supply_index`. Areas with high demand and high supply get
-        a higher clean cooking index.
+        This index is generated by calling the :meth:`set_assistance_need_index` method, which produces an aggregated
+        measure selected demand and supply datasets. The index identifies areas where market assistance is needed the
+        most, where the demand is high, but the ability to pay and access to supply may be low.
 
         See also
         --------
-        get_clean_cooking_index
+        set_clean_cooking_index
         demand_index
-        get_demand_index
+        set_demand_index
         supply_index
-        get_supply_index
+        set_supply_index
         assistance_need_index
-        get_assistance_need_index
+        set_assistance_need_index
         """
         if self._assistance_need_index is None:
             raise ValueError('No `assistance_need_index` was found, please calculate an assistance need index by '
@@ -734,7 +742,20 @@ class MCA(DataProcessor):
             raise ValueError('The assistance need index needs to be of class `RasterLayer`.')
 
     @staticmethod
-    def index(layers):
+    def index(layers: dict[dict[str, Union[VectorLayer, RasterLayer]]]) -> np.ndarray:
+        """Computes a standard index based on the ``layers`` provided.
+
+        Parameters
+        ----------
+        layers: dictionary of dictionaries
+            Dictionary containing the categories and their respective dictionaries of dataset names and
+            :class:`VectorLayer` or :class:`RasterLayer` layers.
+
+        Returns
+        -------
+        np.ndarray
+            The weighted average of the :attr:`RasterLayer.normalized` datasets based on their
+            defined :attr:`RasterLayer.weight`"""
         data = {}
         for k, i in layers.items():
             data.update(i)
@@ -763,7 +784,81 @@ class MCA(DataProcessor):
                 new_datasets[key][name] = layer
         return new_datasets
 
-    def get_index(self, datasets='all', buffer=False, name=None):
+    def get_index(self, datasets: dict[str, list[str]] = 'all',
+                  buffer: bool = False, name: Optional[str] = None):
+        """Computes a standard index based on the ``datasets`` provided.
+
+        It calls the general :meth:`index` method with the provided ``datasets``, normalizes the results including or
+        excluding areas defined by the buffer and returns a :class:`RasterLayer` with the computed data and the
+        :attr:`base_layer` :class:`RasterLayer.meta` information.
+
+        Parameters
+        ----------
+        datasets: dictionary of ``category``-``list of layer names`` pairs, default 'all'
+            Specifies which dataset(s) to use to compute the index.
+
+            .. code-block::
+                :caption: ``datasets`` example:
+
+                datasets={'category_1': ['layer_1', 'layer_2'],
+                          'category_2': [...]}
+
+        buffer: str, default ``False``
+            Whether to buffer the areas outside the :attr:`RasterLayer.distance_limit`.
+        name: str, optional
+            Name used to create the :class:`RasterLayer`
+
+        Returns
+        -------
+        :class:`RasterLayer`
+            The weighted average of the :attr:`RasterLayer.normalized` datasets based on their
+            defined :attr:`RasterLayer.weight`
+
+        Examples
+        --------
+        Clean cooking potential index for Biomass ICS created for Nepal:
+
+        >>> nepal.layers['Electricity']['Existing infra'].inverse = False
+        >>> nepal.layers['OnStove']['LPG_cost_mean'].inverse = False
+        >>> nepal.layers['Biomass']['Traveltime'].inverse = True
+        >>> nepal.layers['Demographics']['Wealth'].inverse = True
+        >>> nepal.layers['Demographics']['Population'].inverse = False
+        >>> nepal.layers['OnStove']['maximum_net_benefit_per_household'].inverse = False
+        >>> nepal.layers['OnStove']['available_biogas_mean'].inverse = True
+        ...
+        >>> nepal.layers['Electricity']['Existing infra'].distance_limit = None
+        >>> nepal.layers['OnStove']['LPG_cost_mean'].distance_limit = None
+        >>> nepal.layers['Biomass']['Traveltime'].distance_limit = None
+        >>> nepal.layers['Demographics']['Wealth'].distance_limit = None
+        >>> nepal.layers['Demographics']['Population'].distance_limit = None
+        >>> nepal.layers['OnStove']['maximum_net_benefit_per_household'].distance_limit = None
+        >>> nepal.layers['OnStove']['available_biogas_mean'].distance_limit = None
+        ...
+        >>> nepal.layers['Electricity']['Existing infra'].weight = 2.7
+        >>> nepal.layers['OnStove']['LPG_cost_mean'].weight = 3.3
+        >>> nepal.layers['Biomass']['Traveltime'].weight = 4.3
+        >>> nepal.layers['Demographics']['Wealth'].weight = 4.6
+        >>> nepal.layers['Demographics']['Population'].weight = 2
+        >>> nepal.layers['OnStove']['maximum_net_benefit_per_household'].weight = 4.1
+        >>> nepal.layers['OnStove']['available_biogas_mean'].weight = 3.3
+        ...
+        >>> biomass_ics_index = nepal.get_index(datasets={'Demographics': ['Population', 'Wealth'],
+        ...                                               'Electricity': ['Existing infra'],
+        ...                                               'Biomass': ['Traveltime'],
+        ...                                               'OnStove': ['LPG_cost_mean',
+        ...                                                           'maximum_net_benefit_per_household',
+        ...                                                           'available_biogas_mean']},
+        ...                                     buffer=True, name='Biomass ICS T3')
+
+        Plotting this index produces the following output:
+
+        **Biomass ICS clean cooking potential index created with OnStove**
+
+        .. figure:: ../images/clean_cooking_index.png
+           :width: 700
+           :alt: Clean cooking potential index created with OnStove
+           :align: center
+        """
         datasets = self._update_layers(datasets)
         self.normalize_rasters(datasets=datasets, buffer=buffer)
         layer = RasterLayer(normalization='MinMax')
@@ -773,13 +868,67 @@ class MCA(DataProcessor):
         layer.normalized.name = name
         return layer.normalized
 
-    def set_demand_index(self, datasets='all', buffer=False):
+    def set_demand_index(self, datasets: dict[str, list[str]] = 'all', buffer: bool = False):
+        """Computes the :attr:`demand_index` based on the ``datasets`` provided.
+
+        It calls the :meth:`get_index` method with the provided ``datasets``, which normalizes the results including or
+        excluding areas defined by the buffer and returns a :class:`RasterLayer` with the computed data and the
+        :attr:`base_layer` :class:`RasterLayer.meta` information. The output :class:`RasterLayer` is saved in the
+        :attr:`demand_index`attribute.
+
+        Parameters
+        ----------
+        datasets: dictionary of ``category``-``list of layer names`` pairs, default 'all'
+            Specifies which dataset(s) to use to compute the index.
+
+            .. code-block::
+                :caption: ``datasets`` example:
+
+                datasets={'category_1': ['layer_1', 'layer_2'],
+                          'category_2': [...]}
+
+        buffer: str, default ``False``
+            Whether to buffer the areas outside the :attr:`RasterLayer.distance_limit`.
+        """
         self.demand_index = self.get_index(datasets=datasets, buffer=buffer, name='Demand Index')
 
-    def set_supply_index(self, datasets='all', buffer=False):
+    def set_supply_index(self, datasets: dict[str, list[str]] = 'all', buffer: bool = False):
+        """Computes the :attr:`supply_index` based on the ``datasets`` provided.
+
+        It calls the :meth:`get_index` method with the provided ``datasets``, which normalizes the results including or
+        excluding areas defined by the buffer and returns a :class:`RasterLayer` with the computed data and the
+        :attr:`base_layer` :class:`RasterLayer.meta` information. The output :class:`RasterLayer` is saved in the
+        :attr:`supply_index`attribute.
+
+        Parameters
+        ----------
+        datasets: dictionary of ``category``-``list of layer names`` pairs, default 'all'
+            Specifies which dataset(s) to use to compute the index.
+
+            .. code-block::
+                :caption: ``datasets`` example:
+
+                datasets={'category_1': ['layer_1', 'layer_2'],
+                          'category_2': [...]}
+
+        buffer: str, default ``False``
+            Whether to buffer the areas outside the :attr:`RasterLayer.distance_limit`."""
         self.supply_index = self.get_index(datasets=datasets, buffer=buffer, name='Supply Index')
 
-    def set_clean_cooking_index(self, demand_weight=1, supply_weight=1, buffer=False):
+    def set_clean_cooking_index(self, demand_weight: float = 1, supply_weight: float = 1, buffer: bool = False):
+        """Computes the :attr:`clean_cooking_index` using the :attr:`demand_index` and the :attr:`supply_index`.
+
+        It computes the weighted average of the :attr:`demand_index` and the :attr:`supply_index` based on the
+        provided ``demand_weight`` and ``supply_weight``.
+
+        Parameters
+        ----------
+        demand_weight: float, default 1
+            Value used to weigh the :attr:`demand_index` dataset.
+        supply_weight: float, default 1
+            Value used to weigh the :attr:`supply_index` dataset.
+        buffer: str, default ``False``
+            Whether to buffer the areas outside the :attr:`RasterLayer.distance_limit`."""
         layer = RasterLayer(normalization='MinMax')
         layer.data = (demand_weight * self.demand_index.data + supply_weight * self.supply_index.data) / \
                      (demand_weight + supply_weight)
@@ -788,11 +937,31 @@ class MCA(DataProcessor):
         layer.normalized.name = 'Clean Cooking Potential Index'
         self.clean_cooking_index = layer.normalized
 
-    def set_assistance_need_index(self, datasets='all', buffer=False):
+    def set_assistance_need_index(self, datasets: dict[str, list[str]] = 'all', buffer: bool = False):
+        """Computes the :attr:`assistance_need_index` based on the ``datasets`` provided.
+
+        It calls the :meth:`get_index` method with the provided ``datasets``, which normalizes the results including or
+        excluding areas defined by the buffer and returns a :class:`RasterLayer` with the computed data and the
+        :attr:`base_layer` :class:`RasterLayer.meta` information. The output :class:`RasterLayer` is saved in the
+        :attr:`assistance_need_index` attribute.
+
+        Parameters
+        ----------
+        datasets: dictionary of ``category``-``list of layer names`` pairs, default 'all'
+            Specifies which dataset(s) to use to compute the index.
+
+            .. code-block::
+                :caption: ``datasets`` example:
+
+                datasets={'category_1': ['layer_1', 'layer_2'],
+                          'category_2': [...]}
+
+        buffer: str, default ``False``
+            Whether to buffer the areas outside the :attr:`RasterLayer.distance_limit`."""
         self.assistance_need_index = self.get_index(datasets=datasets, buffer=buffer, name='Assistance need index')
 
     @staticmethod
-    def autopct_format(values):
+    def _autopct_format(values):
         def my_format(pct):
             total = sum(values)
             val = int(round(pct * total / 100.0))
@@ -800,8 +969,30 @@ class MCA(DataProcessor):
 
         return my_format
 
-    def plot_share(self, index='clean cooking potential index', layer=('demand', 'population'),
-                   title='Clean Cooking Potential Index', output_file=None):
+    def plot_share(self, index: str ='clean cooking potential index',
+                   layer: tuple[str, str] = ('demand', 'population'),
+                   title: str = 'Clean Cooking Potential Index',
+                   output_file: Optional[str] = None):
+        """Creates a pie chart showing five different classes of the index categorized from low to high.
+
+        Parameters
+        ----------
+        index: str, default ``clean cooking potential index``
+            Index to plot the share for.
+        layer: tuple of two str pairs, ``('demand', 'population')``
+            Category and layer name for the layer to use to calculate the shares. If ``('demand', 'population')``
+            then the population shares falling on each of the five categories is shown in the pie chart.
+        title: str, default ``'Clean Cooking Potential Index'``
+            Title of the plot.
+        output_file: str, optional
+            File name used to save the plot into the :attr:`output_directory`. If ``None``, then the plot is not saved,
+            only returned
+
+        Returns
+        -------
+        matplotlib.axes.Axes
+            The axes of the figure.
+        """
         levels = []
         if index.lower() in 'clean cooking potential index':
             data = self.clean_cooking_index.data
@@ -827,7 +1018,7 @@ class MCA(DataProcessor):
         fig, ax = plt.subplots(figsize=(7, 5))
 
         ax.pie(share,
-               autopct=self.autopct_format(np.array(share) / 1000),
+               autopct=self._autopct_format(np.array(share) / 1000),
                pctdistance=1.2, textprops={'fontsize': 16},
                startangle=140,
                colors=cmap.colors)
@@ -841,6 +1032,7 @@ class MCA(DataProcessor):
         if output_file:
             plt.savefig(os.path.join(self.output_directory, output_file),
                         dpi=150, bbox_inches='tight')
+        return ax
 
 
 class OnStove(DataProcessor):
@@ -1227,7 +1419,7 @@ class OnStove(DataProcessor):
         Technology.discounted_inv
         LPG.transportation_cost
         Technology.total_time
-        Technology.required_energy_hh
+        Biogas.required_energy_hh
         Technology.health_parameters
         Technology.discount_fuel_cost
         """
@@ -1740,7 +1932,6 @@ class OnStove(DataProcessor):
         See also
         --------
         calibrate_urban_rural_split
-        calibrate_urban_manual
         calibrate_current_pop
         read_scenario_data
         """
@@ -2426,7 +2617,7 @@ class OnStove(DataProcessor):
              title: Optional[str] = None,
              legend: bool = True, legend_title: str = '', legend_cols: int = 1,
              legend_position: tuple[float, float] = (1.02, 0.7),
-             legend_prop: dict = {'title': {'size': 12, 'weight': 'bold'}, 'size': 12},
+             legend_prop: Optional[dict] = None,
              stats: bool = False,
              stats_kwargs: Optional[dict] = None,
              scale_bar: Optional[dict] = None, north_arrow: Optional[dict] = None,
@@ -2439,7 +2630,7 @@ class OnStove(DataProcessor):
 
         The map can be for categorical or continuous data. If categorical, a legend will be created with the colors
         of the categories. If continuous, a color bar will be created with the range of the data. For continuous data a
-        ``metric`` parameter can be passed indicating the desired statistic to be visualized. Moreover, contonuous
+        ``metric`` parameter can be passed indicating the desired statistic to be visualized. Moreover, continuous
         data can be presented using ``cumulative_count`` or ``quantiles``.
 
         Parameters
@@ -2454,7 +2645,7 @@ class OnStove(DataProcessor):
             see :meth:`create_layer`.
         cmap: dictionary of str key-value pairs or str, default 'viridis'
             Dictionary with the colors to use for each data category if the data is categorical---see
-            :meth:`create_layer`. If the data is continuous, then a name af a color scale accepted y
+            :meth:`create_layer`. If the data is continuous, then a name of a color scale accepted by
             :doc:`matplotlib<matplotlib:tutorials/colors/colormaps>` should be passed.
         cumulative_count: array-like of float, optional
             List of lower and upper limits to consider for the cumulative count. If defined the map will be displayed
@@ -2496,18 +2687,26 @@ class OnStove(DataProcessor):
             Dictionary of arguments to control the position and style of the statistics box.
 
             .. code-block::
-                :captio: Default arguments
+                :caption: ``stats_kwargs`` default arguments
 
-                ``stats_kwargs={'extra_stats': None, 'stats_position': (1.02, 0.9), 'pad': 0, 'sep': 6, 'fontsize': 10,
-                                'fontcolor': 'black', 'fontweight': 'normal', 'box_props': dict(boxstyle='round',
-                                facecolor='#f1f1f1ff', edgecolor='lightgray')}``
+                {'extra_stats': None, 'stats_position': (1.02, 0.9),
+                 'pad': 0, 'sep': 6, 'fontsize': 10,
+                'fontcolor': 'black', 'fontweight': 'normal',
+                'box_props': dict(boxstyle='round',
+                                  facecolor='#f1f1f1ff',
+                                  edgecolor='lightgray')}
 
             .. code-block::
-                :captio: Other options
+                :caption: ``stats_kwargs`` other options
 
-                ``stats_kwargs={'extra_stats': None, 'fontsize': 10, 'stats_position': (1, 0.9), 'pad': 2, 'sep': 0,
-                                'fontcolor': 'black', 'fontweight': 'normal', 'box_props': dict(facecolor='lightyellow',
-                                 edgecolor='black', alpha=1, boxstyle="sawtooth")}``
+                {'extra_stats': dict('StatA': value),
+                'fontsize': 10, 'stats_position': (1, 0.9),
+                'pad': 2, 'sep': 0, 'fontcolor': 'black',
+                'fontweight': 'normal',
+                'box_props': dict(facecolor='lightyellow',
+                                  edgecolor='black',
+                                  alpha=1,
+                                  boxstyle="sawtooth")}
 
         scale_bar: dict, optional
             Dictionary with the parameters needed to create a :class:`ScaleBar`. If not defined, no scale bar will be
@@ -2516,8 +2715,10 @@ class OnStove(DataProcessor):
             .. code-block::
                :caption: Scale bar dictionary example
 
-               dict(size=1000000, style='double', textprops=dict(size=8), location=(1, 0),
-                    linekw=dict(lw=1, color='black'), extent=0.01)
+               dict(size=1000000, style='double',
+                    textprops=dict(size=8), location=(1, 0),
+                    linekw=dict(lw=1, color='black'),
+                    extent=0.01)
 
             .. Note::
                See :func:`onstove.scale_bar` for more details
@@ -2726,7 +2927,7 @@ class OnStove(DataProcessor):
 
         The map can be for categorical or continuous data. If categorical, a legend will be created with the colors
         of the categories. If continuous, a color bar will be created with the range of the data. For continuous data a
-        ``metric`` parameter can be passed indicating the desired statistic to be visualized. Moreover, contonuous
+        ``metric`` parameter can be passed indicating the desired statistic to be visualized. Moreover, continuous
         data can be presented using ``cumulative_count`` or ``quantiles``.
 
         Parameters
@@ -2744,7 +2945,7 @@ class OnStove(DataProcessor):
             see :meth:`create_layer`.
         cmap: dictionary of str key-value pairs or str, default 'viridis'
             Dictionary with the colors to use for each data category if the data is categorical---see
-            :meth:`create_layer`. If the data is continuous, then a name af a color scale accepted y
+            :meth:`create_layer`. If the data is continuous, then a name of a color scale accepted by
             :doc:`matplotlib<matplotlib:tutorials/colors/colormaps>` should be passed.
         cumulative_count: array-like of float, optional
             List of lower and upper limits to consider for the cumulative count. If defined the map will be displayed
@@ -2782,22 +2983,27 @@ class OnStove(DataProcessor):
             defaults to ``{'title': {'size': 12, 'weight': 'bold'}, 'size': 12}``.
         stats: bool, default False
             Whether to display the statistics of the analysis in the map.
-        stats_kwargs: dictionary, optional
-            Dictionary of arguments to control the position and style of the statistics box.
+            .. code-block::
+                :caption: ``stats_kwargs`` default arguments
+
+                {'extra_stats': None, 'stats_position': (1.02, 0.9),
+                 'pad': 0, 'sep': 6, 'fontsize': 10,
+                'fontcolor': 'black', 'fontweight': 'normal',
+                'box_props': dict(boxstyle='round',
+                                  facecolor='#f1f1f1ff',
+                                  edgecolor='lightgray')}
 
             .. code-block::
-                :captio: Default arguments
+                :caption: ``stats_kwargs`` other options
 
-                ``stats_kwargs={'extra_stats': None, 'stats_position': (1.02, 0.9), 'pad': 0, 'sep': 6, 'fontsize': 10,
-                                'fontcolor': 'black', 'fontweight': 'normal', 'box_props': dict(boxstyle='round',
-                                facecolor='#f1f1f1ff', edgecolor='lightgray')}``
-
-            .. code-block::
-                :captio: Other options
-
-                ``stats_kwargs={'extra_stats': None, 'fontsize': 10, 'stats_position': (1, 0.9), 'pad': 2, 'sep': 0,
-                                'fontcolor': 'black', 'fontweight': 'normal', 'box_props': dict(facecolor='lightyellow',
-                                 edgecolor='black', alpha=1, boxstyle="sawtooth")}``
+                {'extra_stats': dict('StatA': value),
+                'fontsize': 10, 'stats_position': (1, 0.9),
+                'pad': 2, 'sep': 0, 'fontcolor': 'black',
+                'fontweight': 'normal',
+                'box_props': dict(facecolor='lightyellow',
+                                  edgecolor='black',
+                                  alpha=1,
+                                  boxstyle="sawtooth")}
 
         scale_bar: dict, optional
             Dictionary with the parameters needed to create a :class:`ScaleBar`. If not defined, no scale bar will be
@@ -2806,8 +3012,10 @@ class OnStove(DataProcessor):
             .. code-block::
                :caption: Scale bar dictionary example
 
-               dict(size=1000000, style='double', textprops=dict(size=8), location=(1, 0),
-                    linekw=dict(lw=1, color='black'), extent=0.01)
+               dict(size=1000000, style='double',
+                    textprops=dict(size=8), location=(1, 0),
+                    linekw=dict(lw=1, color='black'),
+                    extent=0.01)
 
             .. Note::
                See :func:`onstove.scale_bar` for more details
@@ -2873,13 +3081,13 @@ class OnStove(DataProcessor):
             Dictionary with the keys-value pairs to use for the data categories.
 
             .. code-block:: python
-               :caption: Example of labels dictionary
+               :caption: Example of ``labels`` dictionary
 
-               >>> labels = {'Collected Traditional Biomass': 'Biomass',
-               ...           'Collected Improved Biomass': 'Biomass ICS (ND)',
-               ...           'Traditional Charcoal': 'Charcoal',
-               ...           'Biomass Forced Draft': 'Biomass ICS (FD)',
-               ...           'Pellets Forced Draft': 'Pellets ICS (FD)'}
+               {'Collected Traditional Biomass': 'Biomass',
+               'Collected Improved Biomass': 'Biomass ICS (ND)',
+               'Traditional Charcoal': 'Charcoal',
+               'Biomass Forced Draft': 'Biomass ICS (FD)',
+               'Pellets Forced Draft': 'Pellets ICS (FD)'}
 
         variable: str, defalut 'max_benefit_tech'
             Categorical variable used to group and summarize the data.
@@ -2963,28 +3171,28 @@ class OnStove(DataProcessor):
             Dictionary with the keys-value pairs to use for the data categories.
 
             .. code-block:: python
-               :caption: Example of labels dictionary
+               :caption: Example of ``labels`` dictionary
 
-               >>> labels = {'Collected Traditional Biomass': 'Biomass',
-               ...           'Collected Improved Biomass': 'Biomass ICS (ND)',
-               ...           'Traditional Charcoal': 'Charcoal',
-               ...           'Biomass Forced Draft': 'Biomass ICS (FD)',
-               ...           'Pellets Forced Draft': 'Pellets ICS (FD)'}
+               {'Collected Traditional Biomass': 'Biomass',
+               'Collected Improved Biomass': 'Biomass ICS (ND)',
+               'Traditional Charcoal': 'Charcoal',
+               'Biomass Forced Draft': 'Biomass ICS (FD)',
+               'Pellets Forced Draft': 'Pellets ICS (FD)'}
 
         cmap: dictionary of str key-value pairs, optional
             Dictionary with the colors to use for each technology.
 
             .. code-block:: python
-               :caption: Example of cmap dictionary
+               :caption: Example of ``cmap`` dictionary
 
-               >>> cmap = {'Biomass ICS (ND)': '#6F4070',
-               ...         'LPG': '#66C5CC',
-               ...         'Biomass': '#FFB6C1',
-               ...         'Biomass ICS (FD)': '#af04b3',
-               ...         'Pellets ICS (FD)': '#ef02f5',
-               ...         'Charcoal': '#364135',
-               ...         'Charcoal ICS': '#d4bdc5',
-               ...         'Biogas': '#73AF48'}
+               {'Biomass ICS (ND)': '#6F4070',
+               'LPG': '#66C5CC',
+               'Biomass': '#FFB6C1',
+               'Biomass ICS (FD)': '#af04b3',
+               'Pellets ICS (FD)': '#ef02f5',
+               'Charcoal': '#364135',
+               'Charcoal ICS': '#d4bdc5',
+               'Biogas': '#73AF48'}
 
         x_variable: str, default 'Calibrated_pop'
             The variable to use in the x axis. Two options are available ``Calibrated_pop`` and ``Households``.
@@ -3113,13 +3321,13 @@ class OnStove(DataProcessor):
             Dictionary with the keys-value pairs to use for the technology categories.
 
             .. code-block:: python
-               :caption: Example of labels dictionary
+               :caption: Example of ``labels`` dictionary
 
-               >>> labels = {'Collected Traditional Biomass': 'Biomass',
-               ...           'Collected Improved Biomass': 'Biomass ICS (ND)',
-               ...           'Traditional Charcoal': 'Charcoal',
-               ...           'Biomass Forced Draft': 'Biomass ICS (FD)',
-               ...           'Pellets Forced Draft': 'Pellets ICS (FD)'}
+               {'Collected Traditional Biomass': 'Biomass',
+               'Collected Improved Biomass': 'Biomass ICS (ND)',
+               'Traditional Charcoal': 'Charcoal',
+               'Biomass Forced Draft': 'Biomass ICS (FD)',
+               'Pellets Forced Draft': 'Pellets ICS (FD)'}
 
         cmap: dictionary of str key-value pairs, optional
             Dictionary with the colors to use for each cost/benefit category.
@@ -3127,12 +3335,12 @@ class OnStove(DataProcessor):
             .. code-block:: python
                :caption: Example of cmap dictionary
 
-               >>> cmap = {'Health costs avoided': '#542788',
-               ...         'Investment costs': '#b35806',
-               ...         'Fuel costs': '#f1a340',
-               ...         'Emissions costs saved': '#998ec3',
-               ...         'Om costs': '#fee0b6',
-               ...         'Opportunity cost gained': '#d8daeb'}
+               {'Health costs avoided': '#542788',
+               'Investment costs': '#b35806',
+               'Fuel costs': '#f1a340',
+               'Emissions costs saved': '#998ec3',
+               'Om costs': '#fee0b6',
+               'Opportunity cost gained': '#d8daeb'}
 
         font_args: dictionary, optional
             A dictionary with font arguments. Default to ``font_args=dict(size=10, color='black')``.
@@ -3429,28 +3637,28 @@ class OnStove(DataProcessor):
             Dictionary with the keys-value pairs to use for each technology.
 
             .. code-block:: python
-               :caption: Example of labels dictionary
+               :caption: Example of ``labels`` dictionary
 
-               >>> labels = {'Collected Traditional Biomass': 'Biomass',
-               ...           'Collected Improved Biomass': 'Biomass ICS (ND)',
-               ...           'Traditional Charcoal': 'Charcoal',
-               ...           'Biomass Forced Draft': 'Biomass ICS (FD)',
-               ...           'Pellets Forced Draft': 'Pellets ICS (FD)'}
+               {'Collected Traditional Biomass': 'Biomass',
+               'Collected Improved Biomass': 'Biomass ICS (ND)',
+               'Traditional Charcoal': 'Charcoal',
+               'Biomass Forced Draft': 'Biomass ICS (FD)',
+               'Pellets Forced Draft': 'Pellets ICS (FD)'}
 
         cmap: dictionary of str key-value pairs, optional
             Dictionary with the colors to use for technology.
 
             .. code-block:: python
-               :caption: Example of cmap dictionary
+               :caption: Example of ``cmap`` dictionary
 
-               >>> cmap = {'Biomass ICS (ND)': '#6F4070',
-               ...         'LPG': '#66C5CC',
-               ...         'Biomass': '#FFB6C1',
-               ...         'Biomass ICS (FD)': '#af04b3',
-               ...         'Pellets ICS (FD)': '#ef02f5',
-               ...         'Charcoal': '#364135',
-               ...         'Charcoal ICS': '#d4bdc5',
-               ...         'Biogas': '#73AF48'}
+               {'Biomass ICS (ND)': '#6F4070',
+               'LPG': '#66C5CC',
+               'Biomass': '#FFB6C1',
+               'Biomass ICS (FD)': '#af04b3',
+               'Pellets ICS (FD)': '#ef02f5',
+               'Charcoal': '#364135',
+               'Charcoal ICS': '#d4bdc5',
+               'Biogas': '#73AF48'}
 
         x_title: str, optional
             Title of the x axis. If `None` is provided, then a default of ``Net benefit per household (USD/yr)``,
