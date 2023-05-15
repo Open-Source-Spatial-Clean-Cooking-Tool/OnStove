@@ -83,6 +83,10 @@ html_theme_options = {
         }
    ],
    "show_nav_level": 2,
+   # "switcher": {
+        # "json_url": "_static/switcher.json",
+    # },
+   # "navbar_start": ["navbar-logo", "version-switcher"]
 }
 html_favicon = "_static/OnStove_favicon.svg"
 html_css_files = ["onstove.css"]
