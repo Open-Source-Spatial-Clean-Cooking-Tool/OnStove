@@ -156,3 +156,7 @@ onstove/tests/data/*
 onstove/tests/output
 *.csv
 example/OnStove_notebook.ipynb
+example/OnStove_notebook.ipynb
+example/results/Administrative/Country_boundaries/Country_boundaries.geojson
+example/results/Base/Base/Base.tif
+example/results/Biogas/Temperature/Temperature.tif

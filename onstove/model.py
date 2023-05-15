@@ -112,7 +112,7 @@ class DataProcessor:
             warn("The unit of the selected coordinate system is " + unit_name + '. OnStove reqiures the unit to be in '
                 'metres. Check https://epsg.io/ for potential coordinate systems to use.')
         if cell_size != (1000, 1000):
-            warn("The cell size selected is " + cell_size + '. The current version of OnStove requires 1 sq. km '
+            warn("The cell size selected is " + str(cell_size) + '. The current version of OnStove requires 1 sq. km '
                                                             'resolution. Your cell size has been updated')
             cell_size = (1000, 1000)
 
@@ -251,6 +251,9 @@ class DataProcessor:
             Sets the default value for the ``rescale`` attribute. See the ``rescale`` parameter of :class:`RasterLayer`.
         """
         if layer_type == 'vector':
+            if base_layer == True:
+                warn("A vector layer has been given as base_layer. The base_layer can only be of type raster. base_layer"
+                     "for this layer has been set to False.")
             if postgres:
                 layer = VectorLayer(category, name, path, conn=self.conn,
                                     normalization=normalization,
@@ -269,6 +272,9 @@ class DataProcessor:
                                     inverse=inverse, query=query, bbox=window)
 
         elif layer_type == 'raster':
+            if resample not in rasterio.enums.Resampling.__members__.keys():
+                warn("Invalid resampling method selected. Check the rasterio documention for available options: "
+                     "https://rasterio.readthedocs.io/en/latest/api/rasterio.enums.html#rasterio.enums.Resampling")
             if window:
                 with rasterio.open(path) as src:
                     src_crs = src.meta['crs']
@@ -335,17 +341,20 @@ class DataProcessor:
         save_layer: bool default False
             Whether to save the dataset to disk or not
         """
-        if postgres:
-            self.mask_layer = VectorLayer(category, name, path, self.conn, query)
-        else:
-            self.mask_layer = VectorLayer(category, name, path, query=query)
+        try:
+            if postgres:
+                self.mask_layer = VectorLayer(category, name, path, self.conn, query)
+            else:
+                self.mask_layer = VectorLayer(category, name, path, query=query)
 
-        if self.mask_layer.data.crs != self.project_crs:
-            output_path = os.path.join(self.output_directory, category, name)
-            self.mask_layer.reproject(self.project_crs, output_path)
-        if save_layer:
-            self.mask_layer.save(os.path.join(self.output_directory, self.mask_layer.category, self.mask_layer.name))
+            if self.mask_layer.data.crs != self.project_crs:
+                output_path = os.path.join(self.output_directory, category, name)
+                self.mask_layer.reproject(self.project_crs, output_path)
+            if save_layer:
+                self.mask_layer.save(os.path.join(self.output_directory, self.mask_layer.category, self.mask_layer.name))
 
+        except Exception:
+            warn("The mask layer has to be vector polygon layer.")
     def _save_layers(self, save: bool, category: str, name: str):
         if save:
             output_path = os.path.join(self.output_directory,
