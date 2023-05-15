@@ -1,12 +1,11 @@
-*********************
-Resources and license
-*********************
+*********
+Resources
+*********
 
 References
 ==========
 
-Placeholder for when publications are available. 
-
+Khavari, B., Ramirez, C., Jeuland, M. et al. A geospatial approach to understanding clean cooking challenges in sub-Saharan Africa. Nat Sustain 6, 447–457 (2023). https://doi.org/10.1038/s41893-022-01039-8
 
 OnStove license
 ===============

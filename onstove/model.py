@@ -53,7 +53,8 @@ from plotnine.stats.stat_boxplot import weighted_percentile
 from onstove.layer import VectorLayer, RasterLayer
 from onstove.technology import Technology, LPG, Biomass, Electricity, Biogas, Charcoal, MiniGrids
 from onstove.raster import sample_raster
-from onstove._utils import Processes, raster_setter, deep_update
+from onstove._utils import Processes, deep_update
+from onstove._layer_utils import raster_setter
 
 
 def timeit(func):
@@ -183,14 +184,13 @@ class DataProcessor:
                   normalization: str = 'MinMax', inverse: bool = False, distance_method: Optional[str] = None,
                   distance_limit: Optional[Callable[[np.ndarray], np.ndarray]] = None,
                   window: Optional[bool] = False, rescale: bool = False):
-        """
-        Adds a new layer (type VectorLayer or RasterLayer) to the DataProcessor class
+        """Adds a new layer (type VectorLayer or RasterLayer) to the DataProcessor class
 
         Parameters
         ----------
         category: str
             Category of the layer. This parameter is useful to group the data into logical categories such as
-            "Demographics", "Resources" and "Infrastructure" or "Demand", "Supply" and "Others". This categories are
+            "Demographics", "Resources" and "Infrastructure" or "Demand", "Supply" and "Others". These categories are
             particularly relevant for the ``MCA`` analysis.
         name: str
             Name of the dataset.
@@ -206,8 +206,8 @@ class DataProcessor:
                Only applicable for the `vector` ``layer_type``.
 
         postgres: bool, default False
-            Whether to use a PostgreSQL database connection to read the layer from. The connection needs be already
-            created and stored in the :attr:`conn` attribute using the :meth:`set_postgres` method.
+            Whether to use a PostgreSQL database connection to read the layer. The connection has to already exist
+            and be stored in the :attr:`conn` attribute using the :meth:`set_postgres` method.
         base_layer: bool, default False
             Whether the layer should be used as a :attr:`base_layer` for the data processing.
         resample: str, default 'nearest'
@@ -249,6 +249,13 @@ class DataProcessor:
             See the ``window`` parameter of :class:`RasterLayer` and the ``bbox`` parameter of :class:`VectorLayer`.
         rescale: bool, default False
             Sets the default value for the ``rescale`` attribute. See the ``rescale`` parameter of :class:`RasterLayer`.
+
+        See also
+        ----------
+        set_postgres
+        get_distance_raster
+        VectorLayer
+        RasterLayer
         """
         if name is None:
             name = os.path.splitext(os.path.basename(path))[0]
@@ -322,18 +329,18 @@ class DataProcessor:
 
     def add_mask_layer(self, path: str, category: str = 'Other', name: str = None,
                        query: str = None, postgres: bool = False, save_layer: bool = False):
-        """
-        Adds a vector layer to self.mask_layer, which will be used to mask all
-        other layers into is boundaries
+        """Adds a vector layer to self.mask_layer.
+
+        This layer is used to mask all other layers.
 
         Parameters
         ----------
         category: str
-            Category name of the dataset.
+            Category the dataset.
         name: str
-            name of the dataset.
+            Name of the dataset.
         path: str
-            The relative path to the datafile. This file can be of any type that is accepted by
+            The relative path of the datafile. This file can be of any type that is accepted by
             :doc:`geopandas:docs/reference/api/geopandas.read_file`.
         query: str, optional
             A query string to filter the data. For more information refer to
@@ -342,7 +349,11 @@ class DataProcessor:
             Whether to use a PostgreSQL database connection to read the layer from. The connection needs be already
             created and stored in the :attr:`conn` attribute using the :meth:`set_postgres` method.
         save_layer: bool default False
-            Whether to save the dataset to disk or not
+            Whether to save the dataset to disc or not
+
+        See also
+        ----------
+        mask_layer
         """
         if name is None:
             name = os.path.splitext(os.path.basename(path))[0]
@@ -370,15 +381,23 @@ class DataProcessor:
         return output_path
 
     def mask_layers(self, datasets: dict[str, list[str]] = 'all', crop: bool = True, save_layers: bool = False):
-        """
-        Uses the a mask layer in ``self.mask_layer`` to mask all other layers to its boundaries.
+        """Uses the mask layer in ``self.mask_layer`` to mask layers to its boundaries.
 
         Parameters
         ----------
         datasets: dictionary of ``category``-``list of layer names`` pairs, default 'all'
             Specifies which dataset(s) to clip.
+
+            .. code-block::
+                :caption: Example
+
+                datasets={'category_1': ['layer_1', 'layer_2'],
+                          'category_2': [...]}
+
+        crop: boolean, default True
+            Determines whether to crop the masked layers extent to the mask layers extent.
         save_layers: boolean, default False
-            Wheter to save the layer to disc or not.
+            Determines whether to save the reprojected layer to disc or not.
 
         See also
         ----------
@@ -406,19 +425,25 @@ class DataProcessor:
                     layer.distance_raster.mask(self.mask_layer, output_path, crop=crop)
 
     def align_layers(self, datasets: dict[str, list[str]] = 'all', save_layers=False):
-        """
-        Ensures that the coordinate system and resolution of the raster is the same as the base layer
+        """Ensures that the coordinate system and resolution of the raster is the same as the base layer
 
         Parameters
         ----------
         datasets: dictionary of ``category``-``list of layer names`` pairs, default 'all'
             Specifies which dataset(s) to align.
+
+            .. code-block::
+               :caption: Example
+
+               datasets={'category_1': ['layer_1', 'layer_2'],
+                         'category_2': [...]}
+
         save_layers: boolean, default False
-            Wheter to save the layer to disc or not.
+            Determines whether to save the reprojected layer to disc or not.
 
         See also
         ----------
-        add_layer
+        RasterLayer.align
         """
 
         datasets = self._get_layers(datasets)
@@ -435,15 +460,21 @@ class DataProcessor:
                         layer.friction.align(base_layer=self.base_layer, output_path=output_path)
 
     def reproject_layers(self, datasets: dict[str, list[str]] = 'all', save_layers=False):
-        """
-        Reprojects the layers specified by the user.
+        """Reprojects all layers entered.
 
         Parameters
         ----------
         datasets: dictionary of ``category``-``list of layer names`` pairs, default 'all'
             Specifies which dataset(s) to reproject.
+
+            .. code-block::
+                :caption: Example
+
+                datasets={'category_1': ['layer_1', 'layer_2'],
+                          'category_2': [...]}
+
         save_layers: boolean, default False
-            Wheter to save the layer to disc or not.
+            Determines whether to save the reprojected layer to disc or not.
 
         See also
         --------
@@ -458,9 +489,30 @@ class DataProcessor:
                 if isinstance(layer.friction, RasterLayer):
                     layer.friction.reproject(self.project_crs, output_path)
 
-    def get_distance_rasters(self, datasets='all', save_layers=False):
-        """
-        Goes through all layer and call their `.distance_raster` method
+    def get_distance_rasters(self, datasets: Union[str, dict] = "all", save_layers: bool =False):
+        """Calls the `.distance_raster` method of all the layers entered.
+
+        The function calculates the distance either as proximity or as traveltime see `RasterLayer.get_distance_raster`
+        or `VectorLayer.get_distance_raster`
+
+        Parameters
+        ----------
+        datasets: str or dict, default "all"
+            Defines the datasets to be normalized. Can be entered as either a string or a dictionary.
+
+            .. code-block::
+                :caption: Example
+
+                datasets={'category_1': ['layer_1', 'layer_2'],
+                          'category_2': [...]}
+
+        save_layer: bool, default False
+            Determines whether to save the distance raster to disc or not.
+
+        See also
+        --------
+        RasterLayer.get_distance_raster
+        VectorLayer.get_distance_raster
         """
         datasets = self._get_layers(datasets)
         for category, layers in datasets.items():
@@ -473,9 +525,32 @@ class DataProcessor:
                     layer.get_distance_raster(output_path=output_path, mask_layer=self.mask_layer)
 
 
-    def normalize_rasters(self, datasets='all', buffer=False, save_layers=False):
-        """
-        Goes through all layer and call their `.normalize` method
+    def normalize_rasters(self, datasets: Union[str, dict] = "all", buffer: bool =False, save_layers: bool =False):
+        """Calls the `.normalize` method of all the layers entered.
+
+        Normlaizes all input rasters using a ´MinMax´ normalization.
+
+        Parameters
+        ----------
+        datasets: str or dict, default "all"
+            Defines the datasets to be normalized. Can be entered as either a string or a dictionary.
+
+            .. code-block::
+                :caption: Example
+
+                datasets={'category_1': ['layer_1', 'layer_2'],
+                          'category_2': [...]}
+
+        buffer: bool, default False
+            Whether to exclude the areas outside the ``distance_limit`` attribute and make them `np.nan`. The ``distance_limit``
+            is an attribute of the datasets
+        save_layer: bool, default False
+            Determines whether to save the normalized dataset to disc or not.
+
+        See also
+        --------
+        RasterLayer.normalize
+        RasterLayer.mask
         """
         datasets = self._get_layers(datasets)
         for category, layers in datasets.items():
@@ -484,9 +559,22 @@ class DataProcessor:
                 layer.mask(self.mask_layer, crop=False, all_touched=False)
                 layer.normalize(output_path, buffer=buffer, inverse=layer.inverse)
 
-    def save_datasets(self, datasets='all'):
-        """
-        Saves all layers that have not been previously saved
+    def save_datasets(self, datasets: Union[str, dict] = "all"):
+        """Saves layers.
+
+        Saves any layer that is given as input in parameter ``datasets``
+
+        Parameters
+        ----------
+        datasets: str or dict, default "all"
+            Defines the datasets to be saved. Can be entered as either a string or a dictionary.
+
+            .. code-block::
+                :caption: Example
+
+                datasets={'category_1': ['layer_1', 'layer_2'],
+                          'category_2': [...]}
+
         """
         datasets = self._get_layers(datasets)
         if self.mask_layer.category not in datasets.keys():
@@ -511,7 +599,12 @@ class DataProcessor:
 
     @classmethod
     def read_model(cls, path):
-        """Reads a model from a pickle"""
+        """Reads a model from a pickle
+
+        Returns
+        -------
+        OnStove instance
+        """
         with open(path, "rb") as f:
             model = dill.load(f)
         return model
@@ -521,17 +614,18 @@ class MCA(DataProcessor):
     """The ``MCA`` class is used to conduct a spatial Multicriteria Analysis in order to prioritize areas of action for
     clean cooking access.
 
-    The MCA model is based in the methods of the Energy Access Explorer (EAE) and the Clean Cooking Explorer (CCE). It
+    The MCA model is based in the methods of the `Energy Access Explorer (EAE) <https://www.energyaccessexplorer.org/>`_
+    and the `Clean Cooking Explorer (CCE) <https://cleancookingexplorer.org/>`_. It
     focuses on identifying potential areas where clean cooking can be quickly adopted, areas where markets for
     clean cooking technologies can be expanded or areas in need of financial assistance or lack of infrastructure.
     In brief, it identifies priority areas of action from the user perspective.
 
     .. note::
-       The ``OnStove`` class inherits all functionalities from the :class:`DataProcessor` class.
+       The :class:`MCA` class inherits all functionalities from the :class:`DataProcessor` class.
 
     Parameters
     ----------
-    **kwargs: dict of parameters
+    **kwargs: dictionary of parameters
         Parameters from the :class:`DataProcessor` parent class.
 
     Attributes
@@ -550,26 +644,26 @@ class MCA(DataProcessor):
         self.assistance_need_index = None
 
     @property
-    def demand_index(self):
+    def demand_index(self) -> RasterLayer:
         """The Demand Index highlights the potential demand for clean cooking in different parts of the study area. It
         shows where demand is comparatively higher or lower.
 
-        The demand index is generated by calling the :meth:`get_demand_index` method, which normalizes and weights all
+        The demand index is generated by calling the :meth:`set_demand_index` method, which normalizes and weights all
         relevant demand datasets and combines them.
 
         See also
         --------
-        get_demand_index
+        set_demand_index
         supply_index
-        get_supply_index
+        set_supply_index
         clean_cooking_index
-        get_clean_cooking_index
+        set_clean_cooking_index
         assistance_need_index
-        get_assistance_need_index
+        set_assistance_need_index
         """
         if self._demand_index is None:
             raise ValueError('No `demand_index` was found, please calculate a demand index by calling the '
-                             '`get_demand_index()` method with the relevant list of `datasets`.')
+                             '`set_demand_index()` method with the relevant list of `datasets`.')
         return self._demand_index
 
     @demand_index.setter
@@ -582,28 +676,28 @@ class MCA(DataProcessor):
             raise ValueError('The demand index needs to be of class `RasterLayer`, but {type(raster)} was provided.')
 
     @property
-    def supply_index(self):
+    def supply_index(self) -> RasterLayer:
         """The Supply Index highlights the potential for clean cooking supply in different parts of the study area. It
         shows where supply is comparatively better or worst.
 
-        This index is generated by calling the :meth:`get_supply_index` method, which normalizes and weights all
+        This index is generated by calling the :meth:`set_supply_index` method, which normalizes and weights all
         relevant demand datasets and combines them. The supply index can show where the supply potential is better
         for different types of stoves, e.g. biogas, LPG or electricity and Improved Cook Stoves (ICS), or where supply
         is more easily accessible.
 
         See also
         --------
-        get_supply_index
+        set_supply_index
         demand_index
-        get_demand_index
+        set_demand_index
         clean_cooking_index
-        get_clean_cooking_index
+        set_clean_cooking_index
         assistance_need_index
-        get_assistance_need_index
+        set_assistance_need_index
         """
         if self._supply_index is None:
             raise ValueError('No `supply_index` was found, please calculate a supply index by calling the '
-                             '`get_supply_index()` method with the relevant list of `datasets`.')
+                             '`set_supply_index()` method with the relevant list of `datasets`.')
         return self._supply_index
 
     @supply_index.setter
@@ -616,26 +710,26 @@ class MCA(DataProcessor):
             raise ValueError(f'The supply index needs to be of class `RasterLayer`, but {type(raster)} was provided.')
 
     @property
-    def clean_cooking_index(self):
+    def clean_cooking_index(self) -> RasterLayer:
         """The Clean Cooking Index measures where demand and supply are simultaneously higher.
 
-        This index is generated by calling the :meth:`get_clean_cooking_index` method, which produces an aggregated
+        This index is generated by calling the :meth:`set_clean_cooking_index` method, which produces an aggregated
         measure of the :attr:`demand_index` and the :attr:`supply_index`. Areas with high demand and high supply get
         a higher clean cooking index.
 
         See also
         --------
-        get_clean_cooking_index
+        set_clean_cooking_index
         demand_index
-        get_demand_index
+        set_demand_index
         supply_index
-        get_supply_index
+        set_supply_index
         assistance_need_index
-        get_assistance_need_index
+        set_assistance_need_index
         """
         if self._clean_cooking_index is None:
             raise ValueError('No `clean_cooking_index` was found, please calculate a clean cooking index by calling '
-                             'the `get_clean_cooking_index()` method with the relevant list of `datasets`.')
+                             'the `set_clean_cooking_index()` method with the relevant list of `datasets`.')
         return self._clean_cooking_index
 
     @clean_cooking_index.setter
@@ -649,22 +743,22 @@ class MCA(DataProcessor):
                              'provided.')
 
     @property
-    def assistance_need_index(self):
-        """The Clean Cooking Index measures where demand and supply are simultaneously higher.
+    def assistance_need_index(self) -> RasterLayer:
+        """The Assistance Need Index measures where demand and supply are simultaneously higher.
 
-        This index is generated by calling the :meth:`get_clean_cooking_index` method, which produces an aggregated
-        measure of the :attr:`demand_index` and the :attr:`supply_index`. Areas with high demand and high supply get
-        a higher clean cooking index.
+        This index is generated by calling the :meth:`set_assistance_need_index` method, which produces an aggregated
+        measure selected demand and supply datasets. The index identifies areas where market assistance is needed the
+        most, where the demand is high, but the ability to pay and access to supply may be low.
 
         See also
         --------
-        get_clean_cooking_index
+        set_clean_cooking_index
         demand_index
-        get_demand_index
+        set_demand_index
         supply_index
-        get_supply_index
+        set_supply_index
         assistance_need_index
-        get_assistance_need_index
+        set_assistance_need_index
         """
         if self._assistance_need_index is None:
             raise ValueError('No `assistance_need_index` was found, please calculate an assistance need index by '
@@ -681,7 +775,20 @@ class MCA(DataProcessor):
             raise ValueError('The assistance need index needs to be of class `RasterLayer`.')
 
     @staticmethod
-    def index(layers):
+    def index(layers: dict[dict[str, Union[VectorLayer, RasterLayer]]]) -> np.ndarray:
+        """Computes a standard index based on the ``layers`` provided.
+
+        Parameters
+        ----------
+        layers: dictionary of dictionaries
+            Dictionary containing the categories and their respective dictionaries of dataset names and
+            :class:`VectorLayer` or :class:`RasterLayer` layers.
+
+        Returns
+        -------
+        np.ndarray
+            The weighted average of the :attr:`RasterLayer.normalized` datasets based on their
+            defined :attr:`RasterLayer.weight`"""
         data = {}
         for k, i in layers.items():
             data.update(i)
@@ -710,7 +817,81 @@ class MCA(DataProcessor):
                 new_datasets[key][name] = layer
         return new_datasets
 
-    def get_index(self, datasets='all', buffer=False, name=None):
+    def get_index(self, datasets: dict[str, list[str]] = 'all',
+                  buffer: bool = False, name: Optional[str] = None):
+        """Computes a standard index based on the ``datasets`` provided.
+
+        It calls the general :meth:`index` method with the provided ``datasets``, normalizes the results including or
+        excluding areas defined by the buffer and returns a :class:`RasterLayer` with the computed data and the
+        :attr:`base_layer` :class:`RasterLayer.meta` information.
+
+        Parameters
+        ----------
+        datasets: dictionary of ``category``-``list of layer names`` pairs, default 'all'
+            Specifies which dataset(s) to use to compute the index.
+
+            .. code-block::
+                :caption: ``datasets`` example:
+
+                datasets={'category_1': ['layer_1', 'layer_2'],
+                          'category_2': [...]}
+
+        buffer: str, default ``False``
+            Whether to buffer the areas outside the :attr:`RasterLayer.distance_limit`.
+        name: str, optional
+            Name used to create the :class:`RasterLayer`
+
+        Returns
+        -------
+        :class:`RasterLayer`
+            The weighted average of the :attr:`RasterLayer.normalized` datasets based on their
+            defined :attr:`RasterLayer.weight`
+
+        Examples
+        --------
+        Clean cooking potential index for Biomass ICS created for Nepal:
+
+        >>> nepal.layers['Electricity']['Existing infra'].inverse = False
+        >>> nepal.layers['OnStove']['LPG_cost_mean'].inverse = False
+        >>> nepal.layers['Biomass']['Traveltime'].inverse = True
+        >>> nepal.layers['Demographics']['Wealth'].inverse = True
+        >>> nepal.layers['Demographics']['Population'].inverse = False
+        >>> nepal.layers['OnStove']['maximum_net_benefit_per_household'].inverse = False
+        >>> nepal.layers['OnStove']['available_biogas_mean'].inverse = True
+        ...
+        >>> nepal.layers['Electricity']['Existing infra'].distance_limit = None
+        >>> nepal.layers['OnStove']['LPG_cost_mean'].distance_limit = None
+        >>> nepal.layers['Biomass']['Traveltime'].distance_limit = None
+        >>> nepal.layers['Demographics']['Wealth'].distance_limit = None
+        >>> nepal.layers['Demographics']['Population'].distance_limit = None
+        >>> nepal.layers['OnStove']['maximum_net_benefit_per_household'].distance_limit = None
+        >>> nepal.layers['OnStove']['available_biogas_mean'].distance_limit = None
+        ...
+        >>> nepal.layers['Electricity']['Existing infra'].weight = 2.7
+        >>> nepal.layers['OnStove']['LPG_cost_mean'].weight = 3.3
+        >>> nepal.layers['Biomass']['Traveltime'].weight = 4.3
+        >>> nepal.layers['Demographics']['Wealth'].weight = 4.6
+        >>> nepal.layers['Demographics']['Population'].weight = 2
+        >>> nepal.layers['OnStove']['maximum_net_benefit_per_household'].weight = 4.1
+        >>> nepal.layers['OnStove']['available_biogas_mean'].weight = 3.3
+        ...
+        >>> biomass_ics_index = nepal.get_index(datasets={'Demographics': ['Population', 'Wealth'],
+        ...                                               'Electricity': ['Existing infra'],
+        ...                                               'Biomass': ['Traveltime'],
+        ...                                               'OnStove': ['LPG_cost_mean',
+        ...                                                           'maximum_net_benefit_per_household',
+        ...                                                           'available_biogas_mean']},
+        ...                                     buffer=True, name='Biomass ICS T3')
+
+        Plotting this index produces the following output:
+
+        **Biomass ICS clean cooking potential index created with OnStove**
+
+        .. figure:: ../images/clean_cooking_index.png
+           :width: 700
+           :alt: Clean cooking potential index created with OnStove
+           :align: center
+        """
         datasets = self._update_layers(datasets)
         self.normalize_rasters(datasets=datasets, buffer=buffer)
         layer = RasterLayer(normalization='MinMax')
@@ -720,13 +901,67 @@ class MCA(DataProcessor):
         layer.normalized.name = name
         return layer.normalized
 
-    def set_demand_index(self, datasets='all', buffer=False):
+    def set_demand_index(self, datasets: dict[str, list[str]] = 'all', buffer: bool = False):
+        """Computes the :attr:`demand_index` based on the ``datasets`` provided.
+
+        It calls the :meth:`get_index` method with the provided ``datasets``, which normalizes the results including or
+        excluding areas defined by the buffer and returns a :class:`RasterLayer` with the computed data and the
+        :attr:`base_layer` :class:`RasterLayer.meta` information. The output :class:`RasterLayer` is saved in the
+        :attr:`demand_index`attribute.
+
+        Parameters
+        ----------
+        datasets: dictionary of ``category``-``list of layer names`` pairs, default 'all'
+            Specifies which dataset(s) to use to compute the index.
+
+            .. code-block::
+                :caption: ``datasets`` example:
+
+                datasets={'category_1': ['layer_1', 'layer_2'],
+                          'category_2': [...]}
+
+        buffer: str, default ``False``
+            Whether to buffer the areas outside the :attr:`RasterLayer.distance_limit`.
+        """
         self.demand_index = self.get_index(datasets=datasets, buffer=buffer, name='Demand Index')
 
-    def set_supply_index(self, datasets='all', buffer=False):
+    def set_supply_index(self, datasets: dict[str, list[str]] = 'all', buffer: bool = False):
+        """Computes the :attr:`supply_index` based on the ``datasets`` provided.
+
+        It calls the :meth:`get_index` method with the provided ``datasets``, which normalizes the results including or
+        excluding areas defined by the buffer and returns a :class:`RasterLayer` with the computed data and the
+        :attr:`base_layer` :class:`RasterLayer.meta` information. The output :class:`RasterLayer` is saved in the
+        :attr:`supply_index`attribute.
+
+        Parameters
+        ----------
+        datasets: dictionary of ``category``-``list of layer names`` pairs, default 'all'
+            Specifies which dataset(s) to use to compute the index.
+
+            .. code-block::
+                :caption: ``datasets`` example:
+
+                datasets={'category_1': ['layer_1', 'layer_2'],
+                          'category_2': [...]}
+
+        buffer: str, default ``False``
+            Whether to buffer the areas outside the :attr:`RasterLayer.distance_limit`."""
         self.supply_index = self.get_index(datasets=datasets, buffer=buffer, name='Supply Index')
 
-    def set_clean_cooking_index(self, demand_weight=1, supply_weight=1, buffer=False):
+    def set_clean_cooking_index(self, demand_weight: float = 1, supply_weight: float = 1, buffer: bool = False):
+        """Computes the :attr:`clean_cooking_index` using the :attr:`demand_index` and the :attr:`supply_index`.
+
+        It computes the weighted average of the :attr:`demand_index` and the :attr:`supply_index` based on the
+        provided ``demand_weight`` and ``supply_weight``.
+
+        Parameters
+        ----------
+        demand_weight: float, default 1
+            Value used to weigh the :attr:`demand_index` dataset.
+        supply_weight: float, default 1
+            Value used to weigh the :attr:`supply_index` dataset.
+        buffer: str, default ``False``
+            Whether to buffer the areas outside the :attr:`RasterLayer.distance_limit`."""
         layer = RasterLayer(normalization='MinMax')
         layer.data = (demand_weight * self.demand_index.data + supply_weight * self.supply_index.data) / \
                      (demand_weight + supply_weight)
@@ -735,11 +970,31 @@ class MCA(DataProcessor):
         layer.normalized.name = 'Clean Cooking Potential Index'
         self.clean_cooking_index = layer.normalized
 
-    def set_assistance_need_index(self, datasets='all', buffer=False):
+    def set_assistance_need_index(self, datasets: dict[str, list[str]] = 'all', buffer: bool = False):
+        """Computes the :attr:`assistance_need_index` based on the ``datasets`` provided.
+
+        It calls the :meth:`get_index` method with the provided ``datasets``, which normalizes the results including or
+        excluding areas defined by the buffer and returns a :class:`RasterLayer` with the computed data and the
+        :attr:`base_layer` :class:`RasterLayer.meta` information. The output :class:`RasterLayer` is saved in the
+        :attr:`assistance_need_index` attribute.
+
+        Parameters
+        ----------
+        datasets: dictionary of ``category``-``list of layer names`` pairs, default 'all'
+            Specifies which dataset(s) to use to compute the index.
+
+            .. code-block::
+                :caption: ``datasets`` example:
+
+                datasets={'category_1': ['layer_1', 'layer_2'],
+                          'category_2': [...]}
+
+        buffer: str, default ``False``
+            Whether to buffer the areas outside the :attr:`RasterLayer.distance_limit`."""
         self.assistance_need_index = self.get_index(datasets=datasets, buffer=buffer, name='Assistance need index')
 
     @staticmethod
-    def autopct_format(values):
+    def _autopct_format(values):
         def my_format(pct):
             total = sum(values)
             val = int(round(pct * total / 100.0))
@@ -747,8 +1002,30 @@ class MCA(DataProcessor):
 
         return my_format
 
-    def plot_share(self, index='clean cooking potential index', layer=('demand', 'population'),
-                   title='Clean Cooking Potential Index', output_file=None):
+    def plot_share(self, index: str ='clean cooking potential index',
+                   layer: tuple[str, str] = ('demand', 'population'),
+                   title: str = 'Clean Cooking Potential Index',
+                   output_file: Optional[str] = None):
+        """Creates a pie chart showing five different classes of the index categorized from low to high.
+
+        Parameters
+        ----------
+        index: str, default ``clean cooking potential index``
+            Index to plot the share for.
+        layer: tuple of two str pairs, ``('demand', 'population')``
+            Category and layer name for the layer to use to calculate the shares. If ``('demand', 'population')``
+            then the population shares falling on each of the five categories is shown in the pie chart.
+        title: str, default ``'Clean Cooking Potential Index'``
+            Title of the plot.
+        output_file: str, optional
+            File name used to save the plot into the :attr:`output_directory`. If ``None``, then the plot is not saved,
+            only returned
+
+        Returns
+        -------
+        matplotlib.axes.Axes
+            The axes of the figure.
+        """
         levels = []
         if index.lower() in 'clean cooking potential index':
             data = self.clean_cooking_index.data
@@ -774,7 +1051,7 @@ class MCA(DataProcessor):
         fig, ax = plt.subplots(figsize=(7, 5))
 
         ax.pie(share,
-               autopct=self.autopct_format(np.array(share) / 1000),
+               autopct=self._autopct_format(np.array(share) / 1000),
                pctdistance=1.2, textprops={'fontsize': 16},
                startangle=140,
                colors=cmap.colors)
@@ -788,6 +1065,7 @@ class MCA(DataProcessor):
         if output_file:
             plt.savefig(os.path.join(self.output_directory, output_file),
                         dpi=150, bbox_inches='tight')
+        return ax
 
 
 class OnStove(DataProcessor):
@@ -812,16 +1090,35 @@ class OnStove(DataProcessor):
 
     Attributes
     ----------
-    rows
-    cols
-    specs
-    techs
-    base_fuel
-    energy_per_meal
-    gwp
-    clean_cooking_access_u
-    clean_cooking_access_r
-    electrified_weight
+    gdf: gpd.GeoDataFrame
+        GeoDataFrame containing the georeferenced information for every populated square kilometer of the study area.
+        This attribute gets created when calling the :meth:`population_to_dataframe` method.
+    rows: np.ndarray
+        Array containing the row indexes of each row of the :attr:`gdf` in relation to the spatial grid of the data.
+        Indicates the horizontal position of each data point.
+    cols: np.ndarray
+        Array containing the column indexes of each row of the :attr:`gdf` in relation to spatial grid of the data.
+        Indicates the vertical position of each data point.
+    specs: dict
+        Dictionary containing the socio-economic information of the study area. It gets created when reading the
+        `scenario file <https://onstove-documentation.readthedocs.io/en/latest/onstove_tool.html#socio-economic-data>`_
+        using the :meth:`read_scenario_data` method.
+    techs: dict of dict
+        Dictionary containing the technology names and classes. It gets created when reading the
+        `technology file <https://onstove-documentation.readthedocs.io/en/latest/onstove_tool.html#techno-economic-data>`_
+        using the :meth:`read_tech_data` method.
+    base_fuel: Technology
+        :class:`Technology` class containing information on the current technologies used in the study area. It gets
+        created using information from the :attr:`techs` and when the :meth:`set_base_fuel` method gets called.
+    energy_per_meal: float
+        Average energy required for cooking a standard meal (MJ).
+    gwp: dict
+        Dictionary containing values of Global Warming Potential (GWP) of relevant pollutants. Default values are for
+        100 year potential: ``{'co2': 1, 'ch4': 25, 'n2o': 298, 'co': 2, 'bc': 900, 'oc': -46}``.
+    clean_cooking_access_u: float
+        Percentage of clean cooking acces in urban settlements.
+    clean_cooking_access_r: float
+        Percentage of clean cooking acces in rural settlements.
     """
 
     normalize = Processes.normalize
@@ -838,7 +1135,6 @@ class OnStove(DataProcessor):
         self.base_fuel = None
         self.i = {}
         self.energy_per_meal = 3.64  # MJ
-        # TODO: remove from here and make it an input in the specs file
         self.gwp = {'co2': 1, 'ch4': 25, 'n2o': 298, 'co': 2, 'bc': 900, 'oc': -46}
         self.clean_cooking_access_u = None
         self.clean_cooking_access_r = None
@@ -854,7 +1150,13 @@ class OnStove(DataProcessor):
         self.gdf = gpd.GeoDataFrame()
 
     def read_scenario_data(self, path_to_config: str, delimiter=','):
-        """Reads the scenario data into a dictionary
+        """Reads the scenario data into a dictionary.
+
+        The scenario data (specifically the `Param` and `Value` columns)
+        are saved in a :attr:`specs` attribute of the OnStove class which is called with `model.specs` (model is substituted
+        for the name that you gave the model instance). The attribute is in the form of a dictionary where the keys are
+        the names given in the `Param` and the value is taken from the `Value`. See
+        `example <https://onstove-documentation.readthedocs.io/en/latest/onstove_tool.html#socio-economic-data>`_.
         """
         config = {}
         with open(path_to_config, 'r') as csvfile:
@@ -875,9 +1177,9 @@ class OnStove(DataProcessor):
                         raise ValueError("Config file data type not recognised.")
 
         self.specs.update(config)
-        self.check_scenario_data()
+        self._check_scenario_data()
 
-    def check_scenario_data(self):
+    def _check_scenario_data(self):
         """This function checks goes through all rows without default values needed in the socio-economic specification
         file to check whether they are included or not. If they are included nothing happens, otherwise a ValueError will
         be raised.
@@ -931,7 +1233,7 @@ class OnStove(DataProcessor):
 
         self.specs = {self._replace_dict.get(k, k): v for k, v in self.specs.copy().items()}
 
-    def techshare_sumtoone(self):
+    def _techshare_sumtoone(self):
         """
         Checks if the sum of shares in the technology dictionary is 1.0. 
         If it is not, it will adjust the shares to make the sum 1.0.
@@ -961,7 +1263,7 @@ class OnStove(DataProcessor):
             for name,tech in self.techs.items():
                 print(name,tech.current_share_urban)
 
-    def ecooking_adjustment(self):
+    def _ecooking_adjustment(self):
         """
         Checks whether the share of the population cooking with electricity
         is higher than the electrification rate in either rural and/or urban areas. If it is higher in rural 
@@ -1014,7 +1316,7 @@ class OnStove(DataProcessor):
             for name,tech in self.techs.items():
                 print(name,tech.current_share_urban)
 
-    def biogas_adjustment(self):
+    def _biogas_adjustment(self):
         """
         Checks whether the share of the population cooking with biogas entered in the tech specs
         is higher than what OnStove predicts is feasible given biogas availability. If it is higher, then the share of the population cooking 
@@ -1049,7 +1351,7 @@ class OnStove(DataProcessor):
             for name, tech in self.techs.items():
                 print(name, tech.current_share_rural)
 
-    def pop_tech(self):
+    def _pop_tech(self):
         """
         Calculates the number of people cooking with each fuel in rural and urban areas
         based upon the technology shares and population in rural and urban areas. These values are then added
@@ -1062,7 +1364,7 @@ class OnStove(DataProcessor):
             tech.population_cooking_rural = tech.current_share_rural * self.gdf.loc[~isurban, 'Calibrated_pop'].sum()
             tech.population_cooking_urban = tech.current_share_urban * self.gdf.loc[isurban, 'Calibrated_pop'].sum()
     
-    def techshare_allocation(self, tech_dict):
+    def _techshare_allocation(self, tech_dict):
         """
         Calculates the baseline population cooking with each technology in each urban and rural square kilometer.
         The function takes a stepwise approach to allocating population to each cooking technology:
@@ -1139,12 +1441,24 @@ class OnStove(DataProcessor):
             tech.pop_sqkm = tech.pop_sqkm / self.gdf["Calibrated_pop"]
         
     def set_base_fuel(self, techs: list = None):
-        """
-        Defines the base fuel properties according to the technologies
-        tagged as is_base = True or a list of technologies as input.
-        If no technologies are passed as input and no technologies are tagged
-        as is_base = True, then it calculates the base fuel properties considering
-        all technologies in the model
+        """Defines the base fuel properties according to the technologies currently used in the study area.
+
+        The user can either set `is_base = True` to a subclass of the technology class (e.g. biogas or LPG).
+        This would then assume that everyone in the study area use said technology currently. If no `is_base = True` is
+        given the base fuel stoves are calculated using the `current_share_urban` and `current_share_rural` attributes
+        of each subclass.
+
+        Once the current share of each technology in the base year is determined, the current situation is determined
+        in regard to costs, carbon emissions and health related emissions.
+
+        See also
+        --------
+        Technology.discounted_inv
+        LPG.transportation_cost
+        Technology.total_time
+        Biogas.required_energy_hh
+        Technology.health_parameters
+        Technology.discount_fuel_cost
         """
         if techs is None:
             techs = list(self.techs.values())
@@ -1176,17 +1490,17 @@ class OnStove(DataProcessor):
 
             # base_tech_types = [type(tech) for tech in base_fuels.values()]
 
-            self.techshare_sumtoone()
-            self.ecooking_adjustment()
+            self._techshare_sumtoone()
+            self._ecooking_adjustment()
             base_fuels["Biogas"].total_time(self)
             required_energy_hh = base_fuels["Biogas"].required_energy_hh(self)
             factor = self.gdf['biogas_energy'] / (required_energy_hh * self.gdf['Households'])
             factor[factor > 1] = 1
             base_fuels["Biogas"].factor = factor
             base_fuels["Biogas"].households = self.gdf['Households'] * factor
-            self.biogas_adjustment()
-            self.pop_tech()
-            self.techshare_allocation(base_fuels)
+            self._biogas_adjustment()
+            self._pop_tech()
+            self._techshare_allocation(base_fuels)
 
             for name, tech in base_fuels.items():
 
@@ -1222,8 +1536,15 @@ class OnStove(DataProcessor):
             self.base_fuel = base_fuel
 
     def read_tech_data(self, path_to_config: str, delimiter=','):
-        """
-        Reads the technology data from a csv file into a dictionary
+        """Reads the technology data from a csv file into a dictionary of dictionaries.
+
+        The techno-economic data (specifically the `Fuel`, `Param` and `Value` columns)
+        are saved in a :attr:`techs` attribute of the OnStove class which is called with `model.techs` (model is substituted
+        for the name that you gave the model instance). The attribute is in the form of a dictionary of dictionaries
+        where the first level is defined by the data in the `Fuel` columns (e.g. Biogas, called with
+        `model.techs['Biogas']`). Each sub-dictionary in turns has keys and values from the `Param` and `Value` columns
+        (e.g. `model.techs['Biogas'].inv_cost`). See
+        `example <https://onstove-documentation.readthedocs.io/en/latest/onstove_tool.html#techno-economic-data>`_
         """
         techs = {}
         with open(path_to_config, 'r') as csvfile:
@@ -1399,8 +1720,10 @@ class OnStove(DataProcessor):
 
     def calibrate_current_pop(self):
         """Calibrates the spatial population in each cell according to the user defined population in the start year
-        (``Population_start_year`` in the :attr:`specs` dictionary) and saves it in the ``Calibrated_pop`` column of
-        the main GeoDataFrame (:attr:`gdf`).
+        (``Population_start_year`` in the :attr:`specs` dictionary).
+
+        The function does not return anything but the resulting calibration is saved in a column of the
+        main GeoDataFrame (:attr:`gdf`) (``Calibrated_pop``).
 
         See also
         --------
@@ -1494,27 +1817,29 @@ class OnStove(DataProcessor):
 
         It uses the coordinates of the population points (previously extracted with the :meth:`population_to_dataframe`
         method) to either sample the values from the dataset (if ``sample`` is used) or read the :attr:`rows` and
-        :attr:`cols` from the array (if ``read`` is used). The further requires that the raster dataset is aligned with
+        :attr:`cols` from the array (if ``read`` is used). The latter requires that the raster dataset is aligned with
         the used population layer.
 
         Parameters
         ----------
         layer: RasterLayer or path to the raster
-            Raster layer to extract values from. If the method ``sample`` is used, the layer must be provided as the
+            Raster layer to extract values from. If the method ``sample`` is used, this must be provided as the
             path to the raster file.
         name: str, optional
-            Name to use for the column of the extracted data in the :attr:`gdf`.
+            Name to use for the column of the extracted data in the :attr:`gdf`. If name is not given the raster data
+            will be returned as a numpy array.
         method: str, default 'sample'
             Method to use when extracting the data. If ``sample``, the values will be sampled using the coordinates of
-            the point of the GeoDataFrame (:attr:`gdf`), which have been previously defined by the population layer. if
-            ``read``, the values are extracted using the the :attr:`rows` and :attr:`cols` attributes, which have been
+            the point of the GeoDataFrame (:attr:`gdf`), which have been previously defined by the population layer.If
+            ``read``, the values are extracted using the :attr:`rows` and :attr:`cols` attributes, which have been
             previously extracted using the population layer.
         fill_nodata_method: str, optional
-            Method to use to fill the no data. Currently only ``interpolate`` is available.
+            Method to use to fill the no data cells. Current options are ``interpolate`` and ``nearest``. ``nearest`` is
+            best suited for discrete data where values between the discrete classes are not allowed.
         fill_default_value: float or int, default 0
             Default value to use to fill in the no data. This will be used for cells that fall outside the search
-            radius (currently of 100) if the ``interpolate`` method is selected, and for all the nodata values if
-            ``None`` is used as method.
+            radius (currently 100) if the ``interpolate`` method is selected, ignored if ``nearest`` is selected
+            and for all the nodata values if ``None`` is used as method.
         """
         layer = raster_setter(layer)
         data = None
@@ -1566,13 +1891,18 @@ class OnStove(DataProcessor):
 
         The GHS dataset is used to determine which settlements are urban and which are rural in the analysis. Areas
         that have coding of either 30, 23 or 22 are considered urban, while the rest are rural. It saves the
-        binary (1 for urban, 0 for rural) classification as a column in the main GeoDataFrame (:attr:`gdf`) with the
-        name of ``IsUrban``.
+        values of the dataset in the ``IsUrban`` column of the main GeoDataFrame (:attr:`gdf`). The urban - rural
+        calibration is important when determining current stove uses as well as whe calibrating population.
 
         Parameters
         ----------
         GHS_path: str
             Path to the GHS dataset
+
+        See also
+        --------
+        calibrate_current_pop
+        number_of_households
         """
         ghs = raster_setter(GHS_path)
         self.raster_to_dataframe(ghs, name="IsUrban", method='read', fill_nodata_method='nearest')
@@ -1596,7 +1926,7 @@ class OnStove(DataProcessor):
 
         self.number_of_households()
 
-    def calibrate_urban_manual(self):
+    def _calibrate_urban_manual(self):
         """Calibrates the urban rural split based on population density.
 
         It uses the ``Calibrated_pop`` column of the main GeoDataFrame (:attr:`gdf`) and the current national urban
@@ -1639,7 +1969,6 @@ class OnStove(DataProcessor):
         See also
         --------
         calibrate_urban_rural_split
-        calibrate_urban_manual
         calibrate_current_pop
         read_scenario_data
         """
@@ -1657,7 +1986,7 @@ class OnStove(DataProcessor):
         Time is monetized using the minimum wage in the study area, defined in the :attr:`specs` dictionary, and a
         geospatial representation of wealth, which can be either a relative wealth index or a poverty layer (see the
         :meth:`extract_wealth_index` method). The minimum wage value is then distributed spatially using an upper limit
-        of 0.5 times the minimung wage in the wealthier regions and an lower limit of 0.2 in the poorest regions.
+        of 0.5 times the minimung wage in the wealthier regions and a lower limit of 0.2 in the poorest regions.
         """
         min_value = np.nanmin(self.gdf['relative_wealth'])
         max_value = np.nanmax(self.gdf['relative_wealth'])
@@ -1673,11 +2002,11 @@ class OnStove(DataProcessor):
         """Runs the model using the defined ``technologies`` as options to cook with.
 
         It loops through the ``technologies`` and calculates all costs, benefit and the net-benefit of cooking with
-        such technology relative to the current situation in every grid cell of the study area. Then, it calls the
-        :meth:`maximum_net_benefit` method to get the technology with highest net-benefit in each cell (and saves it
-        in the ``max_benefit_tech`` column of the :attr:`gdf`). Finally, it extracts indicators such as lives saved,
-        time saved, avoided emissions, health costs saved, opportunity cost gained, investment costs, fuel costs, and
-        O&M costs.
+        each technology relative to the current situation in every grid cell of the study area (the base line).
+        Then, it calls the :meth:`maximum_net_benefit` method to get the technology with highest net-benefit in each
+        cell (and saves it in the ``max_benefit_tech`` column of the :attr:`gdf`). Finally, it extracts indicators such
+        as lives saved, time saved, avoided emissions, health costs saved, opportunity cost gained, investment costs,
+        fuel costs, and O&M costs.
 
         Parameters
         ----------
@@ -1687,13 +2016,17 @@ class OnStove(DataProcessor):
 
             .. Note::
                All technology names passed need to match the names of technologies in the :attr:`techs` dictionary.
+               Note that it is not enough to only add the technology names in the techno-economic specs, they have to
+               be added here as well. There is also no requirement to have all of the stoves in techno-economic file
+               included in the run (some may only be relevant for the base line)
 
         restriction: bool, default True
-            Whether to have the restriction to only select technologies that produce a positive benefit compared to the
-            baseline.
+            Whether to have the restriction of only selecting technologies producing a positive benefit compared to the
+            baseline. This avoids selecting stoves simply due to them being cheaper.
 
         See also
         --------
+        set_base_fuel
         maximum_net_benefit
         extract_lives_saved
         extract_health_costs_saved
@@ -1784,7 +2117,7 @@ class OnStove(DataProcessor):
         """Extracts the technology or technology combinations producing the highest net-benefit in each cell.
 
         It saves the technology with highest net-benefit in the ``max_benefi_tech`` column of the :attr:`gdf`
-        GeoDataframe.
+        GeoDataframe. This also dictates the benefits and costs extracted in the extract functions.
 
         Parameters
         ----------
@@ -1792,12 +2125,22 @@ class OnStove(DataProcessor):
             Technologies to compare and select the one, or combination of two, that produces the highest net-benefit in
             each cell.
         restriction: bool, default True
-            Whether to have the restriction to only select technologies that produce a positive benefit compared to the
-            baseline.
+            Whether to have the restriction of only selecting technologies producing a positive benefit compared to the
+            baseline. This avoids selecting stoves simply due to them being cheaper.
 
         See also
         --------
         run
+        extract_lives_saved
+        extract_health_costs_saved
+        extract_time_saved
+        extract_opportunity_cost
+        extract_reduced_emissions
+        extract_emissions_costs_saved
+        extract_investment_costs
+        extract_fuel_costs
+        extract_om_costs
+        extract_salvage
         """
         net_benefit_cols = [col for col in self.gdf if 'net_benefit_' in col]
         benefits_cols = [col for col in self.gdf if 'benefits_' in col]
@@ -1977,8 +2320,32 @@ class OnStove(DataProcessor):
             index = self.gdf.loc[is_tech].index
             self.gdf.loc[is_tech, "emission_costs_avoided"] = self.techs[tech].decreased_carbon_costs[index]
 
-    def extract_wealth_index(self, wealth_index, file_type="csv", x_column="longitude", y_column="latitude",
-                             wealth_column="rwi"):
+    def extract_wealth_index(self, wealth_index: str, file_type: str = "csv", x_column: str =  "longitude",
+                             y_column: str = "latitude", wealth_column: str = "rwi"):
+
+        """Extracts the relative wealth index to a column called relative wealth in the :attr:`gdf`.
+
+        The relative wealth index is used to determine the value of time and the value of time saved in subsequent
+        calculations.
+
+        Parameters
+        ----------
+        wealth_index: str
+            The path to the wealth index data used
+        file_type: str, default "csv"
+            The file_type of the wealth index. The allowed file types are `csv`. `point`, `polygon` or `raster`
+        x_column: str, default "longitude"
+            The name of the column containing x-coordinates, only relevant when `file_type = csv`
+        y_column: str, default "latitude"
+            The name of the column containing y-coordinates, only relevant when `file_type = csv`
+        wealth_column: str, default "latitude"
+            The name of the column containing the wealth index, only relevant when file type is either `csv`, `point`
+            or `polygon`
+
+        See also
+        --------
+        get_value_of_time
+        """
 
         if file_type == "csv":
             df = pd.read_csv(wealth_index)
@@ -2159,6 +2526,8 @@ class OnStove(DataProcessor):
             * ``total``: the total value of the data accounting for all households in the cell.
             * ``per_100k``: the values are calculated per 100 thousand population withing each cell.
             * ``per_household``: average value per househol in each cell.
+        nodata: float or int
+            Defines nodata values to be ignored by the function.
 
         Returns
         -------
@@ -2285,7 +2654,7 @@ class OnStove(DataProcessor):
              title: Optional[str] = None,
              legend: bool = True, legend_title: str = '', legend_cols: int = 1,
              legend_position: tuple[float, float] = (1.02, 0.7),
-             legend_prop: dict = {'title': {'size': 12, 'weight': 'bold'}, 'size': 12},
+             legend_prop: Optional[dict] = None,
              stats: bool = False,
              stats_kwargs: Optional[dict] = None,
              scale_bar: Optional[dict] = None, north_arrow: Optional[dict] = None,
@@ -2293,22 +2662,27 @@ class OnStove(DataProcessor):
              figsize: tuple[float, float] = (6.4, 4.8),
              rasterized: bool = True,
              dpi: float = 150, save_as: Optional[str] = None,
-             save_style: bool = False, style_classes: int = 5):
+             save_style: bool = False, style_classes: int = 5) -> matplotlib.axes.Axes:
         """Plots a map from a desired column ``variable`` from the :attr:`gdf`.
+
+        The map can be for categorical or continuous data. If categorical, a legend will be created with the colors
+        of the categories. If continuous, a color bar will be created with the range of the data. For continuous data a
+        ``metric`` parameter can be passed indicating the desired statistic to be visualized. Moreover, continuous
+        data can be presented using ``cumulative_count`` or ``quantiles``.
 
         Parameters
         ----------
         variable: str
-            The column name from the :attr:`gdf` to use.
+            The column name from the :attr:`gdf` to plot.
         metric: str, default 'mean'
-            Metric to use to aggregate data. It is only used for non-categorical data. For available metrics see
+            Metric to use to aggregate data. It is only used for continuous data. For available metrics see
             :meth:`create_layer`.
         labels: dictionary of str key-value pairs, optional
             Dictionary with the keys-value pairs to use for the data categories. It is only used for categorical data---
             see :meth:`create_layer`.
         cmap: dictionary of str key-value pairs or str, default 'viridis'
             Dictionary with the colors to use for each data category if the data is categorical---see
-            :meth:`create_layer`. If the data is continuous, then a name af a color scale accepted y
+            :meth:`create_layer`. If the data is continuous, then a name of a color scale accepted by
             :doc:`matplotlib<matplotlib:tutorials/colors/colormaps>` should be passed.
         cumulative_count: array-like of float, optional
             List of lower and upper limits to consider for the cumulative count. If defined the map will be displayed
@@ -2318,16 +2692,18 @@ class OnStove(DataProcessor):
                :meth:`RasterLayer.cumulative_count`
 
         quantiles: array-like of float, optional
-            Quantile or sequence of quantiles to compute, which must be between 0 and 1 inclusive. If defined the map
-            will be displayed with the quantiles representation of the data.
+            Quantile or sequence of quantiles to compute, which must be between 0 and 1 inclusive
+            (``quantiles=(0.25, 0.5, 0.75, 1)``). If defined the map will be displayed with the quantiles
+            representation of the data.
 
             .. seealso::
                :meth:`RasterLayer.quantiles`
 
+        nodata: float or int, default ```np.nan`
+            Defines nodata values to be ignored when plotting.
         admin_layer: gpd.GeoDataFrame or VectorLayer, optional
             The administrative boundaries to plot as background. If no ``admin_layer`` is provided then the
-            :attr:``mask_layer`` will be used if available, if not then no boundaries will be ploted.
-
+            :attr:``mask_layer`` will be used if available, if not then no boundaries will be plotted.
         title: str, optional
             The title of the plot.
         legend: bool, default False
@@ -2344,10 +2720,31 @@ class OnStove(DataProcessor):
             defaults to ``{'title': {'size': 12, 'weight': 'bold'}, 'size': 12}``.
         stats: bool, default False
             Whether to display the statistics of the analysis in the map.
-        stats_position: array-like of float, default (1.05, 1)
-            Position of the upper-left corner of the statistics box measured in fraction of `x` and `y` axis.
-        stats_fontsize: int, default 12
-            The font size of the statistics text.
+        stats_kwargs: dictionary, optional
+            Dictionary of arguments to control the position and style of the statistics box.
+
+            .. code-block::
+                :caption: ``stats_kwargs`` default arguments
+
+                {'extra_stats': None, 'stats_position': (1.02, 0.9),
+                 'pad': 0, 'sep': 6, 'fontsize': 10,
+                'fontcolor': 'black', 'fontweight': 'normal',
+                'box_props': dict(boxstyle='round',
+                                  facecolor='#f1f1f1ff',
+                                  edgecolor='lightgray')}
+
+            .. code-block::
+                :caption: ``stats_kwargs`` other options
+
+                {'extra_stats': dict('StatA': value),
+                'fontsize': 10, 'stats_position': (1, 0.9),
+                'pad': 2, 'sep': 0, 'fontcolor': 'black',
+                'fontweight': 'normal',
+                'box_props': dict(facecolor='lightyellow',
+                                  edgecolor='black',
+                                  alpha=1,
+                                  boxstyle="sawtooth")}
+
         scale_bar: dict, optional
             Dictionary with the parameters needed to create a :class:`ScaleBar`. If not defined, no scale bar will be
             displayed.
@@ -2355,8 +2752,10 @@ class OnStove(DataProcessor):
             .. code-block::
                :caption: Scale bar dictionary example
 
-               dict(size=1000000, style='double', textprops=dict(size=8),
-                    linekw=dict(lw=1, color='black'), extent=0.01)
+               dict(size=1000000, style='double',
+                    textprops=dict(size=8), location=(1, 0),
+                    linekw=dict(lw=1, color='black'),
+                    extent=0.01)
 
             .. Note::
                See :func:`onstove.scale_bar` for more details
@@ -2383,10 +2782,18 @@ class OnStove(DataProcessor):
             :doc:`matplotlib:gallery/misc/rasterization_demo`.
         dpi: int, default 150
             The resolution of the figure in dots per inch.
+        save_as: str, optional
+            If a string is passed, then the map will be saved with that name and extension file in
+            the:attr:`output_directory` as ``name.pdf``, ``name.png``, ``name.svg``, etc.
         save_style: bool, default False
             Whether to save the style of the plot as a ``.sld`` file---see :meth:`onstove.RasterLayer.save_style`.
         style_classes: int, default 5
             number of classes to include in the ``.sld`` style.
+
+        Returns
+        -------
+        matplotlib.axes.Axes
+            The axes of the figure.
 
         Examples
         --------
@@ -2429,7 +2836,7 @@ class OnStove(DataProcessor):
         >>> north_arow_prop = dict(size=30, location=(0.92, 0.92), linewidth=0.5)
         ...
         >>> africa.plot('max_benefit_tech', labels=labels, cmap=cmap,
-        ...             stats=True, stats_position=(-0.002, 0.61), stats_fontsize=10,
+        ...             stats=True,
         ...             legend=True, legend_position=(0.03, 0.47),
         ...             legend_title='Maximum benefit cooking technology',
         ...             legend_prop={'title': {'size': 10, 'weight': 'bold'}, 'size': 10},
@@ -2518,7 +2925,6 @@ class OnStove(DataProcessor):
         # total_costs = (summary.loc['total', 'investment_costs'] + summary.loc['total', 'fuel_costs'] + 
                        # summary.loc['total', 'om_costs'] - summary.loc['total', 'salvage_value'])
 
-        
         deaths = TextArea(f"{deaths_avoided:,.0f} pp/yr", textprops=font_props)
         health = TextArea(f"{health_costs_avoided:,.2f} BUS$", textprops=font_props)
         emissions = TextArea(f"{reduced_emissions:,.2f} Mton", textprops=font_props)
@@ -2537,33 +2943,199 @@ class OnStove(DataProcessor):
 
         ax.add_artist(ab)
 
-    def to_image(self, variable, name=None, type='png', cmap='viridis', cumulative_count=None, quantiles=None,
-                 legend_position=(1.05, 1), admin_layer=None, title=None, dpi=300, labels=None, legend=True,
-                 legend_title='', legend_cols=1, rasterized=True, stats=False, 
-                 extra_stats: Optional[dict] = None, stats_position=(1.05, 0.5),
-                 stats_fontsize=12, metric='mean', scale_bar=None, north_arrow=None, figsize=(6.4, 4.8),
-                 legend_prop={'title': {'size': 12, 'weight': 'bold'}, 'size': 12}):
-        raster, codes, cmap = self.create_layer(variable, name=name, labels=labels, cmap=cmap, metric=metric)
+    def to_image(self, variable: str, name: str, metric='mean',
+             labels: Optional[dict[str, str]] = None,
+             cmap: Union[dict[str, str], str] = 'viridis',
+             cumulative_count: Optional[tuple[float, float]] = None,
+             quantiles: Optional[tuple[float]] = None,
+             nodata: Union[float, int] = np.nan,
+             admin_layer: Optional[Union[gpd.GeoDataFrame, VectorLayer]] = None,
+             title: Optional[str] = None,
+             legend: bool = True, legend_title: str = '', legend_cols: int = 1,
+             legend_position: tuple[float, float] = (1.02, 0.7),
+             legend_prop: dict = {'title': {'size': 12, 'weight': 'bold'}, 'size': 12},
+             stats: bool = False,
+             stats_kwargs: Optional[dict] = None,
+             scale_bar: Optional[dict] = None, north_arrow: Optional[dict] = None,
+             figsize: tuple[float, float] = (6.4, 4.8),
+             rasterized: bool = True,
+             dpi: float = 150):
+        """Saves a map from a desired column ``variable`` from the :attr:`gdf` into an image file.
+
+        The map can be for categorical or continuous data. If categorical, a legend will be created with the colors
+        of the categories. If continuous, a color bar will be created with the range of the data. For continuous data a
+        ``metric`` parameter can be passed indicating the desired statistic to be visualized. Moreover, continuous
+        data can be presented using ``cumulative_count`` or ``quantiles``.
+
+        Parameters
+        ----------
+        variable: str
+            The column name from the :attr:`gdf` to plot.
+        name: str
+            The map will be saved with that name and extension file in
+            the:attr:`output_directory` as ``name.pdf``, ``name.png``, ``name.svg``, etc.
+        metric: str, default 'mean'
+            Metric to use to aggregate data. It is only used for continuous data. For available metrics see
+            :meth:`create_layer`.
+        labels: dictionary of str key-value pairs, optional
+            Dictionary with the keys-value pairs to use for the data categories. It is only used for categorical data---
+            see :meth:`create_layer`.
+        cmap: dictionary of str key-value pairs or str, default 'viridis'
+            Dictionary with the colors to use for each data category if the data is categorical---see
+            :meth:`create_layer`. If the data is continuous, then a name of a color scale accepted by
+            :doc:`matplotlib<matplotlib:tutorials/colors/colormaps>` should be passed.
+        cumulative_count: array-like of float, optional
+            List of lower and upper limits to consider for the cumulative count. If defined the map will be displayed
+            with the cumulative count representation of the data.
+
+            .. seealso::
+               :meth:`RasterLayer.cumulative_count`
+
+        quantiles: array-like of float, optional
+            Quantile or sequence of quantiles to compute, which must be between 0 and 1 inclusive
+            (``quantiles=(0.25, 0.5, 0.75, 1)``). If defined the map will be displayed with the quantiles
+            representation of the data.
+
+            .. seealso::
+               :meth:`RasterLayer.quantiles`
+
+        nodata: float or int, default ```np.nan`
+            Defines nodata values to be ignored when plotting.
+        admin_layer: gpd.GeoDataFrame or VectorLayer, optional
+            The administrative boundaries to plot as background. If no ``admin_layer`` is provided then the
+            :attr:``mask_layer`` will be used if available, if not then no boundaries will be plotted.
+        title: str, optional
+            The title of the plot.
+        legend: bool, default False
+            Whether to display a legend---only applicable for categorical data.
+        legend_title: str, default ''
+            Title of the legend.
+        legend_cols: int, default 1
+            Number of columns to divide the rows of the legend.
+        legend_position: array-like of float, default (1.05, 1)
+            Position of the upper-left corner of the legend measured in fraction of `x` and `y` axis.
+        legend_prop: dict
+            Dictionary with the font properties of the legend. It can contain any property accepted by the ``prop``
+            parameter from :doc:`matplotlib.pyplot.legend<matplotlib:api/_as_gen/matplotlib.pyplot.legend>`. It
+            defaults to ``{'title': {'size': 12, 'weight': 'bold'}, 'size': 12}``.
+        stats: bool, default False
+            Whether to display the statistics of the analysis in the map.
+            .. code-block::
+                :caption: ``stats_kwargs`` default arguments
+
+                {'extra_stats': None, 'stats_position': (1.02, 0.9),
+                 'pad': 0, 'sep': 6, 'fontsize': 10,
+                'fontcolor': 'black', 'fontweight': 'normal',
+                'box_props': dict(boxstyle='round',
+                                  facecolor='#f1f1f1ff',
+                                  edgecolor='lightgray')}
+
+            .. code-block::
+                :caption: ``stats_kwargs`` other options
+
+                {'extra_stats': dict('StatA': value),
+                'fontsize': 10, 'stats_position': (1, 0.9),
+                'pad': 2, 'sep': 0, 'fontcolor': 'black',
+                'fontweight': 'normal',
+                'box_props': dict(facecolor='lightyellow',
+                                  edgecolor='black',
+                                  alpha=1,
+                                  boxstyle="sawtooth")}
+
+        scale_bar: dict, optional
+            Dictionary with the parameters needed to create a :class:`ScaleBar`. If not defined, no scale bar will be
+            displayed.
+
+            .. code-block::
+               :caption: Scale bar dictionary example
+
+               dict(size=1000000, style='double',
+                    textprops=dict(size=8), location=(1, 0),
+                    linekw=dict(lw=1, color='black'),
+                    extent=0.01)
+
+            .. Note::
+               See :func:`onstove.scale_bar` for more details
+
+        north_arrow: dict, optional
+            Dictionary with the parameters needed to create a north arrow icon in the map. If not defined, the north
+            icon won't be displayed.
+
+            .. code-block::
+               :caption: North arrow dictionary example
+
+               dict(size=30, location=(0.92, 0.92), linewidth=0.5)
+
+            .. Note::
+               See :func:`onstove.north_arrow` for more details
+
+        figsize: tuple of floats, default (6.4, 4.8)
+            The size of the figure in inches.
+        rasterized: bool, default True
+            Whether to rasterize the output.It converts vector graphics into a raster image (pixels). It can speed up
+            rendering and produce smaller files for large data sets---see more at
+            :doc:`matplotlib:gallery/misc/rasterization_demo`.
+        dpi: int, default 150
+            The resolution of the figure in dots per inch.
+        """
+        raster, codes, cmap = self.create_layer(variable, name=name, labels=labels, cmap=cmap, metric=metric,
+                                                nodata=nodata)
         if isinstance(admin_layer, gpd.GeoDataFrame):
             admin_layer = admin_layer
         elif not admin_layer:
             admin_layer = self.mask_layer.data
 
+        fig, ax = plt.subplots(1, 1, figsize=figsize, dpi=dpi)
         if stats:
-            fig, ax = plt.subplots(1, 1, figsize=figsize, dpi=dpi)
-            self._add_statistics(ax, stats_position, stats_fontsize, variable=variable, extra_stats=extra_stats)
-        else:
-            fig, ax = plt.subplots(1, 1, figsize=figsize, dpi=dpi)
+            self._add_statistics(ax, variable=variable, kwargs=stats_kwargs)
 
-        raster.save_image(self.output_directory, type=type, cmap=cmap, cumulative_count=cumulative_count,
+        raster.save_image(name=name, cmap=cmap, cumulative_count=cumulative_count,
                           quantiles=quantiles, categories=codes, legend_position=legend_position,
                           admin_layer=admin_layer, title=title, ax=ax, dpi=dpi,
                           legend=legend, legend_title=legend_title, legend_cols=legend_cols, rasterized=rasterized,
                           scale_bar=scale_bar, north_arrow=north_arrow, legend_prop=legend_prop)
 
+    def summary(self, total: bool = True, pretty: bool = True, labels: Optional[dict] = None,
+                variable: str = 'max_benefit_tech', remove_none: bool = False) -> pd.DataFrame:
+        """Creates a summary of the results grouped by the selected categorical `variable`.
 
-    # TODO: make this a property
-    def summary(self, total=True, pretty=True, labels=None, variable='max_benefit_tech', remove_none=False):
+        The method uses the categorical `variable` provided to group selected results of the :attr:`gdf` dataframe. It
+        produces summary values for the 'Calibrated_pop', 'Households', 'maximum_net_benefit', 'deaths_avoided',
+        'health_costs_avoided', 'time_saved', 'opportunity_cost_gained', 'reduced_emissions', 'emissions_costs_saved',
+        'investment_costs', 'fuel_costs', 'om_costs' and 'salvage_value' columns of the :attr:`gdf`.
+
+        Parameters
+        ----------
+        total: boolean, default `True`
+            If `True` it will include a 'Total' row in the summary dataframe, with totals for all parameters.
+        pretty: boolean, default `True`
+            If `True` the names of the columns in hte summary will be presented with enhanced names. Tha names will be:
+            'Max benefit technology', 'Population (Million)', 'Households (Millions)', 'Total net benefit (MUSD)',
+            'Total deaths avoided (pp/yr)', 'Health costs avoided (MUSD)', 'hours/hh.day',
+            'Opportunity cost avoided (MUSD)', 'Reduced emissions (Mton CO2eq)', 'Emissions costs saved (MUSD)',
+            'Investment costs (MUSD)', 'Fuel costs (MUSD)', 'O&M costs (MUSD)'and 'Salvage value (MUSD)'.
+        labels: dictionary of str key-value pairs, optional
+            Dictionary with the keys-value pairs to use for the data categories.
+
+            .. code-block:: python
+               :caption: Example of ``labels`` dictionary
+
+               {'Collected Traditional Biomass': 'Biomass',
+               'Collected Improved Biomass': 'Biomass ICS (ND)',
+               'Traditional Charcoal': 'Charcoal',
+               'Biomass Forced Draft': 'Biomass ICS (FD)',
+               'Pellets Forced Draft': 'Pellets ICS (FD)'}
+
+        variable: str, defalut 'max_benefit_tech'
+            Categorical variable used to group and summarize the data.
+        remove_none: boolean, default `False`
+            If `True` ```na`` and ``None`` values are ignored.
+
+        Returns
+        -------
+        pd.DataFrame
+            A dataframe containing the summary information grouped by the selected `variable`.
+        """
         dff = self.gdf.copy()
         if labels is not None:
             dff = self._re_name(dff, labels, variable)
@@ -2616,6 +3188,7 @@ class OnStove(DataProcessor):
     def plot_split(self, labels: Optional[dict[str, str]] = None,
                    cmap: Optional[dict[str, str]] = None,
                    x_variable: str = 'Calibrated_pop',
+                   fill: str = 'max_benefit_tech',
                    ascending: bool = True,
                    orientation: str = 'horizontal',
                    font_args: Optional[dict] = None,
@@ -2625,7 +3198,6 @@ class OnStove(DataProcessor):
                    theme_name: str = 'minimal',
                    height: float = 1.5, width: float = 2.5,
                    save_as: Optional[str] = None,
-                   fill: str ='max_benefit_tech',
                    dpi: int = 150) -> 'matplotlib.Figure':
         """Displays a bar plot with the population or households share using the technologies with highest net-benefits
         over the study area.
@@ -2636,36 +3208,40 @@ class OnStove(DataProcessor):
             Dictionary with the keys-value pairs to use for the data categories.
 
             .. code-block:: python
-               :caption: Example of labels dictionary
+               :caption: Example of ``labels`` dictionary
 
-               >>> labels = {'Collected Traditional Biomass': 'Biomass',
-               ...           'Collected Improved Biomass': 'Biomass ICS (ND)',
-               ...           'Traditional Charcoal': 'Charcoal',
-               ...           'Biomass Forced Draft': 'Biomass ICS (FD)',
-               ...           'Pellets Forced Draft': 'Pellets ICS (FD)'}
+               {'Collected Traditional Biomass': 'Biomass',
+               'Collected Improved Biomass': 'Biomass ICS (ND)',
+               'Traditional Charcoal': 'Charcoal',
+               'Biomass Forced Draft': 'Biomass ICS (FD)',
+               'Pellets Forced Draft': 'Pellets ICS (FD)'}
 
         cmap: dictionary of str key-value pairs, optional
             Dictionary with the colors to use for each technology.
 
             .. code-block:: python
-               :caption: Example of cmap dictionary
+               :caption: Example of ``cmap`` dictionary
 
-               >>> cmap = {'Biomass ICS (ND)': '#6F4070',
-               ...         'LPG': '#66C5CC',
-               ...         'Biomass': '#FFB6C1',
-               ...         'Biomass ICS (FD)': '#af04b3',
-               ...         'Pellets ICS (FD)': '#ef02f5',
-               ...         'Charcoal': '#364135',
-               ...         'Charcoal ICS': '#d4bdc5',
-               ...         'Biogas': '#73AF48'}
+               {'Biomass ICS (ND)': '#6F4070',
+               'LPG': '#66C5CC',
+               'Biomass': '#FFB6C1',
+               'Biomass ICS (FD)': '#af04b3',
+               'Pellets ICS (FD)': '#ef02f5',
+               'Charcoal': '#364135',
+               'Charcoal ICS': '#d4bdc5',
+               'Biogas': '#73AF48'}
 
         x_variable: str, default 'Calibrated_pop'
             The variable to use in the x axis. Two options are available ``Calibrated_pop`` and ``Households``.
+        fill: str, default 'max_benefit_tech'
+            Categorical variable used to color and group the bars.
+        ascending: boolean, default `True`
+            If `True` it will order the bars in ascending order from left to right.
         orientation: str, default 'horizontal'
             It defines the orientation of the bar plot, takes as options 'horizontal' or 'vertical'.
         font_args: dict, optional
             Dictionary with arguments for the general text of the plot such as text size. It defaults to
-            ``text_kwargs=dict(text=dict(size=9))``.
+            ``font_args=dict(size=10)``.
         annotation_kwargs: dict, optional
             Dictionary with arguments for the annotations text of the plot such as text size, color, vertical and
             horizontal alignment. It defaults to
@@ -2676,13 +3252,18 @@ class OnStove(DataProcessor):
         legend_kwargs: dict, optional
             Dictionary with arguments for the legend such as the legend position. It defaults to
             ``legend_kwargs=dict(legend_position='none')``.
+        theme_name: str, default 'minimal'
+            Theme to use for the plot. Available options are 'minimal' and 'classic' from the
+            :doc:`plotnine:generated/plotnine.themes` package.
         height: float, default 1.5
             The heihg of the figure in inches.
         width: float, default 2.5
             The width of the figure in inches.
         save_as: str, optional
-            If a string is passed, then the plot will be saved with that name as a ``pdf`` file in the
-            :attr:`output_directory`.
+            If a string is passed, then the plot will be saved with that name and extension file in
+            the:attr:`output_directory` as ``name.pdf``, ``name.png``, ``name.svg``, etc.
+        dpi: int, default 150
+            The resolution of the figure in dots per inch.
 
         Returns
         -------
@@ -2758,30 +3339,32 @@ class OnStove(DataProcessor):
             p.savefig(file, bbox_inches='tight', transparent=True, dpi=dpi)
         return p
 
-    def plot_costs_benefits(self, labels: Optional[dict[str, str]] = None,
+    def plot_costs_benefits(self, variable: str = 'max_benefit_tech',
+                            labels: Optional[dict[str, str]] = None,
                             cmap: Optional[dict[str, str]] = None,
                             font_args: Optional[dict] = None,
                             legend_args: Optional[dict] = None,
                             height: float = 1.5, width: float = 2.5,
                             save_as: Optional[str] = None,
-							variable: str = 'max_benefit_tech',
                             dpi: int = 150) -> 'matplotlib.Figure':
         """Displays a stacked bar plot with the aggregated total costs and benefits for the technologies with the
         highest net-benefits over the study area.
 
         Parameters
         ----------
+        variable: str, default 'max_benefit_tech'
+            Categorical variable to use to calculate the costs and benefits for (one stacked bar for each technology).
         labels: dictionary of str key-value pairs, optional
             Dictionary with the keys-value pairs to use for the technology categories.
 
             .. code-block:: python
-               :caption: Example of labels dictionary
+               :caption: Example of ``labels`` dictionary
 
-               >>> labels = {'Collected Traditional Biomass': 'Biomass',
-               ...           'Collected Improved Biomass': 'Biomass ICS (ND)',
-               ...           'Traditional Charcoal': 'Charcoal',
-               ...           'Biomass Forced Draft': 'Biomass ICS (FD)',
-               ...           'Pellets Forced Draft': 'Pellets ICS (FD)'}
+               {'Collected Traditional Biomass': 'Biomass',
+               'Collected Improved Biomass': 'Biomass ICS (ND)',
+               'Traditional Charcoal': 'Charcoal',
+               'Biomass Forced Draft': 'Biomass ICS (FD)',
+               'Pellets Forced Draft': 'Pellets ICS (FD)'}
 
         cmap: dictionary of str key-value pairs, optional
             Dictionary with the colors to use for each cost/benefit category.
@@ -2796,13 +3379,21 @@ class OnStove(DataProcessor):
                ...         'Om costs': '#fee0b6',
                ...         'Opportunity cost gained': '#d8daeb'}
 
+        font_args: dictionary, optional
+            A dictionary with font arguments. Default to ``font_args=dict(size=10, color='black')``.
+        legend_args: dictionary, optional
+            A dictionary with legend arguments. Default to ``legend_args=dict(legend_direction='vertical', ncol=1)``,
+            but you can give options as ``legend_args=dict(legend_position=(0.5, -0.6), legend_direction='horizontal',
+            ncol=2)``.
         height: float, default 1.5
             The heihg of the figure in inches.
         width: float, default 2.5
             The width of the figure in inches.
         save_as: str, optional
-            If a string is passed, then the plot will be saved with that name as a ``pdf`` file in the
-            :attr:`output_directory`.
+            If a string is passed, then the plot will be saved with that name and extension file in
+            the:attr:`output_directory` as ``name.pdf``, ``name.png``, ``name.svg``, etc.
+        dpi: int, default 150
+            The resolution of the figure in dots per inch.
 
         Returns
         -------
@@ -3010,6 +3601,7 @@ class OnStove(DataProcessor):
         return p
 
     def _plot_quantiles(self, hist, x_variable: str = 'relative_wealth', y_variable: str = 'Households'):
+        """Plots vertical lines in quantiles 1 and 3 of the histogram distribution"""
         # Add quantile lines
         q1, q3 = weighted_percentile(a=self.gdf[x_variable].values, q=(25, 75),
                                      weights=self.gdf[y_variable].values)
@@ -3046,8 +3638,10 @@ class OnStove(DataProcessor):
                           height: float = 1.5, width: float = 2.5,
                           save_as: Optional[str] = None,
                           dpi: int = 150) -> 'matplotlib.Figure':
-        """Displays a distribution plot with the net-benefits, benefits or costs for the technologies with the
-        highest net-benefits throughout the households of the study area.
+        """Displays a distribution plot of the stove mix in relation to a variable.
+
+        The distribution plot will show the count of househols using each stove-type in relation to the net-benefits,
+        benefits, costs or wealth over the study area.
 
         Parameters
         ----------
@@ -3058,65 +3652,83 @@ class OnStove(DataProcessor):
                 The ``box`` plot option is deprecated from version 0.1.3 to favor accurate representation of data.
                 Use ``histrogram`` instead.
 
+        fill: str, default 'max_benefit_tech'
+            The categorical variable to use for the color of the histogram bars. It is normally 'max_benefit_tech' as
+            we want to show the distribution of the optimal mix of stoves selected under the cost-benefit analisys.
         groupby: str, default 'None'
             Groups the results by urban/rural split. Available options are ``None``, ``isurban`` and ``urban-rural``.
-        variable: str, default 'net_benefit'
-            Variable to use for the distribution. Available options are ``net_benefit``, ``benefits`` and ``costs``.
+        variable: str, default 'wealth'
+            Variable to use for the distribution. Available options are ``net_benefit``, ``benefits``, ``costs`` and
+            ``wealth``.
         best_mix: bool, default True
-            Whether to plot only results for the highest net-benefit technologies, or all technologies.
+            Whether to plot only results for the highest net-benefit technologies, or all technologies evaluated.
         hh_divider: int, default 1
             Value used to scale the number of households. For example, if ``1000000`` is used, then the households will
-            be shown as millions.
+            be shown as millions (remember to change the `y_title` parameters in order to reflect this as
+            `y_title='Households (millions)'`).
         var_divider: int, default 1
             Value used to scale the analysed value. For example, if ``1000`` is used, then the variable will be divided
-            by ``1000``, this is useful to denote units in thousands.
+            by ``1000``, this is useful to denote units in thousands (remember to change the `x_title` parameters in
+            order to reflect this as `x_title='Costs (thousands)'`).
         labels: dictionary of str key-value pairs, optional
             Dictionary with the keys-value pairs to use for each technology.
 
             .. code-block:: python
-               :caption: Example of labels dictionary
+               :caption: Example of ``labels`` dictionary
 
-               >>> labels = {'Collected Traditional Biomass': 'Biomass',
-               ...           'Collected Improved Biomass': 'Biomass ICS (ND)',
-               ...           'Traditional Charcoal': 'Charcoal',
-               ...           'Biomass Forced Draft': 'Biomass ICS (FD)',
-               ...           'Pellets Forced Draft': 'Pellets ICS (FD)'}
+               {'Collected Traditional Biomass': 'Biomass',
+               'Collected Improved Biomass': 'Biomass ICS (ND)',
+               'Traditional Charcoal': 'Charcoal',
+               'Biomass Forced Draft': 'Biomass ICS (FD)',
+               'Pellets Forced Draft': 'Pellets ICS (FD)'}
 
         cmap: dictionary of str key-value pairs, optional
             Dictionary with the colors to use for technology.
 
             .. code-block:: python
-               :caption: Example of cmap dictionary
+               :caption: Example of ``cmap`` dictionary
 
-               >>> cmap = {'Biomass ICS (ND)': '#6F4070',
-               ...         'LPG': '#66C5CC',
-               ...         'Biomass': '#FFB6C1',
-               ...         'Biomass ICS (FD)': '#af04b3',
-               ...         'Pellets ICS (FD)': '#ef02f5',
-               ...         'Charcoal': '#364135',
-               ...         'Charcoal ICS': '#d4bdc5',
-               ...         'Biogas': '#73AF48'}
+               {'Biomass ICS (ND)': '#6F4070',
+               'LPG': '#66C5CC',
+               'Biomass': '#FFB6C1',
+               'Biomass ICS (FD)': '#af04b3',
+               'Pellets ICS (FD)': '#ef02f5',
+               'Charcoal': '#364135',
+               'Charcoal ICS': '#d4bdc5',
+               'Biogas': '#73AF48'}
 
         x_title: str, optional
-            Title of the x axis. If `None` is provided, then a default of ``Net benefit per household (USD/yr)`` or
-            ``Costs per household (USD/yr)`` will be used depending on the evaluated variable.
+            Title of the x axis. If `None` is provided, then a default of ``Net benefit per household (USD/yr)``,
+            ``Costs per household (USD/yr)`` and ``Relative wealth index (-)`` will be used depending on the evaluated
+            variable.
         y_title: str, default 'Households'
             Title of the y axis.
+        groupby_kwargs: dict, optional.
+            Dictionary of properties of the groups. You can adjust the `scales` making them fixed or free and, if `None`
+            is used as `groupby`, the number of colums to split the results per category (`fill`). It defaults to
+            ``groupby_kwargs=dict(ncol=1, scales='fixed')``.
+        quantiles: boolean, default `False`.
+            Boolean to indicate wheter to plot the quantile lines (for Q1 and Q3 only).
         kwargs: dict, optional.
-            Dictionary of style arguments passed to the plotting function. For ``histrogram`` the default values used
-            are ``dict(binwidth=binwidth, alpha=0.5, size=0.3)``, where ``banwidth`` is calculated as 5% of the range of
+            Dictionary of style arguments passed to the plotting function. The default values used are
+            ``dict(binwidth=binwidth, alpha=0.8, size=0.3)``, where ``binwidth`` is calculated as 5% of the range of
             the data.
         font_args: dict, optional.
-            Dictionary of font arguments passed to the plotting function. If ``None`` is provided, default values of
+            Dictionary of font arguments passed to the plotting function. If ``None`` is provided, defaults to
             ``dict(size=6)``. For available options see the :doc:`plotnine:generated/plotnine.themes.element_text`
             object.
+        theme_name: str, default 'minimal'
+            Theme to use for the plot. Available options are 'minimal' and 'classic' from the
+            :doc:`plotnine:generated/plotnine.themes` package.
         height: float, default 1.5
             The heihg of the figure in inches.
         width: float, default 2.5
             The width of the figure in inches.
         save_as: str, optional
-            If a string is passed, then the plot will be saved with that name as a ``pdf`` file in the
-            :attr:`output_directory`.
+            If a string is passed, then the plot will be saved with that name and extension file in
+            the:attr:`output_directory` as ``name.pdf``, ``name.png``, ``name.svg``, etc.
+        dpi: int, default 150
+            The resolution of the figure in dots per inch.
 
         Returns
         -------
