@@ -178,7 +178,7 @@ class DataProcessor:
                                      user=user,
                                      password=password)
 
-    def add_layer(self, category: str, name: str, path: str, layer_type: str, query: str = None,
+    def add_layer(self, path: str, layer_type: str, category: str = 'Other', name: str = None, query: str = None,
                   postgres: bool = False, base_layer: bool = False, resample: str = 'nearest',
                   normalization: str = 'MinMax', inverse: bool = False, distance_method: Optional[str] = None,
                   distance_limit: Optional[Callable[[np.ndarray], np.ndarray]] = None,
@@ -250,6 +250,9 @@ class DataProcessor:
         rescale: bool, default False
             Sets the default value for the ``rescale`` attribute. See the ``rescale`` parameter of :class:`RasterLayer`.
         """
+        if name == None:
+            name = os.path.splitext(os.path.basename(path))[0]
+
         if layer_type == 'vector':
             if base_layer == True:
                 warn("A vector layer has been given as base_layer. The base_layer can only be of type raster. base_layer"
@@ -317,7 +320,7 @@ class DataProcessor:
         else:
             self.layers[category] = {name: layer}
 
-    def add_mask_layer(self, category: str, name: str, path: str,
+    def add_mask_layer(self, path: str, category: str = 'Other', name: str = None,
                        query: str = None, postgres: bool = False, save_layer: bool = False):
         """
         Adds a vector layer to self.mask_layer, which will be used to mask all
@@ -341,6 +344,8 @@ class DataProcessor:
         save_layer: bool default False
             Whether to save the dataset to disk or not
         """
+        if name == None:
+            name = os.path.splitext(os.path.basename(path))[0]
         try:
             if postgres:
                 self.mask_layer = VectorLayer(category, name, path, self.conn, query)
