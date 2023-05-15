@@ -102,23 +102,23 @@ class DataProcessor:
         the grid cell of this raster to align all other rasters.
     """
 
-    def __init__(self, project_crs: Optional[Union['pyproj.CRS', int]] = None,
-                 cell_size: tuple[float] = None, output_directory: str = '.'):
-
+    def __init__(self, project_crs: Optional[Union['pyproj.CRS', int]] = 3395,
+                 cell_size: tuple[float] = (1000,1000), output_directory: str = '.'):
+        """
+        Initializes the class and sets an empty layers dictionaries.
+        """
         unit_test = CRS.from_user_input(project_crs)
         unit_name = unit_test.axis_info[0].unit_name
 
         if unit_name != 'metre':
             warn("The unit of the selected coordinate system is " + unit_name + '. OnStove reqiures the unit to be in '
                 'metres. Check https://epsg.io/ for potential coordinate systems to use.')
+            project_crs = 3395
         if cell_size != (1000, 1000):
             warn("The cell size selected is " + str(cell_size) + '. The current version of OnStove requires 1 sq. km '
                                                             'resolution. Your cell size has been updated')
             cell_size = (1000, 1000)
 
-        """
-        Initializes the class and sets an empty layers dictionaries.
-        """
         self.layers = {}
         self.project_crs = project_crs
         self.cell_size = cell_size
@@ -821,8 +821,8 @@ class OnStove(DataProcessor):
 
     normalize = Processes.normalize
 
-    def __init__(self, project_crs: Optional[Union['pyproj.CRS', int]] = None,
-                 cell_size: float = None, output_directory: str = '.'):
+    def __init__(self, project_crs: Optional[Union['pyproj.CRS', int]] = 3395,
+                 cell_size: float = (1000,1000), output_directory: str = '.'):
         """
         Initializes the class and sets an empty layers dictionaries.
         """
@@ -1970,7 +1970,7 @@ class OnStove(DataProcessor):
         for tech in self.gdf['max_benefit_tech'].unique():
             is_tech = self.gdf['max_benefit_tech'] == tech
             index = self.gdf.loc[is_tech].index
-            self.gdf.loc[is_tech, "emissions_costs_saved"] = self.techs[tech].decreased_carbon_costs[index]
+            self.gdf.loc[is_tech, "emission_costs_avoided"] = self.techs[tech].decreased_carbon_costs[index]
 
     def extract_wealth_index(self, wealth_index, file_type="csv", x_column="longitude", y_column="latitude",
                              wealth_column="rwi"):
@@ -2563,7 +2563,7 @@ class OnStove(DataProcessor):
         if labels is not None:
             dff = self._re_name(dff, labels, variable)
         for attribute in ['maximum_net_benefit', 'deaths_avoided', 'health_costs_avoided', 'time_saved',
-                          'opportunity_cost_gained', 'reduced_emissions', 'emissions_costs_saved',
+                          'opportunity_cost_gained', 'reduced_emissions', 'emission_costs_avoided',
                           'investment_costs', 'fuel_costs', 'om_costs', 'salvage_value']:
             dff[attribute] *= dff['Households']
         summary = dff.groupby([variable]).agg({'Calibrated_pop': lambda row: np.nansum(row) / 1000000,
@@ -2575,7 +2575,7 @@ class OnStove(DataProcessor):
                                                          'opportunity_cost_gained': lambda row: np.nansum(
                                                              row) / 1000000,
                                                          'reduced_emissions': lambda row: np.nansum(row) / 1000000000,
-                                                         'emissions_costs_saved': lambda row: np.nansum(row) / 1000000,
+                                                         'emission_costs_avoided': lambda row: np.nansum(row) / 1000000,
                                                          'investment_costs': lambda row: np.nansum(row) / 1000000,
                                                          'fuel_costs': lambda row: np.nansum(row) / 1000000,
                                                          'om_costs': lambda row: np.nansum(row) / 1000000,
@@ -2600,7 +2600,7 @@ class OnStove(DataProcessor):
                                     'time_saved': 'hours/hh.day',
                                     'opportunity_cost_gained': 'Opportunity cost avoided (MUSD)',
                                     'reduced_emissions': 'Reduced emissions (Mton CO2eq)',
-                                    'emissions_costs_saved': 'Emissions costs saved (MUSD)',
+                                    'emission_costs_avoided': 'Emission costs avoided (MUSD)',
                                     'investment_costs': 'Investment costs (MUSD)',
                                     'fuel_costs': 'Fuel costs (MUSD)',
                                     'om_costs': 'O&M costs (MUSD)',
@@ -2787,7 +2787,7 @@ class OnStove(DataProcessor):
                >>> cmap = {'Health costs avoided': '#542788',
                ...         'Investment costs': '#b35806',
                ...         'Fuel costs': '#f1a340',
-               ...         'Emissions costs saved': '#998ec3',
+               ...         'Emission costs avoided': '#998ec3',
                ...         'Om costs': '#fee0b6',
                ...         'Opportunity cost gained': '#d8daeb'}
 
@@ -2811,7 +2811,7 @@ class OnStove(DataProcessor):
         df['om_costs'] *= -1
 
         value_vars = ['investment_costs', 'fuel_costs', 'om_costs',
-                      'health_costs_avoided', 'emissions_costs_saved', 'opportunity_cost_gained']
+                      'health_costs_avoided', 'emission_costs_avoided', 'opportunity_cost_gained']
 
         dff = df.melt(id_vars=[variable], value_vars=value_vars)
 
@@ -2819,7 +2819,7 @@ class OnStove(DataProcessor):
 
         if cmap is None:
             cmap = {'Health costs avoided': '#542788', 'Investment costs': '#b35806',
-                    'Fuel costs': '#f1a340', 'Emissions costs saved': '#998ec3',
+                    'Fuel costs': '#f1a340', 'Emission costs avoided': '#998ec3',
                     'Om costs': '#fee0b6', 'Opportunity cost gained': '#d8daeb'}
 
         _font_args = dict(size=10)
@@ -2832,7 +2832,7 @@ class OnStove(DataProcessor):
 
         tech_list = df.sort_values('Calibrated_pop')[variable].tolist()
         cat_order = ['Health costs avoided',
-                     'Emissions costs saved',
+                     'Emission costs avoided',
                      'Opportunity cost gained',
                      'Investment costs',
                      'Fuel costs',
@@ -3120,7 +3120,7 @@ class OnStove(DataProcessor):
         """
         if best_mix:
             df = self.gdf[[fill, 'Calibrated_pop', 'Households', 'maximum_net_benefit',
-                           'health_costs_avoided', 'opportunity_cost_gained', 'emissions_costs_saved',
+                           'health_costs_avoided', 'opportunity_cost_gained', 'emission_costs_avoided',
                            'investment_costs', 'salvage_value', 'fuel_costs', 'om_costs', 
                            'relative_wealth', 'value_of_time']].copy()
             df = self._re_name(df, labels, fill)
