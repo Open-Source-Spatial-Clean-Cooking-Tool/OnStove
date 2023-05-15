@@ -113,7 +113,8 @@ class DataProcessor:
 
         if unit_name != 'metre':
             warn("The unit of the selected coordinate system is " + unit_name + '. OnStove requires the unit to be in '
-                'metres. Check https://epsg.io/ for potential coordinate systems to use.', Warning, stacklevel=2)
+                'metres. Check https://epsg.io/ for potential coordinate systems to use. Using 3395 as default.',
+                 Warning, stacklevel=2)
             project_crs = 3395
         if cell_size != (1000, 1000):
             warn("The cell size selected is " + str(cell_size) + '. The current version of OnStove requires 1 sq. km '
@@ -1799,10 +1800,11 @@ class OnStove(DataProcessor):
             The raster layer containing the population count data. If not defined, then the :attr:`base_layer` dataset
             will be used. If ``layer`` is not provided and :attr:`base_layer` is None, then an error will be raised.
         """
-
+        layer = raster_setter(layer, category='Demographics', name='Population')
         if isinstance(layer, RasterLayer):
             data = layer.data.copy()
             meta = layer.meta
+            self.base_layer = layer
         else:
             if self.base_layer:
                 data = self.base_layer.data.copy()
@@ -2904,7 +2906,7 @@ class OnStove(DataProcessor):
                               classes=style_classes)
 
         if isinstance(save_as, str):
-            plt.savefig(save_as, dpi=dpi, bbox_inches='tight', transparent=True)
+            plt.savefig(os.path.join(self.output_directory, save_as), dpi=dpi, bbox_inches='tight', transparent=True)
         return ax
 
     def _add_statistics(self, ax, variable='max_benefit_tech', kwargs: Optional[dict] = None):
@@ -2914,7 +2916,7 @@ class OnStove(DataProcessor):
         if kwargs is not None:
             _kwargs = deep_update(_kwargs, kwargs)
 
-        font_props = dict(fontsize=_kwargs['fontsize'], color=kwargs['fontcolor'], weight=kwargs['fontweight'])
+        font_props = dict(fontsize=_kwargs['fontsize'], color=_kwargs['fontcolor'], weight=_kwargs['fontweight'])
 
         extra_text = []
         extra_values = []
