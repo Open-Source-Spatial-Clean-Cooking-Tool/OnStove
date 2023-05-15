@@ -1255,18 +1255,27 @@ class OnStove(DataProcessor):
         if sharesumrural != 1:
             for item in self.techs.values():
                 item.current_share_rural = item.current_share_rural/sharesumrural
-            print("The sum of rural technology shares you provided in the tech specs does not equal 1.0. \nThe shares have been adjusted to make the sum 1.0 as follows. \nIf you are not satisfied then please adjust the shares to your liking manually in the tech specs file.")
+            print("")
+            print("The sum of rural technology shares you provided in the tech specs does not equal 1.0.\n"
+                  "The shares have been adjusted to make the sum 1.0 as follows.\n"
+                  "If you are not satisfied then please adjust the shares to your liking manually in the tech specs file:")
             for name,tech in self.techs.items():
-                print(name,tech.current_share_rural)
+                print('     ','-',name,f"{tech.current_share_rural*100:,.3f}", "%")
+            print("")
+
 
         sharesumurban = sum(item['current_share_urban'] for item in self.techs.values())
 
         if sharesumurban != 1:
             for item in self.techs.values():
                 item.current_share_urban = item.current_share_urban/sharesumurban
-            print("The sum of urban technology shares you provided in the tech specs does not equal 1.0. \nThe shares have been adjusted to make the sum 1.0 as follows. \nIf you are not satisfied then please adjust the shares to your liking manually in the tech specs file.")
+            print("")
+            print("The sum of urban technology shares you provided in the tech specs does not equal 1.0.\n"
+                  "The shares have been adjusted to make the sum 1.0 as follows.\n"
+                  "If you are not satisfied then please adjust the shares to your liking manually in the tech specs file:")
             for name,tech in self.techs.items():
-                print(name,tech.current_share_urban)
+                print('     ','-',name,f"{tech.current_share_urban*100:,.3f}", "%")
+            print("")
 
     def _ecooking_adjustment(self):
         """
