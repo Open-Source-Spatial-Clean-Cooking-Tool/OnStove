@@ -75,13 +75,13 @@ class DataProcessor:
 
     Parameters
     ----------
-    project_crs: pyproj.CRS or int, optional
+    project_crs: pyproj.CRS or int, default 3395
         The coordinate system of the project. The value can be anything accepted by
         :doc:`geopandas:docs/reference/api/geopandas.GeoDataFrame.to_crs`, such as an authority string (eg “EPSG:4326”),
         a WKT string or an EPSG int. If defined all datasets added to the ``DataProcessor`` will be reprojected to
         this crs when calling the :meth:`reproject_layers` method. If not defined then the ``crs`` of the
         :attr:`base_layer` will be used.
-    cell_size: tuple of float (width, height), optional
+    cell_size: tuple of float (width, height), default (1000, 1000)
         The desired cell size of the raster layers. It should be defined in the units of the used ``crs``. If defined,
         it will be used to rescale all datasets when calling the :meth:`align` method. If not defined, the
         ``cell_size`` of the :attr:`base_layer` will be used.
@@ -111,7 +111,7 @@ class DataProcessor:
         unit_name = unit_test.axis_info[0].unit_name
 
         if unit_name != 'metre':
-            warn("The unit of the selected coordinate system is " + unit_name + '. OnStove reqiures the unit to be in '
+            warn("The unit of the selected coordinate system is " + unit_name + '. OnStove requires the unit to be in '
                 'metres. Check https://epsg.io/ for potential coordinate systems to use.', Warning, stacklevel=2)
             project_crs = 3395
         if cell_size != (1000, 1000):
@@ -250,7 +250,7 @@ class DataProcessor:
         rescale: bool, default False
             Sets the default value for the ``rescale`` attribute. See the ``rescale`` parameter of :class:`RasterLayer`.
         """
-        if name == None:
+        if name is None:
             name = os.path.splitext(os.path.basename(path))[0]
 
         if layer_type == 'vector':
@@ -344,7 +344,7 @@ class DataProcessor:
         save_layer: bool default False
             Whether to save the dataset to disk or not
         """
-        if name == None:
+        if name is None:
             name = os.path.splitext(os.path.basename(path))[0]
         try:
             if postgres:
