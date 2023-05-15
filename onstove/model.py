@@ -6,6 +6,7 @@ from warnings import warn
 
 import dill
 import matplotlib
+from pyproj import CRS
 import pandas as pd
 import numpy as np
 import geopandas as gpd
@@ -103,6 +104,18 @@ class DataProcessor:
 
     def __init__(self, project_crs: Optional[Union['pyproj.CRS', int]] = None,
                  cell_size: tuple[float] = None, output_directory: str = '.'):
+
+        unit_test = CRS.from_user_input(project_crs)
+        unit_name = unit_test.axis_info[0].unit_name
+
+        if unit_name != 'metre':
+            warn("The unit of the selected coordinate system is " + unit_name + '. OnStove reqiures the unit to be in '
+                'metres. Check https://epsg.io/ for potential coordinate systems to use.')
+        if cell_size != (1000, 1000):
+            warn("The cell size selected is " + cell_size + '. The current version of OnStove requires 1 sq. km '
+                                                            'resolution. Your cell size has been updated')
+            cell_size = (1000, 1000)
+
         """
         Initializes the class and sets an empty layers dictionaries.
         """
