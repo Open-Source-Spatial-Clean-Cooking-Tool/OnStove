@@ -154,3 +154,24 @@ onstove/tests/data/*
 !onstove/tests/data/.gitkeep
 onstove/tests/output
 *.csv
+example/OnStove_notebook.ipynb
+example/OnStove_notebook.ipynb
+example/results/Administrative/Country_boundaries/Country_boundaries.geojson
+example/results/Base/Base/Base.tif
+example/results/Biogas/Temperature/Temperature.tif
+example/results/LPG/LPG Traveltime/LPG Traveltime.tif
+example/results/Electricity/Night_time_lights/Night_time_lights.tif
+example/results/Electricity/MV_lines/MV_lines.geojson
+example/results/Demographics/Urban_rural_divide/Urban_rural_divide.tif
+example/results/Demographics/Population/Population.tif
+example/results/Biomass/Friction/Friction.tif
+example/results/Biomass/Forest/Forest.tif
+example/results/Biogas/Livestock/sheeps/sheeps.tif
+example/results/Biogas/Livestock/poultry/poultry.tif
+example/results/Biogas/Livestock/pigs/pigs.tif
+example/results/Biogas/Livestock/goats/goats.tif
+example/results/Biogas/Livestock/cattles/cattles.tif
+example/results/Biogas/Livestock/buffaloes/buffaloes.tif
+example/OnStove_notebook.ipynb
+example/OnStove_notebook.ipynb
+onstove/model.py

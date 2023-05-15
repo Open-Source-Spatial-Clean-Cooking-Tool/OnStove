@@ -6,6 +6,7 @@ from warnings import warn
 
 import dill
 import matplotlib
+from pyproj import CRS
 import pandas as pd
 import numpy as np
 import geopandas as gpd
@@ -75,13 +76,13 @@ class DataProcessor:
 
     Parameters
     ----------
-    project_crs: pyproj.CRS or int, optional
+    project_crs: pyproj.CRS or int, default 3395
         The coordinate system of the project. The value can be anything accepted by
         :doc:`geopandas:docs/reference/api/geopandas.GeoDataFrame.to_crs`, such as an authority string (eg “EPSG:4326”),
         a WKT string or an EPSG int. If defined all datasets added to the ``DataProcessor`` will be reprojected to
         this crs when calling the :meth:`reproject_layers` method. If not defined then the ``crs`` of the
         :attr:`base_layer` will be used.
-    cell_size: tuple of float (width, height), optional
+    cell_size: tuple of float (width, height), default (1000, 1000)
         The desired cell size of the raster layers. It should be defined in the units of the used ``crs``. If defined,
         it will be used to rescale all datasets when calling the :meth:`align` method. If not defined, the
         ``cell_size`` of the :attr:`base_layer` will be used.
@@ -102,11 +103,23 @@ class DataProcessor:
         the grid cell of this raster to align all other rasters.
     """
 
-    def __init__(self, project_crs: Optional[Union['pyproj.CRS', int]] = None,
-                 cell_size: tuple[float] = None, output_directory: str = '.'):
+    def __init__(self, project_crs: Optional[Union['pyproj.CRS', int]] = 3395,
+                 cell_size: tuple[float] = (1000,1000), output_directory: str = '.'):
         """
         Initializes the class and sets an empty layers dictionaries.
         """
+        unit_test = CRS.from_user_input(project_crs)
+        unit_name = unit_test.axis_info[0].unit_name
+
+        if unit_name != 'metre':
+            warn("The unit of the selected coordinate system is " + unit_name + '. OnStove requires the unit to be in '
+                'metres. Check https://epsg.io/ for potential coordinate systems to use.', Warning, stacklevel=2)
+            project_crs = 3395
+        if cell_size != (1000, 1000):
+            warn("The cell size selected is " + str(cell_size) + '. The current version of OnStove requires 1 sq. km '
+                                                            'resolution. Your cell size has been updated', Warning, stacklevel=2)
+            cell_size = (1000, 1000)
+
         self.layers = {}
         self.project_crs = project_crs
         self.cell_size = cell_size
@@ -166,7 +179,7 @@ class DataProcessor:
                                      user=user,
                                      password=password)
 
-    def add_layer(self, category: str, name: str, path: str, layer_type: str, query: str = None,
+    def add_layer(self, path: str, layer_type: str, category: str = 'Other', name: str = None, query: str = None,
                   postgres: bool = False, base_layer: bool = False, resample: str = 'nearest',
                   normalization: str = 'MinMax', inverse: bool = False, distance_method: Optional[str] = None,
                   distance_limit: Optional[Callable[[np.ndarray], np.ndarray]] = None,
@@ -244,7 +257,13 @@ class DataProcessor:
         VectorLayer
         RasterLayer
         """
+        if name is None:
+            name = os.path.splitext(os.path.basename(path))[0]
+
         if layer_type == 'vector':
+            if base_layer == True:
+                warn("A vector layer has been given as base_layer. The base_layer can only be of type raster. base_layer"
+                     "for this layer has been set to False.", Warning, stacklevel=2)
             if postgres:
                 layer = VectorLayer(category, name, path, conn=self.conn,
                                     normalization=normalization,
@@ -263,6 +282,9 @@ class DataProcessor:
                                     inverse=inverse, query=query, bbox=window)
 
         elif layer_type == 'raster':
+            if resample not in rasterio.enums.Resampling.__members__.keys():
+                warn("Invalid resampling method selected. Check the rasterio documention for available options: "
+                     "https://rasterio.readthedocs.io/en/latest/api/rasterio.enums.html#rasterio.enums.Resampling", Warning, stacklevel=2)
             if window:
                 with rasterio.open(path) as src:
                     src_crs = src.meta['crs']
@@ -305,7 +327,7 @@ class DataProcessor:
         else:
             self.layers[category] = {name: layer}
 
-    def add_mask_layer(self, category: str, name: str, path: str,
+    def add_mask_layer(self, path: str, category: str = 'Other', name: str = None,
                        query: str = None, postgres: bool = False, save_layer: bool = False):
         """Adds a vector layer to self.mask_layer.
 
@@ -333,17 +355,22 @@ class DataProcessor:
         ----------
         mask_layer
         """
-        if postgres:
-            self.mask_layer = VectorLayer(category, name, path, self.conn, query)
-        else:
-            self.mask_layer = VectorLayer(category, name, path, query=query)
+        if name is None:
+            name = os.path.splitext(os.path.basename(path))[0]
+        try:
+            if postgres:
+                self.mask_layer = VectorLayer(category, name, path, self.conn, query)
+            else:
+                self.mask_layer = VectorLayer(category, name, path, query=query)
 
-        if self.mask_layer.data.crs != self.project_crs:
-            output_path = os.path.join(self.output_directory, category, name)
-            self.mask_layer.reproject(self.project_crs, output_path)
-        if save_layer:
-            self.mask_layer.save(os.path.join(self.output_directory, self.mask_layer.category, self.mask_layer.name))
+            if self.mask_layer.data.crs != self.project_crs:
+                output_path = os.path.join(self.output_directory, category, name)
+                self.mask_layer.reproject(self.project_crs, output_path)
+            if save_layer:
+                self.mask_layer.save(os.path.join(self.output_directory, self.mask_layer.category, self.mask_layer.name))
 
+        except Exception:
+            warn("The mask layer has to be vector polygon layer.", Warning, stacklevel=2)
     def _save_layers(self, save: bool, category: str, name: str):
         if save:
             output_path = os.path.join(self.output_directory,
@@ -1096,8 +1123,8 @@ class OnStove(DataProcessor):
 
     normalize = Processes.normalize
 
-    def __init__(self, project_crs: Optional[Union['pyproj.CRS', int]] = None,
-                 cell_size: float = None, output_directory: str = '.'):
+    def __init__(self, project_crs: Optional[Union['pyproj.CRS', int]] = 3395,
+                 cell_size: float = (1000,1000), output_directory: str = '.'):
         """
         Initializes the class and sets an empty layers dictionaries.
         """
@@ -2291,7 +2318,7 @@ class OnStove(DataProcessor):
         for tech in self.gdf['max_benefit_tech'].unique():
             is_tech = self.gdf['max_benefit_tech'] == tech
             index = self.gdf.loc[is_tech].index
-            self.gdf.loc[is_tech, "emissions_costs_saved"] = self.techs[tech].decreased_carbon_costs[index]
+            self.gdf.loc[is_tech, "emission_costs_avoided"] = self.techs[tech].decreased_carbon_costs[index]
 
     def extract_wealth_index(self, wealth_index: str, file_type: str = "csv", x_column: str =  "longitude",
                              y_column: str = "latitude", wealth_column: str = "rwi"):
@@ -3113,7 +3140,7 @@ class OnStove(DataProcessor):
         if labels is not None:
             dff = self._re_name(dff, labels, variable)
         for attribute in ['maximum_net_benefit', 'deaths_avoided', 'health_costs_avoided', 'time_saved',
-                          'opportunity_cost_gained', 'reduced_emissions', 'emissions_costs_saved',
+                          'opportunity_cost_gained', 'reduced_emissions', 'emission_costs_avoided',
                           'investment_costs', 'fuel_costs', 'om_costs', 'salvage_value']:
             dff[attribute] *= dff['Households']
         summary = dff.groupby([variable]).agg({'Calibrated_pop': lambda row: np.nansum(row) / 1000000,
@@ -3125,7 +3152,7 @@ class OnStove(DataProcessor):
                                                          'opportunity_cost_gained': lambda row: np.nansum(
                                                              row) / 1000000,
                                                          'reduced_emissions': lambda row: np.nansum(row) / 1000000000,
-                                                         'emissions_costs_saved': lambda row: np.nansum(row) / 1000000,
+                                                         'emission_costs_avoided': lambda row: np.nansum(row) / 1000000,
                                                          'investment_costs': lambda row: np.nansum(row) / 1000000,
                                                          'fuel_costs': lambda row: np.nansum(row) / 1000000,
                                                          'om_costs': lambda row: np.nansum(row) / 1000000,
@@ -3150,7 +3177,7 @@ class OnStove(DataProcessor):
                                     'time_saved': 'hours/hh.day',
                                     'opportunity_cost_gained': 'Opportunity cost avoided (MUSD)',
                                     'reduced_emissions': 'Reduced emissions (Mton CO2eq)',
-                                    'emissions_costs_saved': 'Emissions costs saved (MUSD)',
+                                    'emission_costs_avoided': 'Emission costs avoided (MUSD)',
                                     'investment_costs': 'Investment costs (MUSD)',
                                     'fuel_costs': 'Fuel costs (MUSD)',
                                     'om_costs': 'O&M costs (MUSD)',
@@ -3345,12 +3372,12 @@ class OnStove(DataProcessor):
             .. code-block:: python
                :caption: Example of cmap dictionary
 
-               {'Health costs avoided': '#542788',
-               'Investment costs': '#b35806',
-               'Fuel costs': '#f1a340',
-               'Emissions costs saved': '#998ec3',
-               'Om costs': '#fee0b6',
-               'Opportunity cost gained': '#d8daeb'}
+               >>> cmap = {'Health costs avoided': '#542788',
+               ...         'Investment costs': '#b35806',
+               ...         'Fuel costs': '#f1a340',
+               ...         'Emission costs avoided': '#998ec3',
+               ...         'Om costs': '#fee0b6',
+               ...         'Opportunity cost gained': '#d8daeb'}
 
         font_args: dictionary, optional
             A dictionary with font arguments. Default to ``font_args=dict(size=10, color='black')``.
@@ -3380,7 +3407,7 @@ class OnStove(DataProcessor):
         df['om_costs'] *= -1
 
         value_vars = ['investment_costs', 'fuel_costs', 'om_costs',
-                      'health_costs_avoided', 'emissions_costs_saved', 'opportunity_cost_gained']
+                      'health_costs_avoided', 'emission_costs_avoided', 'opportunity_cost_gained']
 
         dff = df.melt(id_vars=[variable], value_vars=value_vars)
 
@@ -3388,7 +3415,7 @@ class OnStove(DataProcessor):
 
         if cmap is None:
             cmap = {'Health costs avoided': '#542788', 'Investment costs': '#b35806',
-                    'Fuel costs': '#f1a340', 'Emissions costs saved': '#998ec3',
+                    'Fuel costs': '#f1a340', 'Emission costs avoided': '#998ec3',
                     'Om costs': '#fee0b6', 'Opportunity cost gained': '#d8daeb'}
 
         _font_args = dict(size=10)
@@ -3401,7 +3428,7 @@ class OnStove(DataProcessor):
 
         tech_list = df.sort_values('Calibrated_pop')[variable].tolist()
         cat_order = ['Health costs avoided',
-                     'Emissions costs saved',
+                     'Emission costs avoided',
                      'Opportunity cost gained',
                      'Investment costs',
                      'Fuel costs',
@@ -3710,7 +3737,7 @@ class OnStove(DataProcessor):
         """
         if best_mix:
             df = self.gdf[[fill, 'Calibrated_pop', 'Households', 'maximum_net_benefit',
-                           'health_costs_avoided', 'opportunity_cost_gained', 'emissions_costs_saved',
+                           'health_costs_avoided', 'opportunity_cost_gained', 'emission_costs_avoided',
                            'investment_costs', 'salvage_value', 'fuel_costs', 'om_costs', 
                            'relative_wealth', 'value_of_time']].copy()
             df = self._re_name(df, labels, fill)
