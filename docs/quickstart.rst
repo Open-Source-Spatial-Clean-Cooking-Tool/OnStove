@@ -57,13 +57,13 @@ To use OnStove the following python modules are needed: `contextily <https://con
 
 5. Navigate to the folder that you downloaded and unzipped by typing *cd PATH/envs*. Where *PATH* is the path on your computer to the unzipped folder. This will bring you to the *envs* folder of the repository.
 
-6. Once in the correct path, type `conda env create --name onstove --file jupyter_env.yaml`. 
+6. Once in the correct path, type ``conda env create --name onstove --file jupyter_env.yaml``. 
 
 .. note::
 
     There is a file called *jupyter_env.yaml* in the *envs*-folder of the GitHub repository which includes all the python modules needed in order to run OnStove. By typing the command here you create an environment called onstove with all the modules in said .yaml. Installing the modules necessary can take some time. Read more about Anaconda environments `here <https://conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html>`_. 
 
-7. Lastly, still in the anaconda prompt, type *conda activate onstove*. This will take you to your recently created environment and give you access to the packages needed to run OnStove. You are now ready to conduct your own OnStove analysis.
+7. Lastly, still in the anaconda prompt, type ``conda activate onstove``. This will take you to your recently created environment and give you access to the packages needed to run OnStove. You are now ready to conduct your own OnStove analysis.
 
 
 Examples

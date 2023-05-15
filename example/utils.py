@@ -1,8 +1,7 @@
 import requests, zipfile, yaml
 
 def download_data(country):
-    # path = "https://data.mendeley.com/api/datasets/c922hsm3b5/draft/files/8aa9f8af-2602-4b51-b3ac-8d2da434c18e?a=8fcd4fad-f8fe-4cca-8f4b-3a468eb8df50"
-    path = "https://onstove-tests-data.s3.amazonaws.com/country_dict.yaml"
+    path = "https://onstove-tests-data.s3.amazonaws.com/Trieste/country_dict.yaml"
     response = requests.get(path)
     open("country_dict.yaml", "wb").write(response.content)
 
