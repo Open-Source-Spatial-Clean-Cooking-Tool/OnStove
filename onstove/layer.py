@@ -1809,7 +1809,7 @@ class RasterLayer(_Layer):
 
         if legend:
             if categories:
-                self.category_legend(im, ax, categories, current_handles_labels=(handles, labels),
+                self.category_legend(im, ax, categories,
                                      legend_position=legend_position,
                                      title=legend_title, legend_cols=legend_cols, legend_prop=legend_prop)
             elif colorbar:

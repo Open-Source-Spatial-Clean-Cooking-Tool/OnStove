@@ -149,6 +149,7 @@ Nepal paper OnStove/TechShares.ipynb
 example/*
 !example/OnStove_notebook.ipynb
 !example/utils.py
+!example/data_templates/*
 
 onstove/tests/data/*
 !onstove/tests/data/.gitkeep

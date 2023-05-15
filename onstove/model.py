@@ -207,8 +207,8 @@ class DataProcessor:
                :class:`RasterLayer`
 
         normalization: str, 'MinMax'
-            Sets the default normalization method to use when calling the :meth:`RasterLayer.normalize`. This is relevant
-            to calculate the
+            Sets the default normalization method to use when calling the :meth:`RasterLayer.normalize`. Currently, the
+            only available option is `'MinMax'`. This is relevant to calculate the
             :attr:`demand_index<onstove.MCA.demand_index>`,
             :attr:`supply_index<onstove.MCA.supply_index>`,
             :attr:`clean_cooking_index<onstove.MCA.clean_cooking_index>` and
@@ -219,7 +219,9 @@ class DataProcessor:
                the vector layer, for example see :attr:`VectorLayer.distance_raster`.
 
         inverse: bool, default False
-            Sets the default mode for the normalization algorithm (see :meth:`RasterLayer.normalize`).
+            Sets the default mode for the normalization algorithm (see :meth:`RasterLayer.normalize`). If `False`, then
+            the raster will be normalized (if :meth:`normalize_rasters` is called) setting 1 as the high value and 0 as
+            the low. If `True`, then the raster will be normalized setting the high value as 0 and the low values as 1.
 
             .. note::
                If the ``layer_type`` is `vector`, this parameters will be passed to any raster dataset created from
@@ -235,7 +237,10 @@ class DataProcessor:
             A window or bounding box to read in the data if ``layer_type`` is `raster` or `vector` respectively.
             See the ``window`` parameter of :class:`RasterLayer` and the ``bbox`` parameter of :class:`VectorLayer`.
         rescale: bool, default False
-            Sets the default value for the ``rescale`` attribute. See the ``rescale`` parameter of :class:`RasterLayer`.
+            Sets the default value for the ``rescale`` attribute. This attribute is used in the :meth:`align` method to
+            rescale the values of a cell proportionally to the change in size of the cell. This is useful when aligning
+            rasters that have different cell sizes and their values can be scaled proportionally. See the ``rescale``
+            parameter of :class:`RasterLayer`.
 
         See also
         ----------
