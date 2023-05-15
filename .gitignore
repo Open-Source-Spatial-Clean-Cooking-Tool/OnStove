@@ -175,3 +175,4 @@ example/results/Biogas/Livestock/cattles/cattles.tif
 example/results/Biogas/Livestock/buffaloes/buffaloes.tif
 example/OnStove_notebook.ipynb
 example/OnStove_notebook.ipynb
+onstove/model.py

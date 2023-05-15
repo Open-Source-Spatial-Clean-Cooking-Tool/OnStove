@@ -112,11 +112,11 @@ class DataProcessor:
 
         if unit_name != 'metre':
             warn("The unit of the selected coordinate system is " + unit_name + '. OnStove reqiures the unit to be in '
-                'metres. Check https://epsg.io/ for potential coordinate systems to use.')
+                'metres. Check https://epsg.io/ for potential coordinate systems to use.', Warning, stacklevel=2)
             project_crs = 3395
         if cell_size != (1000, 1000):
             warn("The cell size selected is " + str(cell_size) + '. The current version of OnStove requires 1 sq. km '
-                                                            'resolution. Your cell size has been updated')
+                                                            'resolution. Your cell size has been updated', Warning, stacklevel=2)
             cell_size = (1000, 1000)
 
         self.layers = {}
@@ -253,7 +253,7 @@ class DataProcessor:
         if layer_type == 'vector':
             if base_layer == True:
                 warn("A vector layer has been given as base_layer. The base_layer can only be of type raster. base_layer"
-                     "for this layer has been set to False.")
+                     "for this layer has been set to False.", Warning, stacklevel=2)
             if postgres:
                 layer = VectorLayer(category, name, path, conn=self.conn,
                                     normalization=normalization,
@@ -274,7 +274,7 @@ class DataProcessor:
         elif layer_type == 'raster':
             if resample not in rasterio.enums.Resampling.__members__.keys():
                 warn("Invalid resampling method selected. Check the rasterio documention for available options: "
-                     "https://rasterio.readthedocs.io/en/latest/api/rasterio.enums.html#rasterio.enums.Resampling")
+                     "https://rasterio.readthedocs.io/en/latest/api/rasterio.enums.html#rasterio.enums.Resampling", Warning, stacklevel=2)
             if window:
                 with rasterio.open(path) as src:
                     src_crs = src.meta['crs']
@@ -354,7 +354,7 @@ class DataProcessor:
                 self.mask_layer.save(os.path.join(self.output_directory, self.mask_layer.category, self.mask_layer.name))
 
         except Exception:
-            warn("The mask layer has to be vector polygon layer.")
+            warn("The mask layer has to be vector polygon layer.", Warning, stacklevel=2)
     def _save_layers(self, save: bool, category: str, name: str):
         if save:
             output_path = os.path.join(self.output_directory,
