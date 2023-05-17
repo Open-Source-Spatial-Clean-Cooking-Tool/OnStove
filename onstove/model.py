@@ -129,6 +129,12 @@ class DataProcessor:
         self.conn = None
         self.base_layer = None
 
+    def __setitem__(self, idx, value):
+        self.__dict__[idx] = value
+
+    def __getitem__(self, idx):
+        return self.__dict__[idx]
+
     def _get_layers(self, layers: dict[str, list[str]]) -> dict[str, dict[str, 'RasterLayer']]:
         """Gets the ``dict(category: dict(name: layer))`` dictionary from the :attr:`layers` attribute.
 
@@ -595,6 +601,12 @@ class DataProcessor:
                                            category, name)
                 os.makedirs(output_path, exist_ok=True)
                 layer.save(output_path)
+                for raster in ['distance_raster', 'normalized']:
+                    if layer[raster] is not None:
+                        output_path = os.path.join(self.output_directory,
+                                                   category, name)
+                        os.makedirs(output_path, exist_ok=True)
+                        layer[raster].save(output_path)
 
     def to_pickle(self, name):
         """Saves the model as a pickle."""
@@ -1857,7 +1869,6 @@ class OnStove(DataProcessor):
             radius (currently 100) if the ``interpolate`` method is selected, ignored if ``nearest`` is selected
             and for all the nodata values if ``None`` is used as method.
         """
-        layer = raster_setter(layer)
         data = None
         if method == 'sample':
             with rasterio.open(layer) as src:
@@ -1866,6 +1877,7 @@ class OnStove(DataProcessor):
                 else:
                     data = sample_raster(layer, self.gdf)
         elif method == 'read':
+            layer = raster_setter(layer)
             if 'nodata' in layer.meta.keys():
                 nodata = layer.meta['nodata']
             else:
@@ -1920,8 +1932,7 @@ class OnStove(DataProcessor):
         calibrate_current_pop
         number_of_households
         """
-        ghs = raster_setter(GHS_path)
-        self.raster_to_dataframe(ghs, name="IsUrban", method='read', fill_nodata_method='nearest')
+        self.raster_to_dataframe(GHS_path, name="IsUrban", method='read', fill_nodata_method='nearest')
 
         self.calibrate_current_pop()
 
@@ -2879,7 +2890,6 @@ class OnStove(DataProcessor):
         elif isinstance(self.mask_layer, VectorLayer):
             admin_layer = self.mask_layer.data
         else:
-            # print('sisas')
             admin_layer = None
 
         if ax is None:
@@ -2907,6 +2917,7 @@ class OnStove(DataProcessor):
 
         if isinstance(save_as, str):
             plt.savefig(os.path.join(self.output_directory, save_as), dpi=dpi, bbox_inches='tight', transparent=True)
+
         return ax
 
     def _add_statistics(self, ax, variable='max_benefit_tech', kwargs: Optional[dict] = None):
@@ -3101,10 +3112,10 @@ class OnStove(DataProcessor):
         elif not admin_layer:
             admin_layer = self.mask_layer.data
 
-        fig, ax = plt.subplots(1, 1, figsize=figsize, dpi=dpi)
+        fig, ax = plt.subplots(1, 1, figsize=figsize)
         if stats:
             self._add_statistics(ax, variable=variable, kwargs=stats_kwargs)
-
+        name = os.path.join(self.output_directory, name)
         raster.save_image(name=name, cmap=cmap, cumulative_count=cumulative_count,
                           quantiles=quantiles, categories=codes, legend_position=legend_position,
                           admin_layer=admin_layer, title=title, ax=ax, dpi=dpi,

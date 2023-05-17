@@ -51,6 +51,7 @@ class _Layer:
         self.category = category
         self.name = name
         self.normalization = normalization
+        self.normalized = None
         self.distance_method = distance_method
         self.distance_limit = distance_limit
         self.inverse = inverse
@@ -69,6 +70,12 @@ class _Layer:
         for attr, value in self.__dict__.items():
             s += f'    - {attr}: {value}\n'
         return s
+
+    def __setitem__(self, idx, value):
+        self.__dict__[idx] = value
+
+    def __getitem__(self, idx):
+        return self.__dict__[idx]
 
     def read_layer(self, layer_path, conn=None):
         pass
@@ -994,19 +1001,30 @@ class RasterLayer(_Layer):
             total_bounds = mask_layer.data['geometry'].total_bounds
             window = windows.from_bounds(*total_bounds, transform=self.meta['transform'])
             height, width = self.shape_from_cell(total_bounds, self.meta['transform'][0], -self.meta['transform'][4])
-            row_off = max(int(window.row_off), 0)
-            col_off = max(int(window.col_off), 0)
+            # row_off = max(int(window.row_off), 0)
+            # col_off = max(int(window.col_off), 0)
             window = windows.Window(
-                col_off=col_off,
-                row_off=row_off,
+                col_off=window.col_off,
+                row_off=window.row_off,
+                # col_off=col_off,
+                # row_off=row_off,
                 width=width,
                 height=height,
             )
             bounds = rasterio.windows.bounds(window, self.meta['transform'])
             transform = rasterio.transform.from_bounds(*bounds, width, height)
-            self.data = self.data[row_off:(row_off + height),
-                                  col_off:(col_off + width)]
-            self.meta.update(transform=transform, height=height, width=width)
+            data = np.empty((height, width))
+            data[:] = self.meta['nodata']
+            raster = RasterLayer()
+            raster.data = data
+            raster.meta = self.meta.copy()
+            raster.meta.update(transform=transform, height=height, width=width)
+            resample = self.resample
+            self.resample = 'nearest'
+            self.align(raster, inplace=True)
+            self.resample = resample
+            # self.data = self.data[row_off:(row_off + height), col_off:(col_off + width)]
+            # self.meta.update(transform=transform, height=height, width=width)
 
         if output_path:
             self.save(output_path)
