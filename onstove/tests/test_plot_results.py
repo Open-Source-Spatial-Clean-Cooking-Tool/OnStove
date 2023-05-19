@@ -40,20 +40,21 @@ def test_plot_maps():
                           linekw=dict(lw=1, color='black'), extent=0.01)
     north_arow_prop = dict(size=30, location=(0.92, 0.92), linewidth=0.5)
               
-    results.to_image('max_benefit_tech', cmap=cmap, legend_position=(1, 0.6), 
-                     figsize=(7, 5), type='pdf', dpi=300, stats=True, 
-                     stats_position=(1, 0.9), stats_fontsize=10, labels=labels, 
-                     legend=True, 
+    results.to_image('max_benefit_tech', name='max_benefit_tech.pdf', cmap=cmap, legend_position=(1, 0.6), 
+                     figsize=(7, 5), dpi=300, stats=True, 
+                     stats_kwargs={'extra_stats': None, 'fontsize': 10, 'stats_position': (1, 0.9), 'pad': 2, 'sep': 0, 'fontcolor': 'black', 'fontweight': 'normal',
+                           'box_props': dict(facecolor='lightyellow', edgecolor='black', alpha=1, boxstyle="sawtooth")},
+                     labels=labels, legend=True, 
                      legend_title='Maximum benefit\ncooking technology', 
                      legend_prop={'title': {'size': 10, 'weight': 'bold'}, 
                                   'size': 10},
                      title=f'Maximum benefit technology | {country}',
                      scale_bar=scale_bar_prop, north_arrow=north_arow_prop, 
                      rasterized=True)
-    results.to_image('maximum_net_benefit', cmap='Spectral', 
+    results.to_image('maximum_net_benefit', name='maximum_net_benefit.pdf', cmap='Spectral', 
                      cumulative_count=[0.01, 0.99], figsize=(7, 5),
                      title=f'Maximum net benefit | {country}', dpi=300,
-                     rasterized=True, type='pdf')
+                     rasterized=True)
     assert True
     
 @pytest.mark.order(after="test_model_run.py::test_run_model")    

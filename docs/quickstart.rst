@@ -60,14 +60,17 @@ Installing with ``conda``
 
 The easiest way of installing and using ``OnStove`` is through ``conda``. After installing a distribution of ``conda``,
 Open an `Anaconda Prompt` or a `Command Prompt` and run:
-```
-> conda create -n onstove -c conda-forge OnStove
-```
+
+.. code::
+
+	conda create -n onstove -c conda-forge OnStove
+
 Now you will have a new conda environment called `ostove` with `OnStove` installed on it. To use it open a `Command Prompt`
 in the root folder of your analysis and activate the enviornment with:
-```
-> conda activate onstove
-```
+
+.. code::
+
+	conda activate onstove
 
 Downloading the source code and installing the environment
 ----------------------------------------------------------
