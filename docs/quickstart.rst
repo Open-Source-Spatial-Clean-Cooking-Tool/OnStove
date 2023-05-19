@@ -44,8 +44,33 @@ OnStove is a spatial tool and as such, relies on the usage of Geographic Informa
 OnStove installation
 ********************
 
-To use OnStove the following python modules are needed: `contextily <https://contextily.readthedocs.io/en/latest/>`_, `dill <https://dill.readthedocs.io/en/latest/dill.html>`_, `geopandas <https://geopandas.org/en/stable/>`_, `json <https://docs.python.org/3/library/json.html>`_, `jupyterlab <https://jupyterlab.readthedocs.io/en/stable/>`_, `matplotlib <https://matplotlib.org/>`_, `pandas <https://pandas.pydata.org/>`_, `plotnine <https://plotnine.readthedocs.io/en/stable/>`_, `psycopg2 <https://www.psycopg.org/docs/>`_, `psutil <https://psutil.readthedocs.io/en/latest/>`_, 
-`pythondecouple <https://pypi.org/project/python-decouple/>`_, `rasterio <https://rasterio.readthedocs.io/en/latest/>`_, `rasterstats <https://pythonhosted.org/rasterstats/manual.html>`_, `scikitlearn <https://scikit-learn.org/stable/>`_ and `scikitimage <https://scikit-image.org/>`_. These packages are all included in the environment yaml file used for installation. In order to install OnStove follow the steps below. 
+To use OnStove the following python modules are needed:
+`dill <https://dill.readthedocs.io/en/latest/dill.html>`_, `geopandas <https://geopandas.org/en/stable/>`_,
+`jupyterlab <https://jupyterlab.readthedocs.io/en/stable/>`_, `matplotlib <https://matplotlib.org/>`_,
+`pandas <https://pandas.pydata.org/>`_, `plotnine <https://plotnine.readthedocs.io/en/stable/>`_,
+`psycopg2 <https://www.psycopg.org/docs/>`_, `psutil <https://psutil.readthedocs.io/en/latest/>`_,
+`pythondecouple <https://pypi.org/project/python-decouple/>`_, `rasterio <https://rasterio.readthedocs.io/en/latest/>`_,
+`scikitimage <https://scikit-image.org/>`_, `svgpathtools <https://pypi.org/project/svgpathtools/>`_ and
+`svgpath2mpl <https://pypi.org/project/svgpath2mpl/>`_.
+These packages are all included in the environment yaml file used for installation. In order to install ``OnStove`` you
+have two options:
+
+Installing with ``conda``
+-------------------------
+
+The easiest way of installing and using ``OnStove`` is through ``conda``. After installing a distribution of ``conda``,
+Open an `Anaconda Prompt` or a `Command Prompt` and run:
+```
+> conda create -n onstove -c conda-forge OnStove
+```
+Now you will have a new conda environment called `ostove` with `OnStove` installed on it. To use it open a `Command Prompt`
+in the root folder of your analysis and activate the enviornment with:
+```
+> conda activate onstove
+```
+
+Downloading the source code and installing the environment
+----------------------------------------------------------
 
 1. Go to the official GitHub repository for OnStove `here <https://github.com/Open-Source-Spatial-Clean-Cooking-Tool/OnStove>`_.
 
