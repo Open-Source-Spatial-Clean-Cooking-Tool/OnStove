@@ -2210,7 +2210,8 @@ class Biogas(Technology):
             model.raster_to_dataframe(self.temperature, name="Temperature", method='read',
                                       fill_nodata_method='interpolate')
             model.gdf.loc[model.gdf["Temperature"] < 10, "available_biogas"] = 0
-            model.gdf.loc[(model.gdf["IsUrban"] > 20), "available_biogas"] = 0
+
+        model.gdf.loc[(model.gdf["IsUrban"] > 20), "available_biogas"] = 0
 
         # Water availability restriction
         if self.water is not None:

@@ -2598,10 +2598,13 @@ class OnStove(DataProcessor):
             if self.rows is not None:
                 if nodata is None:
                     nodata = 0
+                    dtype = 'uint16'
+                else:
+                    dtype = 'float32'
                 layer[:] = nodata
                 layer[self.rows, self.cols] = [codes[tech] for tech in dff[variable]]
                 meta = self.base_layer.meta
-                meta.update(nodata=nodata, dtype='uint16')
+                meta.update(nodata=nodata, dtype=dtype)
             else:
                 dff['codes'] = [codes[tech] for tech in dff[variable]]
                 layer, meta = self._points_to_raster(dff, 'codes', dtype='uint16', nodata=nodata)
@@ -2660,7 +2663,7 @@ class OnStove(DataProcessor):
             Metric to use to aggregate data. It is only used for non-categorical data. For available metrics see
             :meth:`create_layer`.
         """
-        raster, codes, cmap = self.create_layer(variable, labels=labels, cmap=cmap, metric=metric)
+        raster, codes, cmap = self.create_layer(variable, labels=labels, cmap=cmap, metric=metric, nodata=np.nan)
         raster.save(os.path.join(self.output_directory, 'Rasters'))
         print(f'Layer saved in {os.path.join(self.output_directory, "Rasters", raster.name + ".tif")}\n')
         if codes and cmap:
