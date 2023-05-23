@@ -1784,22 +1784,20 @@ class OnStove(DataProcessor):
         print(f'[{self.specs["country_name"]}] Getting value of time')
         self.get_value_of_time()
         # Loop through each technology and calculate all benefits and costs
-        years = self.gdf["year"].copy()
+        self.gdf["placeholder_year"] = self.gdf["year"]
+        years = self.gdf["placeholder_year"].copy()
 
         for year in self.years:
             self.year = year
             mask = years == year
             pop, house, increase = self.yearly_pop(self.year)
             self.gdf["Pop"] = pop
-            # TODO: make sure that self.gdf["Households"] is used everywhere in the runs, "increase" needs to be an input
             self.gdf["Households"] = house
 
             for tech in techs:
-                print(f'Calculating health benefits for {tech.name}...')
-
                 if not tech.is_base:
                     tech.adjusted_pm25()
-
+                print(f'Calculating health benefits for {tech.name}...')
                 tech.morbidity(self, mask, 'morb', True)
                 tech.mortality(self, mask, 'mort', True)
                 print(f'Calculating carbon emissions benefits for {tech.name}...')
@@ -1841,10 +1839,148 @@ class OnStove(DataProcessor):
             print('    - Salvage')
             self.extract_salvage()
 
+            for tech in self.gdf["max_benefit_tech"].dropna().unique():
+                self.gdf.reset_index(drop=False, inplace=True)
+                mask = (self.gdf["year"] == self.year) & (self.gdf["max_benefit_tech"] == tech)
+                self.gdf.loc[mask[mask].index, 'year'] += self.techs[tech].tech_life
+                self.gdf.set_index('index', inplace=True)
+
+            dff = self.gdf.copy()
+            dff.sort_values(by='year', inplace=True)
+            dff_unique = dff[~dff.index.duplicated(keep='first')]
+
+            for tech in dff_unique["max_benefit_tech"].dropna().unique():
+                mask_2 = (dff_unique["placeholder_year"] == self.year) & (dff_unique["max_benefit_tech"] == tech)
+
+                for paf in ['paf_alri', 'paf_copd', 'paf_ihd', 'paf_lc', 'paf_stroke']:
+                    self.base_fuel[paf].loc[mask_2[mask_2].index] = self.techs[tech][paf].loc[mask_2[mask_2].index]
+
+                self.base_fuel.carbon.loc[mask_2[mask_2].index] = self.techs[tech].carbon.loc[mask_2[mask_2].index]
+                self.base_fuel.total_time_yr.loc[mask_2[mask_2].index] = \
+                    self.techs[tech].total_time_yr.loc[mask_2[mask_2].index]
+
+                self.base_fuel.tech_life.loc[mask_2[mask_2].index] = self.techs[tech].tech_life
+
+                self.base_fuel.inv_cost.loc[mask_2[mask_2].index] = self.techs[tech].inv_cost
+
+                self.base_fuel.investments[mask_2[mask_2].index, self.year - self.specs["start_year"] - 1:
+                                                                 self.year - self.specs["start_year"] - 1 +
+                                                                 self.techs[tech].tech_life] = \
+                    self.techs[tech].investments[mask_2[mask_2].index, self.year - self.specs["start_year"] - 1:
+                                                                 self.year - self.specs["start_year"] - 1 +
+                                                                 self.techs[tech].tech_life]
+
+                self.base_fuel.inv_change.loc[mask_2[mask_2].index] = self.techs[tech].inv_change
+
+                self.base_fuel.om_costs[mask_2[mask_2].index, self.year - self.specs["start_year"] - 1:
+                                                                 self.year - self.specs["start_year"] - 1 +
+                                                                 self.techs[tech].tech_life] = \
+                    self.techs[tech].om_costs[mask_2[mask_2].index, self.year - self.specs["start_year"] - 1:
+                                                                 self.year - self.specs["start_year"] - 1 +
+                                                                 self.techs[tech].tech_life]
+
+                self.base_fuel.salvage_cost[mask_2[mask_2].index, self.year - self.specs["start_year"] - 1:
+                                                                 self.year - self.specs["start_year"] - 1 +
+                                                                 self.techs[tech].tech_life] = \
+                    self.techs[tech].salvage_cost[mask_2[mask_2].index, self.year - self.specs["start_year"] - 1:
+                                                                 self.year - self.specs["start_year"] - 1 +
+                                                                 self.techs[tech].tech_life]
+
+                self.base_fuel.fuel_costs[mask_2[mask_2].index, self.year - self.specs["start_year"] - 1:
+                                                                 self.year - self.specs["start_year"] - 1 +
+                                                                 self.techs[tech].tech_life] = \
+                    self.techs[tech].fuel_costs[mask_2[mask_2].index, self.year - self.specs["start_year"] - 1:
+                                                                 self.year - self.specs["start_year"] - 1 +
+                                                                 self.techs[tech].tech_life]
+
+            duplicated_indices = self.gdf.loc[(self.gdf.index.duplicated()) &
+                                              (self.gdf['placeholder_year'] == self.year)].index
+            self.gdf["duplicates"] = self.gdf.index
+            for i, g in self.gdf.loc[duplicated_indices].groupby('duplicates'):
+                if self.gdf.loc[i]['year'].nunique() == 1:
+                    tech_0 = g["max_benefit_tech"].iloc[0]
+                    pop_0 = g["Pop"].iloc[0]
+                    tech_1 = g["max_benefit_tech"].iloc[1]
+                    pop_1 = g["Pop"].iloc[1]
+                    total_pop = pop_0 + pop_1
+
+                    for paf in ['paf_alri', 'paf_copd', 'paf_ihd', 'paf_lc', 'paf_stroke']:
+                        self.base_fuel[paf].loc[i] = \
+                            (self.techs[tech_0][paf].loc[i] * pop_0 + self.techs[tech_1][paf].loc[i] * pop_1) / total_pop
+
+                    self.base_fuel.carbon.loc[i] = (self.techs[tech_0].carbon.loc[i] * pop_0 +
+                                                    self.techs[tech_1].carbon.loc[i] * pop_1) / total_pop
+                    self.base_fuel.total_time_yr.loc[i] = \
+                        (self.techs[tech_0].total_time_yr.loc[i] * pop_0 + self.techs[tech_1].total_time_yr.loc[
+                            i] * pop_1) / total_pop
+
+                    self.base_fuel.tech_life.loc[i] = self.techs[tech_0].tech_life
+
+                    self.base_fuel.inv_cost.loc[i] = (self.techs[tech_0].inv_cost * pop_0 + self.techs[
+                        tech_1].inv_cost * pop_1) / total_pop
+
+                    inv_0 = (self.techs[tech_0].investments[i, self.year - self.specs["start_year"] - 1:
+                                                               self.year - self.specs["start_year"] - 1 +
+                                                               self.techs[tech_0].tech_life]) * pop_0
+
+                    inv_1 = (self.techs[tech_1].investments[i, self.year - self.specs["start_year"] - 1:
+                                                               self.year - self.specs["start_year"] - 1 +
+                                                               self.techs[tech_1].tech_life]) * pop_1
+
+                    self.base_fuel.investments[i, self.year - self.specs["start_year"] - 1:
+                    self.year - self.specs["start_year"] - 1 +
+                    self.techs[tech].tech_life] = (inv_0 + inv_1) / total_pop
+
+                    self.base_fuel.inv_change.loc[i] = (self.techs[tech_0].inv_change * pop_0 + self.techs[
+                        tech_1].inv_change * pop_1) / total_pop
+
+                    om_0 = (self.techs[tech_0].om_costs[i, self.year - self.specs["start_year"] - 1:
+                                                           self.year - self.specs["start_year"] - 1 +
+                                                           self.techs[tech_0].tech_life]) * pop_0
+
+                    om_1 = (self.techs[tech_1].om_costs[i, self.year - self.specs["start_year"] - 1:
+                                                           self.year - self.specs["start_year"] - 1 +
+                                                           self.techs[tech_1].tech_life]) * pop_1
+
+                    self.base_fuel.om_costs[i, self.year - self.specs["start_year"] - 1:
+                    self.year - self.specs["start_year"] - 1 +
+                    self.techs[tech].tech_life] = (om_0 + om_1) / total_pop
+
+                    sal_0 = pop_0 * (self.techs[tech_0].salvage_cost[i, self.year - self.specs["start_year"] - 1:
+                                                                        self.year - self.specs["start_year"] - 1 +
+                                                                        self.techs[tech_0].tech_life])
+
+                    sal_1 = pop_1 * (self.techs[tech_1].salvage_cost[i, self.year - self.specs["start_year"] - 1:
+                                                                        self.year - self.specs["start_year"] - 1 +
+                                                                        self.techs[tech_1].tech_life])
+
+                    self.base_fuel.salvage_cost[i, self.year - self.specs["start_year"] - 1:
+                    self.year - self.specs["start_year"] - 1 +
+                    self.techs[tech].tech_life] = (sal_0 + sal_1) / total_pop
+
+                    fuel_0 = pop_0 * (self.techs[tech_0].fuel_costs[i, self.year - self.specs["start_year"] - 1:
+                                                                       self.year - self.specs["start_year"] - 1 +
+                                                                       self.techs[tech_0].tech_life])
+
+                    fuel_1 = pop_1 * (self.techs[tech_1].fuel_costs[i, self.year - self.specs["start_year"] - 1:
+                                                                       self.year - self.specs["start_year"] - 1 +
+                                                                       self.techs[tech_1].tech_life]) / total_pop
+
+                    self.base_fuel.fuel_costs[i, self.year - self.specs["start_year"] - 1:
+                    self.year - self.specs["start_year"] - 1 +
+                    self.techs[tech_0].tech_life] = (fuel_0 + fuel_1) / total_pop
+
+
+            del self.gdf["duplicates"]
+
+
         for i, y in enumerate(range(self.specs['start_year'] + 1, self.specs['end_year'] + 1)):
             mask = (self.gdf['year'] == y)
             index = mask[mask].index
             self.gdf.loc[mask, 'maximum_net_benefit'] *= self.houses[index, i]
+
+        self.gdf["year"] = self.gdf["placeholder_year"]
+        del self.gdf["placeholder_year"]
 
         print('Done')
 
@@ -1975,6 +2111,9 @@ class OnStove(DataProcessor):
         self.gdf.loc[(self.gdf["year"] == self.year), 'max_benefit_tech'] = self.gdf.loc[
             (self.gdf["year"] == self.year), 'max_benefit_tech'].str.replace("_temp", "")
 
+        series_value = self.gdf['max_benefit_tech']
+        setattr(self, 'max_benefit_tech_{}'.format(self.year), series_value)
+
     # TODO: check if we need this method
     def _add_admin_names(self, admin, column_name):
         if isinstance(admin, str):
@@ -1996,6 +2135,9 @@ class OnStove(DataProcessor):
             self.gdf.loc[is_tech, 'deaths_avoided'] = (self.techs[tech].relative_deaths[index] *
                                                        self.houses[index] * self.techs[tech].factor[index]).sum(axis=1)
 
+        series_value = self.gdf['deaths_avoided']
+        setattr(self, 'deaths_avoided_{}'.format(self.year), series_value)
+
     def extract_health_costs_saved(self):
         """
         Extracts the health costs avoided from adopting each stove type selected across the study area. The health costs
@@ -2007,6 +2149,9 @@ class OnStove(DataProcessor):
             self.gdf.loc[is_tech, 'health_costs_avoided'] = ((self.techs[tech].relative_cost_mort[index] + \
                                                                 self.techs[tech].relative_cost_morb[index])  * \
                                                        self.houses[index] * self.techs[tech].factor[index]).sum(axis=1)
+
+        series_value = self.gdf['health_costs_avoided']
+        setattr(self, 'health_costs_avoided_{}'.format(self.year),series_value)
 
     def extract_time_saved(self):
         """
@@ -2020,6 +2165,9 @@ class OnStove(DataProcessor):
                                                    self.techs[tech].factor[index]).sum(axis=1) / \
                                                   (365 * (self.houses[index] * self.techs[tech].factor[index]).sum(axis=1))
 
+        series_value = self.gdf['time_saved']
+        setattr(self, 'time_saved_{}'.format(self.year),series_value)
+
     def extract_opportunity_cost(self):
         """
         Extracts the opportunity cost of adopting each stove type selected across the study area.
@@ -2030,6 +2178,9 @@ class OnStove(DataProcessor):
             self.gdf.loc[is_tech, 'opportunity_cost'] = (self.techs[tech].time_value[index] *
                                                        self.houses[index] * self.techs[tech].factor[index]).sum(axis=1)
 
+        series_value = self.gdf['opportunity_cost']
+        setattr(self, 'opportunity_cost_{}'.format(self.year),series_value)
+
     def extract_reduced_emissions(self):
         """
         Extracts the reduced emissions achieved by adopting each stove type selected across the study area.
@@ -2039,6 +2190,9 @@ class OnStove(DataProcessor):
             index = is_tech[is_tech].index
             self.gdf.loc[is_tech, 'reduced_emissions'] = (self.techs[tech].decreased_carbon_emissions[index] *
                                                        self.houses[index] * self.techs[tech].factor[index]).sum(axis=1)
+
+        series_value = self.gdf['reduced_emissions']
+        setattr(self, 'reduced_emissions_{}'.format(self.year),series_value)
 
     def discount(self, cost):
         discount_rate, proj_life = Technology.discount_factor(self.specs)
@@ -2055,6 +2209,9 @@ class OnStove(DataProcessor):
             self.gdf.loc[is_tech, 'investment_costs'] = self.discount(self.techs[tech].investments[index] *\
                                                         self.houses[index] * self.techs[tech].factor[index])
 
+        series_value = self.gdf['investment_costs']
+        setattr(self, 'investment_costs_{}'.format(self.year),series_value)
+
     def extract_om_costs(self):
         """
         Extracts the total operation and maintenance costs needed in order to adopt each stove type across the study area.
@@ -2064,6 +2221,9 @@ class OnStove(DataProcessor):
             index = is_tech[is_tech].index
             self.gdf.loc[is_tech, 'om_costs'] = self.discount(self.techs[tech].om_costs[index] *\
                                                 self.houses[index] * self.techs[tech].factor[index])
+
+        series_value = self.gdf['om_costs']
+        setattr(self, 'om_costs_{}'.format(self.year),series_value)
 
     def extract_fuel_costs(self):
         """
@@ -2075,6 +2235,9 @@ class OnStove(DataProcessor):
             self.gdf.loc[is_tech, 'fuel_costs'] = self.discount(self.techs[tech].fuel_costs[index] *\
                                                    self.houses[index] * self.techs[tech].factor[index])
 
+        series_value = self.gdf['fuel_costs']
+        setattr(self, 'fuel_costs_{}'.format(self.year),series_value)
+
     def extract_salvage(self):
         """
         Extracts the total salvage costs in order to adopt each stove type across the study area.
@@ -2085,6 +2248,9 @@ class OnStove(DataProcessor):
             self.gdf.loc[is_tech, 'salvage_cost'] = self.discount(self.techs[tech].salvage_cost[index] *\
                                                      self.houses[index] * self.techs[tech].factor[index])
 
+        series_value = self.gdf['salvage_cost']
+        setattr(self, 'salvage_cost_{}'.format(self.year),series_value)
+
     def extract_emissions_costs_saved(self):
         """
         Extracts the economic value of the emissions by adopt each stove type across the study area.
@@ -2094,6 +2260,9 @@ class OnStove(DataProcessor):
             index = is_tech[is_tech].index
             self.gdf.loc[is_tech, 'emissions_costs_avoided'] = (self.techs[tech].decreased_carbon_costs[index] *
                                                        self.houses[index] * self.techs[tech].factor[index]).sum(axis=1)
+
+        series_value = self.gdf['emissions_costs_avoided']
+        setattr(self, 'emissions_costs_avoided_{}'.format(self.year),series_value)
 
     def extract_wealth_index(self, wealth_index, file_type="csv", x_column="longitude", y_column="latitude",
                              wealth_column="rwi"):
@@ -2705,7 +2874,7 @@ class OnStove(DataProcessor):
                           legend=legend, legend_title=legend_title, legend_cols=legend_cols, rasterized=rasterized,
                           scale_bar=scale_bar, north_arrow=north_arrow, legend_prop=legend_prop)
 
-    def summary(self, total=True, pretty=True, labels=None, cumulative_stats = True, year = None, variable='max_benefit_tech',
+    def summary(self, total=True, pretty=True, labels=None, cumulative_stats = True, year = None,
                 remove_none=False):
 
         if year is None:
@@ -2847,7 +3016,7 @@ class OnStove(DataProcessor):
         if year is None:
             year = self.specs["end_year"]
 
-        df = self.summary(total=False, pretty=False, labels=labels, variable=fill, cumulative_stats=cumulative_stats, year=year)
+        df = self.summary(total=False, pretty=False, labels=labels, cumulative_stats=cumulative_stats, year=year)
         df['labels'] = df[x_variable] / df[x_variable].sum()
         df = df.loc[(df[fill]!='None')]
 
@@ -2971,7 +3140,7 @@ class OnStove(DataProcessor):
             year = self.specs["end_year"]
 
         df = self.summary(total=False, pretty=False, labels=labels, cumulative_stats=cumulative_stats, year = year,
-                          variable=variable, remove_none=True)
+                          remove_none=True)
         df['investment_costs'] -= df['salvage_cost']
         df['fuel_costs'] *= -1
         df['investment_costs'] *= -1

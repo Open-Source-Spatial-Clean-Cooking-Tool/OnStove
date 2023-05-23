@@ -434,43 +434,54 @@ class Technology:
             start_year = mask[mask].index
             self.health_parameters(model)
 
-            cl_diseases = {'alri': {1: 0.7, 2: 0.1, 3: 0.07, 4: 0.07, 5: 0.06},
-                           'copd': {1: 0.3, 2: 0.2, 3: 0.17, 4: 0.17, 5: 0.16},
-                           'lc': {1: 0.2, 2: 0.1, 3: 0.24, 4: 0.23, 5: 0.23},
-                           'ihd': {1: 0.2, 2: 0.1, 3: 0.24, 4: 0.23, 5: 0.23},
-                           'stroke': {1: 0.2, 2: 0.1, 3: 0.24, 4: 0.23, 5: 0.23}}
+            cl_diseases = {
+                'alri': {1: 0.7, 2: 0.1, 3: 0.07, 4: 0.07, 5: 0.06},
+                'copd': {1: 0.3, 2: 0.2, 3: 0.17, 4: 0.17, 5: 0.16},
+                'lc': {1: 0.2, 2: 0.1, 3: 0.24, 4: 0.23, 5: 0.23},
+                'ihd': {1: 0.2, 2: 0.1, 3: 0.24, 4: 0.23, 5: 0.23},
+                'stroke': {1: 0.2, 2: 0.1, 3: 0.24, 4: 0.23, 5: 0.23}
+            }
+
+            new_keys = range(6, model.specs["end_year"] - model.specs["start_year"] + 1)
+            default_value = 0
+
+            for disease in cl_diseases.values():
+                for key in new_keys:
+                    disease.setdefault(key, default_value)
 
             for disease in diseases:
                 rate = model.specs[f'{parameter}_{disease}']
-                cl = 0
                 i = model.year
                 paf = f'paf_{disease.lower()}'
                 pop, house, pop_increase = model.yearly_pop(model.year)
                 mor[disease] = pd.Series(0, index=mask.index)
-                mor[disease].loc[start_year] = (pop.loc[start_year] * (model.base_fuel[paf].loc[start_year] - self[paf].loc[start_year]) * (
-                        rate / 100000))/model.houses[mask, model.year - 1 - model.specs["start_year"]]
+                mor[disease].loc[start_year] = (pop.loc[start_year] * (
+                            model.base_fuel[paf].loc[start_year] - self[paf].loc[start_year]) * (
+                                                        rate / 100000)) / model.houses[
+                                                   mask, model.year - 1 - model.specs["start_year"]]
 
                 cases = np.zeros((len(mask), model.specs["end_year"] - model.specs["start_year"]))
                 costs = np.zeros((len(mask), model.specs["end_year"] - model.specs["start_year"]))
 
+                cl_cum_sum = np.cumsum(list(cl_diseases[disease].values())[:(model.specs["end_year"] -
+                                                                          model.specs["start_year"])
+                                                         - (model.year - model.specs["start_year"] - 1)])
+
+                j = 0
                 while i <= model.specs["end_year"]:
                     if parameter == 'morb':
                         cost = model.specs[f'coi_{disease}']
                     elif parameter == 'mort':
                         cost = model.specs['vsl']
 
-                    if i - model.year + 1 > 5:
-                        cl = 1
-                    else:
-                        cl += cl_diseases[disease][i - model.year + 1]
-
-                    disease_cases = mor[disease].loc[start_year] * cl * (1 + pop_increase.loc[start_year]) ** (
-                            i - model.year)
+                    disease_cases = mor[disease].loc[start_year] * cl_cum_sum[j] * (1 + pop_increase.loc[start_year]) \
+                                    ** (i - model.year)
 
                     cases[mask, i - model.specs["start_year"] - 1] += disease_cases.loc[start_year]
                     costs[mask, i - model.specs["start_year"] - 1] += disease_cases.loc[start_year] * cost
 
                     i += 1
+                    j += 1
 
                 cases_dict[disease] = cases
                 costs_dict[disease] = costs
@@ -539,20 +550,20 @@ class Technology:
                 self.relative_cost_mort = np.zeros((len(mask), model.specs["end_year"] - model.specs["start_year"]))
                 self.distributed_mortality = pd.Series(0, index=mask.index)
 
-            self.distributed_mortality.loc[masky] = pd.Series(discounted_costs, index=mask.index).loc[masky]
-            self.relative_deaths[mask] = deaths[mask]
-            self.relative_cost_mort[mask] = costs[mask]
-            self.deaths_avoided.loc[masky] = \
+            self.distributed_mortality.loc[masky] += pd.Series(discounted_costs, index=mask.index).loc[masky]
+            self.relative_deaths[mask] += deaths[mask]
+            self.relative_cost_mort[mask] += costs[mask]
+            self.deaths_avoided.loc[masky] += \
                 pd.Series(np.array([sum(x) for x in self.relative_deaths]), index=mask.index).loc[masky]
 
             if model.specs['health_spillovers_parameter'] > 0:
-                self.relative_deaths[mask] = self.relative_deaths[mask] * (1 + model.specs['w_spillover']
+                self.relative_deaths[mask] += self.relative_deaths[mask] * (1 + model.specs['w_spillover']
                                                                          * model.specs['health_spillovers_parameter'])
-                self.relative_cost_mort[mask] = self.relative_cost_mort[mask] * (1 + model.specs['w_spillover']
+                self.relative_cost_mort[mask] += self.relative_cost_mort[mask] * (1 + model.specs['w_spillover']
                                                                            * model.specs['health_spillovers_parameter'])
-                self.deaths_avoided.loc[masky] = self.deaths_avoided.loc[masky] * (1 + model.specs['w_spillover']
+                self.deaths_avoided.loc[masky] += self.deaths_avoided.loc[masky] * (1 + model.specs['w_spillover']
                                                                          * model.specs['health_spillovers_parameter'])
-                self.distributed_mortality.loc[masky] = self.distributed_mortality.loc[masky] * (1 + model.specs['w_spillover']
+                self.distributed_mortality.loc[masky] += self.distributed_mortality.loc[masky] * (1 + model.specs['w_spillover']
                                                                          * model.specs['health_spillovers_parameter'])
         else:
             if not isinstance(self.deaths, np.ndarray):
@@ -598,20 +609,20 @@ class Technology:
                 self.relative_cost_morb = np.zeros((len(mask), model.specs["end_year"] - model.specs["start_year"]))
                 self.distributed_morbidity = pd.Series(0, index=mask.index)
 
-            self.distributed_morbidity.loc[masky] = pd.Series(discounted_costs, index=mask.index).loc[masky]
-            self.relative_cases[mask] = cases[mask]
-            self.relative_cost_morb[mask] = costs[mask]
-            self.cases_avoided.loc[masky] = \
+            self.distributed_morbidity.loc[masky] += pd.Series(discounted_costs, index=mask.index).loc[masky]
+            self.relative_cases[mask] += cases[mask]
+            self.relative_cost_morb[mask] += costs[mask]
+            self.cases_avoided.loc[masky] += \
                 pd.Series(np.array([sum(x) for x in self.relative_cases]), index=mask.index).loc[masky]
 
             if model.specs['health_spillovers_parameter'] > 0:
-                self.relative_cases[mask] = self.relative_cases[mask] * (1 + model.specs['w_spillover']
+                self.relative_cases[mask] += self.relative_cases[mask] * (1 + model.specs['w_spillover']
                                                                          * model.specs['health_spillovers_parameter'])
-                self.relative_cost_morb[mask] = self.relative_cost_morb[mask] * (1 + model.specs['w_spillover']
+                self.relative_cost_morb[mask] += self.relative_cost_morb[mask] * (1 + model.specs['w_spillover']
                                                                            * model.specs['health_spillovers_parameter'])
-                self.cases_avoided.loc[masky] = self.cases_avoided.loc[masky] * (1 + model.specs['w_spillover']
+                self.cases_avoided.loc[masky] += self.cases_avoided.loc[masky] * (1 + model.specs['w_spillover']
                                                                          * model.specs['health_spillovers_parameter'])
-                self.distributed_morbidity.loc[masky] = self.distributed_morbidity.loc[masky] * (1 + model.specs['w_spillover']
+                self.distributed_morbidity.loc[masky] += self.distributed_morbidity.loc[masky] * (1 + model.specs['w_spillover']
                                                                          * model.specs['health_spillovers_parameter'])
         else:
 
@@ -950,6 +961,8 @@ class Technology:
          total_costs, morbidity, mortality, time_saved, carbon_emissions
         """
 
+        limit = min(self.tech_life, model.specs["end_year"] - model.year + 1)
+
         self.total_costs(model, mask)
         discount_rate, proj_life = self.discount_factor(model.specs)
         masky = mask[mask].index
@@ -959,12 +972,17 @@ class Technology:
             self.factor = np.zeros((len(model.gdf), model.specs["end_year"] - model.specs["start_year"]))
             self.households = pd.Series(0, index=mask.index, dtype='float64')
 
-        self.benefits.loc[masky] = model.specs["w_health"] * (self.distributed_morbidity.loc[masky] + self.distributed_mortality.loc[masky]) + \
-                        model.specs["w_environment"] * self.decreased_carbon_costs[mask].sum(axis=1) \
-                                   + model.specs["w_time"] * self.time_value[mask].sum(axis=1)
+        self.benefits.loc[masky] = model.specs["w_health"] * (self.distributed_morbidity.loc[masky] +
+                        self.distributed_mortality.loc[masky]) + model.specs["w_environment"] * \
+                        self.decreased_carbon_costs[mask, model.year-model.specs["start_year"]-1:limit].sum(axis=1) + \
+                        model.specs["w_time"] * \
+                                   self.time_value[mask, model.year-model.specs["start_year"]-1:limit].sum(axis=1)
+
+        self.decreased_carbon_costs[mask, model.year-model.specs["start_year"]-1:limit].sum(axis=1)
 
         self.net_benefits.loc[masky] = self.benefits.loc[masky] - model.specs["w_costs"] * \
-                                       np.array([sum(x / discount_rate) for x in self.costs[mask]])
+                                       np.array([sum(x / discount_rate[model.year-model.specs["start_year"]-1:limit])
+                                       for x in self.costs[mask, model.year-model.specs["start_year"]-1:limit]])
 
         if "costs_{}".format(self.name) not in model.gdf.columns:
             model.gdf["costs_{}".format(self.name)] = np.nan
