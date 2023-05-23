@@ -1273,9 +1273,9 @@ class OnStove(DataProcessor):
                   "The shares have been adjusted to make the sum 1.0 as follows.\n"
                   "If you are not satisfied then please adjust the shares to your liking manually in the tech specs file:")
             for name,tech in self.techs.items():
-                print('     ','-',name,f"{tech.current_share_rural*100:,.3f}", "%")
+                if tech.current_share_rural > 0:
+                    print('     ','-',name,f"{tech.current_share_rural*100:,.3f}", "%")
             print("")
-
 
         sharesumurban = sum(item['current_share_urban'] for item in self.techs.values())
 
@@ -1287,7 +1287,8 @@ class OnStove(DataProcessor):
                   "The shares have been adjusted to make the sum 1.0 as follows.\n"
                   "If you are not satisfied then please adjust the shares to your liking manually in the tech specs file:")
             for name,tech in self.techs.items():
-                print('     ','-',name,f"{tech.current_share_urban*100:,.3f}", "%")
+                if tech.current_share_urban > 0:
+                    print('     ','-',name,f"{tech.current_share_urban*100:,.3f}", "%")
             print("")
 
     def _ecooking_adjustment(self):
@@ -1305,9 +1306,11 @@ class OnStove(DataProcessor):
         If the share of the population cooking with electricity is higher than the electrification rate
         in either rural or urban areas, then the function prints a message to user and the adjusted technology shares
         """
-        if self.specs["rural_elec_rate"] < self.techs["Electricity"].current_share_rural:
-            rural_difference = self.techs["Electricity"].current_share_rural - self.specs["rural_elec_rate"]
-            self.techs["Electricity"].current_share_rural = self.specs["rural_elec_rate"]
+        urban = self.gdf['IsUrban'] > 20
+        rural_access = self.gdf.loc[~urban, 'Elec_pop_calib'].sum() / self.gdf.loc[~urban, 'Calibrated_pop'].sum()
+        if rural_access < self.techs["Electricity"].current_share_rural:
+            rural_difference = self.techs["Electricity"].current_share_rural - rural_access
+            self.techs["Electricity"].current_share_rural = rural_access
             ruralsum_dirtyfuels = 0
             for name, tech in self.techs.items():
                 if not tech.is_clean:
@@ -1320,13 +1323,14 @@ class OnStove(DataProcessor):
                 \nthan the share of the population cooking with electricity. \
                 \nThe share of the population cooking with electricity has been made equal to the rural electrification rate. \
                 \nThe remaining population share has been reallocated proportionally to dirty fuels.\
-                \nIf you are not satisfied then please adjust the rural electrificaiton rate or tech shares accordingly in the specs.")
+                \nIf you are not satisfied then please adjust the rural electrification rate or tech shares accordingly in the specs.")
             for name,tech in self.techs.items():
                 print(name,tech.current_share_rural)
-            
-        if self.specs["urban_elec_rate"] < self.techs["Electricity"].current_share_urban:
-            urban_difference = self.techs["Electricity"].current_share_urban - self.specs["urban_elec_rate"]
-            self.techs["Electricity"].current_share_urban = self.specs["urban_elec_rate"]
+
+        urban_access = self.gdf.loc[urban, 'Elec_pop_calib'].sum() / self.gdf.loc[urban, 'Calibrated_pop'].sum()
+        if urban_access < self.techs["Electricity"].current_share_urban:
+            urban_difference = self.techs["Electricity"].current_share_urban - urban_access
+            self.techs["Electricity"].current_share_urban = urban_access
             urbansum_dirtyfuels = 0
             for name, tech in self.techs.items():
                 if not tech.is_clean:
@@ -1416,18 +1420,18 @@ class OnStove(DataProcessor):
         isurban = self.gdf["IsUrban"] > 20
         urban_factor = tech_dict["Electricity"].population_cooking_urban / sum(isurban * self.gdf["Elec_pop_calib"])
         tech_dict["Electricity"].pop_sqkm = (isurban) * (self.gdf["Elec_pop_calib"] * urban_factor)
-        #allocate population in each rural cell to electricity
+        # allocate population in each rural cell to electricity
         rural_factor = np.divide(tech_dict["Electricity"].population_cooking_rural,
                                  sum(~isurban * self.gdf["Elec_pop_calib"]),
                                  out=np.zeros_like(tech_dict["Electricity"].population_cooking_rural),
                                  where=sum(~isurban * self.gdf["Elec_pop_calib"]) != 0)
-        #rural_factor = tech_dict["Electricity"].population_cooking_rural / sum(~isurban * self.gdf["Elec_pop_calib"])
+        # rural_factor = tech_dict["Electricity"].population_cooking_rural / sum(~isurban * self.gdf["Elec_pop_calib"])
         tech_dict["Electricity"].pop_sqkm.loc[~isurban] = (self.gdf["Elec_pop_calib"] * rural_factor)
         #create series for biogas same size as dataframe with zeros 
         tech_dict["Biogas"].pop_sqkm = pd.Series(np.zeros(self.gdf.shape[0]))
         #allocate remaining population to biogas in rural areas where there's potential
-        biogas_factor = tech_dict["Biogas"].population_cooking_rural / (self.gdf["Calibrated_pop"].loc[(tech_dict["Biogas"].time_of_collection!=float('inf')) & ~isurban].sum())
-        tech_dict["Biogas"].pop_sqkm.loc[(~isurban) & (tech_dict["Biogas"].time_of_collection!=float('inf'))] = self.gdf["Calibrated_pop"] * biogas_factor
+        biogas_factor = tech_dict["Biogas"].population_cooking_rural / (self.gdf["Calibrated_pop"].loc[~np.isnan(tech_dict["Biogas"].time_of_collection) & ~isurban].sum())
+        tech_dict["Biogas"].pop_sqkm.loc[(~isurban) & (~np.isnan(tech_dict["Biogas"].time_of_collection))] = self.gdf["Calibrated_pop"] * biogas_factor
         pop_diff = (tech_dict["Biogas"].pop_sqkm + tech_dict["Electricity"].pop_sqkm) > self.gdf["Calibrated_pop"]
         tech_dict["Biogas"].pop_sqkm.loc[pop_diff] = self.gdf["Calibrated_pop"] - tech_dict["Electricity"].pop_sqkm
         #allocate remaining population proportionally to techs other than biogas and electricity 
@@ -2683,7 +2687,7 @@ class OnStove(DataProcessor):
              admin_layer: Optional[Union[gpd.GeoDataFrame, VectorLayer]] = None,
              title: Optional[str] = None,
              legend: bool = True, legend_title: str = '', legend_cols: int = 1,
-             legend_position: tuple[float, float] = (1.02, 0.7),
+             legend_position: tuple[float, float] = (1.02, 0.6),
              legend_prop: Optional[dict] = None,
              stats: bool = False,
              stats_kwargs: Optional[dict] = None,
@@ -2982,7 +2986,7 @@ class OnStove(DataProcessor):
              admin_layer: Optional[Union[gpd.GeoDataFrame, VectorLayer]] = None,
              title: Optional[str] = None,
              legend: bool = True, legend_title: str = '', legend_cols: int = 1,
-             legend_position: tuple[float, float] = (1.02, 0.7),
+             legend_position: tuple[float, float] = (1.02, 0.6),
              legend_prop: dict = {'title': {'size': 12, 'weight': 'bold'}, 'size': 12},
              stats: bool = False,
              stats_kwargs: Optional[dict] = None,
