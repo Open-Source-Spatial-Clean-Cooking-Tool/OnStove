@@ -62,7 +62,7 @@ always before conducting any analysis.
 * [svgpath2mpl](https://pypi.org/project/svgpath2mpl/)
 
 ## Documentation
-Access the latest documentation in [read the docs](https://readthedocs.org/projects/onstove-documentation/badge/?version=latest).
+Access the latest documentation in [read the docs](https://onstove-documentation.readthedocs.io/en/latest/?badge=latest).
 
 ## Resources
 
