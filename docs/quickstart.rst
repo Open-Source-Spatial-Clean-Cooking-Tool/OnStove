@@ -63,7 +63,7 @@ Open an `Anaconda Prompt` or a `Command Prompt` and run:
 
 .. code::
 
-	conda create -n onstove -c conda-forge OnStove
+	conda create -n onstove -c conda-forge onstove
 
 Now you will have a new conda environment called `ostove` with `OnStove` installed on it. To use it open a `Command Prompt`
 in the root folder of your analysis and activate the enviornment with:
