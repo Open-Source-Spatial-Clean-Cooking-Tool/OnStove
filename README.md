@@ -24,13 +24,13 @@ Open an `Anaconda Prompt` or a `Command Prompt` and run:
 ```
 > conda create -n onstove -c conda-forge onstove
 ```
-Now you will have a new conda environment called `ostove` with `OnStove` installed on it. To use it open a `Command Prompt`
-in the root folder of your analysis and activate the enviornment with:
+Now you will have a new conda environment called `onstove` with `OnStove` installed on it. To use it open a `Command Prompt`
+in the root folder of your analysis and activate the environment with:
 ```
 > conda activate onstove
 ```
 
-### Downloading the source code and intalling the environment
+### Downloading the source code and installing the environment
 Open an `Anaconda Prompt` or a `Command Prompt` and download the source code with:
 ```
 > conda install git
@@ -44,10 +44,10 @@ Then use the `jupyter_env.yaml` in the `envs` folder to install the environment 
 ```
 
 Now your environment `onstove` is available to use. Note that you need to activate it
-always before conducting any analysis. 
+always before conducting any analysis.
 
 ## Dependencies
-`OnStove` relais on the following packages:
+`OnStove` relies on the following packages:
 * [dill](https://dill.readthedocs.io/en/latest/dill.html)
 * [geopandas](https://geopandas.org/en/stable/)
 * [jupyterlab](https://jupyterlab.readthedocs.io/en/stable/)
@@ -76,4 +76,3 @@ Khavari, Babak, Camilo Ramirez, Marc Jeuland and Francesco Fuso Nerini (12 Janua
 Nature Sustainability. 1–11. ISSN 2398-9629. doi:10.1038/s41893-022-01039-8. 
 Creative Commons CC‑BY‑4.0 license.
 ```
-
