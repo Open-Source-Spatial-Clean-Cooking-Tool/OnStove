@@ -15,7 +15,7 @@ OnStove produces scenarios depicting the “true” cost of clean cooking. The s
 
 ## Installation 
 Install a python distribution using 
-[Anaconda](https://www.anaconda.com/distribution/) or 
+[Anaconda](https://www.anaconda.com/) or 
 [Miniconda](https://docs.conda.io/en/latest/miniconda.html#).
 
 ### Installing with `conda`
