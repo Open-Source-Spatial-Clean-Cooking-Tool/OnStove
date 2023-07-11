@@ -15,6 +15,6 @@ dependencies:
   - python-decouple
   - rasterio
   - scikit-image
-  - snakemake-minimal<7.12.0
+  - snakemake-minimal
   - svgpathtools
   - svgpath2mpl

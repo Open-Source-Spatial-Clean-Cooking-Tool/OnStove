@@ -1420,6 +1420,7 @@ class OnStove(DataProcessor):
         isurban = self.gdf["IsUrban"] > 20
         urban_factor = tech_dict["Electricity"].population_cooking_urban / sum(isurban * self.gdf["Elec_pop_calib"])
         tech_dict["Electricity"].pop_sqkm = (isurban) * (self.gdf["Elec_pop_calib"] * urban_factor)
+
         # allocate population in each rural cell to electricity
         rural_factor = np.divide(tech_dict["Electricity"].population_cooking_rural,
                                  sum(~isurban * self.gdf["Elec_pop_calib"]),
@@ -1427,13 +1428,16 @@ class OnStove(DataProcessor):
                                  where=sum(~isurban * self.gdf["Elec_pop_calib"]) != 0)
         # rural_factor = tech_dict["Electricity"].population_cooking_rural / sum(~isurban * self.gdf["Elec_pop_calib"])
         tech_dict["Electricity"].pop_sqkm.loc[~isurban] = (self.gdf["Elec_pop_calib"] * rural_factor)
+
         #create series for biogas same size as dataframe with zeros 
         tech_dict["Biogas"].pop_sqkm = pd.Series(np.zeros(self.gdf.shape[0]))
+
         #allocate remaining population to biogas in rural areas where there's potential
         biogas_factor = tech_dict["Biogas"].population_cooking_rural / (self.gdf["Calibrated_pop"].loc[~np.isnan(tech_dict["Biogas"].time_of_collection) & ~isurban].sum())
         tech_dict["Biogas"].pop_sqkm.loc[(~isurban) & (~np.isnan(tech_dict["Biogas"].time_of_collection))] = self.gdf["Calibrated_pop"] * biogas_factor
         pop_diff = (tech_dict["Biogas"].pop_sqkm + tech_dict["Electricity"].pop_sqkm) > self.gdf["Calibrated_pop"]
         tech_dict["Biogas"].pop_sqkm.loc[pop_diff] = self.gdf["Calibrated_pop"] - tech_dict["Electricity"].pop_sqkm
+
         #allocate remaining population proportionally to techs other than biogas and electricity 
         remaining_share = 0
         for name, tech in tech_dict.items():

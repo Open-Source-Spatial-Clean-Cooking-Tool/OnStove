@@ -1,5 +1,6 @@
 import sys, os
 from decouple import config
+import numpy as np
 
 onstove_path = config('ONSTOVE').format(os.getlogin())
 sys.path.append(onstove_path)
@@ -9,7 +10,7 @@ from onstove import VectorLayer, RasterLayer, OnStove
 # 1. Create an OnSSTOVE model
 output_directory = snakemake.params.output_directory
 country = snakemake.params.country
-model = OnStove()
+model = OnStove(project_crs=3395)
 model.output_directory = output_directory
 
 # 2. Read the model data
@@ -29,7 +30,7 @@ model.population_to_dataframe()
 
 # 5. Calibrate population and urban/rural split
 print(f'[{country}] Calibrating population')
-model.calibrate_current_pop()
+# model.calibrate_current_pop()
 
 # path = os.path.join(output_directory, 'Demographics', 'Urban_rural_divide', 'Urban_rural_divide.tif')
 ghs_path = snakemake.input.ghs
@@ -58,7 +59,7 @@ mv_lines = VectorLayer('Electricity', 'MV_lines', path=path, distance_method='pr
 print(f'[{country}] Calculating distance to electricity')
 model.distance_to_electricity(mv_lines=mv_lines)
 
-# 8.2. Add night time lights data
+# 8.2. Add nighttime lights data
 path = snakemake.input.ntl
 ntl = RasterLayer('Electricity', 'Night_time_lights', path=path)
 
@@ -84,8 +85,19 @@ model.read_tech_data(path, delimiter=',')
 
 # 12. Reading GIS data for LPG supply
 print(f'[{country}] LPG data')
+roads = VectorLayer('LPG', 'Roads', snakemake.input.roads)
+roads.reproject(3395)
 travel_time = RasterLayer('LPG', 'Traveltime', snakemake.input.traveltime_cities)
-model.techs['LPG'].travel_time = model.raster_to_dataframe(travel_time,fill_nodata_method='interpolate',
+# dist_roads = roads.proximity(base_layer=model.base_layer, create_raster=False)
+model.techs['LPG'].roads = roads
+model.techs['LPG'].distance_limit = 3000
+# rows, cols = np.where(dist_roads.data > 3000)
+# travel_time.data[rows, cols] = 999999
+# rows, cols = np.where(model.layers['Demographics']['Population'].data < 50)
+# travel_time.data[rows, cols] = 999999
+
+
+model.techs['LPG'].travel_time = model.raster_to_dataframe(travel_time, fill_nodata_method='interpolate',
                                                            method='read') * 2 / 60
 
 # 13. Adding GIS data for Traditional Biomass

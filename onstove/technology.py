@@ -1093,6 +1093,38 @@ class LPG(Technology):
             share[model.gdf['IsUrban'] < 20] *= self.current_share_rural
             self.discounted_investments += (self.discounted_infra_cost * (1 - share))
 
+    def net_benefit(self, model: 'onstove.OnStove', w_health: int = 1, w_spillovers: int = 1,
+                    w_environment: int = 1, w_time: int = 1, w_costs: int = 1):
+        """This method expands :meth:`Technology.net_benefit` by taking into account access to roads (proximity).
+
+        Parameters
+         ----------
+         model: OnStove model
+             Instance of the OnStove model containing the main data of the study case. See
+             :class:`onstove.OnStove`.
+         w_health: int, default 1
+             Determines the weight of the health parameters (reduced morbidity and mortality)
+             in the net-benefit equation.
+         w_spillovers: int, default 1
+             Determines the weight of the spillover effects from cooking with traditional fuels
+             in the net-benefit equation.
+         w_environment: int, default 1
+             Determines the weight of the environmental effects (reduced emissions) in the net-benefit equation.
+         w_time: int, default 1
+             Determines the weight of the opportunity cost (reduced time spent) in the net-benefit equation.
+         w_costs: int, default 1
+             Determines the weight of the costs in the net-benefit equation.
+
+        See also
+        --------
+        net_benefit
+        """
+        super().net_benefit(model, w_health, w_spillovers, w_environment, w_time, w_costs)
+        dist_roads = self.roads.proximity(base_layer=model.base_layer, create_raster=False)
+        dist_roads.data = dist_roads.data > self.distance_limit
+        limit = model.raster_to_dataframe(dist_roads, method='read')
+        model.gdf.loc[limit == 1, "benefits_{}".format(self.name)] = -999999999999999
+
 
 class Biomass(Technology):
     """Biomass technology class used to model traditional and improved stoves.
@@ -1577,7 +1609,8 @@ class Electricity(Technology):
                  time_of_cooking: float = 1.8,
                  om_cost: float = 3.7,  # percentage of investement cost
                  efficiency: float = 0.85,  # ratio
-                 pm25: float = 32):
+                 pm25: float = 32,
+                 grid_cost_factor: float = 1):
         super().__init__(name, carbon_intensity, None, None, None,
                          None, None, None, energy_content, tech_life,
                          inv_cost, fuel_cost, time_of_cooking,
@@ -1588,6 +1621,7 @@ class Electricity(Technology):
         self.grid_capacity_cost = grid_capacity_cost
         self.tiers_path = None
         self.connection_cost = connection_cost
+        self.grid_cost_factor = grid_cost_factor
         self.carbon_intensities = {'coal': 0.090374363, 'natural_gas': 0.050300655,
                                    'crude_oil': 0.070650288, 'heavy_fuel_oil': 0.074687989,
                                    'oil': 0.072669139, 'diesel': 0.069332823,
@@ -1673,7 +1707,7 @@ class Electricity(Technology):
         `grid_capacity_cost` attribute of the Electricity class."""
         self.grid_capacity_cost = sum(
             [self.grid_capacity_costs[fuel] * (cap / sum(self.capacities.values())) for fuel, cap in
-             self.capacities.items()])
+             self.capacities.items()]) * self.grid_cost_factor
 
     def grid_salvage(self, model: 'onstove.OnStove', single: bool = False):
         """This method determines the salvage cost of the grid connected power plants.
