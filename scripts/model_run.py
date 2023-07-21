@@ -24,6 +24,7 @@ model.output_directory = snakemake.params.output_directory
 model.techs['Electricity'].get_capacity_cost(model)
 
 # 3. Calculating benefits and costs of each technology and getting the max benefit technology for each cell
+
 model.run(technologies=['Electricity', 'LPG', 'Biogas',
                         'Collected_Improved_Biomass', 'Collected_Traditional_Biomass', 'Charcoal ICS',
                         'Traditional_Charcoal', 'Biomass Forced Draft', 'Pellets Forced Draft'

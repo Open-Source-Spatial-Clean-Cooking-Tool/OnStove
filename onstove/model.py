@@ -2584,9 +2584,9 @@ class OnStove(DataProcessor):
         if isinstance(self.gdf[variable].iloc[0], str):
             if isinstance(labels, dict):
                 dff = self._re_name(dff, labels, variable)
-            dff[variable] += ' and '
+            dff[variable] += ' + '
             dff = dff.groupby('index').agg({variable: 'sum', 'geometry': 'first'})
-            dff[variable] = [s[0:len(s) - 5] for s in dff[variable]]
+            dff[variable] = [s[0:len(s) - 3] for s in dff[variable]]
             if isinstance(labels, dict):
                 dff = self._re_name(dff, labels, variable)
 
