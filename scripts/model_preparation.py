@@ -90,7 +90,7 @@ roads.reproject(3395)
 travel_time = RasterLayer('LPG', 'Traveltime', snakemake.input.traveltime_cities)
 # dist_roads = roads.proximity(base_layer=model.base_layer, create_raster=False)
 model.techs['LPG'].roads = roads
-model.techs['LPG'].distance_limit = 3000
+model.techs['LPG'].distance_limit = 4000
 # rows, cols = np.where(dist_roads.data > 3000)
 # travel_time.data[rows, cols] = 999999
 # rows, cols = np.where(model.layers['Demographics']['Population'].data < 50)
