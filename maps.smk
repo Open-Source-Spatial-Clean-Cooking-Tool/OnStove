@@ -15,7 +15,7 @@ COUNTRIES = ['Africa']
 
 rule all:
     input:
-        expand("../Clean cooking Africa paper/06. Results/IEA/{country}/{scenario}/{restriction}/max_benefit_tech.pdf",
+        expand("../Clean cooking Africa paper/06. Results/IEA/Archive/{country}/{scenario}/{restriction}/max_benefit_tech.pdf",
                country=COUNTRIES,
                scenario=SCENARIOS,
                restriction=RESTRICTION)
@@ -24,7 +24,8 @@ rule get_maps:
     input:
         model = "../Clean cooking Africa paper/06. Results/IEA/{country}/{scenario}/{restriction}/results.pkl"
     params:
-        country = "{country}"
+        country = "{country}",
+        output_directory = "../Clean cooking Africa paper/06. Results/IEA/{country}/{scenario}/{restriction}"
     output:
         "../Clean cooking Africa paper/06. Results/IEA/{country}/{scenario}/{restriction}/max_benefit_tech.pdf"
     script:

@@ -12,6 +12,7 @@ from onstove import OnStove
 country = snakemake.params.country
 print(f'[{country}] Reading model')
 model = OnStove.read_model(snakemake.input.model)
+model.output_directory = snakemake.params.output_directory
 
 # 5. Saving data to raster files
 cmap = {"Electricity": '#ffc000',
@@ -24,9 +25,9 @@ labels = {"Biogas + Electricity": "Electricity",
           'Charcoal ICS': 'ICS',
           'Biomass Forced Draft': 'ICS',
           'Pellets Forced Draft': 'ICS',
-          'Biogas + LPG': 'LPG'
+          'Biogas + LPG': 'LPG',
           'LPG + Biogas': 'LPG',
-          'Biogas + ICS': 'ICS',
+          'Biogas + ICS': 'Biogas',
           'Electricity + LPG': "Electricity",
           "Electricity + Biogas": "Electricity",
           "Electricity + ICS": "Electricity"
@@ -55,9 +56,9 @@ plt.savefig(os.path.join(model.output_directory, 'max_benefit_tech.svg'),
             dpi=600, bbox_inches='tight', transparent=True)
 plt.close()
 
-# model.plot_split(cmap=cmap, labels=labels, save_as='tech_split.pdf', height=1.5, width=3.5)
-# model.plot_costs_benefits(labels=labels, save_as='benefits_costs.pdf', height=1.5, width=2)
-# model.plot_distribution(type='histogram', groupby='None', cmap=cmap, labels=labels,
-#                         hh_divider=1000, y_title='Households (k)',
-#                         quantiles=True,
-#                         height=1.5, width=3.5, dpi=300, save_as='max_benefits_hist.pdf')
+model.plot_split(cmap=cmap, labels=labels, save_as='tech_split.pdf', height=1.5, width=3.5)
+model.plot_costs_benefits(labels=labels, save_as='benefits_costs.pdf', height=1.5, width=2)
+model.plot_distribution(type='histogram', groupby='None', cmap=cmap, labels=labels,
+                        hh_divider=1000, y_title='Households (k)',
+                        quantiles=True,
+                        height=1.5, width=3.5, dpi=300, save_as='max_benefits_hist.pdf')

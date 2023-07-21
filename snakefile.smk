@@ -19,18 +19,18 @@ COUNTRIES = ['AGO', 'BDI', 'BEN', 'BFA', 'BWA', 'CAF', 'CIV', 'CMR',
              'UGA', 'ZAF', 'ZMB', 'ZWE']
 
 
+# rule all:
+	# input:
+		# expand("../Clean cooking Africa paper/06. Results/IEA/{country}/{scenario}/{restriction}/results.pkl",
+               # country=COUNTRIES,
+               # scenario=SCENARIOS,
+               # restriction=RESTRICTION)
+
 rule all:
-	input:
-		expand("../Clean cooking Africa paper/06. Results/IEA/{country}/{scenario}/{restriction}/results.pkl",
-               country=COUNTRIES,
+    input:
+        expand("../Clean cooking Africa paper/06. Results/IEA/Africa/{scenario}/{restriction}/results.pkl",
                scenario=SCENARIOS,
                restriction=RESTRICTION)
-
-# rule all:
-#     input:
-#         expand("../Clean cooking Africa paper/06. Results/IEA/Africa/{scenario}/{restriction}/results.pkl",
-#                scenario=SCENARIOS,
-#                restriction=RESTRICTION)
 
 rule extract_forest:
     input:
