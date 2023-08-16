@@ -4,7 +4,7 @@ cwd = os.getcwd()
 SCENARIOS = ['Social_private_benefits']
 RESTRICTION = ['Positive_Benefits']
 
-COUNTRIES = ['Africa']
+COUNTRIES = ['KEN']
 # COUNTRIES = ['AGO', 'BDI', 'BEN', 'BFA', 'BWA', 'CAF', 'CIV', 'CMR',
 #              'COD', 'COG', 'DJI', 'ERI', 'ETH', 'GAB', 'GHA', 'GIN',
 #              'GMB', 'GNB', 'GNQ', 'KEN', 'LBR', 'LSO', 'MDG', 'MLI',
