@@ -1128,7 +1128,7 @@ class OnStove(DataProcessor):
                 if tech.is_clean:
                     pop_sqkm += tech.pop_sqkm
 
-                    self.clean_cooking_access += pop_sqkm
+            self.clean_cooking_access += pop_sqkm
             self.sfu = 1 - self.clean_cooking_access
 
             houses = np.empty((self.gdf.shape[0], 0), int)
@@ -1193,6 +1193,8 @@ class OnStove(DataProcessor):
                 tech.time_saved(self, mask, False)
                 base_fuel.time += tech.discounted_time_value.replace(float("inf"), 0) * tech.pop_sqkm
                 base_fuel.total_time_yr += tech.total_time_yr.replace(float("inf"), 0) * tech.pop_sqkm
+
+
 
                 for paf in ['paf_alri', 'paf_copd', 'paf_ihd', 'paf_lc', 'paf_stroke']:
                     base_fuel[paf] += tech[paf] * tech.pop_sqkm
@@ -1660,6 +1662,7 @@ class OnStove(DataProcessor):
         start_rate = (self.clean_cooking_access_u*self.specs['urban_start'] \
                      + self.clean_cooking_access_r*(1 - self.specs['urban_start']))
 
+
         # TODO: change the print to a warning
         if start_rate > target:
             print('Note that your clean cooking access rate in the start year ({0}%) is higher than the clean cooking '
@@ -1872,6 +1875,7 @@ class OnStove(DataProcessor):
 
                 self.base_fuel.inv_change.loc[mask_2[mask_2].index] = self.techs[tech].inv_change
 
+
                 self.base_fuel.om_costs[mask_2[mask_2].index, self.year - self.specs["start_year"] - 1:
                                                                  self.year - self.specs["start_year"] - 1 +
                                                                  self.techs[tech].tech_life] = \
@@ -1898,6 +1902,7 @@ class OnStove(DataProcessor):
             self.gdf["duplicates"] = self.gdf.index
             for i, g in self.gdf.loc[duplicated_indices].groupby('duplicates'):
                 if self.gdf.loc[i]['year'].nunique() == 1:
+
                     tech_0 = g["max_benefit_tech"].iloc[0]
                     pop_0 = g["Pop"].iloc[0]
                     tech_1 = g["max_benefit_tech"].iloc[1]
@@ -1927,9 +1932,10 @@ class OnStove(DataProcessor):
                                                                self.year - self.specs["start_year"] - 1 +
                                                                self.techs[tech_1].tech_life]) * pop_1
 
+
                     self.base_fuel.investments[i, self.year - self.specs["start_year"] - 1:
                     self.year - self.specs["start_year"] - 1 +
-                    self.techs[tech].tech_life] = (inv_0 + inv_1) / total_pop
+                    self.techs[tech_0].tech_life] = (inv_0 + inv_1) / total_pop
 
                     self.base_fuel.inv_change.loc[i] = (self.techs[tech_0].inv_change * pop_0 + self.techs[
                         tech_1].inv_change * pop_1) / total_pop
@@ -1942,9 +1948,10 @@ class OnStove(DataProcessor):
                                                            self.year - self.specs["start_year"] - 1 +
                                                            self.techs[tech_1].tech_life]) * pop_1
 
+
                     self.base_fuel.om_costs[i, self.year - self.specs["start_year"] - 1:
-                    self.year - self.specs["start_year"] - 1 +
-                    self.techs[tech].tech_life] = (om_0 + om_1) / total_pop
+                                               self.year - self.specs["start_year"] - 1 +
+                                               self.techs[tech_0].tech_life] = (om_0 + om_1) / total_pop
 
                     sal_0 = pop_0 * (self.techs[tech_0].salvage_cost[i, self.year - self.specs["start_year"] - 1:
                                                                         self.year - self.specs["start_year"] - 1 +
@@ -1954,9 +1961,10 @@ class OnStove(DataProcessor):
                                                                         self.year - self.specs["start_year"] - 1 +
                                                                         self.techs[tech_1].tech_life])
 
+
                     self.base_fuel.salvage_cost[i, self.year - self.specs["start_year"] - 1:
-                    self.year - self.specs["start_year"] - 1 +
-                    self.techs[tech].tech_life] = (sal_0 + sal_1) / total_pop
+                                                   self.year - self.specs["start_year"] - 1 +
+                                                   self.techs[tech_0].tech_life] = (sal_0 + sal_1) / total_pop
 
                     fuel_0 = pop_0 * (self.techs[tech_0].fuel_costs[i, self.year - self.specs["start_year"] - 1:
                                                                        self.year - self.specs["start_year"] - 1 +
@@ -1972,7 +1980,6 @@ class OnStove(DataProcessor):
 
 
             del self.gdf["duplicates"]
-
 
         for i, y in enumerate(range(self.specs['start_year'] + 1, self.specs['end_year'] + 1)):
             mask = (self.gdf['year'] == y)

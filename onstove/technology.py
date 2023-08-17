@@ -3,6 +3,7 @@
 import os
 import numpy as np
 import geopandas as gpd
+from warnings import warn
 import pandas as pd
 import geopandas as gpd
 from typing import Optional, Callable
@@ -428,7 +429,7 @@ class Technology:
         cases_dict = {}
         costs_dict = {}
 
-        diseases = ['alri', 'copd', 'ihd', 'lc', 'stroke']
+        diseases = ['alri', 'copd', 'lc', 'stroke','ihd']
 
         if relative:
             start_year = mask[mask].index
@@ -497,6 +498,7 @@ class Technology:
                 rate = model.specs[f'{parameter}_{disease}']
                 paf = f'paf_{disease.lower()}'
                 mor[disease] = (pop * (self[paf]) * (rate / 100000))/house
+
                 cases = np.zeros((len(mask), model.specs["end_year"] - model.specs["start_year"]))
                 costs = np.zeros((len(mask), model.specs["end_year"] - model.specs["start_year"]))
                 while i < model.specs["end_year"]:
@@ -543,28 +545,25 @@ class Technology:
         masky = mask[mask].index
 
         if relative:
-
             if not isinstance(self.deaths_avoided, pd.Series):
                 self.relative_deaths = np.zeros((len(mask), model.specs["end_year"] - model.specs["start_year"]))
                 self.deaths_avoided = pd.Series(0, index=mask.index)
                 self.relative_cost_mort = np.zeros((len(mask), model.specs["end_year"] - model.specs["start_year"]))
                 self.distributed_mortality = pd.Series(0, index=mask.index)
 
-            self.distributed_mortality.loc[masky] += pd.Series(discounted_costs, index=mask.index).loc[masky]
-            self.relative_deaths[mask] += deaths[mask]
-            self.relative_cost_mort[mask] += costs[mask]
-            self.deaths_avoided.loc[masky] += \
-                pd.Series(np.array([sum(x) for x in self.relative_deaths]), index=mask.index).loc[masky]
+            if model.specs['health_spillovers_parameter'] < 0:
+                warn("The health_spillover_parameter given is smaller than 0. The spillover parameter describes "
+                     "spillover effect from household air pollution and as such, should to be at least 0."
+                     , DeprecationWarning, stacklevel=2)
 
-            if model.specs['health_spillovers_parameter'] > 0:
-                self.relative_deaths[mask] += self.relative_deaths[mask] * (1 + model.specs['w_spillover']
-                                                                         * model.specs['health_spillovers_parameter'])
-                self.relative_cost_mort[mask] += self.relative_cost_mort[mask] * (1 + model.specs['w_spillover']
-                                                                           * model.specs['health_spillovers_parameter'])
-                self.deaths_avoided.loc[masky] += self.deaths_avoided.loc[masky] * (1 + model.specs['w_spillover']
-                                                                         * model.specs['health_spillovers_parameter'])
-                self.distributed_mortality.loc[masky] += self.distributed_mortality.loc[masky] * (1 + model.specs['w_spillover']
-                                                                         * model.specs['health_spillovers_parameter'])
+            self.relative_deaths[mask] += deaths[mask] * (1 + model.specs['w_spillover']
+                                                                     * model.specs['health_spillovers_parameter'])
+            self.relative_cost_mort[mask] += costs[mask] * (1 + model.specs['w_spillover']
+                                                                       * model.specs['health_spillovers_parameter'])
+            self.deaths_avoided.loc[masky] += pd.Series(np.array([sum(x) for x in self.relative_deaths]), index=mask.index).loc[masky]
+            self.distributed_mortality.loc[masky] += pd.Series(discounted_costs, index=mask.index).loc[masky]\
+                                                     * (1 + model.specs['w_spillover']
+                                                        * model.specs['health_spillovers_parameter'])
         else:
             if not isinstance(self.deaths, np.ndarray):
                 self.deaths = np.zeros((len(mask), model.specs["end_year"] - model.specs["start_year"]))
@@ -609,23 +608,20 @@ class Technology:
                 self.relative_cost_morb = np.zeros((len(mask), model.specs["end_year"] - model.specs["start_year"]))
                 self.distributed_morbidity = pd.Series(0, index=mask.index)
 
-            self.distributed_morbidity.loc[masky] += pd.Series(discounted_costs, index=mask.index).loc[masky]
-            self.relative_cases[mask] += cases[mask]
-            self.relative_cost_morb[mask] += costs[mask]
-            self.cases_avoided.loc[masky] += \
-                pd.Series(np.array([sum(x) for x in self.relative_cases]), index=mask.index).loc[masky]
+            if model.specs['health_spillovers_parameter'] < 0:
+                warn("The health_spillover_parameter given is smaller than 0. The spillover parameter describes "
+                     "spillover effect from household air pollution and as such, should to be at least 0."
+                     , DeprecationWarning, stacklevel=2)
 
-            if model.specs['health_spillovers_parameter'] > 0:
-                self.relative_cases[mask] += self.relative_cases[mask] * (1 + model.specs['w_spillover']
-                                                                         * model.specs['health_spillovers_parameter'])
-                self.relative_cost_morb[mask] += self.relative_cost_morb[mask] * (1 + model.specs['w_spillover']
-                                                                           * model.specs['health_spillovers_parameter'])
-                self.cases_avoided.loc[masky] += self.cases_avoided.loc[masky] * (1 + model.specs['w_spillover']
-                                                                         * model.specs['health_spillovers_parameter'])
-                self.distributed_morbidity.loc[masky] += self.distributed_morbidity.loc[masky] * (1 + model.specs['w_spillover']
-                                                                         * model.specs['health_spillovers_parameter'])
+            self.relative_cases[mask] += cases[mask] * (1 + model.specs['w_spillover']
+                                                                     * model.specs['health_spillovers_parameter'])
+            self.relative_cost_morb[mask] += costs[mask] * (1 + model.specs['w_spillover']
+                                                                       * model.specs['health_spillovers_parameter'])
+            self.cases_avoided.loc[masky] += pd.Series(np.array([sum(x) for x in self.relative_cases]), index=mask.index).loc[masky]
+            self.distributed_morbidity.loc[masky] += pd.Series(discounted_costs, index=mask.index).loc[masky]\
+                                                     * (1 + model.specs['w_spillover']
+                                                                     * model.specs['health_spillovers_parameter'])
         else:
-
             if not isinstance(self.cases, np.ndarray):
                 self.cases = np.zeros((len(mask), model.specs["end_year"] - model.specs["start_year"]))
                 self.distributed_morbidity = pd.Series(0, index=mask.index)
@@ -767,14 +763,15 @@ class Technology:
                                np.expand_dims(np.zeros(proj_life), axis=0))
 
         if relative:
-            proj_years[mask, model.year - model.specs["start_year"] - 1] = 1
+            proj_years[mask, model.year - model.specs["start_year"] - 1] = 1*self.inv_change**\
+                                                                           (model.year - model.specs["start_year"] - 1)
             self.tech_life = round(self.tech_life)
             for j in range(self.tech_life, proj_life, self.tech_life):
                 if j + model.year - model.specs["start_year"] - 1 < proj_life:
-                    proj_years[mask, j + model.year - model.specs["start_year"] - 1] = 1*self.inv_change**j
+                    proj_years[mask, j + model.year - model.specs["start_year"] - 1] = 1*self.inv_change**\
+                                                                                       (j + model.year - model.specs["start_year"] - 1)
 
             investments = proj_years * np.array(inv)[:, None]
-
             investments[mask, 0:(model.year - model.specs["start_year"] - 1)] = model.base_fuel.investments[mask,
                                                                               :(model.year - model.specs[
                                                                                   "start_year"] - 1)]
