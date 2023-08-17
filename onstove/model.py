@@ -3599,7 +3599,7 @@ class OnStove(DataProcessor):
              + scale_fill_manual(cmap)
              + scale_color_manual(cmap, guide=False)
              + theme_name
-             + theme(subplots_adjust={'wspace': 0.25}, text=element_text(**_font_args))
+             + theme(text=element_text(**_font_args))
              + wrap
              + labs(x=x_title, y=y_title, fill='Cooking technology')
              )
@@ -3661,7 +3661,7 @@ class OnStove(DataProcessor):
              + scale_fill_manual(cmap)
              + scale_color_manual(cmap, guide=False)
              + theme_minimal()
-             + theme(subplots_adjust={'wspace': 0.25}, text=element_text(**font_args))
+             + theme(text=element_text(**font_args))
              + labs(x=x_title, y=y_title, fill='Cooking technology')
              )
         return p

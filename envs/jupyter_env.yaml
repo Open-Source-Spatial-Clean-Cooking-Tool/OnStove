@@ -6,11 +6,11 @@ dependencies:
   - dill
   - geopandas
   - jupyterlab
-  - matplotlib<=3.5.2
-  - plotnine
+  - matplotlib
+  - plotnine>=0.12.2
   - psutil
   - psycopg2
-  - pyproj<=3.3.1
+  - pyproj
   - python>=3.10
   - python-decouple
   - rasterio
