@@ -8,7 +8,7 @@ def test_prepare_model():
     # 1. Create an OnStove model
     output_directory = os.path.join('onstove', 'tests', 'output')
     country = 'Rwanda'
-    model = OnStove()
+    model = OnStove(project_crs=3857)
     model.output_directory = output_directory
     assert isinstance(model, OnStove)
     
@@ -83,6 +83,12 @@ def test_prepare_model():
     model.techs['LPG'].travel_time = model.raster_to_dataframe(travel_time,
                                             fill_nodata_method='interpolate',
                                             method='read') * 2 / 60
+    
+    path = os.path.join(output_directory, 'LPG', 
+                        'Roads', 'Roads.geojson')
+    roads = VectorLayer('LPG', 'Roads', path=path)
+    model.techs['LPG'].roads = roads
+    model.techs['LPG'].distance_limit = 4000
                                             
     # 11. Adding GIS data for Traditional Biomass
     friction_path = os.path.join(output_directory, 'Biomass', 

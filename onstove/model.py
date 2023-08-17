@@ -6,6 +6,7 @@ from warnings import warn
 
 import dill
 import matplotlib
+import csv
 from pyproj import CRS
 import pandas as pd
 import numpy as np
@@ -1157,6 +1158,7 @@ class OnStove(DataProcessor):
         self.clean_cooking_access_u = None
         self.clean_cooking_access_r = None
         self.electrified_weight = None
+        self.tech_separator = 'and'
 
         self.specs = {'startyear': 2020, 'endyear': 2020,
                       'endyeartarget': 1.0, 'mealsperday': 3.0, 'infraweight': 1.0,
@@ -1420,6 +1422,7 @@ class OnStove(DataProcessor):
         isurban = self.gdf["IsUrban"] > 20
         urban_factor = tech_dict["Electricity"].population_cooking_urban / sum(isurban * self.gdf["Elec_pop_calib"])
         tech_dict["Electricity"].pop_sqkm = (isurban) * (self.gdf["Elec_pop_calib"] * urban_factor)
+
         # allocate population in each rural cell to electricity
         rural_factor = np.divide(tech_dict["Electricity"].population_cooking_rural,
                                  sum(~isurban * self.gdf["Elec_pop_calib"]),
@@ -1427,13 +1430,16 @@ class OnStove(DataProcessor):
                                  where=sum(~isurban * self.gdf["Elec_pop_calib"]) != 0)
         # rural_factor = tech_dict["Electricity"].population_cooking_rural / sum(~isurban * self.gdf["Elec_pop_calib"])
         tech_dict["Electricity"].pop_sqkm.loc[~isurban] = (self.gdf["Elec_pop_calib"] * rural_factor)
+
         #create series for biogas same size as dataframe with zeros 
         tech_dict["Biogas"].pop_sqkm = pd.Series(np.zeros(self.gdf.shape[0]))
+
         #allocate remaining population to biogas in rural areas where there's potential
         biogas_factor = tech_dict["Biogas"].population_cooking_rural / (self.gdf["Calibrated_pop"].loc[~np.isnan(tech_dict["Biogas"].time_of_collection) & ~isurban].sum())
         tech_dict["Biogas"].pop_sqkm.loc[(~isurban) & (~np.isnan(tech_dict["Biogas"].time_of_collection))] = self.gdf["Calibrated_pop"] * biogas_factor
         pop_diff = (tech_dict["Biogas"].pop_sqkm + tech_dict["Electricity"].pop_sqkm) > self.gdf["Calibrated_pop"]
         tech_dict["Biogas"].pop_sqkm.loc[pop_diff] = self.gdf["Calibrated_pop"] - tech_dict["Electricity"].pop_sqkm
+
         #allocate remaining population proportionally to techs other than biogas and electricity 
         remaining_share = 0
         for name, tech in tech_dict.items():
@@ -2580,9 +2586,9 @@ class OnStove(DataProcessor):
         if isinstance(self.gdf[variable].iloc[0], str):
             if isinstance(labels, dict):
                 dff = self._re_name(dff, labels, variable)
-            dff[variable] += ' and '
+            dff[variable] += ' {} '.format(self.tech_separator)
             dff = dff.groupby('index').agg({variable: 'sum', 'geometry': 'first'})
-            dff[variable] = [s[0:len(s) - 5] for s in dff[variable]]
+            dff[variable] = [s[0:len(s) - (len(self.tech_separator) + 2)] for s in dff[variable]]
             if isinstance(labels, dict):
                 dff = self._re_name(dff, labels, variable)
 
@@ -2626,6 +2632,8 @@ class OnStove(DataProcessor):
                 dff = dff.groupby('index').agg({variable: 'sum', 'Households': 'sum',
                                                 'geometry': 'first'})
                 dff[variable] = dff[variable] / dff['Households']
+                if variable == 'time_saved':
+                    dff[variable] /= 365                  
             else:
                 dff = dff.groupby('index').agg({variable: metric, 'geometry': 'first'})
             if self.rows is not None:
@@ -2650,7 +2658,10 @@ class OnStove(DataProcessor):
     def to_raster(self, variable: str,
                   labels: Optional[dict[str, str]] = None,
                   cmap: Optional[dict[str, str]] = None,
-                  metric: str = 'mean'):
+                  metric: str = 'mean',
+                  nodata: Optional[Union[float, int]] = None,
+                  mask: bool = False,
+                  mask_nodata: Optional[Union[float, int]] = None):
         """Creates a RasterLayer and saves it as a ``.tif`` file and a ``.clr`` colormap.
 
         Parameters
@@ -2666,8 +2677,13 @@ class OnStove(DataProcessor):
         metric: str, default 'mean'
             Metric to use to aggregate data. It is only used for non-categorical data. For available metrics see
             :meth:`create_layer`.
+        nodata: float or int
+            Defines nodata values to be ignored by the function.
         """
-        raster, codes, cmap = self.create_layer(variable, labels=labels, cmap=cmap, metric=metric, nodata=np.nan)
+        raster, codes, cmap = self.create_layer(variable, labels=labels, cmap=cmap, metric=metric, nodata=nodata)
+        if mask:
+            raster.meta['nodata'] = mask_nodata
+            raster.mask(self.mask_layer)
         raster.save(os.path.join(self.output_directory, 'Rasters'))
         print(f'Layer saved in {os.path.join(self.output_directory, "Rasters", raster.name + ".tif")}\n')
         if codes and cmap:
@@ -2677,6 +2693,22 @@ class OnStove(DataProcessor):
                     g = int(to_rgb(cmap[code])[1] * 255)
                     b = int(to_rgb(cmap[code])[2] * 255)
                     f.write(f'{code} {r} {g} {b} 255 {label}\n')
+
+            fields = ['KEY', 'VALUE']
+
+            csv_file = os.path.join(self.output_directory, 'Rasters', "Categories.csv")
+            # Open the CSV file with write permission
+            with open(csv_file, "w", newline="") as csvfile:
+                # Create a CSV writer using the field/column names
+                writer = csv.DictWriter(csvfile, fieldnames=fields)
+
+                # Write the header row (column names)
+                writer.writeheader()
+
+                # Write the data
+                writer.writerow({'KEY': 0, 'VALUE': '0: None'})
+                for value, key in codes.items():
+                    writer.writerow({'KEY': key, 'VALUE': f'{key}: {value}'})
 
     def plot(self, variable: str, metric='mean',
              labels: Optional[dict[str, str]] = None,
@@ -3567,7 +3599,7 @@ class OnStove(DataProcessor):
              + scale_fill_manual(cmap)
              + scale_color_manual(cmap, guide=False)
              + theme_name
-             + theme(subplots_adjust={'wspace': 0.25}, text=element_text(**_font_args))
+             + theme(text=element_text(**_font_args))
              + wrap
              + labs(x=x_title, y=y_title, fill='Cooking technology')
              )
@@ -3629,7 +3661,7 @@ class OnStove(DataProcessor):
              + scale_fill_manual(cmap)
              + scale_color_manual(cmap, guide=False)
              + theme_minimal()
-             + theme(subplots_adjust={'wspace': 0.25}, text=element_text(**font_args))
+             + theme(text=element_text(**font_args))
              + labs(x=x_title, y=y_title, fill='Cooking technology')
              )
         return p
