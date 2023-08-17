@@ -1158,6 +1158,7 @@ class OnStove(DataProcessor):
         self.clean_cooking_access_u = None
         self.clean_cooking_access_r = None
         self.electrified_weight = None
+        self.tech_separator = 'and'
 
         self.specs = {'startyear': 2020, 'endyear': 2020,
                       'endyeartarget': 1.0, 'mealsperday': 3.0, 'infraweight': 1.0,
@@ -2585,9 +2586,9 @@ class OnStove(DataProcessor):
         if isinstance(self.gdf[variable].iloc[0], str):
             if isinstance(labels, dict):
                 dff = self._re_name(dff, labels, variable)
-            dff[variable] += ' + '
+            dff[variable] += ' {} '.format(self.tech_separator)
             dff = dff.groupby('index').agg({variable: 'sum', 'geometry': 'first'})
-            dff[variable] = [s[0:len(s) - 3] for s in dff[variable]]
+            dff[variable] = [s[0:len(s) - (len(self.tech_separator) + 2)] for s in dff[variable]]
             if isinstance(labels, dict):
                 dff = self._re_name(dff, labels, variable)
 

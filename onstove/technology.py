@@ -858,6 +858,7 @@ class LPG(Technology):
         self.friction_path = friction_path
         self.cylinder_cost = cylinder_cost
         self.cylinder_life = cylinder_life
+        self.roads = None
 
     def add_travel_time(self, model: 'onstove.OnStove', lpg_path: Optional[str] = None,
                         friction_path: Optional[str] = None, align: bool = False):
@@ -1120,10 +1121,11 @@ class LPG(Technology):
         net_benefit
         """
         super().net_benefit(model, w_health, w_spillovers, w_environment, w_time, w_costs)
-        dist_roads = self.roads.proximity(base_layer=model.base_layer, create_raster=False)
-        dist_roads.data = dist_roads.data > self.distance_limit
-        limit = model.raster_to_dataframe(dist_roads, method='read')
-        model.gdf.loc[limit == 1, "benefits_{}".format(self.name)] = -999999999999999
+        if isinstance(self.roads, VectorLayer):
+            dist_roads = self.roads.proximity(base_layer=model.base_layer, create_raster=False)
+            dist_roads.data = dist_roads.data > self.distance_limit
+            limit = model.raster_to_dataframe(dist_roads, method='read')
+            model.gdf.loc[limit == 1, "benefits_{}".format(self.name)] = -999999
 
 
 class Biomass(Technology):
