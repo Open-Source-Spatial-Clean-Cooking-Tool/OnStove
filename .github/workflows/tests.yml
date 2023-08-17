@@ -1,11 +1,8 @@
 name: OnStove tests
 on:
-  push:
-    branches: ['main']
-    paths: ['onstove/*', 'tests/*']
   pull_request:
     branches: ['main']
-    paths: ['onstove/*', 'tests/*']
+    paths: ['onstove/*', 'onstove/tests/*']
 
 jobs:
   miniconda:

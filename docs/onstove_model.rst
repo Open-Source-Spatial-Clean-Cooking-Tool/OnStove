@@ -288,13 +288,13 @@ There are also several visualization options (see figure below). See the differe
 
     Example OnStove results a)  bar-plot indicating the population stove shares in the scenario, b) spatial distribution of stoves with the highest net-benefit across SSA, c) box-plot indicating the distribution of the net-benefit per household resulting from switching to each stove type and d) total levelized costs and monetized benefits of each stove type.
 
+
 Inputs
 ######
 
 GIS datasets
 ************
 The table below describes the geospatial datasets needed for OnStove. The table contains four columns: name of the dataset, type (raster or vector), purpose (how it is used in OnStove) and potential sources that can be used. Note that most datasets are agnostic to source i.e., different sources can be used for the datasets unless otherwise is stated. 
-
 
 +-----------------------------------+-----------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 | Dataset                           | Type            | Purpose                                                                                                                                                                                                                                                                                                                                                                                                    | Potential sources                                                                                                                                                                                                                                                                                          |
@@ -428,8 +428,6 @@ The socio-economic data is entered in a socio-economic specification file (.csv-
 +------------------------------+--------------------------------------------------------------------------------------------------------------------------+---------------------------------------+
 
 
-
-
 Techno-economic data
 ********************
 The techno-economic data is entered in the techno-economic specification file (.csv-file). This file includes techno-economic data as it pertains to the stoves that you include in your analysis. The table below gives the name of each parameter (this name has to be used in the socio-economic file exactly as it appears here), a description of each parameter and the unit of the parameter, which stove each parameter is included for and the type of input data (string, float, int or bool). 
@@ -438,7 +436,7 @@ Note that the table below is meant to give you a list of inputs in the techno-ec
  
 
 +--------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+-----------------------------------+----------------------------------------------------+---------+
-| Parameter                      | Description                                                                                                                                                                                           | Unit                              | Stoves   for which this is relevant for our study  | Type    |
+| Parameter                      | Description                                                                                                                                                                                           | Unit                              | Stoves*                                            | Type    |
 +================================+=======================================================================================================================================================================================================+===================================+====================================================+=========+
 | name                           | The name of the technology. This name will appear in the result files.                                                                                                                                | --                                | All                                                | String  |
 +--------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+-----------------------------------+----------------------------------------------------+---------+
@@ -518,7 +516,7 @@ Note that the table below is meant to give you a list of inputs in the techno-ec
 +--------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+-----------------------------------+----------------------------------------------------+---------+
 | epsilon                        | Exposure adjustment factor. This factor is included to account for potential behavioral change that results from switching to a cleaner stove, default is 0.71.                                       | --                                | All                                                | float   |
 +--------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+-----------------------------------+----------------------------------------------------+---------+
-
+\* *Stoves for which this is relevant in our study*.
 
 References
 ##########

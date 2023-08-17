@@ -1,7 +1,9 @@
 import os
+import pytest
 
 from onstove import OnStove
 
+@pytest.mark.order(after="test_model_prep.py::test_prepare_model")
 def test_run_model():
     # 1. Read the OnSSTOVE model
     country = 'Rwanda'

@@ -10,7 +10,8 @@ from typing import Optional, Callable
 from math import exp
 from time import time
 
-from onstove._utils import raster_setter, vector_setter, Processes
+from onstove._layer_utils import raster_setter, vector_setter
+from onstove._utils import Processes
 from onstove.layer import VectorLayer, RasterLayer
 
 def timeit(func):
@@ -170,6 +171,15 @@ class Technology:
         """Adjusts the PM25 value of each stove based on the adjusment factor. This is to take into account the
         potential behaviour change resulting from stove change [1]_.
 
+        See also
+        --------
+        relative_risk
+        paf
+        health_parameters
+        mort_morb
+        mortality
+        morbidity
+
         References
         ----------
         .. [1] Das, I. et al. The benefits of action to reduce household air pollution (BAR-HAP) model:
@@ -199,6 +209,15 @@ class Technology:
             Relative Risk of lung cancer
         rr_stroke: float
             Relative Risk of stroke
+
+        See also
+        --------
+        adjusted_pm25
+        paf
+        health_parameters
+        mort_morb
+        mortality
+        morbidity
         """
         if self.pm25 < 7.298:
             rr_alri = 1
@@ -228,8 +247,10 @@ class Technology:
         return rr_alri, rr_copd, rr_ihd, rr_lc, rr_stroke
 
     def paf(self, rr: float, sfu: float) -> float:
-        """Calculates the population attributable fraction for ALRI, COPD, IHD, lung cancer or stroke
-        based on the percentage of population using non-clean stoves and the relative risk [1]_.
+        """Calculates the Population Attributable Fraction for (PAF) ALRI, COPD, IHD, lung cancer or stroke
+        based on the percentage of population using non-clean stoves and the relative risk. Given the total mortality
+        and incidence (or prevalence) rates of each disease the PAF estimates the share of these factors attributed to
+        the share of solid fuel users [1]_.
 
         References
         ----------
@@ -248,7 +269,16 @@ class Technology:
         Returns
         -------
         paf: float
-            The Population Attributable Fraction for each disease
+            The Population Attributable Fraction for each disease.
+
+        See also
+        --------
+        adjusted_pm25
+        relative_risk
+        health_parameters
+        mort_morb
+        mortality
+        morbidity
         """
         paf = (sfu * (rr - 1)) / (sfu * (rr - 1) + 1)
 
@@ -256,8 +286,7 @@ class Technology:
 
     @staticmethod
     def discount_factor(specs: dict) -> tuple[list[float], list[float]]:
-        """Calculates and returns the discount factor used for benefits and costs in the net-benefit equation. Also
-        returns the length of the analysis in years
+        """Calculates and returns the discount factor used for benefits and costs in the net-benefit equation.
 
         Parameters
         ----------
@@ -281,7 +310,8 @@ class Technology:
 
     def required_energy(self, model: 'onstove.OnStove'):
         """ Calculates the annual energy needed for cooking in MJ/yr. This is dependent on the number of meals cooked
-        and the efficiency of the stove.
+        and the efficiency of the stove. Function does not return anything but saves the energy in the `energy`
+        attribute of the OnStove model object.
 
         Parameters
         ----------
@@ -293,6 +323,7 @@ class Technology:
         self.energy = model.specs["meals_per_day"] * 365 * model.energy_per_meal / self.efficiency
 
     def get_carbon_intensity(self, model: 'onstove.OnStove'):
+
         """Calculates the carbon intensity of the associated stove.
 
         Parameters
@@ -327,7 +358,8 @@ class Technology:
 
 
     def carbon_emissions(self, model: 'onstove.OnStove', mask: pd.Series, relative: bool = True):
-        """Calculates the reduced emissions and the costs avoided by reducing these emissions.
+        """Calculates the carbon intensity of the associated stove. Function does not return anything but saves the
+        carbon_intensity in the `carbon_intensity` attribute of the OnStove model object.
 
         Parameters
         ----------
@@ -342,6 +374,51 @@ class Technology:
         See also
         --------
         carb
+        carbon_emissions
+        """
+        pollutants = ['co2', 'ch4', 'n2o', 'co', 'bc', 'oc']
+        self.carbon_intensity = sum([self[f'{pollutant}_intensity'] * model.gwp[pollutant] for pollutant in pollutants])
+
+    def carb(self, model: 'onstove.OnStove'):
+        """Checks if carbon_emission is given in the socio-economic specification file. If it is given this is read
+        directly, otherwise the get_carbon_intensity function is called. Function does not return anything but saves the
+        carbon_emissions in the `carbon` attribute of the OnStove model object.
+
+        Parameters
+        ----------
+        model: OnStove model
+            Instance of the OnStove model containing the main data of the study case. See
+            :class:`onstove.OnStove`.
+
+        See also
+        --------
+        required_energy
+        get_carbon_intensity
+        carbon_emissions
+        """
+
+        self.required_energy(model)
+        if self.carbon_intensity is None:
+            self.get_carbon_intensity(model)
+        self.carbon = pd.Series([(self.energy * self.carbon_intensity) / 1000] * model.gdf.shape[0],
+                                index=model.gdf.index)
+
+    def carbon_emissions(self, model: 'onstove.OnStove', mask, relative):
+        """Calculates the reduced emissions and the costs avoided by reducing these emissions. Function does not return
+        anything but the reduced emissions and avoided costs are saved in the `decreased_carbon_emissions` and
+        `decreased_carbon_costs` attributes of the OnStove model object respectively
+
+        Parameters
+        ----------
+        model: OnStove model
+            Instance of the OnStove model containing the main data of the study case. See
+            :class:`onstove.OnStove`.
+
+        See also
+        --------
+        carb
+        required_energy
+        get_carbon_intensity
         """
         discount_rate, proj_life = self.discount_factor(model.specs)
         self.carb(model, mask)
@@ -390,9 +467,15 @@ class Technology:
             Instance of the OnStove model containing the main data of the study case. See
             :class:`onstove.OnStove`.
 
+
         See also
         --------
-        relative_risk, paf
+        adjusted_pm25
+        relative_risk
+        paf
+        mort_morb
+        mortality
+        morbidity
         """
         rr_alri, rr_copd, rr_ihd, rr_lc, rr_stroke = self.relative_risk()
         self.paf_alri = self.paf(rr_alri, model.sfu)
@@ -403,10 +486,11 @@ class Technology:
 
     def mort_morb(self, model: 'onstove.OnStove', mask: gpd.GeoSeries, parameter: str = 'mort', relative = True) -> tuple[
         float, float]:
-        """
-        Calculates mortality or morbidity rate per fuel. These two calculations are very similar in nature and are
-        therefore combined in one function. In order to indicate if morbidity or mortality should be calculated, the
-        `parameter` parameter can be changed (to either `Morb` or `Mort`).
+        """Calculates mortality or morbidity rate per fuel.
+
+        These two calculations are very similar in nature and are therefore combined in one function. In order to
+        indicate if morbidity or mortality should be calculated, the `parameter` parameter can be changed
+        (to either `Morb` or `Mort`).
 
         Parameters
         ----------
@@ -420,7 +504,16 @@ class Technology:
 
         Returns
         ----------
-        Monetary mortality or morbidity for each stove.
+        Monetary value of mortality or morbidity for each stove in every cell of the analysis
+
+        See also
+        --------
+        adjusted_pm25
+        relative_risk
+        paf
+        health_parameters
+        mortality
+        morbidity
         """
 
         discount_rate, proj_life = self.discount_factor(model.specs)
@@ -523,8 +616,11 @@ class Technology:
         return total_cases, total_costs, discounted_costs
 
     def mortality(self, model: 'onstove.OnStove', mask, parameter, relative):
-        """
-        Distributes the total mortality across the study area per fuel.
+        """Calculates the mortality across the study area per stove by calling the `mort_morb` function. Function does
+        not return anything but saves the avoided costs in `distributed_mortality` of the Onstove model object, the
+        avoided deaths in the `deaths_avoided` attribute of the OnStove model object. The function takes into account
+        the `health_spillovers_parameter`
+
 
         Parameters
         ----------
@@ -536,8 +632,11 @@ class Technology:
 
         See also
         --------
+        djusted_pm25
+        relative_risk
+        paf
+        health_parameters
         mort_morb
-
         """
 
         deaths, costs, discounted_costs = self.mort_morb(model, mask, parameter=parameter, relative=relative)
@@ -582,8 +681,10 @@ class Technology:
                                                                          * model.specs['health_spillovers_parameter'])
 
     def morbidity(self, model: 'onstove.OnStove', mask, parameter, relative):
-        """
-        Distributes the total morbidity across the study area per fuel.
+        """Calculates the morbidity across the study area per stove by calling the `mort_morb` function. Function does
+        not return anything but saves the avoided costs in the `distributed_morbidity` attribute of the Onstove model
+        object, the avoided cases in the `cases_avoided` attribute of the OnStove model object. The function takes into
+        account the `health_spillovers_parameter`
 
         Parameters
         ----------
@@ -593,8 +694,12 @@ class Technology:
         mask: gpd.GeoSeries
             Determines which cells are ran. This is relevant when the start and end years are different
 
-        See also
+         See also
         --------
+        djusted_pm25
+        relative_risk
+        paf
+        health_parameters
         mort_morb
         """
 
@@ -641,11 +746,12 @@ class Technology:
                                                                          * model.specs['health_spillovers_parameter'])
 
 
-    def salvage(self, model: 'onstove.OnStove', mask: pd.Series, relative: bool = True):
-        """
-        Calls discount_factor function and calculates discounted salvage cost for each stove assuming a straight-line depreciation.
+    def salvage(self, model: 'onstove.OnStove', mask, relative):
+        """Calls discount_factor function and calculates discounted salvage cost for each stove assuming a straight-line
+        depreciation of the stove value. Function does not return anything but saves the discounted salvage cost in the
+        `discounted_salvage_cost` attribute of the Onstove model object
 
-                Parameters
+        Parameters
         ----------
         model: OnStove model
             Instance of the OnStove model containing the main data of the study case. See
@@ -696,9 +802,10 @@ class Technology:
         else:
             self.salvage_cost = salvage
 
-    def discounted_om(self, model: 'onstove.OnStove', mask: pd.Series, relative: bool = True):
-        """
-        Calls discount_factor function and calculates discounted operation and maintenance cost for each stove.
+    def discounted_om(self, model: 'onstove.OnStove', mask, relative):
+        """Calls discount_factor function and calculates discounted operation and maintenance cost for each stove.
+        Function does not return anything but saves the discounted operation and maintenance cost in the
+        `discounted_om_costs` attribute of the Onstove model object.
 
         Parameters
         ----------
@@ -737,8 +844,9 @@ class Technology:
 
     def discounted_inv(self, model: 'onstove.OnStove', mask: pd.Series, relative: bool):
         """
-        Calls discount_factor function and calculates discounted investment cost. Uses proj_life and tech_life to determine
-        number of necessary re-investments
+        Calls discount_factor function and calculates discounted investment cost. Uses proj_life and tech_life to
+        determine number of necessary re-investments. Function does not return anything but saves the discounted
+        investment cost in the `discounted_investments` attribute of the Onstove model object.
 
         Parameters
         ----------
@@ -793,10 +901,9 @@ class Technology:
 
             self.investments = investments
 
-
-    def discount_fuel_cost(self, model: 'onstove.OnStove', mask: pd.Series, relative: bool = True):
-        """
-        Calls discount_factor function and calculates discounted fuel costs.
+    def discount_fuel_cost(self, model: 'onstove.OnStove', mask, relative: bool = True):
+        """Calls discount_factor function and calculates discounted fuel costs. Function does not return anything but
+        saves the discounted fuel cost in the `discounted_fuel_cost` attribute of the Onstove model object.
 
         Parameters
         ----------
@@ -845,10 +952,11 @@ class Technology:
             fuel_cost = proj_years * np.array(cost)[:, None]
             self.fuel_costs = fuel_cost
 
-
     def total_time(self, model: 'onstove.OnStove', mask):
-        """
-        Calculates total time used per year by taking into account time of cooking and time of fuel collection (if relevant)
+        """Calculates total time used per year by taking into account time of cooking and time of fuel collection
+        (if relevant). Function does not return anything but saves the total time used in the `total_time_yr` attribute
+        of the Onstove model object.
+
 
         Parameters
         ----------
@@ -869,9 +977,10 @@ class Technology:
         self.total_time_yr.loc[masky] = pd.Series((self.time_of_cooking + time_of_collection) * 365,
                                                   index=mask.loc[masky].index)
 
-    def time_saved(self, model: 'onstove.OnStove', mask: pd.Series, relative: bool = True):
-        """
-        Calculates time saved per year by adopting a new stove.
+    def time_saved(self, model: 'onstove.OnStove', mask, relative):
+        """Calculates time saved per year by adopting a new stove. Function does not return anything but saves the
+        total time saved in  the `total_time_saved` attribute of the OnStove model object and the total monetary value
+        of the time saved in `time_value` attribute of the OnStove model object.
 
         Parameters
         ----------
@@ -923,9 +1032,9 @@ class Technology:
             discounted_time = np.array([sum(x / discount_rate) for x in time]) * model.gdf["value_of_time"]
             self.discounted_time_value = pd.Series(discounted_time, index=mask.index)
 
-    def total_costs(self, model, mask):
-        """
-        Calculates total costs (fuel, investment, operation and maintenance as well as salvage costs)
+    def total_costs(self,  model: 'onstove.OnStove', mask):
+        """ Calculates total costs (fuel, investment, operation and maintenance as well as salvage costs). Function does
+        not return anything but saves the total costs in the `costs` attribute of the OnStove model object.
 
         Parameters
         ----------
@@ -944,8 +1053,10 @@ class Technology:
                             self.om_costs[mask] - self.salvage_cost[mask])
 
     def net_benefit(self, model: 'onstove.OnStove', mask):
+        """This method combines all costs and benefits as specified by the user using the weights parameters. Function
+        does not return anything but saves the total benefits in the `benefits` attribute of the OnStove object and the
+        net-benefits in the `net-benefits` attribute of the OnStove net-benefits object.
 
-        """This method combines all costs and benefits as specified by the user using the weights parameters
 
          Parameters
          ----------
@@ -955,7 +1066,11 @@ class Technology:
 
          See also
          --------
-         total_costs, morbidity, mortality, time_saved, carbon_emissions
+         total_costs
+         morbidity
+         mortality
+         time_saved
+         carbon_emissions
         """
 
         limit = min(self.tech_life, model.specs["end_year"] - model.year + 1)
@@ -995,9 +1110,9 @@ class LPG(Technology):
     """LPG technology class used to model LPG stoves.
 
     This class inherits the standard :class:`Technology` class and is used to model stoves using LPG as fuel.
-    The LPG is assumed to be bought either by the closest vendor or in the closest urban settlement depedning on
+    The LPG is assumed to be bought either by the closest vendor or in the closest urban settlement depending on
     data availability. In the first case a point layer indicating vendors is assumed to be passed to the OnStove after
-    which a least-cost path is determined using a friction map. In the other case it is assumed that the traveltime map
+    which a least-cost path is determined using a friction map. In the other case it is assumed that the travel time map
     is passed to OnStove directly.
 
     Parameters
@@ -1038,7 +1153,7 @@ class LPG(Technology):
     travel_time: Pandas Series, optional
        Pandas Series describing the time needed (in hours) to reach either the closest LPG supply point or urban
        settlement  from each population point. It is either calculated using the LPG supply points, friction layer and
-       population density layer or taken directly from a traveltime map.
+       population density layer or taken directly from a travel time map.
     truck_capacity: float, default 2000
        Capacity of the truck carrying the fuel in kg.
     diesel_cost: float, 1.04
@@ -1098,24 +1213,27 @@ class LPG(Technology):
         self.cylinder_life = cylinder_life
         self.inv_change = inv_change
         self.infra_cost = None
+        self.roads = None
 
-    def add_travel_time(self, model: 'onstove.OnStove', lpg_path: Optional[str] = None,
+    def add_travel_time(self, model: 'onstove.OnStove', mask, lpg_path: Optional[str] = None,
                         friction_path: Optional[str] = None, align: bool = False):
         """This method calculates the travel time needed to transport LPG.
 
         The travel time is calculated as the time needed (in hours) to reach the closest LPG supplier from each
         population point. It uses a point layer for LPG suppliers, a friction layer and a population density layer.
+        The function does not return anything but saves the travel time in the `travel_time` attribute of the LPG technology
+        class.
 
         Parameters
         ----------
+        model: OnStove model
+            Instance of the OnStove model containing the main data of the study case. See
+            :class:`onstove.OnStove`.
         lpg_path: str
             Path to the LPG supply points.
         friction_path: str
             Path to the friction raster file describing the time needed (in minutes) to travel one meter within each
             cell using motorized transport.
-        model: OnStove model
-            Instance of the OnStove model containing the main data of the study case. See
-            :class:`onstove.OnStove`.
         align: bool, default False
             Boolean parameter to indicate if the friction layer need to be align with the population
             data in the `model`.
@@ -1160,6 +1278,9 @@ class LPG(Technology):
 
         The function uses the following attributes of model: ``diesel_per_hour``, ``diesel_cost``, ``travel_time``,
         ``truck_capacity``, ``efficiency`` and ``energy_content``.
+
+        The function does not return anything but saves the transport cost in the `transport_cost` attribute of the LPG
+        technology class.
 
         References
         ----------
@@ -1260,7 +1381,8 @@ class LPG(Technology):
 
     def infrastructure_cost(self, model: 'onstove.OnStove', mask: pd.Series):
         """Calculates cost of cylinders for first-time LPG users. It is assumed that the cylinder contains 12.5 kg of
-        LPG. The function calls ``infrastructure_salvage``.
+        LPG. The function calls ``infrastructure_salvage``. The function does not return anything but saves the
+        infrastructure cost (cylinder cost) in the `discounted_infra_cost` attribute of the LPG technology class.
 
         The function uses the ``cylinder_cost`` attribute of the model.
 
@@ -1354,6 +1476,40 @@ class LPG(Technology):
             self.infrastructure_cost(model, mask)
             self.investments[mask] += (self.infra_cost[mask] * (1 - shares_reshaped[mask]))
 
+    def net_benefit(self, model: 'onstove.OnStove', w_health: int = 1, w_spillovers: int = 1,
+                    w_environment: int = 1, w_time: int = 1, w_costs: int = 1):
+        """This method expands :meth:`Technology.net_benefit` by taking into account access to roads (proximity).
+
+        Parameters
+         ----------
+         model: OnStove model
+             Instance of the OnStove model containing the main data of the study case. See
+             :class:`onstove.OnStove`.
+         w_health: int, default 1
+             Determines the weight of the health parameters (reduced morbidity and mortality)
+             in the net-benefit equation.
+         w_spillovers: int, default 1
+             Determines the weight of the spillover effects from cooking with traditional fuels
+             in the net-benefit equation.
+         w_environment: int, default 1
+             Determines the weight of the environmental effects (reduced emissions) in the net-benefit equation.
+         w_time: int, default 1
+             Determines the weight of the opportunity cost (reduced time spent) in the net-benefit equation.
+         w_costs: int, default 1
+             Determines the weight of the costs in the net-benefit equation.
+
+        See also
+        --------
+        net_benefit
+        """
+        super().net_benefit(model, w_health, w_spillovers, w_environment, w_time, w_costs)
+        if isinstance(self.roads, VectorLayer):
+            dist_roads = self.roads.proximity(base_layer=model.base_layer, create_raster=False)
+            dist_roads.data = dist_roads.data > self.distance_limit
+            limit = model.raster_to_dataframe(dist_roads, method='read')
+            model.gdf.loc[limit == 1, "benefits_{}".format(self.name)] = -999999
+
+
 class Biomass(Technology):
     """Biomass technology class used to model traditional and improved stoves.
 
@@ -1373,8 +1529,8 @@ class Biomass(Technology):
     friction: str, optional
         This is the forest cover raster dataset read from the ``friction_path``.
     trips_per_yr: float
-        The trips that a person per household needs to do to the nearest forest point, in order to collect the amount
-        of biomass required for cooking in one year.
+        The trips that a person  needs to do to the nearest forest point, in order to collect the amount
+        of biomass required for cooking in one year (per households).
 
     Parameters
     ----------
@@ -1398,7 +1554,7 @@ class Biomass(Technology):
     energy_content: float, default 16
         Energy content of the fuel in MJ/kg.
     tech_life: int, default 2
-        Stove life in year.
+        Stove life in years.
     inv_cost: float, default 0
         Investment cost of the stove in USD.
     fuel_cost: float, default 0
@@ -1530,7 +1686,9 @@ class Biomass(Technology):
         """This method calculates the travel time needed to gather biomass.
 
         The travel time is calculated as the time needed (in hours) to reach the closest forest cover point from each
-        population point. It uses a forest cover layer, a friction layer and population density layer.
+        population point. It uses a forest cover layer, a friction layer and population density layer.  The function
+        does not return anything but saves the travel time in the `travel_time` attribute of the Biomass technology
+        class.
 
         Parameters
         ----------
@@ -1542,9 +1700,6 @@ class Biomass(Technology):
         model: OnStove model
             Instance of the OnStove model containing the main data of the study case. See
             :class:`onstove.OnStove`.
-        align: bool, default False
-            Boolean parameter to indicate if the forest cover and friction layers need to be align with the population
-            data in the `model`.
         """
         self.forest = RasterLayer(self.name, 'Forest', path=forest_path, resample='mode')
         self.friction = RasterLayer(self.name, 'Friction', path=friction_path, resample='average')
@@ -1616,9 +1771,9 @@ class Biomass(Technology):
     def solar_panel_investment(self, model: 'onstove.OnStove', mask: pd.Series, relative = True):
         """This method adds the cost of a solar panel to unelectrified areas.
 
-        The stove can be modelled a ICS with natural draft or forced draft. This is achieved by specifying the
-        ``draft_type`` attribute of the class. If forced draft is used, then the class will consider and extra capital
-        cost for a standard 6 watt solar panel in order to run the fan in unelectrified areas. The cost used for the
+        The stove can be modelled as ICS with natural draft or forced draft. This is achieved by specifying the
+        ``draft_type`` attribute of the class. If forced draft is used, then the class will consider an extra capital
+        cost for a standard 6 watt solar panel to run the fan in currently unelectrified areas. The cost used for the
         panel is 1.25 USD per watt.
 
         Parameters
@@ -1706,7 +1861,7 @@ class Charcoal(Technology):
     energy_content: float, default 30
         Energy content of the fuel in MJ/kg.
     tech_life: int, default 2
-        Stove life in year.
+        Stove life in years.
     inv_cost: float, default 4
         Investment cost of the stove in USD.
     fuel_cost: float, default 0.09
@@ -1774,7 +1929,7 @@ class Charcoal(Technology):
         self['co2_intensity'] = intensity
 
     def production_emissions(self, model: 'onstove.OnStove'):
-        """Calculates the emissions caused by the production of Charcoal. The function uses emission factors with regards
+        """Calculates the emissions caused by the production of Charcoal. The function uses emission factors in regards
         to CO2, CO, CH4, BC and OC as well as the ``energy`` and ``energy_content`` attributes of te model.
         Emissions factors for the production of charcoal are taken from [1]_.
 
@@ -1804,9 +1959,11 @@ class Charcoal(Technology):
                             emission_factors.items()])  # gCO2eq/yr
         return hh_emissions / 1000  # kgCO2/yr
 
+
     def carb(self, model: 'onstove.OnStove', mask):
-        """This method expands :meth:`Technology.carbon` when Charcoal is the fuel used (both traditional stoves and ICS)
-         in order to ensure that the emissions caused by the production and transportation is included in the total emissions.
+        """This method expands :meth:`Technology.carbon` when Charcoal is the fuel used (both traditional stoves and
+        ICS) to ensure that the emissions caused by the production and transportation is included in the total
+        emissions.
 
         Parameters
         ----------
@@ -1847,15 +2004,15 @@ class Electricity(Technology):
     energy_content: float, default 3.6
         Energy content in MJ/kWh.
     tech_life: int, default 10
-        Stove life in year.
+        Stove life in years.
     connection_cost: float, defualt 0
         Cost of strengthening a household connection to enable electrical cooking.
     grid_capacity_cost: float, optional
-        Cost of added capacity in the grid (USD/kW)
+        Cost of added capacity to the grid (USD/kW)
     inv_cost: float, default 36.3
         Investment cost of the stove in USD.
     fuel_cost: float, default 0.1
-        Fuel cost in USD/kg if any.
+        Fuel cost in USD/kWh if any.
     time_of_cooking: float, default 1.8
         Daily average time spent for cooking with this stove in hours.
     om_cost: float, default 3.7
@@ -1879,7 +2036,8 @@ class Electricity(Technology):
                  inv_change: float = 1.0,
                  om_cost: float = 3.7,  # percentage of investement cost
                  efficiency: float = 0.85,  # ratio
-                 pm25: float = 32):
+                 pm25: float = 32,
+                 grid_cost_factor: float = 1):
         super().__init__(name, carbon_intensity, None, None, None,
                          None, None, None, energy_content, tech_life,
                          inv_cost, fuel_cost, time_of_cooking,
@@ -1893,6 +2051,7 @@ class Electricity(Technology):
         self.capacity_cost = None
         self.inv_change = inv_change
         self.connection_cost = connection_cost
+        self.grid_cost_factor = grid_cost_factor
         self.carbon_intensities = {'coal': 0.090374363, 'natural_gas': 0.050300655,
                                    'crude_oil': 0.070650288, 'heavy_fuel_oil': 0.074687989,
                                    'oil': 0.072669139, 'diesel': 0.069332823,
@@ -1931,7 +2090,9 @@ class Electricity(Technology):
     def get_capacity_cost(self, model: 'onstove.OnStove', mask: pd.Series):
         """This method determines the cost of electricity for each added unit of capacity (kW). The added capacity is
         assumed to be the same shares as the current installed capacity (i.e. if a country uses 10% coal powered power
-        plants and 90% natural gas, the added capacity will consist of 10% coal and 90% natural gas)
+        plants and 90% natural gas, the added capacity will consist of 10% coal and 90% natural gas). The function does
+        not return anything but assigns capacity to the `capacity` of the Electricity class and the capacity cost to the
+        `capacity_cost` of the Electricity class.
 
         Parameters
         ----------
@@ -1973,7 +2134,8 @@ class Electricity(Technology):
 
     def get_carbon_intensity(self, model: 'onstove.OnStove'):
         """This function determines the carbon intensity of generated electricity based on the power plant mix in the
-        area of interest.
+        area of interest. The function does not return anything but assigns carbon intensity to the `carbon_intensity`
+        of the Electricity class.
 
         Parameters
         ----------
@@ -1986,10 +2148,11 @@ class Electricity(Technology):
         self.carbon_intensity = grid_emissions / grid_generation * 1000  # to convert from Mton/PJ to kg/GJ
 
     def get_grid_capacity_cost(self):
-        """This function determines the grid capacity cost in the area of interest."""
+        """This function determines the grid capacity cost in the area of interest and assigns it to the
+        `grid_capacity_cost` attribute of the Electricity class."""
         self.grid_capacity_cost = sum(
             [self.grid_capacity_costs[fuel] * (cap / sum(self.capacities.values())) for fuel, cap in
-             self.capacities.items()])
+             self.capacities.items()]) * self.grid_cost_factor
 
     def get_grid_life(self):
         """This function determines the grid capacity cost in the area of interest."""
@@ -2007,6 +2170,10 @@ class Electricity(Technology):
             :class:`onstove.OnStove`.
         single: bool, default True
             Boolean parameter to indicate if there is only one grid_capacity_cost or several.
+
+        Returns
+        -------
+        The discounted salvage cost of the grid connected powerplants.
         """
         discount_rate, proj_life = self.discount_factor(model.specs)
 
@@ -2028,7 +2195,6 @@ class Electricity(Technology):
 
     def carb(self, model: 'onstove.OnStove', mask):
         """This method expands :meth:`Technology.carbon` when electricity is the fuel used
-
 
          Parameters
          ----------
@@ -2098,6 +2264,52 @@ class MiniGrids(Electricity):
     """Mini-grids technology class used to model electrical stoves powered by mini-grids.
 
     This class inherits and modifies the :class:`Electricity` class.
+
+    Attributes
+    ----------
+    coverage
+    distance
+
+    Parameters
+    ----------
+    name: str, optional
+        Name of the technology to model.
+    carbon_intensity: float, optional
+        The CO2 equivalent emissions in kg/GJ of burned fuel. If this attribute is used, then none of the
+        gas-specific intensities will be used (e.g. ch4_intensity).
+    energy_content: float, default 3.6
+        Energy content in MJ/kWh.
+    tech_life: int, default 10
+        Stove life in years.
+    connection_cost: float, defualt 0
+        Cost of strengthening a household connection to enable electrical cooking.
+    grid_capacity_cost: float, optional
+        Cost of added capacity to the grid (USD/kW)
+    inv_cost: float, default 36.3
+        Investment cost of the stove in USD.
+    fuel_cost: float, default 0.1
+        Fuel cost in USD/kWh if any.
+    time_of_cooking: float, default 1.8
+        Daily average time spent for cooking with this stove in hours.
+    om_cost: float, default 3.7
+        Operation and maintenance cost in USD/year.
+    efficiency: float, default 0.85
+        Efficiency of the stove.
+    pm25: float, default 32
+        Particulate Matter emissions (PM25) in mg/kg of fuel.
+    stove_power: float, default 0.7
+        The power of the stove in kW.
+    capacity_factor: float, default 0.8
+        Capacity factor of the mini-grid.
+    base_load: float, default 0.1
+        Base load of the mini-grid.
+    w_pop: float, default 0
+        Weight of population count when calibrating access to mini-grids.
+    w_ntl: float, default 0
+        Weight of nighttime lights intensity when calibrating access to mini-grids.
+    w_mg_dist: float, default 1
+        Weight of the distance to the closest mini-grid when calibrating access to mini-grids
+
     """
 
     def __init__(self,
@@ -2126,7 +2338,7 @@ class MiniGrids(Electricity):
                          time_of_cooking=time_of_cooking, om_cost=om_cost, efficiency=efficiency, pm25=pm25)
 
         self.coverage = None
-        self.potential = None
+        self.distance = None
         self.capacity_factor = capacity_factor
         self.stove_power = stove_power
         self.base_load = base_load
@@ -2179,6 +2391,7 @@ class MiniGrids(Electricity):
         self._ntl = raster_setter(layer)
 
     def calculate_potential(self, model):
+        # TODO: Expand here.
         """Calculates the potential of each mini-grid for supporting eCooking in each area.
         """
         leftover = np.maximum(self.capacity_factor * self.coverage.data['capacity'] -
@@ -2219,11 +2432,55 @@ class MiniGrids(Electricity):
                     break
 
     def discounted_inv(self, model: 'onstove.OnStove', relative: bool = True):
+
+        """This method expands :meth:`Electricity.discounted_inv` by adding connection costs.
+
+        Parameters
+        ----------
+        model: OnStove model
+            Instance of the OnStove model containing the main data of the study case. See
+            :class:`onstove.OnStove`.
+        relative: bool, default True
+            Boolean parameter to indicate if the discounted investments will be calculated relative to the `base_fuel`
+            or not.
+
+        See also
+        --------
+        get_capacity_cost
+        """
+
         super(Electricity, self).discounted_inv(model, relative=relative)
         self.discounted_investments += self.connection_cost
 
     def net_benefit(self, model: 'onstove.OnStove', w_health: int = 1, w_spillovers: int = 1,
                     w_environment: int = 1, w_time: int = 1, w_costs: int = 1):
+
+        """This method modifies :meth:`Electricity.net_benefit` for the mini-grid class
+
+        Parameters
+         ----------
+         model: OnStove model
+             Instance of the OnStove model containing the main data of the study case. See
+             :class:`onstove.OnStove`.
+         w_health: int, default 1
+             Determines the weight of the health parameters (reduced morbidity and mortality)
+             in the net-benefit equation.
+         w_spillovers: int, default 1
+             Determines the weight of the spillover effects from cooking with traditional fuels
+             in the net-benefit equation.
+         w_environment: int, default 1
+             Determines the weight of the environmental effects (reduced emissions) in the net-benefit equation.
+         w_time: int, default 1
+             Determines the weight of the opportunity cost (reduced time spent) in the net-benefit equation.
+         w_costs: int, default 1
+             Determines the weight of the costs in the net-benefit equation.
+
+        See also
+        --------
+        net_benefit
+        """
+
+
         super(Electricity, self).net_benefit(model, w_health, w_spillovers, w_environment, w_time, w_costs)
         self.calculate_potential(model)
         self.households = self.gdf['supported_hh']
@@ -2236,12 +2493,12 @@ class MiniGrids(Electricity):
 
 class Biogas(Technology):
     """Biogas technology class used to model biogas fueled stoves. This class inherits the standard
-    :class:`Technology` class and is used to model stove using biogas as fuel. Biogas stoves are assumed to not
+    :class:`Technology` class and is used to model stoves using biogas as fuel. Biogas stoves are assumed to not
     be available in urban settlements as the collection of manure is assumed to be limited. If the fuel is assumed
     to be purchased changes can be made to the function called ``available_biogas``. Biogas is also assumed to be
     restricted based on temperature (an average yearly temperature below 10 degrees Celsius is assumed to lead to
     heavy drops of efficiency [1]_). Biogas production is also assumed to be a very water intensive process [2]_, hence
-    areas under water stress are assumed restricted as well.
+    areas experiencing water stress are assumed restricted as well.
 
     References
     ----------
@@ -2370,7 +2627,9 @@ class Biogas(Technology):
 
     def get_collection_time(self, model: 'onstove.OnStove'):
         """Calculates the daily time of collection based on friction (hour/meter), the available biogas energy from
-        each cell (MJ/yr/meter, 1000000 represents meters per km2) and the required energy per household (MJ/yr)
+        each cell (MJ/yr/meter, 1000000 represents meters per km2) and the required energy per household (MJ/yr). The
+        function does not return anything but saves the time of collection in the `time_of_collection` of the Biogas
+        class.
 
         Parameters
         ----------
@@ -2385,17 +2644,18 @@ class Biogas(Technology):
         friction = self.read_friction(model, self.friction_path)
 
         time_of_collection = required_energy_hh * friction / (model.gdf["biogas_energy"] / 1000000) / 365
-        #time_of_collection[time_of_collection == float('inf')] = np.nan
-        #mean_value = time_of_collection.mean()
-        #time_of_collection[time_of_collection.isna()] = mean_value
+
+        time_of_collection[time_of_collection == float('inf')] = np.nan
+
         self.time_of_collection = time_of_collection
 
     def available_biogas(self, model: 'onstove.OnStove'):
         """Calculates the biogas production potential in liters per day. It currently takes into account 6 categories
         of livestock (cattle, buffalo, sheep, goat, pig and poultry). The biogas potential for each category is determined
         following the methodology outlined by Lohani et al.[1]_ This function also applies a restriction to biogas
-        production with regards to urban areas, areas with temperature lower than 10 degrees[1]_ celsius and areas under
-        water stress[2]_.
+        production in urban areas, areas with temperature lower than 10 degrees[1]_ celsius and areas
+        experiencing water stress[2]_. The function does not return anything but creates a column in the main dataframe
+        for total biogas energy available in every settlement.
 
         References
         ----------
@@ -2447,8 +2707,8 @@ class Biogas(Technology):
 
     def recalibrate_livestock(self, model: 'onstove.OnStove', buffaloes: str, cattles: str, poultry: str,
                               goats: str, pigs: str, sheeps: str):
-        """Recalibrates the livestock maps and adds them to the main dataframe. It currently takes into account 6 categories
-        of livestock (cattle, buffalo, sheep, goat, pig and poultry).
+        """Recalibrates the livestock maps and adds them to the main dataframe. It currently takes into account 6
+        categories of livestock (cattle, buffalo, sheep, goat, pig and poultry).
 
         Parameters
         ----------

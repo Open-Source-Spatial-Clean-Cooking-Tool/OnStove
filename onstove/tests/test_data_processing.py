@@ -94,7 +94,6 @@ def test_process_data():
     data.add_layer(category='Electricity', name='Night_time_lights', 
                    path=ntl_path, layer_type='raster',
                    resample='average', window=False)
-    data.layers['Electricity']['Night_time_lights'].save(f'{data.output_directory}/Electricity/Night_time_lights')
     assert isinstance(data.layers['Electricity']['Night_time_lights'], 
                       RasterLayer)
     
@@ -104,8 +103,14 @@ def test_process_data():
                                      'LPG', 'Traveltime', 'Traveltime.tif')
     data.add_layer(category='LPG', name='Traveltime', path=traveltime_cities,
                    layer_type='raster', resample='average', window=False)
-    data.layers['LPG']['Traveltime'].save(f'{data.output_directory}/LPG/Traveltime')
     assert isinstance(data.layers['LPG']['Traveltime'], RasterLayer)
+    
+    ## Roads
+    roads = os.path.join('onstove', 'tests', 'data', 'RWA', 
+                         'LPG', 'Roads', 'Roads.shp')
+    data.add_layer(category='LPG', name='Roads', path=roads,
+                   layer_type='vector')
+    assert isinstance(data.layers['LPG']['Roads'], VectorLayer)
     
     # Biogas
     ## Temperature
@@ -113,7 +118,6 @@ def test_process_data():
                                'Biogas', 'Temperature', 'Temperature.tif')
     data.add_layer(category='Biogas', name='Temperature', path=temperature,
                    layer_type='raster', resample='average', window=False)
-    data.layers['Biogas']['Temperature'].save(f'{data.output_directory}/Biogas/Temperature')
     data.mask_layers(datasets={'Biogas': ['Temperature']})
     assert isinstance(data.layers['Biogas']['Temperature'], RasterLayer)
     

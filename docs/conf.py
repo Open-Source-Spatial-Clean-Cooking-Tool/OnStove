@@ -18,11 +18,11 @@ sys.path.insert(0, os.path.abspath('..'))
 # -- Project information -----------------------------------------------------
 
 project = 'onstove'
-copyright = '2022, Camilo Ramirez and Babak Khavari'
+copyright = '2023, Camilo Ramirez and Babak Khavari'
 author = 'Camilo Ramirez and Babak Khavari'
 
 # The full version, including alpha/beta/rc tags
-release = 'v0.1.0'
+release = 'v0.1.3'
 
 
 # -- General configuration ---------------------------------------------------
@@ -66,32 +66,35 @@ intersphinx_mapping = {
 #
 html_theme = 'pydata_sphinx_theme'
 
-
-
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ['_static']
 html_theme_options = {
    "logo": {
-      "image_light": "OnStove_logo_color.svg",
-      "image_dark": "OnStove_logo_dark.svg",
+      "image_light": "OnStove_logo_color_margins.svg",
+      "image_dark": "OnStove_logo_dark_margins.svg",
    },
    "icon_links": [
         {
             "name": "GitHub",
             "url": "https://github.com/Open-Source-Spatial-Clean-Cooking-Tool/OnStove",
-            "icon": "fab fa-github-square",
-            "type": "fontawesome",
+            "icon": "fab fa-github",
         }
    ],
    "show_nav_level": 2,
+   # "switcher": {
+        # "json_url": "_static/switcher.json",
+    # },
+   # "navbar_start": ["navbar-logo", "version-switcher"]
 }
 html_favicon = "_static/OnStove_favicon.svg"
 html_css_files = ["onstove.css"]
 html_sidebars = {
    'index': ['search-field.html', 'globaltoc.html'],
-   'onstove_tool': ['search-field.html', 'globaltoc.html'],
+   'onstove_model': ['search-field.html', 'globaltoc.html'],
    'quickstart': ['search-field.html', 'globaltoc.html'],
    'resources_and_license': ['search-field.html', 'globaltoc.html'],
+   'contributions_and_partners': ['search-field.html', 'globaltoc.html'],
+   '**': ['search-field.html', 'sidebar-nav-bs.html']
 }
