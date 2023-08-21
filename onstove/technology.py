@@ -244,6 +244,7 @@ class Technology:
         else:
             rr_stroke = 1 + 1.314 * (1 - exp(-0.012 * (self.pm25 - 7.358) ** 1.275))
 
+
         return rr_alri, rr_copd, rr_ihd, rr_lc, rr_stroke
 
     def paf(self, rr: float, sfu: float) -> float:
@@ -355,6 +356,8 @@ class Technology:
             self.get_carbon_intensity(model)
 
         self.carbon = pd.Series((self.energy * self.carbon_intensity) / 1000, index=mask.index)
+        print(self.name)
+        print(self.carbon[122850])
 
 
     def carbon_emissions(self, model: 'onstove.OnStove', mask: pd.Series, relative: bool = True):
@@ -379,7 +382,7 @@ class Technology:
         pollutants = ['co2', 'ch4', 'n2o', 'co', 'bc', 'oc']
         self.carbon_intensity = sum([self[f'{pollutant}_intensity'] * model.gwp[pollutant] for pollutant in pollutants])
 
-    def carb(self, model: 'onstove.OnStove'):
+    def carb(self, model: 'onstove.OnStove', mask: pd.Series):
         """Checks if carbon_emission is given in the socio-economic specification file. If it is given this is read
         directly, otherwise the get_carbon_intensity function is called. Function does not return anything but saves the
         carbon_emissions in the `carbon` attribute of the OnStove model object.
@@ -400,8 +403,8 @@ class Technology:
         self.required_energy(model)
         if self.carbon_intensity is None:
             self.get_carbon_intensity(model)
-        self.carbon = pd.Series([(self.energy * self.carbon_intensity) / 1000] * model.gdf.shape[0],
-                                index=model.gdf.index)
+
+        self.carbon = pd.Series((self.energy * self.carbon_intensity) / 1000, index=mask.index)
 
     def carbon_emissions(self, model: 'onstove.OnStove', mask, relative):
         """Calculates the reduced emissions and the costs avoided by reducing these emissions. Function does not return
@@ -609,6 +612,7 @@ class Technology:
                 cases_dict[disease] = cases
                 costs_dict[disease] = costs
 
+
             total_costs = np.sum(list(costs_dict.values()), axis=0)
             total_cases = np.sum(list(cases_dict.values()), axis=0)
             discounted_costs = np.array([sum(x / discount_rate) for x in total_costs])
@@ -643,6 +647,11 @@ class Technology:
 
         masky = mask[mask].index
 
+        if model.specs['health_spillovers_parameter'] < 0:
+            warn("The health_spillover_parameter given is smaller than 0. The spillover parameter describes "
+                 "spillover effect from household air pollution and as such, should to be at least 0."
+                 , DeprecationWarning, stacklevel=2)
+
         if relative:
             if not isinstance(self.deaths_avoided, pd.Series):
                 self.relative_deaths = np.zeros((len(mask), model.specs["end_year"] - model.specs["start_year"]))
@@ -650,10 +659,6 @@ class Technology:
                 self.relative_cost_mort = np.zeros((len(mask), model.specs["end_year"] - model.specs["start_year"]))
                 self.distributed_mortality = pd.Series(0, index=mask.index)
 
-            if model.specs['health_spillovers_parameter'] < 0:
-                warn("The health_spillover_parameter given is smaller than 0. The spillover parameter describes "
-                     "spillover effect from household air pollution and as such, should to be at least 0."
-                     , DeprecationWarning, stacklevel=2)
 
             self.relative_deaths[mask] += deaths[mask] * (1 + model.specs['w_spillover']
                                                                      * model.specs['health_spillovers_parameter'])
@@ -1090,8 +1095,6 @@ class Technology:
                         model.specs["w_time"] * \
                                    self.time_value[mask, model.year-model.specs["start_year"]-1:limit].sum(axis=1)
 
-        self.decreased_carbon_costs[mask, model.year-model.specs["start_year"]-1:limit].sum(axis=1)
-
         self.net_benefits.loc[masky] = self.benefits.loc[masky] - model.specs["w_costs"] * \
                                        np.array([sum(x / discount_rate[model.year-model.specs["start_year"]-1:limit])
                                        for x in self.costs[mask, model.year-model.specs["start_year"]-1:limit]])
@@ -1476,8 +1479,7 @@ class LPG(Technology):
             self.infrastructure_cost(model, mask)
             self.investments[mask] += (self.infra_cost[mask] * (1 - shares_reshaped[mask]))
 
-    def net_benefit(self, model: 'onstove.OnStove', w_health: int = 1, w_spillovers: int = 1,
-                    w_environment: int = 1, w_time: int = 1, w_costs: int = 1):
+    def net_benefit(self, model: 'onstove.OnStove', mask):
         """This method expands :meth:`Technology.net_benefit` by taking into account access to roads (proximity).
 
         Parameters
@@ -1485,24 +1487,12 @@ class LPG(Technology):
          model: OnStove model
              Instance of the OnStove model containing the main data of the study case. See
              :class:`onstove.OnStove`.
-         w_health: int, default 1
-             Determines the weight of the health parameters (reduced morbidity and mortality)
-             in the net-benefit equation.
-         w_spillovers: int, default 1
-             Determines the weight of the spillover effects from cooking with traditional fuels
-             in the net-benefit equation.
-         w_environment: int, default 1
-             Determines the weight of the environmental effects (reduced emissions) in the net-benefit equation.
-         w_time: int, default 1
-             Determines the weight of the opportunity cost (reduced time spent) in the net-benefit equation.
-         w_costs: int, default 1
-             Determines the weight of the costs in the net-benefit equation.
 
         See also
         --------
         net_benefit
         """
-        super().net_benefit(model, w_health, w_spillovers, w_environment, w_time, w_costs)
+        super().net_benefit(model, mask)
         if isinstance(self.roads, VectorLayer):
             dist_roads = self.roads.proximity(base_layer=model.base_layer, create_raster=False)
             dist_roads.data = dist_roads.data > self.distance_limit
@@ -2452,8 +2442,7 @@ class MiniGrids(Electricity):
         super(Electricity, self).discounted_inv(model, relative=relative)
         self.discounted_investments += self.connection_cost
 
-    def net_benefit(self, model: 'onstove.OnStove', w_health: int = 1, w_spillovers: int = 1,
-                    w_environment: int = 1, w_time: int = 1, w_costs: int = 1):
+    def net_benefit(self, model: 'onstove.OnStove', mask):
 
         """This method modifies :meth:`Electricity.net_benefit` for the mini-grid class
 
@@ -2481,7 +2470,7 @@ class MiniGrids(Electricity):
         """
 
 
-        super(Electricity, self).net_benefit(model, w_health, w_spillovers, w_environment, w_time, w_costs)
+        super(Electricity, self).net_benefit(model, mask)
         self.calculate_potential(model)
         self.households = self.gdf['supported_hh']
         model.gdf.loc[self.households == 0, "net_benefit_{}".format(self.name)] = np.nan
