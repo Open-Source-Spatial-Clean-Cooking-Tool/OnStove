@@ -3350,7 +3350,8 @@ class OnStove(DataProcessor):
         if year is None:
             year = self.specs["end_year"]
 
-        raster, codes, cmap = self.create_layer(variable, year=year, cumulative_stats=cumulative_stats, labels=labels, cmap=cmap, metric=metric, nodata=nodata)
+        raster, codes, cmap = self.create_layer(variable, year=year, cumulative_stats=cumulative_stats, labels=labels,
+                                                cmap=cmap, metric=metric, nodata=nodata)
 
         if isinstance(admin_layer, gpd.GeoDataFrame):
             admin_layer = admin_layer
@@ -3362,8 +3363,10 @@ class OnStove(DataProcessor):
         if ax is None:
             fig, ax = plt.subplots(1, 1, figsize=figsize)
 
+
         if stats:
-            self._add_statistics(ax, year, cumulative_stats, stats_position, stats_fontsize, variable=variable, extra_stats=extra_stats)
+            self._add_statistics(ax, year=year, cumulative_stats=cumulative_stats, kwargs=stats_kwargs,
+                                 variable=variable)
 
         ax = raster.plot(cmap=cmap, cumulative_count=cumulative_count,
                          quantiles=quantiles,
@@ -3387,7 +3390,7 @@ class OnStove(DataProcessor):
 
         return ax
 
-    def _add_statistics(self, ax, variable='max_benefit_tech', kwargs: Optional[dict] = None):
+    def _add_statistics(self, ax, cumulative_stats, year, variable='max_benefit_tech', kwargs: Optional[dict] = None):
         _kwargs = {'extra_stats': None, 'stats_position': (1.02, 0.9), 'pad': 0, 'sep': 6,
                    'fontsize': 10, 'fontcolor': 'black', 'fontweight': 'normal',
                    'box_props': dict(boxstyle='round', facecolor='#f1f1f1ff', edgecolor='lightgray')}
@@ -3403,33 +3406,25 @@ class OnStove(DataProcessor):
                 extra_text.append(TextArea(name, textprops=font_props))
                 extra_values.append(TextArea(stat, textprops=font_props))
                 
-        summary = self.summary(total=True, pretty=False, variable=variable, remove_none=True)
         deaths = TextArea("Deaths avoided", textprops=font_props)
         health = TextArea("Health costs avoided", textprops=font_props)
         emissions = TextArea("Emissions avoided", textprops=font_props)
         time = TextArea("Time saved", textprops=font_props)
-        # costs = TextArea("Total system cost", textprops=font_props)
 
         texts_vbox = VPacker(children=[deaths, health, emissions, time, *extra_text], pad=0, sep=6)
 
-        if cumulative_stats:
-            mask = self.gdf['year'] <= year
-        else:
-            mask = self.gdf['year'] == year
+        summary = self.summary(year=year, cumulative_stats=cumulative_stats, pretty=False)
 
-        deaths_avoided = self.gdf.loc[mask, 'deaths_avoided'].sum()
-        health_costs_avoided = self.gdf.loc[mask, 'health_costs_avoided'].sum() / 1000000000
-        reduced_emissions = self.gdf.loc[mask, 'reduced_emissions'].sum() / 1000000000
-        time_saved = (self.gdf.loc[mask, 'time_saved'] * self.gdf.loc[mask, "Households"]).sum() / \
-                      self.gdf.loc[mask, "Households"].sum()
+        deaths_avoided = summary.loc['Total', 'deaths_avoided']
+        health_costs_avoided = summary.loc['Total', 'health_costs_avoided']
+        reduced_emissions = summary.loc['Total', 'reduced_emissions']
+        time_saved = summary.loc['Total', 'time_weighted']
 
         deaths = TextArea(f"{deaths_avoided:,.0f} pp/yr", textprops=font_props)
         health = TextArea(f"{health_costs_avoided:,.2f} BUS$", textprops=font_props)
         emissions = TextArea(f"{reduced_emissions:,.2f} Mton", textprops=font_props)
         time = TextArea(f"{time_saved:,.2f} h/hh.day", textprops=font_props)
-        # costs = TextArea(f"{total_costs:,.2f} MUS$", textprops=font_props)
 
-        
         values_vbox = VPacker(children=[deaths, health, emissions, time, *extra_values], pad=0, sep=6, align='right')
 
         hvox = HPacker(children=[texts_vbox, values_vbox], pad=_kwargs['pad'], sep=_kwargs['sep'])
@@ -3587,7 +3582,7 @@ class OnStove(DataProcessor):
         fig, ax = plt.subplots(1, 1, figsize=figsize)
         if stats:
             fig, ax = plt.subplots(1, 1, figsize=figsize, dpi=dpi)
-            self._add_statistics(ax, year, cumulative_stats, stats_position, stats_fontsize, variable=variable, extra_stats=extra_stats)
+            self._add_statistics(ax, variable=variable)
         else:
             fig, ax = plt.subplots(1, 1, figsize=figsize, dpi=dpi)
 
@@ -3644,14 +3639,23 @@ class OnStove(DataProcessor):
 
         if year is None:
             year = self.specs['end_year']
+
         if cumulative_stats:
             dff = self.gdf.loc[self.gdf["year"] <= year].copy()
         else:
             dff = self.gdf.loc[self.gdf["year"] == year].copy()
+
         if labels is not None:
             dff = self._re_name(dff, labels, 'max_benefit_tech')
+
+        proj_life = self.specs["end_year"] - self.specs["start_year"]
+        factor = year - self.specs["start_year"]
+
+        dff["Households"] = dff["households_init"] + factor*(dff["households_end"]-dff["households_init"])/proj_life
+
         tot_hh = dff['max_benefit_tech'].map(dff.groupby('max_benefit_tech')['Households'].sum())
         dff['time_weighted'] = dff['time_saved'] * dff['Households'] / tot_hh
+
         summary = dff.groupby(['max_benefit_tech']).agg({'Pop': lambda row: np.nansum(row) / 1000000,
                                                          "Households": lambda row: np.nansum(row) / 1000000,
                                                          'maximum_net_benefit': lambda row: np.nansum(row) / 1000000000,
@@ -3674,7 +3678,7 @@ class OnStove(DataProcessor):
             summary = pd.concat([summary, total.to_frame().T])
         if remove_none:
             summary.drop('None', errors='ignore', inplace=True)
-        summary.reset_index(inplace=True)
+        #summary.reset_index(inplace=True)
         if pretty:
             summary.rename(columns={'max_benefit_tech': 'Max benefit technology',
                                     'Pop': 'Population (Million)',
@@ -4108,6 +4112,7 @@ class OnStove(DataProcessor):
 
     def plot_distribution(self, type: str = 'histogram', fill: str = 'max_benefit_tech',
                           groupby: str = 'None', variable: str = 'wealth',
+                          year = None, cumulative_stats = True,
                           best_mix: bool = True, hh_divider: int = 1, var_divider: int = 1,
                           labels: Optional[dict[str, str]] = None,
                           cmap: Optional[dict[str, str]] = None,
@@ -4217,9 +4222,17 @@ class OnStove(DataProcessor):
             Figure object used to plot the distribution
         """
 
+        if year == None:
+            year = self.specs["end_year"]
+
+        if cumulative_stats:
+            dff = self.gdf.loc[self.gdf["year"] <= year]
+        else:
+            dff = self.gdf.loc[self.gdf["year"] == year]
+
         if type.lower() == 'box':
             if groupby.lower() == 'isurban':
-                df = self.gdf.groupby(['IsUrban', 'max_benefit_tech'])[['health_costs_avoided',
+                df = dff.groupby(['IsUrban', 'max_benefit_tech'])[['health_costs_avoided',
                                                                         'opportunity_cost',
                                                                         'emissions_costs_avoided',
                                                                         'salvage_cost',
@@ -4234,14 +4247,14 @@ class OnStove(DataProcessor):
                 tech_list = tech_list.reset_index().sort_values('Pop')['max_benefit_tech'].tolist()
                 x = 'max_benefit_tech'
             elif groupby.lower() == 'urban-rural':
-                df = self.gdf.copy()
+                df = dff.copy()
                 df = self._re_name(df, labels, 'max_benefit_tech')
                 df['Urban'] = df['IsUrban'] > 20
                 df['Urban'].replace({True: 'Urban', False: 'Rural'}, inplace=True)
                 x = 'Urban'
             else:
                 if best_mix:
-                    df = self.gdf.copy()
+                    df = dff.copy()
                     df = self._re_name(df, labels, 'max_benefit_tech')
                     tech_list = df.groupby('max_benefit_tech')[['Pop']].sum()
                     tech_list = tech_list.reset_index().sort_values('Pop')['max_benefit_tech'].tolist()
@@ -4297,7 +4310,7 @@ class OnStove(DataProcessor):
                 p += labs(x='')
 
         elif type.lower() == 'density':
-            df = self.gdf.groupby(['IsUrban', 'max_benefit_tech'])[['health_costs_avoided',
+            df = dff.groupby(['IsUrban', 'max_benefit_tech'])[['health_costs_avoided',
                                                                         'opportunity_cost',
                                                                         'emissions_costs_avoided',
                                                                         'salvage_cost',
@@ -4309,9 +4322,9 @@ class OnStove(DataProcessor):
             df.reset_index(inplace=True)
 
         if best_mix:
-            df = self.gdf[[fill, 'Pop', 'Households', 'maximum_net_benefit',
-                           'health_costs_avoided', 'opportunity_cost_gained', 'emissions_costs_saved',
-                           'investment_costs', 'salvage_value', 'fuel_costs', 'om_costs', 'relative_wealth',
+            df = dff[[fill, 'Pop', 'Households', 'maximum_net_benefit',
+                           'health_costs_avoided', 'opportunity_cost', 'emissions_costs_avoided',
+                           'investment_costs', 'salvage_cost', 'fuel_costs', 'om_costs', 'relative_wealth',
                            'value_of_time']].copy()
 
             df = self._re_name(df, labels, fill)
@@ -4350,14 +4363,14 @@ class OnStove(DataProcessor):
         if groupby_kwargs is not None:
             _groupby_kwargs = deep_update(_groupby_kwargs, groupby_kwargs)
 
-        if (groupby in self.gdf.columns) or (groupby.lower() in ['urban-rural', 'rural-urban']):
+        if (groupby in dff.columns) or (groupby.lower() in ['urban-rural', 'rural-urban']):
             if groupby.lower() == 'urban-rural':
                 groupby = 'Urban'
-                df[groupby] = self.gdf[~self.gdf.index.duplicated()].loc[df.index, 'IsUrban']
+                df[groupby] = dff[~dff.index.duplicated()].loc[df.index, 'IsUrban']
                 df[groupby] = df[groupby] > 20
                 df[groupby].replace({True: 'Urban', False: 'Rural'}, inplace=True)
             else:
-                df[groupby] = self.gdf[~self.gdf.index.duplicated()].loc[df.index, groupby]
+                df[groupby] = dff[~dff.index.duplicated()].loc[df.index, groupby]
             _groupby_kwargs.pop('ncol')
             wrap = facet_grid(f'{cat} ~ {groupby}', **_groupby_kwargs)
         elif _groupby_kwargs['ncol'] > 1:
