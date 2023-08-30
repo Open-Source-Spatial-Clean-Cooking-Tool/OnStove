@@ -2310,10 +2310,10 @@ class OnStove(DataProcessor):
             self.extract_salvage()
 
             for tech in self.gdf["max_benefit_tech"].dropna().unique():
-                self.gdf.reset_index(drop=False, inplace=True)
+                # self.gdf.reset_index(drop=False, inplace=True)
                 mask = (self.gdf["year"] == self.year) & (self.gdf["max_benefit_tech"] == tech)
                 self.gdf.loc[mask[mask].index, 'year'] += self.techs[tech].tech_life
-                self.gdf.set_index('index', inplace=True)
+                # self.gdf.set_index('index', inplace=True)
 
             dff = self.gdf.copy()
             dff.sort_values(by='year', inplace=True)
@@ -2619,6 +2619,7 @@ class OnStove(DataProcessor):
             index = is_tech[is_tech].index
             self.gdf.loc[is_tech, 'deaths_avoided'] = (self.techs[tech].relative_deaths[index] *
                                                        self.houses[index] * self.techs[tech].factor[index]).sum(axis=1)
+            # self.gdf.loc[is_tech, 'deaths_avoided'] /= (self.specs['end_year'] + 1 - self.year)
 
         series_value = self.gdf['deaths_avoided']
         setattr(self, 'deaths_avoided_{}'.format(self.year), series_value)
@@ -2634,9 +2635,10 @@ class OnStove(DataProcessor):
             self.gdf.loc[is_tech, 'health_costs_avoided'] = ((self.techs[tech].relative_cost_mort[index] + \
                                                                 self.techs[tech].relative_cost_morb[index])  * \
                                                        self.houses[index] * self.techs[tech].factor[index]).sum(axis=1)
+            # self.gdf.loc[is_tech, 'health_costs_avoided'] /= (self.specs['end_year'] + 1 - self.year)
 
         series_value = self.gdf['health_costs_avoided']
-        setattr(self, 'health_costs_avoided_{}'.format(self.year),series_value)
+        setattr(self, 'health_costs_avoided_{}'.format(self.year), series_value)
 
     def extract_time_saved(self):
         """
@@ -2645,13 +2647,15 @@ class OnStove(DataProcessor):
         for tech in self.gdf.loc[self.gdf["year"] == self.year, 'max_benefit_tech'].unique():
             is_tech = ((self.gdf['max_benefit_tech'] == tech) & (self.gdf['year'] == self.year))
             index = is_tech[is_tech].index
+            year = self.year - self.specs['start_year'] - 1
             self.gdf.loc[is_tech, 'time_saved'] = (self.techs[tech].total_time_saved[index] *
                                                    self.houses[index] *
-                                                   self.techs[tech].factor[index]).sum(axis=1) / \
-                                                  (365 * (self.houses[index] * self.techs[tech].factor[index]).sum(axis=1))
+                                                   self.techs[tech].factor[index]).sum(axis=1)
+            households = (self.houses[index, year:] * self.techs[tech].factor[index, year:]).sum(axis=1)
+            self.gdf.loc[is_tech, 'time_saved'] /= (365 * households)
 
         series_value = self.gdf['time_saved']
-        setattr(self, 'time_saved_{}'.format(self.year),series_value)
+        setattr(self, 'time_saved_{}'.format(self.year), series_value)
 
     def extract_opportunity_cost(self):
         """
@@ -2662,9 +2666,10 @@ class OnStove(DataProcessor):
             index = is_tech[is_tech].index
             self.gdf.loc[is_tech, 'opportunity_cost'] = (self.techs[tech].time_value[index] *
                                                        self.houses[index] * self.techs[tech].factor[index]).sum(axis=1)
+            # self.gdf.loc[is_tech, 'opportunity_cost'] /= (self.specs['end_year'] + 1 - self.year)
 
         series_value = self.gdf['opportunity_cost']
-        setattr(self, 'opportunity_cost_{}'.format(self.year),series_value)
+        setattr(self, 'opportunity_cost_{}'.format(self.year), series_value)
 
     def extract_reduced_emissions(self):
         """
@@ -2675,9 +2680,10 @@ class OnStove(DataProcessor):
             index = is_tech[is_tech].index
             self.gdf.loc[is_tech, 'reduced_emissions'] = (self.techs[tech].decreased_carbon_emissions[index] *
                                                        self.houses[index] * self.techs[tech].factor[index]).sum(axis=1)
+            # self.gdf.loc[is_tech, 'reduced_emissions'] /= (self.specs['end_year'] + 1 - self.year)
 
         series_value = self.gdf['reduced_emissions']
-        setattr(self, 'reduced_emissions_{}'.format(self.year),series_value)
+        setattr(self, 'reduced_emissions_{}'.format(self.year), series_value)
 
     def discount(self, cost):
         discount_rate, proj_life = Technology.discount_factor(self.specs)
@@ -2693,9 +2699,10 @@ class OnStove(DataProcessor):
             index = is_tech[is_tech].index
             self.gdf.loc[is_tech, 'investment_costs'] = self.discount(self.techs[tech].investments[index] *\
                                                         self.houses[index] * self.techs[tech].factor[index])
+            # self.gdf.loc[is_tech, 'investment_costs'] /= (self.specs['end_year'] + 1 - self.year)
 
         series_value = self.gdf['investment_costs']
-        setattr(self, 'investment_costs_{}'.format(self.year),series_value)
+        setattr(self, 'investment_costs_{}'.format(self.year), series_value)
 
     def extract_om_costs(self):
         """
@@ -2706,9 +2713,10 @@ class OnStove(DataProcessor):
             index = is_tech[is_tech].index
             self.gdf.loc[is_tech, 'om_costs'] = self.discount(self.techs[tech].om_costs[index] *\
                                                 self.houses[index] * self.techs[tech].factor[index])
+            # self.gdf.loc[is_tech, 'om_costs'] /= (self.specs['end_year'] + 1 - self.year)
 
         series_value = self.gdf['om_costs']
-        setattr(self, 'om_costs_{}'.format(self.year),series_value)
+        setattr(self, 'om_costs_{}'.format(self.year), series_value)
 
     def extract_fuel_costs(self):
         """
@@ -2719,9 +2727,10 @@ class OnStove(DataProcessor):
             index = is_tech[is_tech].index
             self.gdf.loc[is_tech, 'fuel_costs'] = self.discount(self.techs[tech].fuel_costs[index] *\
                                                    self.houses[index] * self.techs[tech].factor[index])
+            # self.gdf.loc[is_tech, 'fuel_costs'] /= (self.specs['end_year'] + 1 - self.year)
 
         series_value = self.gdf['fuel_costs']
-        setattr(self, 'fuel_costs_{}'.format(self.year),series_value)
+        setattr(self, 'fuel_costs_{}'.format(self.year), series_value)
 
     def extract_salvage(self):
         """
@@ -2732,9 +2741,10 @@ class OnStove(DataProcessor):
             index = is_tech[is_tech].index
             self.gdf.loc[is_tech, 'salvage_cost'] = self.discount(self.techs[tech].salvage_cost[index] *\
                                                      self.houses[index] * self.techs[tech].factor[index])
+            # self.gdf.loc[is_tech, 'salvage_cost'] /= (self.specs['end_year'] + 1 - self.year)
 
         series_value = self.gdf['salvage_cost']
-        setattr(self, 'salvage_cost_{}'.format(self.year),series_value)
+        setattr(self, 'salvage_cost_{}'.format(self.year), series_value)
 
     def extract_emissions_costs_saved(self):
         """
@@ -2746,9 +2756,10 @@ class OnStove(DataProcessor):
             index = is_tech[is_tech].index
             self.gdf.loc[is_tech, 'emissions_costs_avoided'] = (self.techs[tech].decreased_carbon_costs[index] *
                                                        self.houses[index] * self.techs[tech].factor[index]).sum(axis=1)
+            # self.gdf.loc[is_tech, 'emissions_costs_avoided'] /= (self.specs['end_year'] + 1 - self.year)
 
         series_value = self.gdf['emissions_costs_avoided']
-        setattr(self, 'emissions_costs_avoided_{}'.format(self.year),series_value)
+        setattr(self, 'emissions_costs_avoided_{}'.format(self.year), series_value)
 
 
     def extract_wealth_index(self, wealth_index: str, file_type: str = "csv", x_column: str =  "longitude",
@@ -3420,7 +3431,7 @@ class OnStove(DataProcessor):
         reduced_emissions = summary.loc['Total', 'reduced_emissions']
         time_saved = summary.loc['Total', 'time_weighted']
 
-        deaths = TextArea(f"{deaths_avoided:,.0f} pp/yr", textprops=font_props)
+        deaths = TextArea(f"{deaths_avoided:,.0f} pp", textprops=font_props)
         health = TextArea(f"{health_costs_avoided:,.2f} BUS$", textprops=font_props)
         emissions = TextArea(f"{reduced_emissions:,.2f} Mton", textprops=font_props)
         time = TextArea(f"{time_saved:,.2f} h/hh.day", textprops=font_props)
@@ -3661,7 +3672,7 @@ class OnStove(DataProcessor):
                                                          'maximum_net_benefit': lambda row: np.nansum(row) / 1000000000,
                                                          'deaths_avoided': 'sum',
                                                          'health_costs_avoided': lambda row: np.nansum(row) / 1000000000,
-                                                         'time_weighted': 'sum',
+                                                         'time_weighted':  'sum',
                                                          'opportunity_cost': lambda row: np.nansum(
                                                              row) / 1000000000,
                                                          'reduced_emissions': lambda row: np.nansum(row) / 1000000000,
@@ -3906,7 +3917,7 @@ class OnStove(DataProcessor):
 
         if year is None:
             year = self.specs["end_year"]
-        df = self.summary(total=False, pretty=False, labels=labels, cumulative_stats=cumulative_stats, year = year,
+        df = self.summary(total=False, pretty=False, labels=labels, cumulative_stats=cumulative_stats, year=year,
                           remove_none=True)
         df['investment_costs'] -= df['salvage_cost']
         df['fuel_costs'] *= -1
