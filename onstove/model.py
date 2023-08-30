@@ -2309,18 +2309,12 @@ class OnStove(DataProcessor):
             print('    - Salvage')
             self.extract_salvage()
 
-            for tech in self.gdf["max_benefit_tech"].dropna().unique():
-                # self.gdf.reset_index(drop=False, inplace=True)
-                mask = (self.gdf["year"] == self.year) & (self.gdf["max_benefit_tech"] == tech)
-                self.gdf.loc[mask[mask].index, 'year'] += self.techs[tech].tech_life
-                # self.gdf.set_index('index', inplace=True)
-
             dff = self.gdf.copy()
             dff.sort_values(by='year', inplace=True)
             dff_unique = dff[~dff.index.duplicated(keep='first')]
 
             for tech in dff_unique["max_benefit_tech"].dropna().unique():
-                mask_2 = (dff_unique["placeholder_year"] == self.year) & (dff_unique["max_benefit_tech"] == tech)
+                mask_2 = (dff_unique["year"] == self.year) & (dff_unique["max_benefit_tech"] == tech)
 
                 for paf in ['paf_alri', 'paf_copd', 'paf_ihd', 'paf_lc', 'paf_stroke']:
                     self.base_fuel[paf].loc[mask_2[mask_2].index] = self.techs[tech][paf].loc[mask_2[mask_2].index]
@@ -2365,7 +2359,7 @@ class OnStove(DataProcessor):
                                                                  self.techs[tech].tech_life]
 
             duplicated_indices = self.gdf.loc[(self.gdf.index.duplicated()) &
-                                              (self.gdf['placeholder_year'] == self.year)].index
+                                              (self.gdf['year'] == self.year)].index
             self.gdf["duplicates"] = self.gdf.index
             for i, g in self.gdf.loc[duplicated_indices].groupby('duplicates'):
                 if self.gdf.loc[i]['year'].nunique() == 1:
@@ -2445,6 +2439,10 @@ class OnStove(DataProcessor):
                     self.year - self.specs["start_year"] - 1 +
                     self.techs[tech_0].tech_life] = (fuel_0 + fuel_1) / total_pop
 
+            for tech in self.gdf["max_benefit_tech"].dropna().unique():
+                mask = (self.gdf["year"] == self.year) & (self.gdf["max_benefit_tech"] == tech)
+                self.gdf.loc[mask[mask].index, 'year'] += self.techs[tech].tech_life
+                years[mask] += self.techs[tech].tech_life
 
             del self.gdf["duplicates"]
 
@@ -2526,6 +2524,8 @@ class OnStove(DataProcessor):
 
                 second_benefit_cols = temps.copy()
                 second_benefit_cols.remove(f'net_benefit_{tech.name}_temp')
+                if "Electricity" in tech.name:
+                    second_benefit_cols = [item for item in second_benefit_cols if 'Electricity' not in item]
                 second_best = dff.loc[current[current].index, second_benefit_cols].idxmax(axis=1)
 
                 second_best.replace(np.nan, 'NaN', inplace=True)
