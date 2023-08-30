@@ -937,7 +937,9 @@ class Technology:
             transport_cost = self.transport_cost.loc[start_year]
         else:
             transport_cost = self.transport_cost
+
         cost[mask] = (self.energy * self.fuel_cost / self.energy_content + transport_cost)
+
 
         if relative:
             proj_years[mask, (model.year - model.specs["start_year"] - 1):proj_years.shape[1]] = 1
@@ -1083,10 +1085,12 @@ class Technology:
         self.total_costs(model, mask)
         discount_rate, proj_life = self.discount_factor(model.specs)
         masky = mask[mask].index
+
         if not isinstance(self.benefits, pd.Series):
             self.benefits = pd.Series(0, index=mask.index, dtype='float64')
             self.net_benefits = pd.Series(0, index=mask.index, dtype='float64')
-            self.factor = np.zeros((len(model.gdf), model.specs["end_year"] - model.specs["start_year"]))
+            if "Electricity" not in self.name:
+                self.factor = np.zeros((len(model.gdf), model.specs["end_year"] - model.specs["start_year"]))
             self.households = pd.Series(0, index=mask.index, dtype='float64')
 
         self.benefits.loc[masky] = model.specs["w_health"] * (self.distributed_morbidity.loc[masky] +
@@ -1107,7 +1111,8 @@ class Technology:
         model.gdf.loc[masky, "costs_{}".format(self.name)] = self.costs[mask].sum(axis=1)
         model.gdf.loc[masky, "benefits_{}".format(self.name)] = self.benefits.loc[masky]
         model.gdf.loc[masky, "net_benefit_{}".format(self.name)] = self.net_benefits.loc[masky]
-        self.factor[mask, model.year - model.specs["start_year"] -1:] = 1
+        if "Electricity" not in self.name:
+            self.factor[mask, model.year - model.specs["start_year"] -1:] = 1
 
 class LPG(Technology):
     """LPG technology class used to model LPG stoves.
@@ -2077,6 +2082,40 @@ class Electricity(Technology):
         else:
             super().__setitem__(idx, value)
 
+    def discount_fuel_cost(self, model: 'onstove.OnStove', mask, relative: bool = True):
+
+        self.required_energy(model)
+        discount_rate, proj_life = self.discount_factor(model.specs)
+
+        proj_years = np.matmul(np.expand_dims(np.ones(mask.shape[0]), axis=1),
+                               np.expand_dims(np.zeros(proj_life), axis=0))
+
+        start_year = mask[mask].index
+
+        cost = np.ones(self.fuel_cost.shape)
+
+        if isinstance(self.transport_cost, pd.Series):
+            transport_cost = self.transport_cost.loc[start_year]
+        else:
+            transport_cost = self.transport_cost
+
+        cost[mask] = (self.energy * self.fuel_cost[mask] / self.energy_content + transport_cost)
+
+        if relative:
+            fuel_cost = cost
+
+            fuel_cost[mask, 0:(model.year - model.specs["start_year"] - 1)] = model.base_fuel.fuel_costs[mask,
+                                                                              :(model.year - model.specs[
+                                                                                  "start_year"] - 1)]
+            relative_fuel_cost = fuel_cost[mask] - model.base_fuel.fuel_costs[mask]
+
+            if not isinstance(self.fuel_costs, np.ndarray):
+                self.fuel_costs = np.zeros(len(mask), model.specs["end_year"] - model.specs["start_year"])
+
+            self.fuel_costs[mask] = relative_fuel_cost
+        else:
+            self.fuel_costs = cost[mask]
+
     def get_capacity_cost(self, model: 'onstove.OnStove', mask: pd.Series):
         """This method determines the cost of electricity for each added unit of capacity (kW). The added capacity is
         assumed to be the same shares as the current installed capacity (i.e. if a country uses 10% coal powered power
@@ -2120,7 +2159,8 @@ class Electricity(Technology):
         if not isinstance(self.capacity_cost, pd.Series):
             self.capacity_cost = np.zeros((len(mask), model.specs["end_year"] - model.specs["start_year"]))
 
-        self.capacity_cost[mask] = self.capacity * self.per_unit_capacity_cost[mask]
+        #self.capacity_cost[mask] = self.capacity * self.per_unit_capacity_cost[mask]
+        self.capacity_cost[mask] = 0
 
     def get_carbon_intensity(self, model: 'onstove.OnStove'):
         """This function determines the carbon intensity of generated electricity based on the power plant mix in the
@@ -2244,11 +2284,14 @@ class Electricity(Technology):
         net_benefit
         """
         super().net_benefit(model, mask)
-        model.gdf.loc[model.gdf['Current_elec'] == 0, "net_benefit_{}".format(self.name)] = np.nan
+        for i in mask[mask].index:
+            fct = self.factor[i][model.year - model.specs["start_year"] - 1]
+            if fct == 0:
+                model.gdf.loc[i, "net_benefit_{}".format(self.name)] = np.nan
 
-        shares_array = model.elec_pop.to_numpy()
-        shares_reshaped = shares_array.reshape(-1, 1)
-        self.factor[mask.index, model.year - model.specs["start_year"] - 1:] = shares_reshaped[mask.index]
+        #shares_array = model.elec_pop.to_numpy()
+        #shares_reshaped = shares_array.reshape(-1, 1)
+        #self.factor[mask.index, model.year - model.specs["start_year"] - 1:] = shares_reshaped[mask.index]
 
 class MiniGrids(Electricity):
     """Mini-grids technology class used to model electrical stoves powered by mini-grids.
