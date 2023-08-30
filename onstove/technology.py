@@ -1200,7 +1200,8 @@ class LPG(Technology):
                  lpg_path: Optional[str] = None,
                  friction_path: Optional[str] = None,
                  cylinder_cost: float = 34.75,  # USD/cylinder,
-                 cylinder_life: float = 15):
+                 cylinder_life: float = 15,
+                 cylinder_capacity: float = 12.5):
         super().__init__(name, carbon_intensity, co2_intensity, ch4_intensity,
                          n2o_intensity, co_intensity, bc_intensity, oc_intensity,
                          energy_content, tech_life, inv_cost, fuel_cost, time_of_cooking,
@@ -1217,6 +1218,8 @@ class LPG(Technology):
         self.inv_change = inv_change
         self.infra_cost = None
         self.roads = None
+        self.cylinder_capacity = cylinder_capacity
+        self.trips_per_yr = 0
 
     def add_travel_time(self, model: 'onstove.OnStove', mask, lpg_path: Optional[str] = None,
                         friction_path: Optional[str] = None, align: bool = False):
@@ -1478,6 +1481,24 @@ class LPG(Technology):
         if relative:
             self.infrastructure_cost(model, mask)
             self.investments[mask] += (self.infra_cost[mask] * (1 - shares_reshaped[mask]))
+
+    def total_time(self, model: 'onstove.OnStove', mask):
+        """This method expands :meth:`Technology.total_time` when LPG is refilled by the user.
+
+        Parameters
+        ----------
+        model: OnStove model
+            Instance of the OnStove model containing the main data of the study case. See
+            :class:`onstove.OnStove`.
+        """
+        masky = mask[mask].index
+        self.trips_per_yr = self.energy / (self.cylinder_capacity * self.energy_content)
+
+        if not isinstance(self.total_time_yr, pd.Series):
+            self.total_time_yr = pd.Series(0, index=mask.index)
+
+        self.total_time_yr.loc[masky] = self.time_of_cooking * 365 + self.time_of_collection * self.trips_per_yr
+
 
     def net_benefit(self, model: 'onstove.OnStove', mask):
         """This method expands :meth:`Technology.net_benefit` by taking into account access to roads (proximity).
