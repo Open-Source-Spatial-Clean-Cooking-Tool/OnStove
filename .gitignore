@@ -157,3 +157,5 @@ onstove/tests/output
 *.csv
 example/OnStove_notebook.ipynb
 example/OnStove_notebook.ipynb
+*.tif
+*.geojson
