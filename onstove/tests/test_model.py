@@ -1,6 +1,7 @@
 # Test for models.py
 import os.path
 import shutil
+import geopandas as gpd
 import pytest
 from OnStove.onstove.model import DataProcessor, MCA, OnStove
 from OnStove.onstove.layer import VectorLayer, RasterLayer
@@ -32,6 +33,12 @@ def model_object():
 def data_object():
     data = DataProcessor(project_crs=3857, cell_size=(1000, 1000))
     return data
+
+
+@pytest.fixture
+def mca_object():
+    mca = MCA(project_crs=3857)
+    return mca
 
 
 # tests for DataProcessor
@@ -77,6 +84,7 @@ def test_mask_layers(data_object, sample_raster_layer):
         True
     )
     assert isinstance(data_object, DataProcessor)
+    assert data_object.layers is not None
 
 
 def test_get_distance_rasters(data_object):
@@ -91,3 +99,121 @@ def test_to_pickle(model_object):
     name = "model_object.pkl"
     model_object.to_pickle(name=name)
     assert os.path.exists(name)
+
+
+# MCA
+
+def test_set_demand_index():
+    pass
+
+
+def test_set_supply_index():
+    pass
+
+
+def test_set_clean_cooking_index():
+    pass
+
+
+def test_assistance_need_index():
+    pass
+
+
+# OnStove
+def test_read_scenario_data(model_object):
+    path = r"data/RWA/RWA_scenario_file.csv"
+    model_object.read_scenario_data(path, delimiter=',')
+    assert model_object.specs is not None
+    assert isinstance(model_object.specs, dict)
+
+
+def test_population_to_dataframe(model_object):
+    path = r"data/RWA/Demographics/Population/Population.tif"
+    model_object.add_layer(
+        category="Demographics",
+        name="Population",
+        path=path,
+        layer_type="raster",
+        base_layer="True"
+    )
+    model_object.population_to_dataframe()
+    assert model_object.gdf is not None
+    assert isinstance(model_object.gdf, gpd.GeoDataFrame)
+
+
+def test_calibrate_urban_rural_split(model_object):
+    """path = r"data/RWA/Demographics/Population/Population.tif"
+    model_object.add_layer(
+        category="Demographics",
+        name="Population",
+        path=path,
+        layer_type="raster",
+        base_layer="True"
+    )
+    model_object.population_to_dataframe()"""
+
+    ghs_path = r"data/RWA/Demographics/Urban/Urban.tif"
+    #model_object.calibrate_urban_rural_split(ghs_path)
+    assert model_object.gdf is not None
+    assert isinstance(model_object.gdf, gpd.GeoDataFrame)
+
+
+def test_extract_wealth_index(model_object):
+    path = r"data/RWA/Demographics/Population/Population.tif"
+    model_object.add_layer(
+        category="Demographics",
+        name="Population",
+        path=path,
+        layer_type="raster",
+        base_layer="True"
+    )
+    model_object.population_to_dataframe()
+    # wealth index
+    wealth_idx = r"data/gis_data/Relative wealth index/RWA_relative_wealth_index.csv"
+    # extract wealth index and add to gdf
+    model_object.extract_wealth_index(wealth_index=wealth_idx, file_type="csv")
+    assert model_object.gdf is not None
+    assert isinstance(model_object.gdf, gpd.GeoDataFrame)
+
+
+def test_distance_to_electricity(model_object):
+    path = r"data/RWA/Demographics/Population/Population.tif"
+
+    model_object.add_layer(
+        category="Demographics",
+        name="Population",
+        path=path,
+        layer_type="raster",
+        base_layer="True"
+    )
+
+    mv_path = r"data/RWA/Electricity/MV_lines/MV_lines.geojson"
+    mv_lines = VectorLayer(
+        "Electricity",
+        "MV_lines",
+        mv_path
+    )
+    model_object.distance_to_electricity(mv_lines=mv_lines)
+    assert model_object.gdf is not None
+    assert isinstance(model_object.gdf, gpd.GeoDataFrame)
+
+
+def test_raster_to_dataframe(model_object):
+    path = r"data/RWA/Demographics/Population/Population.tif"
+
+    model_object.add_layer(
+        category="Demographics",
+        name="Population",
+        path=path,
+        layer_type="raster",
+        base_layer="True"
+    )
+
+    ntl = r"data/RWA/Electricity/Night_time_lights/Night_time_lights.tif"
+    model_object.raster_to_dataframe(
+        ntl,
+        name="Night_lights",
+        method="read"
+    )
+    assert model_object.gdf is not None
+    assert isinstance(model_object.gdf, gpd.GeoDataFrame)
