@@ -22,6 +22,10 @@ jobs:
           auto-activate-base: false
 
       - name: Run pytest
+        env:
+            AWS_ACCESS_ID: ${{ secrets.AWS_ACCESS_ID }}
+            AWS_SECRET_KEY: ${{ secrets.AWS_SECRET_KEY }}
+            AWS_REGION: ${{ secrets.AWS_REGION }}
         shell: bash -l {0}
         run: |
             pytest
