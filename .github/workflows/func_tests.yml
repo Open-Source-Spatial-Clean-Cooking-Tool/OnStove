@@ -1,4 +1,4 @@
-name: OnStove tests
+name: OnStove Functional tests
 on:
   push:
     branches: ['tests']
