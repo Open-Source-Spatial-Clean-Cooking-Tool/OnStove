@@ -11,6 +11,8 @@ from onstove.layer import VectorLayer, RasterLayer
 def sample_vector_layer():
     # set path
     vect_path = os.path.join(
+        "onstove",
+        "tests",
         "data",
         "RWA",
         "Administrative",
@@ -25,11 +27,13 @@ def sample_vector_layer():
 def sample_raster_layer():
     # set path
     rast_path = os.path.join(
+        "onstove",
+        "tests",
         "data",
         "RWA",
         "Demographics",
-        "Population",
-        "Population.tif"
+        "Urban",
+        "Urban.tif"
     )
     # Create RasterLayer object
     raster_file = RasterLayer(path=rast_path)
@@ -66,6 +70,8 @@ def test_get_layers():
 
 def test_add_layer(model_object):
     path = os.path.join(
+        "onstove",
+        "tests",
         "data",
         "RWA",
         "Demographics",
@@ -84,6 +90,8 @@ def test_add_layer(model_object):
 
 def test_add_mask_layer(data_object):
     path = os.path.join(
+        "onstove",
+        "tests",
         "data",
         "RWA",
         "Administrative",
@@ -97,6 +105,8 @@ def test_add_mask_layer(data_object):
 
 def test_mask_layers(data_object, sample_raster_layer):
     path = os.path.join(
+        "onstove",
+        "tests",
         "data",
         "RWA",
         "Administrative",
@@ -151,6 +161,8 @@ def test_assistance_need_index():
 # OnStove
 def test_read_scenario_data(model_object):# TODO
     path = os.path.join(
+        "onstove",
+        "tests",
         "data",
         "RWA",
         "RWA_scenario_file.csv"
@@ -162,6 +174,8 @@ def test_read_scenario_data(model_object):# TODO
 
 def test_population_to_dataframe(model_object):
     path = os.path.join(
+        "onstove",
+        "tests",
         "data",
         "RWA",
         "Demographics",
@@ -199,6 +213,8 @@ def test_calibrate_urban_rural_split(model_object):#TODO
 
 def test_extract_wealth_index(model_object):
     path = os.path.join(
+        "onstove",
+        "tests",
         "data",
         "RWA",
         "Demographics",
@@ -215,6 +231,8 @@ def test_extract_wealth_index(model_object):
     model_object.population_to_dataframe()
     # wealth index
     wealth_idx = os.path.join(
+        "onstove",
+        "tests",
         "data",
         "gis_data",
         "Relative wealth index",
@@ -228,6 +246,8 @@ def test_extract_wealth_index(model_object):
 
 def test_distance_to_electricity(model_object):#TODO
     path = os.path.join(
+        "onstove",
+        "tests",
         "data",
         "RWA",
         "Demographics",
@@ -243,6 +263,8 @@ def test_distance_to_electricity(model_object):#TODO
     )
 
     mv_path = os.path.join(
+        "onstove",
+        "tests",
         "data",
         "RWA",
         "Electricity",
@@ -261,6 +283,8 @@ def test_distance_to_electricity(model_object):#TODO
 
 def test_raster_to_dataframe(model_object):#TODO
     path = os.path.join(
+        "onstove",
+        "tests",
         "data",
         "RWA",
         "Demographics",
@@ -276,6 +300,8 @@ def test_raster_to_dataframe(model_object):#TODO
     )
 
     ntl = os.path.join(
+        "onstove",
+        "tests",
         "data",
         "RWA",
         "Electricity",
