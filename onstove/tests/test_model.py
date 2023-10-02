@@ -3,7 +3,7 @@ import os
 import shutil
 import geopandas as gpd
 import pytest
-from onstove.model import DataProcessor, MCA, OnStove
+from OnStove.onstove.model import DataProcessor, MCA, OnStove
 from onstove.layer import VectorLayer, RasterLayer
 
 
@@ -234,8 +234,9 @@ def test_extract_wealth_index(model_object):
         "onstove",
         "tests",
         "data",
-        "gis_data",
-        "Relative wealth index",
+        "RWA",
+        "Demographics",
+        "Wealth",
         "RWA_relative_wealth_index.csv"
     )
     # extract wealth index and add to gdf
@@ -261,7 +262,7 @@ def test_distance_to_electricity(model_object):#TODO
         layer_type="raster",
         base_layer="True"
     )
-
+    model_object.population_to_dataframe()
     mv_path = os.path.join(
         "onstove",
         "tests",
@@ -274,7 +275,8 @@ def test_distance_to_electricity(model_object):#TODO
     mv_lines = VectorLayer(
         "Electricity",
         "MV_lines",
-        mv_path
+        mv_path,
+        distance_method="proximity"
     )
     model_object.distance_to_electricity(mv_lines=mv_lines)
     assert model_object.gdf is not None
@@ -298,7 +300,7 @@ def test_raster_to_dataframe(model_object):#TODO
         layer_type="raster",
         base_layer="True"
     )
-
+    model_object.population_to_dataframe()
     ntl = os.path.join(
         "onstove",
         "tests",
@@ -311,7 +313,9 @@ def test_raster_to_dataframe(model_object):#TODO
     model_object.raster_to_dataframe(
         ntl,
         name="Night_lights",
-        method="read"
+        method="read",
+        fill_nodata_method="interpolate"
     )
-    assert model_object.gdf is not None
     assert isinstance(model_object.gdf, gpd.GeoDataFrame)
+    assert model_object.gdf["Night_lights"] is not None
+
