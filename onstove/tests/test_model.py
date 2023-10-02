@@ -35,10 +35,12 @@ def sample_raster_layer():
     raster_file = RasterLayer(path=rast_path)
     return raster_file
 
+
 @pytest.fixture
 def model_object():
     model = OnStove(project_crs=3857)
     return model
+
 
 @pytest.fixture
 def data_object():
@@ -53,7 +55,7 @@ def mca_object():
 
 
 # tests for DataProcessor
-def test_model(model_object): #TODO
+def test_model(model_object):
     # test if model is instance OnStove
     assert isinstance(model_object, OnStove)
 
@@ -61,7 +63,7 @@ def test_model(model_object): #TODO
 def test_get_layers():
     pass
 
-#TODO
+
 def test_add_layer(model_object):
     path = os.path.join(
         "data",
@@ -79,7 +81,7 @@ def test_add_layer(model_object):
     )
     assert len(model_object.layers.items()) > 0
 
-#TODO
+
 def test_add_mask_layer(data_object):
     path = os.path.join(
         "data",
@@ -93,7 +95,7 @@ def test_add_mask_layer(data_object):
     assert isinstance(data_object, DataProcessor)
 
 
-def test_mask_layers(data_object, sample_raster_layer):#TODO
+def test_mask_layers(data_object, sample_raster_layer):
     path = os.path.join(
         "data",
         "RWA",
@@ -158,7 +160,7 @@ def test_read_scenario_data(model_object):# TODO
     assert isinstance(model_object.specs, dict)
 
 
-def test_population_to_dataframe(model_object): #TODO
+def test_population_to_dataframe(model_object):
     path = os.path.join(
         "data",
         "RWA",
@@ -195,7 +197,7 @@ def test_calibrate_urban_rural_split(model_object):#TODO
     assert isinstance(model_object.gdf, gpd.GeoDataFrame)
 
 
-def test_extract_wealth_index(model_object):#TODO
+def test_extract_wealth_index(model_object):
     path = os.path.join(
         "data",
         "RWA",
