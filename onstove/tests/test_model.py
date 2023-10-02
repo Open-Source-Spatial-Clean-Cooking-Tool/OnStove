@@ -3,7 +3,7 @@ import os
 import shutil
 import geopandas as gpd
 import pytest
-from OnStove.onstove.model import DataProcessor, MCA, OnStove
+from onstove.model import DataProcessor, MCA, OnStove
 from onstove.layer import VectorLayer, RasterLayer
 
 
