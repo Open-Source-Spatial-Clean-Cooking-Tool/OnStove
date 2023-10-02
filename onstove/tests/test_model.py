@@ -1,5 +1,5 @@
 # Test for models.py
-import os.path
+import os
 import shutil
 import geopandas as gpd
 import pytest
@@ -10,7 +10,12 @@ from onstove.layer import VectorLayer, RasterLayer
 @pytest.fixture
 def sample_vector_layer():
     # set path
-    vect_path = r"data/sample_mask.geojson"
+    vect_path = os.path.join(
+        "data",
+        "RWA",
+        "Administrative",
+        "Country_boundaries",
+        "Country_boundaries.geojson")
     # Create a VectorLayer object with sample data
     vect = VectorLayer(path=vect_path)
     return vect
@@ -19,7 +24,13 @@ def sample_vector_layer():
 @pytest.fixture
 def sample_raster_layer():
     # set path
-    rast_path = r"data/sample_raster.tif"
+    rast_path = os.path.join(
+        "data",
+        "RWA",
+        "Demographics",
+        "Population",
+        "Population.tif"
+    )
     # Create RasterLayer object
     raster_file = RasterLayer(path=rast_path)
     return raster_file
@@ -42,7 +53,7 @@ def mca_object():
 
 
 # tests for DataProcessor
-def test_model(model_object):
+def test_model(model_object): #TODO
     # test if model is instance OnStove
     assert isinstance(model_object, OnStove)
 
@@ -50,9 +61,15 @@ def test_model(model_object):
 def test_get_layers():
     pass
 
-
+#TODO
 def test_add_layer(model_object):
-    path = r"data/sample_raster3.tif"
+    path = os.path.join(
+        "data",
+        "RWA",
+        "Demographics",
+        "Population",
+        "Population.tif"
+    )
     model_object.add_layer(
         category='Demographics',
         name='Population',
@@ -62,17 +79,27 @@ def test_add_layer(model_object):
     )
     assert len(model_object.layers.items()) > 0
 
-
+#TODO
 def test_add_mask_layer(data_object):
-    path = r"data/sample_mask.geojson"
+    path = os.path.join(
+        "data",
+        "RWA",
+        "Administrative",
+        "Country_boundaries",
+        "Country_boundaries.geojson")
     data_object.add_mask_layer(
         path=path
     )
     assert isinstance(data_object, DataProcessor)
 
 
-def test_mask_layers(data_object, sample_raster_layer):
-    path = r"data/sample_mask.geojson"
+def test_mask_layers(data_object, sample_raster_layer):#TODO
+    path = os.path.join(
+        "data",
+        "RWA",
+        "Administrative",
+        "Country_boundaries",
+        "Country_boundaries.geojson")
     data_object.add_mask_layer(
         category='Administrative',
         name='County_boundaries',
@@ -120,15 +147,25 @@ def test_assistance_need_index():
 
 
 # OnStove
-def test_read_scenario_data(model_object):
-    path = r"data/RWA/RWA_scenario_file.csv"
+def test_read_scenario_data(model_object):# TODO
+    path = os.path.join(
+        "data",
+        "RWA",
+        "RWA_scenario_file.csv"
+    )
     model_object.read_scenario_data(path, delimiter=',')
     assert model_object.specs is not None
     assert isinstance(model_object.specs, dict)
 
 
-def test_population_to_dataframe(model_object):
-    path = r"data/RWA/Demographics/Population/Population.tif"
+def test_population_to_dataframe(model_object): #TODO
+    path = os.path.join(
+        "data",
+        "RWA",
+        "Demographics",
+        "Population",
+        "Population.tif"
+    )
     model_object.add_layer(
         category="Demographics",
         name="Population",
@@ -141,7 +178,7 @@ def test_population_to_dataframe(model_object):
     assert isinstance(model_object.gdf, gpd.GeoDataFrame)
 
 
-def test_calibrate_urban_rural_split(model_object):
+def test_calibrate_urban_rural_split(model_object):#TODO
     """path = r"data/RWA/Demographics/Population/Population.tif"
     model_object.add_layer(
         category="Demographics",
@@ -158,8 +195,14 @@ def test_calibrate_urban_rural_split(model_object):
     assert isinstance(model_object.gdf, gpd.GeoDataFrame)
 
 
-def test_extract_wealth_index(model_object):
-    path = r"data/RWA/Demographics/Population/Population.tif"
+def test_extract_wealth_index(model_object):#TODO
+    path = os.path.join(
+        "data",
+        "RWA",
+        "Demographics",
+        "Population",
+        "Population.tif"
+    )
     model_object.add_layer(
         category="Demographics",
         name="Population",
@@ -169,15 +212,25 @@ def test_extract_wealth_index(model_object):
     )
     model_object.population_to_dataframe()
     # wealth index
-    wealth_idx = r"data/gis_data/Relative wealth index/RWA_relative_wealth_index.csv"
+    wealth_idx = os.path.join(
+        "data",
+        "gis_data",
+        "Relative wealth index",
+        "RWA_relative_wealth_index.csv"
+    )
     # extract wealth index and add to gdf
     model_object.extract_wealth_index(wealth_index=wealth_idx, file_type="csv")
     assert model_object.gdf is not None
     assert isinstance(model_object.gdf, gpd.GeoDataFrame)
 
 
-def test_distance_to_electricity(model_object):
-    path = r"data/RWA/Demographics/Population/Population.tif"
+def test_distance_to_electricity(model_object):#TODO
+    path = os.path.join(
+        "data",
+        "RWA",
+        "Demographics",
+        "Population/Population.tif"
+    )
 
     model_object.add_layer(
         category="Demographics",
@@ -187,7 +240,13 @@ def test_distance_to_electricity(model_object):
         base_layer="True"
     )
 
-    mv_path = r"data/RWA/Electricity/MV_lines/MV_lines.geojson"
+    mv_path = os.path.join(
+        "data",
+        "RWA",
+        "Electricity",
+        "MV_lines",
+        "MV_lines.geojson"
+    )
     mv_lines = VectorLayer(
         "Electricity",
         "MV_lines",
@@ -198,8 +257,13 @@ def test_distance_to_electricity(model_object):
     assert isinstance(model_object.gdf, gpd.GeoDataFrame)
 
 
-def test_raster_to_dataframe(model_object):
-    path = r"data/RWA/Demographics/Population/Population.tif"
+def test_raster_to_dataframe(model_object):#TODO
+    path = os.path.join(
+        "data",
+        "RWA",
+        "Demographics",
+        "Population/Population.tif"
+    )
 
     model_object.add_layer(
         category="Demographics",
@@ -209,7 +273,13 @@ def test_raster_to_dataframe(model_object):
         base_layer="True"
     )
 
-    ntl = r"data/RWA/Electricity/Night_time_lights/Night_time_lights.tif"
+    ntl = os.path.join(
+        "data",
+        "RWA",
+        "Electricity",
+        "Night_time_lights",
+        "Night_time_lights.tif"
+    )
     model_object.raster_to_dataframe(
         ntl,
         name="Night_lights",
