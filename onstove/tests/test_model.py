@@ -146,14 +146,16 @@ def test_get_distance_rasters(data_object):
 
 
 def test_to_pickle(model_object, output_path):
-
-    name = os.path.join(
-        output_path,
-        "model_object.pkl"
-    )
+    model_object.output_directory = output_path
+    name = "model_object.pkl"
     model_object.to_pickle(name=name)
-    print(model_object)
-    assert os.path.exists(name)
+
+    assert os.path.exists(
+        os.path.join(
+            model_object.output_directory,
+            "model_object.pkl"
+        )
+    )
 
 
 # MCA
