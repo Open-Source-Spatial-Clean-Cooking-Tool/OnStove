@@ -58,6 +58,17 @@ def mca_object():
     return mca
 
 
+@pytest.fixture
+def output_path():
+    path = os.path.join(
+        "onstove",
+        "tests",
+        "data",
+        "output"
+    )
+    return path
+
+
 # tests for DataProcessor
 def test_model(model_object):
     # test if model is instance OnStove
@@ -134,9 +145,14 @@ def test_get_distance_rasters(data_object):
     assert isinstance(data_object, DataProcessor)
 
 
-def test_to_pickle(model_object):
-    name = "model_object.pkl"
+def test_to_pickle(model_object, output_path):
+
+    name = os.path.join(
+        output_path,
+        "model_object.pkl"
+    )
     model_object.to_pickle(name=name)
+    print(model_object)
     assert os.path.exists(name)
 
 
