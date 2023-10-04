@@ -2,7 +2,7 @@
 import os
 import shutil
 import pytest
-from OnStove.onstove.layer import VectorLayer, RasterLayer
+from onstove.layer import VectorLayer, RasterLayer
 
 # Vector Layer test functions
 
