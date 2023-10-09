@@ -1,6 +1,5 @@
 # test for layer.py module
 import os
-import shutil
 import pytest
 from onstove.layer import VectorLayer, RasterLayer
 
@@ -13,11 +12,9 @@ def sample_vector_layer():
     vect_path = os.path.join(
         "onstove",
         "tests",
-        "data",
-        "RWA",
-        "Administrative",
-        "Country_boundaries",
-        "Country_boundaries.geojson")
+        "tests_data",
+        "vector.geojson"
+    )
     # Create a VectorLayer object with sample data
     vect = VectorLayer(path=vect_path)
     return vect
@@ -29,15 +26,13 @@ def sample_raster_layer():
     rast_path = os.path.join(
         "onstove",
         "tests",
-        "data",
-        "RWA",
-        "Demographics",
-        "Population",
-        "Population.tif"
+        "tests_data",
+        "raster.tif"
     )
     # Create RasterLayer object
     raster_file = RasterLayer(path=rast_path)
     return raster_file
+
 
 @pytest.fixture
 def output_path():
@@ -54,11 +49,9 @@ def test_vector_layer_read_layer(sample_vector_layer):
     vect_path = os.path.join(
         "onstove",
         "tests",
-        "data",
-        "RWA",
-        "Administrative",
-        "Country_boundaries",
-        "Country_boundaries.geojson")
+        "tests_data",
+        "vector.geojson"
+    )
     sample_vector_layer.read_layer(path=vect_path)
     assert len(sample_vector_layer.data) > 0
     assert isinstance(sample_vector_layer, VectorLayer)
@@ -203,11 +196,8 @@ def test_align(sample_raster_layer, output_path):
     path = os.path.join(
         "onstove",
         "tests",
-        "data",
-        "RWA",
-        "Demographics",
-        "Population",
-        "Population.tif"
+        "tests_data",
+        "raster2.tif"
     )
     align_path = os.path.join(
         output_path,
@@ -234,4 +224,3 @@ def test_normalize(sample_raster_layer, output_path):
     )
     assert sample_raster_layer.normalized is not None
     assert (os.path.join(path, "normalized", "-normalized.tif"), RasterLayer)
-
