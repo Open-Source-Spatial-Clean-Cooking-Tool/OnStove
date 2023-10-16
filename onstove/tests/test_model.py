@@ -75,10 +75,6 @@ def test_model(model_object):
     assert isinstance(model_object, OnStove)
 
 
-def test_get_layers():
-    pass
-
-
 def test_add_layer(model_object):
     path = os.path.join(
         "onstove",
@@ -156,24 +152,6 @@ def test_to_pickle(model_object, output_path):
             "model_object.pkl"
         )
     )
-
-
-# MCA
-
-def test_set_demand_index():
-    pass
-
-
-def test_set_supply_index():
-    pass
-
-
-def test_set_clean_cooking_index():
-    pass
-
-
-def test_assistance_need_index():
-    pass
 
 
 # OnStove
@@ -263,14 +241,15 @@ def test_extract_wealth_index(model_object):
     assert isinstance(model_object.gdf, gpd.GeoDataFrame)
 
 
-def test_distance_to_electricity(model_object):#TODO
+def test_distance_to_electricity(model_object):
     path = os.path.join(
         "onstove",
         "tests",
         "data",
         "RWA",
         "Demographics",
-        "Population/Population.tif"
+        "Population",
+        "Population.tif"
     )
 
     model_object.add_layer(
@@ -301,7 +280,7 @@ def test_distance_to_electricity(model_object):#TODO
     assert isinstance(model_object.gdf, gpd.GeoDataFrame)
 
 
-def test_raster_to_dataframe(model_object):#TODO
+def test_raster_to_dataframe(model_object):
     path = os.path.join(
         "onstove",
         "tests",
