@@ -17,7 +17,7 @@ def test_run_model():
     
     # 3. Calculate new generation capacity cost
     model.techs['Electricity'].get_capacity_cost(model)
-    
+    print(model.techs['LPG'].travel_time)
     model.run(technologies=['Electricity', 'LPG', 'Biogas',
                             'Collected_Improved_Biomass', 
                             'Collected_Traditional_Biomass', 'Charcoal ICS',

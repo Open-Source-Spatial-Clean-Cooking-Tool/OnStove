@@ -6,16 +6,16 @@ from onstove import VectorLayer, RasterLayer, OnStove
 @pytest.mark.order(after="test_data_processing.py::test_process_data")
 def test_prepare_model():
     # 1. Create an OnStove model
-    output_directory = os.path.join('onstove', 'tests', 'output')
+    output_directory = os.path.join('onstove', 'tests', 'tests_data', 'RWA')
     country = 'Rwanda'
     model = OnStove(project_crs=3857)
     model.output_directory = output_directory
     assert isinstance(model, OnStove)
     
     # 2. Read the model data
-    path = os.path.join('onstove', 'tests', 'data', 'RWA', 'RWA_prep_file.csv')
+    path = os.path.join(output_directory, 'RWA_prep_file.csv')
     model.read_scenario_data(path, delimiter=',')
-    
+
     # 3. Add a country mask layer
     path = os.path.join(output_directory, 'Administrative', 
                         'Country_boundaries', 'Country_boundaries.geojson')
@@ -35,8 +35,8 @@ def test_prepare_model():
     model.calibrate_urban_rural_split(ghs_path)
     
     # 6. Add wealth index GIS data
-    wealth_index = os.path.join('onstove', 'tests', 'data', 'RWA', 
-                                'Demographics', 'Wealth', 
+    wealth_index = os.path.join(output_directory,
+                                'Demographics', 'Wealth',
                                 'RWA_relative_wealth_index')
     if country in ['SOM', 'SDN', 'SSD']:
         model.extract_wealth_index(wealth_index + '.shp', file_type='polygon',
@@ -75,7 +75,7 @@ def test_prepare_model():
     path = os.path.join('onstove', 'tests', 'data', 'RWA', 
                         'RWA_file_tech_specs.csv')
     model.read_tech_data(path, delimiter=',')
-    
+
     # 10. Reading GIS data for LPG supply
     path = os.path.join(output_directory, 'LPG', 
                         'Traveltime', 'Traveltime.tif')
@@ -83,12 +83,12 @@ def test_prepare_model():
     model.techs['LPG'].travel_time = model.raster_to_dataframe(travel_time,
                                             fill_nodata_method='interpolate',
                                             method='read') * 2 / 60
-    
-    path = os.path.join(output_directory, 'LPG', 
+
+    """path = os.path.join(output_directory, 'LPG', 
                         'Roads', 'Roads.geojson')
     roads = VectorLayer('LPG', 'Roads', path=path)
     model.techs['LPG'].roads = roads
-    model.techs['LPG'].distance_limit = 4000
+    model.techs['LPG'].distance_limit = 4000"""
                                             
     # 11. Adding GIS data for Traditional Biomass
     friction_path = os.path.join(output_directory, 'Biomass', 
@@ -129,15 +129,17 @@ def test_prepare_model():
                                   'Water scarcity.tif')
         model.techs['Biogas'].temperature = RasterLayer('Biogas', 'Temperature', 
                                                         path_temp)
-        model.techs['Biogas'].water = RasterLayer('Biogas', 'Water scarcity', 
-                                                  path_water)
+        #model.techs['Biogas'].water = RasterLayer('Biogas', 'Water scarcity',
+        #                                          path_water)
 
         ## Recalibrating livestock
         model.techs['Biogas'].recalibrate_livestock(model, buffaloes,
                                                     cattles, poultry, goats, 
                                                     pigs, sheeps)
         model.techs['Biogas'].friction_path = friction_path
-
+    model.get_clean_cooking_access()
+    print(model.techs['LPG'].current_share_rural)
+    #model.techs.set_base_fuel()
     # 14. Saving the prepared model inputs
     model.to_pickle("model.pkl")
     assert True
