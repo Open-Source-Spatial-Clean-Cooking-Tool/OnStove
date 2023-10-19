@@ -1,8 +1,8 @@
 # tests for raster.py module
 import pytest
 import os
-from OnStove.onstove.layer import VectorLayer, RasterLayer
-from OnStove.onstove.raster import (
+from onstove.layer import VectorLayer, RasterLayer
+from onstove.raster import (
     align_raster,
     mask_raster,
     normalize,
