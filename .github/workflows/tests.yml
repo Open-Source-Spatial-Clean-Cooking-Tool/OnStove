@@ -1,7 +1,7 @@
 name: OnStove tests
 on:
-  pull_request:
-    branches: ['main']
+  push:
+    branches: ['test_technology']
     paths: ['onstove/*', 'onstove/tests/*']
 
 jobs:
@@ -26,10 +26,6 @@ jobs:
             # python -m flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
             # python -m flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
       - name: Run pytest
-        env:
-            AWS_ACCESS_ID: ${{ secrets.AWS_ACCESS_ID }}
-            AWS_SECRET_KEY: ${{ secrets.AWS_SECRET_KEY }}
-            AWS_REGION: ${{ secrets.AWS_REGION }}
         shell: bash -l {0}
         run: |
             pytest
