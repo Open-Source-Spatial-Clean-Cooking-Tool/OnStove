@@ -28,11 +28,11 @@ def model_object():
     )
     model = model.read_model(os.path.join(path, 'model.pkl'))
     path2 = os.path.join(
-        'onstove',
-        'tests',
-        'tests_data',
-        'RWA',
-        'RWA_scenario_file.csv')
+        "onstove",
+        "tests",
+        "tests_data",
+        "RWA",
+        "RWA_scenario_file.csv")
     model.read_scenario_data(path2, delimiter=',')
 
     model.lpg = model.techs['LPG']
