@@ -1,0 +1,16 @@
+Param,Value,data_type
+coi_alri,39,float
+coi_copd,103,float
+coi_ihd,45,float
+coi_lc,2431,float
+coi_stroke,3970,float
+cost_of_carbon_emissions,51,float
+discount_rate,0.03,float
+health_spillovers_parameter,0.112,float
+minimum_wage,2,float
+vsl,67731,float
+w_costs,1,float
+w_environment,1,float
+w_health,1,float
+w_spillovers,1,float
+w_time,1,float
