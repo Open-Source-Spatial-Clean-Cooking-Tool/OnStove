@@ -31,9 +31,9 @@ def model_object():
         "onstove",
         "tests",
         "tests_data",
-        "RWA",
-        "RWA_scenario_file.csv")
-    model.read_scenario_data(path2, delimiter=',')
+        "RWA"
+    )
+    model.read_scenario_data(os.path.join(path2, 'RWA_scenario_file.csv'), delimiter=',')
 
     model.lpg = model.techs['LPG']
     model.ci_biomass = model.techs['Collected_Improved_Biomass']
