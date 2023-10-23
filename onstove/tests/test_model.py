@@ -13,7 +13,7 @@ def sample_vector_layer():
     vect_path = os.path.join(
         "onstove",
         "tests",
-        "data",
+        "tests_data",
         "RWA",
         "Administrative",
         "Country_boundaries",
@@ -29,7 +29,7 @@ def sample_raster_layer():
     rast_path = os.path.join(
         "onstove",
         "tests",
-        "data",
+        "tests_data",
         "RWA",
         "Demographics",
         "Urban",
@@ -43,6 +43,14 @@ def sample_raster_layer():
 @pytest.fixture
 def model_object():
     model = OnStove(project_crs=3857)
+    path = os.path.join(
+        "onstove",
+        "tests",
+        "tests_data",
+        "RWA",
+        "RWA_prep_file.csv"
+    )
+    model.read_scenario_data(path, delimiter=',')
     return model
 
 
@@ -75,15 +83,11 @@ def test_model(model_object):
     assert isinstance(model_object, OnStove)
 
 
-def test_get_layers():
-    pass
-
-
 def test_add_layer(model_object):
     path = os.path.join(
         "onstove",
         "tests",
-        "data",
+        "tests_data",
         "RWA",
         "Demographics",
         "Population",
@@ -103,7 +107,7 @@ def test_add_mask_layer(data_object):
     path = os.path.join(
         "onstove",
         "tests",
-        "data",
+        "tests_data",
         "RWA",
         "Administrative",
         "Country_boundaries",
@@ -118,7 +122,7 @@ def test_mask_layers(data_object, sample_raster_layer):
     path = os.path.join(
         "onstove",
         "tests",
-        "data",
+        "tests_data",
         "RWA",
         "Administrative",
         "Country_boundaries",
@@ -158,20 +162,6 @@ def test_to_pickle(model_object, output_path):
     )
 
 
-# MCA
-
-def test_set_demand_index():
-    pass
-
-
-def test_set_supply_index():
-    pass
-
-
-def test_set_clean_cooking_index():
-    pass
-
-
 def test_assistance_need_index():
     pass
 
@@ -181,7 +171,7 @@ def test_read_scenario_data(model_object):# TODO
     path = os.path.join(
         "onstove",
         "tests",
-        "data",
+        "tests_data",
         "RWA",
         "RWA_scenario_file.csv"
     )
@@ -194,7 +184,7 @@ def test_population_to_dataframe(model_object):
     path = os.path.join(
         "onstove",
         "tests",
-        "data",
+        "tests_data",
         "RWA",
         "Demographics",
         "Population",
@@ -213,7 +203,14 @@ def test_population_to_dataframe(model_object):
 
 
 def test_calibrate_urban_rural_split(model_object):#TODO
-    """path = r"data/RWA/Demographics/Population/Population.tif"
+    path = os.path.join(
+        "onstove",
+        "tests",
+        "tests_data",
+        "RWA",
+        "Demographics",
+        "Population",
+        "Population.tif")
     model_object.add_layer(
         category="Demographics",
         name="Population",
@@ -221,10 +218,18 @@ def test_calibrate_urban_rural_split(model_object):#TODO
         layer_type="raster",
         base_layer="True"
     )
-    model_object.population_to_dataframe()"""
+    model_object.population_to_dataframe()
 
-    ghs_path = r"data/RWA/Demographics/Urban/Urban.tif"
-    #model_object.calibrate_urban_rural_split(ghs_path)
+    ghs_path = os.path.join(
+        "onstove",
+        "tests",
+        "tests_data",
+        "RWA",
+        "Demographics",
+        "Urban",
+        "Urban.tif"
+    )
+    model_object.calibrate_urban_rural_split(ghs_path)
     assert model_object.gdf is not None
     assert isinstance(model_object.gdf, gpd.GeoDataFrame)
 
@@ -233,7 +238,7 @@ def test_extract_wealth_index(model_object):
     path = os.path.join(
         "onstove",
         "tests",
-        "data",
+        "tests_data",
         "RWA",
         "Demographics",
         "Population",
@@ -251,7 +256,7 @@ def test_extract_wealth_index(model_object):
     wealth_idx = os.path.join(
         "onstove",
         "tests",
-        "data",
+        "tests_data",
         "RWA",
         "Demographics",
         "Wealth",
@@ -267,7 +272,7 @@ def test_distance_to_electricity(model_object):#TODO
     path = os.path.join(
         "onstove",
         "tests",
-        "data",
+        "tests_data",
         "RWA",
         "Demographics",
         "Population/Population.tif"
@@ -284,7 +289,7 @@ def test_distance_to_electricity(model_object):#TODO
     mv_path = os.path.join(
         "onstove",
         "tests",
-        "data",
+        "tests_data",
         "RWA",
         "Electricity",
         "MV_lines",
@@ -305,7 +310,7 @@ def test_raster_to_dataframe(model_object):#TODO
     path = os.path.join(
         "onstove",
         "tests",
-        "data",
+        "tests_data",
         "RWA",
         "Demographics",
         "Population/Population.tif"
@@ -322,7 +327,7 @@ def test_raster_to_dataframe(model_object):#TODO
     ntl = os.path.join(
         "onstove",
         "tests",
-        "data",
+        "tests_data",
         "RWA",
         "Electricity",
         "Night_time_lights",
