@@ -30,7 +30,7 @@ def model_object():
     path2 = os.path.join(
         'onstove',
         'tests',
-        'data',
+        'tests_data',
         'RWA',
         'RWA_scenario_file.csv')
     model.read_scenario_data(path2, delimiter=',')
