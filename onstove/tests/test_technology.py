@@ -24,7 +24,7 @@ def model_object():
         "onstove",
         "tests",
         "tests_data",
-        "RWA"
+        "output"
     )
     model = model.read_model(os.path.join(path, 'model.pkl'))
     path2 = os.path.join(
@@ -122,7 +122,7 @@ def test_read_friction(model_object):
         "onstove",
         "tests",
         "tests_data",
-        "RWA",
+        "output",
         "Biomass",
         "Friction",
         "Friction.tif"
@@ -154,7 +154,7 @@ def test_recalibrate_livestock(model_object):
         "onstove",
         "tests",
         "tests_data",
-        "RWA",
+        "output",
         "Biogas",
         "Livestock"
     )
