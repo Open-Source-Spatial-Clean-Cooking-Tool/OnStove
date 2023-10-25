@@ -14,6 +14,8 @@ from onstove.raster import (
 
 @pytest.fixture
 def sample_vector_layer():
+    """Vector layer fixture"""
+
     # set path
     vect_path = os.path.join(
         "onstove",
@@ -28,6 +30,8 @@ def sample_vector_layer():
 
 @pytest.fixture
 def sample_raster_layer():
+    """Raster layer fixture"""
+
     # set path
     rast_path = os.path.join(
         "onstove",
@@ -42,6 +46,8 @@ def sample_raster_layer():
 
 @pytest.fixture
 def sample_raster_layer_1():
+    """Raster layer 1 fixture"""
+
     # set path
     rast_path = os.path.join(
         "onstove",
@@ -56,6 +62,8 @@ def sample_raster_layer_1():
 
 @pytest.fixture
 def sample_raster_layer_2():
+    """Raster layer2 fixture"""
+
     # set path
     rast_path = os.path.join(
         "onstove",
@@ -70,6 +78,8 @@ def sample_raster_layer_2():
 
 @pytest.fixture
 def raster_path():
+    """Raster path fixture"""
+
     path = os.path.join(
         "onstove",
         "tests",
@@ -81,6 +91,8 @@ def raster_path():
 
 @pytest.fixture
 def vector_path():
+    """vector path fixture"""
+
     path = os.path.join(
         "onstove",
         "tests",
@@ -92,6 +104,8 @@ def vector_path():
 
 @pytest.fixture
 def output_path():
+    """ Output path fixture"""
+
     path = os.path.join(
         "onstove",
         "tests",
@@ -102,6 +116,17 @@ def output_path():
 
 
 def test_align_raster(sample_raster_layer, sample_raster_layer_2):
+    """Test for align raster function
+
+    Parameters
+    ----------
+    sample_raster_layer: Raster Layer
+                Instance of Raster Layer class.
+    sample_raster_layer_2: Raster Layer
+                Instance of Raster Layer class.
+                See :class:`onstove.RasterLayer`.
+    """
+
     destination, out_meta = align_raster(
         raster_1=sample_raster_layer,
         raster_2=sample_raster_layer_2,
@@ -116,6 +141,18 @@ def test_align_raster(sample_raster_layer, sample_raster_layer_2):
 
 
 def test_mask_raster(raster_path, vector_path, output_path):
+    """Test for mask raster function
+
+    Parameters
+    ----------
+    raster_path: str
+                Raster path.
+    vector_path: str
+                Vector path.
+    output_path: str
+                Output path
+    """
+
     path = os.path.join(
         output_path,
         "masked_raster.tif"
@@ -135,6 +172,14 @@ def test_mask_raster(raster_path, vector_path, output_path):
 
 
 def test_reproject_raster(raster_path):
+    """Test for reproject raster function
+
+    Parameters
+    ----------
+    raster_path: str
+                Raster path
+    """
+
     raster = reproject_raster(
         raster_path=raster_path,
         dst_crs=3857,
@@ -148,6 +193,19 @@ def test_reproject_raster(raster_path):
 
 
 def test_merge_rasters(sample_raster_layer_1, sample_raster_layer_2, output_path):
+    """Test for merge rasters function
+
+    Parameters
+    ----------
+    sample_raster_layer_1: Raster Layer
+                Instance of Raster Layer class.
+    sample_raster_layer_2: Raster Layer
+                Instance of Raster Layer class.
+                See :class:`onstove.RasterLayer`.
+    output_path: str
+                Output path
+    """
+
     path = os.path.join(
         "onstove",
         "tests",
@@ -167,6 +225,17 @@ def test_merge_rasters(sample_raster_layer_1, sample_raster_layer_2, output_path
 
 
 def test_resample(sample_raster_layer, raster_path):
+    """Test for align raster function
+
+    Parameters
+    ----------
+    sample_raster_layer: Raster Layer
+                Instance of Raster Layer class.
+                See :class:`onstove.RasterLayer`.
+    raster_path: str
+                Raster path
+    """
+
     data, transform = resample(
         raster_path=raster_path,
         height=20,
@@ -178,6 +247,16 @@ def test_resample(sample_raster_layer, raster_path):
 
 
 def test_normalize(raster_path, output_path):
+    """Test for normalize raster function
+
+    Parameters
+    ----------
+    raster_path: str
+                Raster path.
+    output_path: str
+                Output path.
+    """
+
     output = os.path.join(
         output_path,
         "normalized.tif"
