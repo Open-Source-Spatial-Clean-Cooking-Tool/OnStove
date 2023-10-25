@@ -138,6 +138,7 @@ def test_prepare_model():
                                                     pigs, sheeps)
         model.techs['Biogas'].friction_path = friction_path
     model.get_clean_cooking_access()
+    model.set_base_fuel(list(model.techs.values()))
     # 14. Saving the prepared model inputs
     model.to_pickle("model.pkl")
     assert True
