@@ -150,7 +150,7 @@ def test_add_mask_layer(data_object):
     data_object.add_mask_layer(
         path=path
     )
-    assert isinstance(data_object, DataProcessor)
+    assert isinstance(data_object.mask_layer, VectorLayer)
 
 
 def test_mask_layers(data_object, sample_raster_layer):
@@ -180,7 +180,7 @@ def test_mask_layers(data_object, sample_raster_layer):
     data_object.mask_layers(
         "all",
         True,
-        True
+        False
     )
     assert isinstance(data_object, DataProcessor)
     assert data_object.layers is not None

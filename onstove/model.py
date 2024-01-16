@@ -377,8 +377,8 @@ class DataProcessor:
                 self.mask_layer = VectorLayer(category, name, path, query=query)
 
             if self.mask_layer.data.crs != self.project_crs:
-                output_path = os.path.join(self.output_directory, category, name)
-                self.mask_layer.reproject(self.project_crs, output_path)
+                # output_path = os.path.join(self.output_directory, category, name)
+                self.mask_layer.reproject(self.project_crs)
             if save_layer:
                 self.mask_layer.save(os.path.join(self.output_directory, self.mask_layer.category, self.mask_layer.name))
 
