@@ -6,14 +6,14 @@ from onstove import VectorLayer, RasterLayer, OnStove
 @pytest.mark.order(after="test_data_processing.py::test_process_data")
 def test_prepare_model():
     # 1. Create an OnStove model
-    output_directory = os.path.join('onstove', 'tests', 'output')
+    output_directory = os.path.join('onstove', 'tests', 'tests_data', 'output')
     country = 'Rwanda'
     model = OnStove(project_crs=3857)
     model.output_directory = output_directory
     assert isinstance(model, OnStove)
     
     # 2. Read the model data
-    path = os.path.join('onstove', 'tests', 'data', 'RWA', 'RWA_prep_file.csv')
+    path = os.path.join('onstove', 'tests', 'tests_data', 'RWA', 'RWA_prep_file.csv')
     model.read_scenario_data(path, delimiter=',')
     
     # 3. Add a country mask layer
@@ -35,7 +35,7 @@ def test_prepare_model():
     model.calibrate_urban_rural_split(ghs_path)
     
     # 6. Add wealth index GIS data
-    wealth_index = os.path.join('onstove', 'tests', 'data', 'RWA', 
+    wealth_index = os.path.join('onstove', 'tests', 'tests_data', 'RWA',
                                 'Demographics', 'Wealth', 
                                 'RWA_relative_wealth_index')
     if country in ['SOM', 'SDN', 'SSD']:
@@ -72,7 +72,7 @@ def test_prepare_model():
     assert abs(rate - model.specs['elec_rate']) <= 0.05
     
     # 9. Read the cooking technologies data
-    path = os.path.join('onstove', 'tests', 'data', 'RWA', 
+    path = os.path.join('onstove', 'tests', 'tests_data', 'RWA',
                         'RWA_file_tech_specs.csv')
     model.read_tech_data(path, delimiter=',')
     
@@ -84,11 +84,11 @@ def test_prepare_model():
                                             fill_nodata_method='interpolate',
                                             method='read') * 2 / 60
     
-    path = os.path.join(output_directory, 'LPG', 
+    """path = os.path.join(output_directory, 'LPG', 
                         'Roads', 'Roads.geojson')
     roads = VectorLayer('LPG', 'Roads', path=path)
     model.techs['LPG'].roads = roads
-    model.techs['LPG'].distance_limit = 4000
+    model.techs['LPG'].distance_limit = 4000"""
                                             
     # 11. Adding GIS data for Traditional Biomass
     friction_path = os.path.join(output_directory, 'Biomass', 
@@ -137,7 +137,8 @@ def test_prepare_model():
                                                     cattles, poultry, goats, 
                                                     pigs, sheeps)
         model.techs['Biogas'].friction_path = friction_path
-
+    model.get_clean_cooking_access()
+    model.set_base_fuel(list(model.techs.values()))
     # 14. Saving the prepared model inputs
     model.to_pickle("model.pkl")
     assert True
