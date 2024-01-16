@@ -1,7 +1,7 @@
 ﻿# <img src="https://user-images.githubusercontent.com/12953752/178504166-47821216-ea94-4241-8b4c-5c6f19a460ec.svg" alt="drawing" style="width:200px"/>
 
 [![Documentation Status](https://readthedocs.org/projects/onstove-documentation/badge/?version=latest)](https://onstove-documentation.readthedocs.io/en/latest/?badge=latest) 
-[![Tests](https://github.com/Open-Source-Spatial-Clean-Cooking-Tool/OnStove/actions/workflows/tests.yml/badge.svg?event=pull_request)](https://github.com/Open-Source-Spatial-Clean-Cooking-Tool/OnStove/actions?query=workflow%3Atests)
+[![Tests](https://github.com/Open-Source-Spatial-Clean-Cooking-Tool/OnStove/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/Open-Source-Spatial-Clean-Cooking-Tool/OnStove/actions?query=workflow%3Atests)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.7185177.svg)](https://doi.org/10.5281/zenodo.7185177)
 [![Conda Version](https://img.shields.io/conda/vn/conda-forge/onstove.svg)](https://anaconda.org/conda-forge/onstove)
