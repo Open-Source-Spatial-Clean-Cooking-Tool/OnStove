@@ -7,11 +7,11 @@ from onstove import OnStove
 def test_run_model():
     # 1. Read the OnSSTOVE model
     country = 'Rwanda'
-    output_directory = os.path.join('onstove', 'tests', 'output')
+    output_directory = os.path.join('onstove', 'tests', 'tests_data', 'output')
     model = OnStove.read_model(os.path.join(output_directory, 'model.pkl'))
 
     # 2. Read the scenario data
-    path = os.path.join('onstove', 'tests', 'data', 'RWA', 
+    path = os.path.join('onstove', 'tests', 'tests_data', 'RWA',
                         'RWA_scenario_file.csv')
     model.read_scenario_data(path, delimiter=',')
     

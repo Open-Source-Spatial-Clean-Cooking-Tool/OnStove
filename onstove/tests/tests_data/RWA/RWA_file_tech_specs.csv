@@ -1,0 +1,181 @@
+Fuel,Param,Value,data_type,Unit
+Biogas,energy_content,22.8,float,MJ/m3
+Biogas,om_cost,3.7,float,USD/year
+Biogas,co2_intensity,0.0,float,kg/GJ
+Biogas,bc_intensity,0.0043,float,kg/GJ
+Biogas,ch4_intensity,0.029,float,kg/GJ
+Biogas,inv_cost,550,float,USD
+Biogas,n2o_intensity,0.0006,float,kg/GJ
+Biogas,tech_life,20,int,
+Biogas,fuel_cost,0,float,
+Biogas,efficiency,0.4,float,
+Biogas,time_of_collection,3,float,
+Biogas,name,Biogas,string,
+Biogas,time_of_cooking,2,float,
+Biogas,oc_intensity,0.0091,float,kg/GJ
+Biogas,pm25,43,float,
+Biomass Forced Draft,om_cost,3.7,float,
+Biomass Forced Draft,n2o_intensity,0.0039,float,
+Biomass Forced Draft,time_of_collection,2,float,
+Biomass Forced Draft,tech_life,5,int,
+Biomass Forced Draft,pm25,325,float,
+Biomass Forced Draft,name,Biomass Forced Draft,string,
+Biomass Forced Draft,oc_intensity,0.308,float,
+Biomass Forced Draft,collected_fuel,True,bool,-
+Biomass Forced Draft,co2_intensity,112,float,
+Biomass Forced Draft,inv_cost,47,float,
+Biomass Forced Draft,draft_type,Forced,string,-
+Biomass Forced Draft,energy_content,16,float,
+Biomass Forced Draft,efficiency,0.37,float,
+Biomass Forced Draft,fuel_cost,0,float,
+Biomass Forced Draft,ch4_intensity,0.864,float,
+Biomass Forced Draft,time_of_cooking,2.85,float,
+Biomass Forced Draft,bc_intensity,0.1075,float,
+Charcoal ICS,energy_content,30,float,
+Charcoal ICS,oc_intensity,0.308,float,kg/GJ
+Charcoal ICS,tech_life,4,int,
+Charcoal ICS,bc_intensity,0.1075,float,kg/GJ
+Charcoal ICS,efficiency,0.3,float,
+Charcoal ICS,fuel_cost,0.09,float,USD/kg
+Charcoal ICS,name,Charcoal ICS,string,
+Charcoal ICS,n2o_intensity,0.001,float,kg/GJ
+Charcoal ICS,pm25,185,float,
+Charcoal ICS,co2_intensity,121.0,float,kg/GJ
+Charcoal ICS,time_of_collection,0,float,
+Charcoal ICS,time_of_cooking,2.25,float,
+Charcoal ICS,ch4_intensity,0.576,float,kg/GJ
+Charcoal ICS,inv_cost,27.5,float,USD
+Charcoal ICS,om_cost,3.7,float,USD/year
+Collected_Improved_Biomass,tech_life,3,int,years
+Collected_Improved_Biomass,bc_intensity,0.1075,float,kg/GJ
+Collected_Improved_Biomass,name,Collected_Improved_Biomass,string,
+Collected_Improved_Biomass,ch4_intensity,0.864,float,kg/GJ
+Collected_Improved_Biomass,efficiency,0.3,float,
+Collected_Improved_Biomass,n2o_intensity,0.0039,float,kg/GJ
+Collected_Improved_Biomass,fuel_cost,0,float,USD/kg
+Collected_Improved_Biomass,time_of_cooking,2.85,float,
+Collected_Improved_Biomass,om_cost,3.7,float,USD/year
+Collected_Improved_Biomass,co2_intensity,112.0,float,kg/GJ
+Collected_Improved_Biomass,time_of_collection,2,float,h/day
+Collected_Improved_Biomass,oc_intensity,0.308,float,kg/GJ
+Collected_Improved_Biomass,energy_content,16,float,MJ/kg
+Collected_Improved_Biomass,pm25,450,float,
+Collected_Improved_Biomass,inv_cost,32,float,USD
+Collected_Traditional_Biomass,fuel_cost,0,float,USD/kg
+Collected_Traditional_Biomass,pm25,844,float,
+Collected_Traditional_Biomass,current_share_rural,0.931645,float,-
+Collected_Traditional_Biomass,n2o_intensity,0.0039,float,kg/GJ
+Collected_Traditional_Biomass,tech_life,2,int,
+Collected_Traditional_Biomass,name,Collected_Traditional_Biomass,string,
+Collected_Traditional_Biomass,oc_intensity,0.308,float,kg/GJ
+Collected_Traditional_Biomass,epsilon,0.51,float,float
+Collected_Traditional_Biomass,inv_cost,0,float,USD
+Collected_Traditional_Biomass,is_base,FALSE,bool,
+Collected_Traditional_Biomass,time_of_collection,2,float,h/day
+Collected_Traditional_Biomass,ch4_intensity,0.864,float,kg/GJ
+Collected_Traditional_Biomass,current_share_urban,0.232925,float,-
+Collected_Traditional_Biomass,om_cost,0,float,USD/year
+Collected_Traditional_Biomass,time_of_cooking,3,float,
+Collected_Traditional_Biomass,efficiency,0.12,float,
+Collected_Traditional_Biomass,co2_intensity,112.0,float,kg/GJ
+Collected_Traditional_Biomass,energy_content,16,float,MJ/kg
+Collected_Traditional_Biomass,bc_intensity,0.1075,float,kg/GJ
+Electricity,generation_solar,0.05,float,
+Electricity,om_cost,3.7,float,USD/year
+Electricity,capacity_Nuclear,0.0,float,
+Electricity,fuel_cost,0.052,float,
+Electricity,capacity_geothermal,0.0,float,
+Electricity,tech_life,10,int,
+Electricity,generation_Nuclear,0.0,float,
+Electricity,capacity_coal,0.015,float,
+Electricity,capacity_wind,0.0,float,
+Electricity,energy_content,3.6,float,
+Electricity,generation_coal,0.0,float,
+Electricity,generation_geothermal,0.0,float,
+Electricity,time_of_cooking,1.8,float,
+Electricity,generation_hydro,1.67,float,
+Electricity,capacity_biofuels_and_waste,0.00378,float,
+Electricity,capacity_solar,0.00874035,float,
+Electricity,capacity_natural_gas,0.02859,float,
+Electricity,generation_biofuels_and_waste,0.05,float,
+Electricity,pm25,32,float,
+Electricity,generation_natural_gas,0.02,float,
+Electricity,generation_oil,0.17,float,
+Electricity,inv_cost,36.3,float,USD
+Electricity,capacity_oil,0.0575,float,
+Electricity,efficiency,0.85,float,
+Electricity,time_of_collection,0,float,
+Electricity,name,Electricity,string,
+Electricity,current_share_rural,3.50E-05,float,-
+Electricity,current_share_urban,0.00091,float,-
+Electricity,capacity_hydro,0.139695,float,
+Electricity,generation_wind,0.0,float,
+Kerosene,co2_intensity,72.0,float,kg/GJ
+Kerosene,epsilon,0.51,float,float
+Kerosene,fuel_cost,0.62,float,USD/kg
+Kerosene,pm25,55,float,
+Kerosene,ch4_intensity,0.009,float,kg/GJ
+Kerosene,current_share_urban,0.00036,float,-
+Kerosene,n2o_intensity,0.0006,float,kg/GJ
+Kerosene,oc_intensity,0.0172,float,kg/GJ
+Kerosene,name,Kerosene,string,-
+Kerosene,current_share_rural,2.00E-05,float,-
+Kerosene,efficiency,0.35,float,
+Kerosene,bc_intensity,0.0613,float,kg/GJ
+Kerosene,time_of_cooking,2,float,
+Kerosene,energy_content,43,float,MJ/kg
+Kerosene,inv_cost,19.5,float,USD
+Kerosene,tech_life,4,float,USD
+LPG,current_share_urban,0.059745,float,-
+LPG,time_of_cooking,2,float,
+LPG,bc_intensity,0.0044,float,kg/GJ
+LPG,ch4_intensity,0.003,float,kg/GJ
+LPG,co2_intensity,63.0,float,kg/GJ
+LPG,energy_content,45.5,float,MJ/kg
+LPG,pm25,43,float,
+LPG,time_of_collection,0,float,h/day
+LPG,n2o_intensity,0.0001,float,kg/GJ
+LPG,inv_cost,44,float,
+LPG,current_share_rural,0.00263,float,-
+LPG,om_cost,3.7,float,USD/year
+LPG,oc_intensity,0.0091,float,kg/GJ
+LPG,tech_life,7,int,
+LPG,diesel_cost,1.04,float,USD/l
+LPG,fuel_cost,0.73,float,
+LPG,name,LPG,string,
+LPG,efficiency,0.5,float,
+Pellets Forced Draft,fuel_cost,0.25,float,
+Pellets Forced Draft,efficiency,0.39,float,
+Pellets Forced Draft,tech_life,6,int,
+Pellets Forced Draft,n2o_intensity,0.0039,float,
+Pellets Forced Draft,om_cost,3.7,float,
+Pellets Forced Draft,oc_intensity,0.308,float,
+Pellets Forced Draft,time_of_cooking,2.25,float,
+Pellets Forced Draft,time_of_collection,0,float,
+Pellets Forced Draft,bc_intensity,0.1075,float,
+Pellets Forced Draft,inv_cost,54,float,
+Pellets Forced Draft,name,Pellets Forced Draft,string,
+Pellets Forced Draft,pm25,207,float,
+Pellets Forced Draft,energy_content,16,float,
+Pellets Forced Draft,draft_type,Forced,string,-
+Pellets Forced Draft,collected_fuel,False,bool,-
+Pellets Forced Draft,ch4_intensity,0.864,float,
+Pellets Forced Draft,co2_intensity,112,float,
+Traditional_Charcoal,bc_intensity,0.1075,float,kg/GJ
+Traditional_Charcoal,time_of_collection,0,float,
+Traditional_Charcoal,time_of_cooking,2.6,float,
+Traditional_Charcoal,efficiency,0.2,float,-
+Traditional_Charcoal,current_share_urban,0.682945,float,-
+Traditional_Charcoal,name,Traditional_Charcoal,string,-
+Traditional_Charcoal,om_cost,0,float,USD/year
+Traditional_Charcoal,tech_life,2,int,
+Traditional_Charcoal,ch4_intensity,0.576,float,kg/GJ
+Traditional_Charcoal,epsilon,0.71,float,float
+Traditional_Charcoal,current_share_rural,0.060215,float,-
+Traditional_Charcoal,inv_cost,4,float,USD
+Traditional_Charcoal,fuel_cost,0.09,float,USD/kg
+Traditional_Charcoal,n2o_intensity,0.001,float,kg/GJ
+Traditional_Charcoal,energy_content,30,float,MJ/kg
+Traditional_Charcoal,co2_intensity,121.0,float,kg/GJ
+Traditional_Charcoal,pm25,256,float,
+Traditional_Charcoal,oc_intensity,0.308,float,kg/GJ

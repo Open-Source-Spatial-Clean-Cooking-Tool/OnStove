@@ -7,7 +7,7 @@ from onstove import OnStove
 def test_plot_maps():
     # 1. Reading results
     country = 'Rwanda'
-    results = OnStove.read_model(os.path.join('onstove', 'tests', 'output', 
+    results = OnStove.read_model(os.path.join('onstove', 'tests', 'tests_data', 'output',
                                               'results.pkl'))
                                               
     # 2. Creating result maps
@@ -61,7 +61,7 @@ def test_plot_maps():
 def test_plot_stats():
     # 1. Reading results
     country = 'Rwanda'
-    results = OnStove.read_model(os.path.join('onstove', 'tests', 'output', 
+    results = OnStove.read_model(os.path.join('onstove', 'tests', 'tests_data', 'output',
                                               'results.pkl'))
                                               
     # 2. Creating result stat plots
