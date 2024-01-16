@@ -118,9 +118,8 @@ class Technology:
         self.current_share_rural = current_share_rural
         self.energy = 0
         self.epsilon = epsilon
-        for paf in ['paf_alri_', 'paf_copd_', 'paf_ihd_', 'paf_lc_', 'paf_stroke_']:
-            for s in ['u', 'r']:
-                self[paf + s] = 0
+        for paf in ['paf_alri', 'paf_copd', 'paf_ihd', 'paf_lc', 'paf_stroke']:
+            self[paf] = 0
         self.discounted_fuel_cost = 0
         self.discounted_investments = 0
         self.benefits = None
@@ -375,17 +374,11 @@ class Technology:
         morbidity
         """
         rr_alri, rr_copd, rr_ihd, rr_lc, rr_stroke = self.relative_risk()
-        self.paf_alri_r = self.paf(rr_alri, 1 - model.clean_cooking_access_r)
-        self.paf_copd_r = self.paf(rr_copd, 1 - model.clean_cooking_access_r)
-        self.paf_ihd_r = self.paf(rr_ihd, 1 - model.clean_cooking_access_r)
-        self.paf_lc_r = self.paf(rr_lc, 1 - model.clean_cooking_access_r)
-        self.paf_stroke_r = self.paf(rr_stroke, 1 - model.clean_cooking_access_r)
-
-        self.paf_alri_u = self.paf(rr_alri, 1 - model.clean_cooking_access_u)
-        self.paf_copd_u = self.paf(rr_copd, 1 - model.clean_cooking_access_u)
-        self.paf_ihd_u = self.paf(rr_ihd, 1 - model.clean_cooking_access_u)
-        self.paf_lc_u = self.paf(rr_lc, 1 - model.clean_cooking_access_u)
-        self.paf_stroke_u = self.paf(rr_stroke, 1 - model.clean_cooking_access_u)
+        self.paf_alri = self.paf(rr_alri, model.sfu)
+        self.paf_copd = self.paf(rr_copd, model.sfu)
+        self.paf_ihd = self.paf(rr_ihd, model.sfu)
+        self.paf_lc = self.paf(rr_lc, model.sfu)
+        self.paf_stroke = self.paf(rr_stroke, model.sfu)
 
     def mort_morb(self, model: 'onstove.OnStove', parameter: str = 'mort', dr: str = 'discount_rate') -> tuple[
         float, float]:
@@ -420,21 +413,21 @@ class Technology:
         """
         self.health_parameters(model)
 
-        mor_u = {}
-        mor_r = {}
+        mor = {}
+        # mor_r = {}
         diseases = ['alri', 'copd', 'ihd', 'lc', 'stroke']
-        is_urban = model.gdf["IsUrban"] > 20
-        is_rural = model.gdf["IsUrban"] < 20
+        # is_urban = model.gdf["IsUrban"] > 20
+        # is_rural = model.gdf["IsUrban"] < 20
         for disease in diseases:
             rate = model.specs[f'{parameter}_{disease}']
 
-            paf = f'paf_{disease.lower()}_u'
-            mor_u[disease] = model.gdf.loc[is_urban, "Calibrated_pop"].sum() * (model.base_fuel[paf] - self[paf]) * (
-                    rate / 100000)
+            paf = f'paf_{disease.lower()}'
+            mor[disease] = pd.Series(0, index=model.gdf.index)
+            mor[disease] = model.gdf['Calibrated_pop'] * (model.base_fuel[paf] - self[paf]) * (rate / 100000)
 
-            paf = f'paf_{disease.lower()}_r'
-            mor_r[disease] = model.gdf.loc[is_rural, "Calibrated_pop"].sum() * (model.base_fuel[paf] - self[paf]) * (
-                    rate / 100000)
+            # paf = f'paf_{disease.lower()}_r'
+            # mor_r[disease] = model.gdf.loc[is_rural, "Calibrated_pop"].sum() * (model.base_fuel[paf] - self[paf]) * (
+            #         rate / 100000)
 
         cl_diseases = {'alri': {1: 0.7, 2: 0.1, 3: 0.07, 4: 0.07, 5: 0.06},
                        'copd': {1: 0.3, 2: 0.2, 3: 0.17, 4: 0.17, 5: 0.16},
@@ -443,33 +436,36 @@ class Technology:
                        'stroke': {1: 0.2, 2: 0.1, 3: 0.24, 4: 0.23, 5: 0.23}}
 
         i = 1
-        total_mor_u = 0
-        total_mor_r = 0
+        total_mor = 0
+        # total_mor_r = 0
         while i < 6:
             for disease in diseases:
                 if parameter == 'morb':
                     cost = model.specs[f'coi_{disease}']
                 elif parameter == 'mort':
                     cost = model.specs['vsl']
-                total_mor_u += cl_diseases[disease][i] * cost * mor_u[disease] / (1 + model.specs[dr]) ** (i - 1)
-                total_mor_r += cl_diseases[disease][i] * cost * mor_r[disease] / (1 + model.specs[dr]) ** (i - 1)
+                total_mor += cl_diseases[disease][i] * cost * mor[disease] / (1 + model.specs[dr]) ** (i - 1)
+                # total_mor_r += cl_diseases[disease][i] * cost * mor_r[disease] / (1 + model.specs[dr]) ** (i - 1)
             i += 1
 
-        is_urban = model.gdf["IsUrban"] > 20
-        is_rural = model.gdf["IsUrban"] < 20
+        distributed_cost = total_mor / model.gdf['Households']
+        cases_avoided = sum(mor.values()) / model.gdf['Households']
 
-        urban_denominator = model.gdf.loc[is_urban, "Calibrated_pop"].sum() * model.gdf.loc[is_urban, 'Households']
-        rural_denominator = model.gdf.loc[is_rural, "Calibrated_pop"].sum() * model.gdf.loc[is_rural, 'Households']
-
-        distributed_cost = pd.Series(index=model.gdf.index, dtype='float64')
-
-        distributed_cost[is_urban] = model.gdf.loc[is_urban, "Calibrated_pop"] * total_mor_u / urban_denominator
-        distributed_cost[is_rural] = model.gdf.loc[is_rural, "Calibrated_pop"] * total_mor_r / rural_denominator
-
-        cases_avoided = pd.Series(index=model.gdf.index, dtype='float64')
-
-        cases_avoided[is_urban] = sum(mor_u.values()) * model.gdf.loc[is_urban, "Calibrated_pop"] / urban_denominator
-        cases_avoided[is_rural] = sum(mor_r.values()) * model.gdf.loc[is_rural, "Calibrated_pop"] / rural_denominator
+        # is_urban = model.gdf["IsUrban"] > 20
+        # is_rural = model.gdf["IsUrban"] < 20
+        #
+        # urban_denominator = model.gdf.loc[is_urban, "Calibrated_pop"].sum() * model.gdf.loc[is_urban, 'Households']
+        # rural_denominator = model.gdf.loc[is_rural, "Calibrated_pop"].sum() * model.gdf.loc[is_rural, 'Households']
+        #
+        # distributed_cost = pd.Series(index=model.gdf.index, dtype='float64')
+        #
+        # distributed_cost[is_urban] = model.gdf.loc[is_urban, "Calibrated_pop"] * total_mor_u / urban_denominator
+        # distributed_cost[is_rural] = model.gdf.loc[is_rural, "Calibrated_pop"] * total_mor_r / rural_denominator
+        #
+        # cases_avoided = pd.Series(index=model.gdf.index, dtype='float64')
+        #
+        # cases_avoided[is_urban] = sum(mor_u.values()) * model.gdf.loc[is_urban, "Calibrated_pop"] / urban_denominator
+        # cases_avoided[is_rural] = sum(mor_r.values()) * model.gdf.loc[is_rural, "Calibrated_pop"] / rural_denominator
 
         return distributed_cost, cases_avoided
 
