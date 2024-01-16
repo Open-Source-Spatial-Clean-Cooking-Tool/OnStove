@@ -477,6 +477,9 @@ class VectorLayer(_Layer):
         elif method == 'travel_time':
             self.travel_time(friction=raster, output_path=output_path, create_raster=True)
 
+        elif method == 'rasterize':
+            self.distance_raster = self.rasterize(raster=raster, attribute='value', all_touched=False)
+
     def rasterize(self, raster: 'RasterLayer' = None, 
                   attribute: str = None,
                   value: Union[int, float] = 1,
@@ -926,7 +929,7 @@ class RasterLayer(_Layer):
                     self.meta = src.meta
 
             if self.meta['nodata'] is None:
-                if self.data.dtype in [int, 'int32']:
+                if self.data.dtype in [int, 'int32', 'uint8']:
                     self.meta['nodata'] = 0
                     warn(f"The {self.name} layer do not have a defined nodata value, thus 0 was assigned. "
                          f"You can change this defining the nodata value in the metadata of the variable as: "
@@ -939,6 +942,11 @@ class RasterLayer(_Layer):
                 else:
                     warn(f"The {self.name} layer do not have a defined nodata value, please define the nodata "
                          f"value in the metadata of the variable with: variable.meta['nodata'] = value")
+
+            if self.data.dtype in [int, 'int32', 'uint8']:
+                self.meta['nodata'] = int(self.meta['nodata'])
+            else:
+                self.meta['nodata'] = float(self.meta['nodata'])
         self.path = path
 
     @staticmethod
@@ -1317,9 +1325,9 @@ class RasterLayer(_Layer):
             :class:`RasterLayer` with the normalized data.
         """
         if self.normalization == 'MinMax':
-            raster = self.data.copy()
-            nodata = self.meta['nodata']
-            meta = self.meta
+            raster = self.data.astype(float).copy()
+            nodata = float(self.meta['nodata'])
+            meta = self.meta.copy()
             if callable(self.distance_limit):
                 raster[~self.distance_limit(raster)] = np.nan
 

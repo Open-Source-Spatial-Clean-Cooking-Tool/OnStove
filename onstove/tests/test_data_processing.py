@@ -68,7 +68,6 @@ def test_process_data():
                    layer_type='raster', resample='sum')
     data.layers['Biomass']['Forest'].data[data.layers['Biomass']['Forest'].data < 5] = 0
     data.layers['Biomass']['Forest'].data[data.layers['Biomass']['Forest'].data >= 5] = 1
-    data.layers['Biomass']['Forest'].save(f'{data.output_directory}/Biomass/Forest')
     transform = data.layers['Biomass']['Forest'].calculate_default_transform(data.project_crs)[0]
     factor = (data.cell_size[0] ** 2) / (transform[0] ** 2)
     assert isinstance(data.layers['Biomass']['Forest'], RasterLayer)
@@ -176,7 +175,7 @@ def test_process_data():
     data.reproject_layers(datasets={'Electricity': ['MV_lines']})
 
     ## Calculate canopy cover
-    data.layers['Biomass']['Forest'].data /= factor
+    data.layers['Biomass']['Forest'].data = data.layers['Biomass']['Forest'].data / factor
     data.layers['Biomass']['Forest'].data *= 100
     data.layers['Biomass']['Forest'].data[data.layers['Biomass']['Forest'].data > 100] = 100
     data.save_datasets(datasets='all')
