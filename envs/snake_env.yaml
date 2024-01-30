@@ -6,6 +6,7 @@ channels:
 dependencies:
   - dill
   - geopandas
+  - jupyterlab
   - matplotlib
   - plotnine>=0.12.2
   - psycopg2
