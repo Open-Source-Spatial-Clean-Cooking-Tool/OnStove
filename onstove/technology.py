@@ -1964,9 +1964,9 @@ class MiniGrids(Electricity):
         weights = self.w_pop + self.w_ntl + self.w_mg_dist
         weight_sum = (self.w_pop * pop_norm + self.w_ntl * ntl_norm + self.w_mg_dist * mg_dist_norm) / weights
         self.gdf['mg_acces_weight'] = weight_sum
-        self.gdf["current_mg_elec"] = 0
-        self.gdf['supported_hh'] = 0
-        self.gdf['supported_pop'] = 0
+        self.gdf["current_mg_elec"] = 0.0
+        self.gdf['supported_hh'] = 0.0
+        self.gdf['supported_pop'] = 0.0
         for municipality, group in self.gdf.groupby('municipality'):
             hh_access = group['potential_hh'].mean()
             weights = sorted(group['mg_acces_weight'], reverse=True)

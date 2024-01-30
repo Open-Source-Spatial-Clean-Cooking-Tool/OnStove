@@ -569,6 +569,7 @@ class DataProcessor:
         for category, layers in datasets.items():
             for name, layer in layers.items():
                 output_path = self._save_layers(save=save_layers, category=category, name=name)
+                #  TODO: check on this mask
                 layer.mask(self.mask_layer, crop=False, all_touched=False)
                 layer.normalize(output_path, buffer=buffer, inverse=layer.inverse)
 
@@ -1779,7 +1780,7 @@ class OnStove(DataProcessor):
         calibration_factor_u = (self.specs["population_start_year"] * self.specs["urban_start"])/total_urban_pop
         calibration_factor_r = (self.specs["population_start_year"] * (1-self.specs["urban_start"]))/total_rural_pop
 
-        self.gdf["Calibrated_pop"] = 0
+        self.gdf["Calibrated_pop"] = 0.0
         self.gdf.loc[~isurban, "Calibrated_pop"] = self.gdf.loc[~isurban,"Pop"] * calibration_factor_r
         self.gdf.loc[isurban, "Calibrated_pop"] = self.gdf.loc[isurban, "Pop"] * calibration_factor_u
 
@@ -1919,7 +1920,7 @@ class OnStove(DataProcessor):
                                                      method='nearest')
                         layer = np.where(nodata_mask, data_interpolated, layer)
                     else:
-                        raise NotImplementedError('fill_nodata can only be None or "interpolate"')
+                        raise NotImplementedError('fill_nodata can only be None, "interpolate" or "nearest"')
 
             data = layer[self.rows, self.cols]
         if name:
