@@ -3,6 +3,7 @@
 [![Documentation Status](https://readthedocs.org/projects/onstove-documentation/badge/?version=latest)](https://onstove-documentation.readthedocs.io/en/latest/?badge=latest) 
 [![Tests](https://github.com/Open-Source-Spatial-Clean-Cooking-Tool/OnStove/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/Open-Source-Spatial-Clean-Cooking-Tool/OnStove/actions?query=workflow%3Atests)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![codecov](https://codecov.io/gh/Open-Source-Spatial-Clean-Cooking-Tool/OnStove/graph/badge.svg?token=OTRT9AQNE1)](https://codecov.io/gh/Open-Source-Spatial-Clean-Cooking-Tool/OnStove)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.7185177.svg)](https://doi.org/10.5281/zenodo.7185177)
 [![Conda Version](https://img.shields.io/conda/vn/conda-forge/onstove.svg)](https://anaconda.org/conda-forge/onstove)
 

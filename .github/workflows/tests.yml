@@ -1,8 +1,9 @@
 name: OnStove tests
 on:
+  push:
+    branches: ['main']
   pull_request:
     branches: ['main']
-    paths: ['onstove/*', 'onstove/tests/*']
 
 jobs:
   miniconda:
@@ -24,3 +25,7 @@ jobs:
         shell: bash -l {0}
         run: |
             pytest
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v3
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
