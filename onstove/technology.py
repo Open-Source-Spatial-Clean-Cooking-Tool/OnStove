@@ -414,20 +414,14 @@ class Technology:
         self.health_parameters(model)
 
         mor = {}
-        # mor_r = {}
         diseases = ['alri', 'copd', 'ihd', 'lc', 'stroke']
-        # is_urban = model.gdf["IsUrban"] > 20
-        # is_rural = model.gdf["IsUrban"] < 20
+
         for disease in diseases:
             rate = model.specs[f'{parameter}_{disease}']
 
             paf = f'paf_{disease.lower()}'
             mor[disease] = pd.Series(0, index=model.gdf.index)
             mor[disease] = model.gdf['Calibrated_pop'] * (model.base_fuel[paf] - self[paf]) * (rate / 100000)
-
-            # paf = f'paf_{disease.lower()}_r'
-            # mor_r[disease] = model.gdf.loc[is_rural, "Calibrated_pop"].sum() * (model.base_fuel[paf] - self[paf]) * (
-            #         rate / 100000)
 
         cl_diseases = {'alri': {1: 0.7, 2: 0.1, 3: 0.07, 4: 0.07, 5: 0.06},
                        'copd': {1: 0.3, 2: 0.2, 3: 0.17, 4: 0.17, 5: 0.16},
@@ -437,7 +431,6 @@ class Technology:
 
         i = 1
         total_mor = 0
-        # total_mor_r = 0
         while i < 6:
             for disease in diseases:
                 if parameter == 'morb':
@@ -445,27 +438,10 @@ class Technology:
                 elif parameter == 'mort':
                     cost = model.specs['vsl']
                 total_mor += cl_diseases[disease][i] * cost * mor[disease] / (1 + model.specs[dr]) ** (i - 1)
-                # total_mor_r += cl_diseases[disease][i] * cost * mor_r[disease] / (1 + model.specs[dr]) ** (i - 1)
             i += 1
 
         distributed_cost = total_mor / model.gdf['Households']
         cases_avoided = sum(mor.values()) / model.gdf['Households']
-
-        # is_urban = model.gdf["IsUrban"] > 20
-        # is_rural = model.gdf["IsUrban"] < 20
-        #
-        # urban_denominator = model.gdf.loc[is_urban, "Calibrated_pop"].sum() * model.gdf.loc[is_urban, 'Households']
-        # rural_denominator = model.gdf.loc[is_rural, "Calibrated_pop"].sum() * model.gdf.loc[is_rural, 'Households']
-        #
-        # distributed_cost = pd.Series(index=model.gdf.index, dtype='float64')
-        #
-        # distributed_cost[is_urban] = model.gdf.loc[is_urban, "Calibrated_pop"] * total_mor_u / urban_denominator
-        # distributed_cost[is_rural] = model.gdf.loc[is_rural, "Calibrated_pop"] * total_mor_r / rural_denominator
-        #
-        # cases_avoided = pd.Series(index=model.gdf.index, dtype='float64')
-        #
-        # cases_avoided[is_urban] = sum(mor_u.values()) * model.gdf.loc[is_urban, "Calibrated_pop"] / urban_denominator
-        # cases_avoided[is_rural] = sum(mor_r.values()) * model.gdf.loc[is_rural, "Calibrated_pop"] / rural_denominator
 
         return distributed_cost, cases_avoided
 
@@ -1082,13 +1058,10 @@ class LPG(Technology):
         --------
         infrastructure_cost
         """
-        # TODO: this method needs update on the current shares based on the new calibration methods
         super().discounted_inv(model, relative=relative)
         self.infrastructure_cost(model)
         if relative:
-            share = (model.gdf['IsUrban'] > 20) * self.current_share_urban
-            share[model.gdf['IsUrban'] < 20] *= self.current_share_rural
-            self.discounted_investments += (self.discounted_infra_cost * (1 - share))
+            self.discounted_investments += (self.discounted_infra_cost * (1 - self.pop_sqkm))
 
     def net_benefit(self, model: 'onstove.OnStove', w_health: int = 1, w_spillovers: int = 1,
                     w_environment: int = 1, w_time: int = 1, w_costs: int = 1):
@@ -1772,12 +1745,9 @@ class Electricity(Technology):
         --------
         get_capacity_cost
         """
-        # TODO: this method needs update on the current shares based on the new calibration methods
         super().discounted_inv(model, relative=relative)
         if relative:
-            share = (model.gdf['IsUrban'] > 20) * self.current_share_urban
-            share[model.gdf['IsUrban'] < 20] *= self.current_share_rural
-            self.discounted_investments += (self.connection_cost + self.capacity_cost * (1 - share))
+            self.discounted_investments += (self.connection_cost + self.capacity_cost * (1 - self.pop_sqkm))
 
     def net_benefit(self, model: 'onstove.OnStove', w_health: int = 1, w_spillovers: int = 1,
                     w_environment: int = 1, w_time: int = 1, w_costs: int = 1):
@@ -2034,8 +2004,6 @@ class MiniGrids(Electricity):
         --------
         net_benefit
         """
-
-
         super(Electricity, self).net_benefit(model, w_health, w_spillovers, w_environment, w_time, w_costs)
         self.calculate_potential(model)
         self.households = self.gdf['supported_hh']

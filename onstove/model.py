@@ -569,7 +569,6 @@ class DataProcessor:
         for category, layers in datasets.items():
             for name, layer in layers.items():
                 output_path = self._save_layers(save=save_layers, category=category, name=name)
-                #  TODO: check on this mask
                 layer.mask(self.mask_layer, crop=False, all_touched=False)
                 layer.normalize(output_path, buffer=buffer, inverse=layer.inverse)
 
@@ -1639,7 +1638,6 @@ class OnStove(DataProcessor):
             Stores the clean cooking access percentage in rural settlements in the :attr:`clean_cooking_access_r`
             attribute.
         """
-        # TODO: the clean cooking access needs to be calculated based on the new baseline fuels calculations
         pop_sqkm = 0
         self.clean_cooking_access = pd.Series(0, index=self.gdf.index)
 
@@ -2199,7 +2197,6 @@ class OnStove(DataProcessor):
         self.gdf["maximum_net_benefit"] = self.gdf[temps].max(axis=1)
 
         gdf = gpd.GeoDataFrame()
-        # gdf = gdf.astype(dtype=gdf.dtypes.to_dict())
         gdf_copy = self.gdf.copy()
         # TODO: Change this to a while loop that checks the sum of number of households supplied against the total hhs
         for tech in techs:
