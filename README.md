@@ -15,24 +15,25 @@ OnStove is developed by the division of Energy Systems at KTH together with part
 OnStove produces scenarios depicting the “true” cost of clean cooking. The scenarios benefits and costs of produced by the tool are to be interpreted as the benefits and costs one could expect if the clean cooking transition was to happen now (overnight change). Results from OnStove are to be interpreted as an upper bound of net-benefits following a switch to cleaner stoves. OnStove can be used by planners and policy makers to identify whether various combinations of interventions in their settings would be worth the potential benefits that could be captured
 
 ## Installation 
-Install a python distribution using 
+First, you need to install a python distribution using 
 [Anaconda](https://www.anaconda.com/) or 
-[Miniconda](https://docs.conda.io/en/latest/miniconda.html#).
+[Miniconda](https://docs.conda.io/en/latest/miniconda.html#) (recomended).
 
 ### Installing with `conda`
 The easiest way of installing and using `OnStove` is through `conda`. After installing a distribution of `conda`, 
-Open an `Anaconda Prompt` or a `Command Prompt` and run:
+Open an `Anaconda Prompt` and run:
 ```
 > conda create -n onstove -c conda-forge onstove
 ```
-Now you will have a new conda environment called `onstove` with `OnStove` installed on it. To use it open a `Command Prompt`
+Now you will have a new conda environment called `onstove` with `OnStove` installed on it. To use it open an `Anaconda Prompt`
 in the root folder of your analysis and activate the environment with:
 ```
 > conda activate onstove
 ```
 
-### Downloading the source code and installing the environment
-Open an `Anaconda Prompt` or a `Command Prompt` and download the source code with:
+### Downloading the source code and installing the environment (for advanced users)
+If you rather download the development version of `OnStove` and install the development environment, open an `Anaconda Prompt`
+and download the source code with:
 ```
 > conda install git
 > git clone https://github.com/Open-Source-Spatial-Clean-Cooking-Tool/OnStove.git
@@ -46,22 +47,6 @@ Then use the `jupyter_env.yaml` in the `envs` folder to install the environment 
 
 Now your environment `onstove` is available to use. Note that you need to activate it
 always before conducting any analysis.
-
-## Dependencies
-`OnStove` relies on the following packages:
-* [dill](https://dill.readthedocs.io/en/latest/dill.html)
-* [geopandas](https://geopandas.org/en/stable/)
-* [jupyterlab](https://jupyterlab.readthedocs.io/en/stable/)
-* [matplotlib](https://matplotlib.org/)
-* [pandas](https://pandas.pydata.org/)
-* [plotnine](https://plotnine.readthedocs.io/en/stable/)
-* [psycopg2](https://www.psycopg.org/docs/)
-* [psutil](https://psutil.readthedocs.io/en/latest/)
-* [python-decouple](https://pypi.org/project/python-decouple/)
-* [rasterio](https://rasterio.readthedocs.io/en/latest/)
-* [scikit-image](https://scikit-image.org/)
-* [svgpathtools](https://pypi.org/project/svgpathtools/)
-* [svgpath2mpl](https://pypi.org/project/svgpath2mpl/)
 
 ## Documentation
 Access the latest documentation in [read the docs](https://onstove-documentation.readthedocs.io/en/latest/?badge=latest).
