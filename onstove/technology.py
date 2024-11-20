@@ -89,6 +89,8 @@ class Technology:
                  is_clean: bool = False,
                  current_share_urban: float = 0,
                  current_share_rural: float = 0,
+                 future_share_urban: float = 0,
+                 future_share_rural: float = 0,
                  epsilon: float = 0.71):
 
         self.name = name
@@ -116,6 +118,8 @@ class Technology:
         self.is_clean = is_clean
         self.current_share_urban = current_share_urban
         self.current_share_rural = current_share_rural
+        self.future_share_urban = future_share_urban
+        self.future_share_rural = future_share_rural
         self.energy = 0
         self.epsilon = epsilon
         for paf in ['paf_alri', 'paf_copd', 'paf_ihd', 'paf_lc', 'paf_stroke']:

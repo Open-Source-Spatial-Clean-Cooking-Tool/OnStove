@@ -10,6 +10,7 @@ import csv
 from pyproj import CRS
 import pandas as pd
 import numpy as np
+import pulp
 import geopandas as gpd
 import rasterio
 import matplotlib.pyplot as plt
@@ -1253,7 +1254,7 @@ class OnStove(DataProcessor):
 
         self.specs = {self._replace_dict.get(k, k): v for k, v in self.specs.copy().items()}
 
-    def _techshare_sumtoone(self):
+    def _techshare_sumtoone(self, share_type):
         """
         Checks if the sum of shares in the technology dictionary is 1.0. 
         If it is not, it will adjust the shares to make the sum 1.0.
@@ -1265,35 +1266,39 @@ class OnStove(DataProcessor):
         If the sum of technology shares in rural and / or urban areas is not equal to 1, then 
         the function prints a message to the user and the adjusted technology shares.
         """
-        sharesumrural = sum(item['current_share_rural'] for item in self.techs.values())
+
+        rural_attr = f"{share_type}_share_rural"
+        urban_attr = f"{share_type}_share_urban"
+
+        sharesumrural = sum(getattr(item, rural_attr, 0) for item in self.techs.values())
 
         if sharesumrural != 1:
             for item in self.techs.values():
-                item.current_share_rural = item.current_share_rural/sharesumrural
+                setattr(item, rural_attr, getattr(item, rural_attr, 0) / sharesumrural)
             print("")
             print("The sum of rural technology shares you provided in the tech specs does not equal 1.0.\n"
                   "The shares have been adjusted to make the sum 1.0 as follows.\n"
                   "If you are not satisfied then please adjust the shares to your liking manually in the tech specs file:")
             for name,tech in self.techs.items():
-                if tech.current_share_rural > 0:
-                    print('     ','-',name,f"{tech.current_share_rural*100:,.3f}", "%")
+                if getattr(tech, rural_attr) > 0:
+                    print('     ', '-', name, f"{getattr(tech, rural_attr) * 100:,.3f}", "%")
             print("")
 
-        sharesumurban = sum(item['current_share_urban'] for item in self.techs.values())
+        sharesumurban = sum(getattr(item, urban_attr, 0) for item in self.techs.values())
 
         if sharesumurban != 1:
             for item in self.techs.values():
-                item.current_share_urban = item.current_share_urban/sharesumurban
+                setattr(item, urban_attr, getattr(item, urban_attr, 0) / sharesumurban)
             print("")
             print("The sum of urban technology shares you provided in the tech specs does not equal 1.0.\n"
                   "The shares have been adjusted to make the sum 1.0 as follows.\n"
                   "If you are not satisfied then please adjust the shares to your liking manually in the tech specs file:")
-            for name,tech in self.techs.items():
-                if tech.current_share_urban > 0:
-                    print('     ','-',name,f"{tech.current_share_urban*100:,.3f}", "%")
+            for name, tech in self.techs.items():
+                if getattr(tech, urban_attr) > 0:
+                    print('     ', '-', name, f"{getattr(tech, urban_attr) * 100:,.3f}", "%")
             print("")
 
-    def _ecooking_adjustment(self):
+    def _ecooking_adjustment(self, share_type):
         """
         Checks whether the share of the population cooking with electricity
         is higher than the electrification rate in either rural and/or urban areas. If it is higher in rural 
@@ -1308,48 +1313,72 @@ class OnStove(DataProcessor):
         If the share of the population cooking with electricity is higher than the electrification rate
         in either rural or urban areas, then the function prints a message to user and the adjusted technology shares
         """
+
+        rural_attr = f"{share_type}_share_rural"
+        urban_attr = f"{share_type}_share_urban"
+
         urban = self.gdf['IsUrban'] > 20
         rural_access = self.gdf.loc[~urban, 'Elec_pop_calib'].sum() / self.gdf.loc[~urban, 'Calibrated_pop'].sum()
-        if rural_access < self.techs["Electricity"].current_share_rural:
-            rural_difference = self.techs["Electricity"].current_share_rural - rural_access
-            self.techs["Electricity"].current_share_rural = rural_access
-            ruralsum_dirtyfuels = 0
+
+        if rural_access < getattr(self.techs["Electricity"], rural_attr):
+            rural_difference = getattr(self.techs["Electricity"], rural_attr) - rural_access
+            setattr(self.techs["Electricity"], rural_attr, rural_access)
+
+            ruralsum_shares = 0
             for name, tech in self.techs.items():
-                if not tech.is_clean:
-                    ruralsum_dirtyfuels += tech.current_share_rural
+                if share_type == 'current' and not tech.is_clean:
+                    ruralsum_shares += getattr(tech, rural_attr)
+                elif share_type == 'future' and getattr(tech, rural_attr, 0) > 0:
+                    ruralsum_shares += getattr(tech, rural_attr)
+
             for name, tech in self.techs.items():
-                if not tech.is_clean:
-                    tech.current_share_rural += (tech.current_share_rural/ruralsum_dirtyfuels) * rural_difference
+                if share_type == 'current' and not tech.is_clean:
+                    new_share = (getattr(tech, rural_attr) / ruralsum_shares) * rural_difference
+                    setattr(tech, rural_attr, getattr(tech, rural_attr) + new_share)
+                elif share_type == 'future' and getattr(tech, rural_attr, 0) > 0:
+                    new_share = (getattr(tech, rural_attr) / ruralsum_shares) * rural_difference
+                    setattr(tech, rural_attr, getattr(tech, rural_attr) + new_share)
             
             print("The rural electrification rate you provided in the tech specs is less \
                 \nthan the share of the population cooking with electricity. \
                 \nThe share of the population cooking with electricity has been made equal to the rural electrification rate. \
                 \nThe remaining population share has been reallocated proportionally to dirty fuels.\
                 \nIf you are not satisfied then please adjust the rural electrification rate or tech shares accordingly in the specs.")
-            for name,tech in self.techs.items():
-                print(name,tech.current_share_rural)
+
+            for name, tech in self.techs.items():
+                print(name, getattr(tech, rural_attr))
 
         urban_access = self.gdf.loc[urban, 'Elec_pop_calib'].sum() / self.gdf.loc[urban, 'Calibrated_pop'].sum()
-        if urban_access < self.techs["Electricity"].current_share_urban:
-            urban_difference = self.techs["Electricity"].current_share_urban - urban_access
-            self.techs["Electricity"].current_share_urban = urban_access
-            urbansum_dirtyfuels = 0
+
+        if urban_access < getattr(self.techs["Electricity"], urban_attr):
+            urban_difference = getattr(self.techs["Electricity"], urban_attr) - urban_access
+            setattr(self.techs["Electricity"], urban_attr, urban_access)
+
+            urbansum_shares = 0
             for name, tech in self.techs.items():
-                if not tech.is_clean:
-                    urbansum_dirtyfuels += tech.current_share_urban
+                if share_type == 'current' and not tech.is_clean:
+                    urbansum_shares += getattr(tech, urban_attr)
+                elif share_type == 'future' and getattr(tech, urban_attr, 0) > 0:
+                    urbansum_shares += getattr(tech, urban_attr)
+
             for name, tech in self.techs.items():
-                if not tech.is_clean:
-                    tech.current_share_urban += (tech.current_share_urban/urbansum_dirtyfuels) * urban_difference
-        
+                if share_type == 'current' and not tech.is_clean:
+                    new_share = (getattr(tech, urban_attr) / urbansum_shares) * urban_difference
+                    setattr(tech, urban_attr, getattr(tech, urban_attr) + new_share)
+                elif share_type == 'future' and getattr(tech, urban_attr, 0) > 0:
+                    new_share = (getattr(tech, urban_attr) / urbansum_shares) * urban_difference
+                    setattr(tech, urban_attr, getattr(tech, urban_attr) + new_share)
+
             print("The urban electrification rate you provided in the tech specs is less \
                 \nthan the share of the population cooking with electricity. \
                 \nThe share of the population cooking with electricity has been made equal to the urban electrification rate. \
                 \nThe remaining population share has been reallocated proportionally to dirty fuels.\
                 \nIf you are not satisfied then please adjust the rural electrificaiton rate or tech shares accordingly in the specs.")
-            for name,tech in self.techs.items():
-                print(name,tech.current_share_urban)
 
-    def _biogas_adjustment(self):
+            for name, tech in self.techs.items():
+                print(name, getattr(tech, urban_attr))
+
+    def _biogas_adjustment(self, share_type):
         """
         Checks whether the share of the population cooking with biogas entered in the tech specs
         is higher than what OnStove predicts is feasible given biogas availability. If it is higher, then the share of the population cooking 
@@ -1363,26 +1392,38 @@ class OnStove(DataProcessor):
         If the share of the population cooking with biogas is higher than the feasible share predicted by
         OnStove, then the function prints a message to user and the adjusted technology shares    
         """
+
         biogas_calcshare = sum((self.techs["Biogas"].households * self.specs["rural_hh_size"]))/((1-self.specs["urban_start"]) * self.specs["population_start_year"])
-        
-        if self.techs["Biogas"].current_share_rural > biogas_calcshare:
-            difference = self.techs["Biogas"].current_share_rural - biogas_calcshare
-            self.techs["Biogas"].current_share_rural = biogas_calcshare
-            ruralsum_dirtyfuels = 0
+
+        rural_attr = f"{share_type}_share_rural"
+
+        if getattr(self.techs["Biogas"], rural_attr,0) > biogas_calcshare:
+            difference = getattr(self.techs["Biogas"], rural_attr,0) - biogas_calcshare
+            setattr(self.techs["Biogas"], rural_attr, biogas_calcshare)
+
+            ruralsum_shares = 0
             for name, tech in self.techs.items():
-                if not tech.is_clean:
-                    ruralsum_dirtyfuels += tech.current_share_rural
+                if share_type == 'current' and not tech.is_clean:
+                    ruralsum_shares += getattr(tech, rural_attr,0)
+                elif share_type == 'future' and getattr(tech, rural_attr,0) > 0:
+                    ruralsum_shares += getattr(tech, rural_attr,0)
+
             for name, tech in self.techs.items():
-                if not tech.is_clean:
-                    tech.current_share_rural += (tech.current_share_rural/ruralsum_dirtyfuels) * difference
-            
+                if share_type == 'current' and not tech.is_clean:
+                    new_share = (getattr(tech, rural_attr,0) / ruralsum_shares) * difference
+                    setattr(tech, rural_attr, getattr(tech, rural_attr,0) + new_share)
+                elif share_type == 'future' and getattr(tech, rural_attr, 0) > 0:
+                    new_share = (getattr(tech, rural_attr,0) / ruralsum_shares) * difference
+                    setattr(tech, rural_attr, getattr(tech, rural_attr,0) + new_share)
+
             print("The calculated share of the population that can cook with biogas based upon the biogas availability GIS data is smaller than \
                 \nthe share of the population cooking with biogas you entered. \
                 \nThe share of the population cooking with biogas has been made equal to the calculated share based upon biogas availability. \
                 \nThe remaining population share has been reallocated proportionally to dirty fuels.\
                 \nIf you are not satisfied then please adjust the GIS data or tech shares accordingly in the tech specs.")
+
             for name, tech in self.techs.items():
-                print(name, tech.current_share_rural)
+                print('     ', '-', name, f"{getattr(tech, rural_attr, 0) * 100:,.3f}", "%")
 
     def _pop_tech(self):
         """
@@ -1527,15 +1568,15 @@ class OnStove(DataProcessor):
 
             # base_tech_types = [type(tech) for tech in base_fuels.values()]
 
-            self._techshare_sumtoone()
-            self._ecooking_adjustment()
+            self._techshare_sumtoone("current")
+            self._ecooking_adjustment("current")
             base_fuels["Biogas"].total_time(self)
             required_energy_hh = base_fuels["Biogas"].required_energy_hh(self)
             factor = self.gdf['biogas_energy'] / (required_energy_hh * self.gdf['Households'])
             factor[factor > 1] = 1
             base_fuels["Biogas"].factor = factor
             base_fuels["Biogas"].households = self.gdf['Households'] * factor
-            self._biogas_adjustment()
+            self._biogas_adjustment("current")
             self._pop_tech()
             self._techshare_allocation(base_fuels)
 
@@ -2720,6 +2761,96 @@ class OnStove(DataProcessor):
                 writer.writerow({'KEY': 0, 'VALUE': '0: None'})
                 for value, key in codes.items():
                     writer.writerow({'KEY': key, 'VALUE': f'{key}: {value}'})
+
+    def conditional_opt(self, urban):
+
+        self._techshare_sumtoone("future")
+        self._ecooking_adjustment("future")
+        if urban == False:
+            self._biogas_adjustment("future")
+
+        tech = []
+        share = []
+        gdf = self.gdf.reset_index()
+
+        if urban:
+            mask = gdf['IsUrban'] > 20
+            for item in iter(self.techs):
+                if self.techs[item].future_share_urban > 0:
+                    share.append(self.techs[item].future_share_urban)
+                    tech.append(item)
+                    if item not in self.gdf.columns:
+                        self.gdf[item] = 0.0
+        else:
+            mask = gdf['IsUrban'] < 20
+            for item in iter(self.techs):
+                if self.techs[item].future_share_rural > 0:
+                    share.append(self.techs[item].future_share_rural)
+                    tech.append(item)
+                    if item not in self.gdf.columns:
+                        self.gdf[item] = 0.0
+
+        res = gdf[mask].copy()
+        res1 = res.set_index('index')
+
+        populations = res1['Calibrated_pop'].to_numpy()
+        tech_dict = {t: (res1['net_benefit_' + t] * res1['Households']).fillna(0).to_numpy() for t in tech}
+        total_population = populations.sum()
+        n = len(res1)
+
+        prob = pulp.LpProblem("MaximizeNetBenefit", pulp.LpMaximize)
+
+        x = pulp.LpVariable.dicts("x", [(i, j) for i in range(n) for j in range(len(tech))], lowBound=0, upBound=1,
+                                  cat="Continuous")
+
+        matrix = np.stack(list(tech_dict.values()), axis=1)
+
+        prob += pulp.lpSum(matrix[i, j] * x[i, j] for i in range(n) for j in range(len(tech))), "TotalMaxNetBenefit"
+
+        for i in range(n):
+            prob += pulp.lpSum(x[i, j] for j in range(len(tech))) == 1, f"RowSelection_{i}"
+
+        for idx, percentage in enumerate(share):
+            prob += pulp.lpSum(populations[i] * x[i, idx] for i in
+                               range(n)) == percentage * total_population, f"Population{chr(65 + idx)}"
+
+        prob.solve(pulp.PULP_CBC_CMD(msg=0))
+
+        print("Status:", pulp.LpStatus[prob.status])
+
+        selected = np.array([[x[i, j].varValue for j in range(len(tech))] for i in range(n)])
+
+        selected_params = {tech[i]: selected[:, i] for i in range(len(tech))}
+
+        for tech_name, values in selected_params.items():
+            self.gdf.loc[mask, tech_name] = values
+
+    def prio(self, row):
+        priorities = []
+        filtered_techs = {key: value for key, value in self.techs.items() if (
+                    (hasattr(value, "future_share_urban") and getattr(value, "future_share_urban") > 0) or (
+                        hasattr(value, "future_share_rural") and getattr(value, "future_share_rural") > 0))}
+        for item in iter(filtered_techs):
+            if row[item] > 0:
+                priorities.append(item)
+
+        self.gdf['Prioritized_hh'] = self.gdf.apply(' and '.join(priorities), axis=1)
+
+    def prio(self):
+        filtered_techs = {key: value for key, value in self.techs.items() if (
+                (hasattr(value, "future_share_urban") and getattr(value, "future_share_urban") > 0) or
+                (hasattr(value, "future_share_rural") and getattr(value, "future_share_rural") > 0))}
+
+        priorities_column = []
+
+        for _, row in self.gdf.iterrows():
+            priorities = []
+            for item in filtered_techs:
+                if row[item] > 0:
+                    priorities.append(item)
+            priorities_column.append(' and '.join(priorities))
+
+        self.gdf['Prioritized_hh'] = priorities_column
 
     def plot(self, variable: str, metric='mean',
              labels: Optional[dict[str, str]] = None,
