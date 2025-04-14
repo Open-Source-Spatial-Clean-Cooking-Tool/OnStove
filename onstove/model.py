@@ -2655,6 +2655,63 @@ class OnStove(DataProcessor):
 
         return raster, codes, cmap
 
+    def to_gpkg(self, name:str, variable: str,
+               labels: Optional[dict[str, str]] = None,
+               cmap: Optional[dict[str, str]] = None,
+               metric: str = 'mean',
+               nodata: Optional[Union[float, int]] = None,
+               mask: bool = False,
+               mask_nodata: Optional[Union[float, int]] = None,
+               append_subdataset: bool = False):
+        """Creates a RasterLayer and saves it as a ``.gpkg`` file.
+
+        Parameters
+        ----------
+        name: str
+            name of the geopackage.
+        variable: str
+            The column name from the :attr:`gdf` to use.
+        labels: dictionary of str key-value pairs, optional
+            Dictionary with the keys-value pairs to use for the data categories. It is only used for categorical data---
+            see :meth:`create_layer`.
+        cmap: dictionary of str key-value pairs, optional
+            Dictionary with the colors to use for each data category. It is only used for categorical data---see
+            :meth:`create_layer`.
+        metric: str, default 'mean'
+            Metric to use to aggregate data. It is only used for non-categorical data. For available metrics see
+            :meth:`create_layer`.
+        nodata: float or int
+            Defines nodata values to be ignored by the function.
+        """
+        raster, codes, cmap = self.create_layer(variable, labels=labels, cmap=cmap, metric=metric, nodata=nodata)
+        if mask:
+            raster.meta['nodata'] = mask_nodata
+            raster.mask(self.mask_layer)
+        raster.save(os.path.join(self.output_directory), name=name, type='gpkg', append_subdataset=append_subdataset)
+        if codes and cmap:
+            with open(os.path.join(self.output_directory, f'{variable}ColorMap.clr'), 'w') as f:
+                for label, code in codes.items():
+                    r = int(to_rgb(cmap[code])[0] * 255)
+                    g = int(to_rgb(cmap[code])[1] * 255)
+                    b = int(to_rgb(cmap[code])[2] * 255)
+                    f.write(f'{code} {r} {g} {b} 255 {label}\n')
+
+            fields = ['KEY', 'VALUE']
+
+            csv_file = os.path.join(self.output_directory, "Categories.csv")
+            # Open the CSV file with write permission
+            with open(csv_file, "w", newline="") as csvfile:
+                # Create a CSV writer using the field/column names
+                writer = csv.DictWriter(csvfile, fieldnames=fields)
+
+                # Write the header row (column names)
+                writer.writeheader()
+
+                # Write the data
+                writer.writerow({'KEY': 0, 'VALUE': '0: None'})
+                for value, key in codes.items():
+                    writer.writerow({'KEY': key, 'VALUE': f'{key}: {value}'})
+
     def to_raster(self, variable: str,
                   labels: Optional[dict[str, str]] = None,
                   cmap: Optional[dict[str, str]] = None,

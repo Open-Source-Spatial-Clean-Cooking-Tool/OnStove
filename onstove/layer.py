@@ -1371,8 +1371,8 @@ class RasterLayer(_Layer):
         polygon.crs = self.meta['crs']
         return polygon
 
-    def save(self, output_path: str):
-        """Saves the raster layer as a `tif` file.
+    def save(self, output_path: str, name: str = None, type: str = 'tif', append_subdataset: bool = False):
+        """Saves the raster layer as a `tif` or `gpkg` file.
 
         It uses the ``name`` attribute as the name of the file.
 
@@ -1380,14 +1380,32 @@ class RasterLayer(_Layer):
         ----------
         output_path: str
             A folder path where to save the output dataset.
+        name: str
+            name of the file or geopackage.
+        type: str
+            Type of file to save.
+        append_subdataset: bool
+            Add subdataset to existing geopackage.
         """
-        output_file = os.path.join(output_path,
-                                   self.name + '.tif')
-        self.path = output_file
         os.makedirs(output_path, exist_ok=True)
-        self.meta.update(compress='DEFLATE', driver='GTiff')
-        with rasterio.open(output_file, "w", **self.meta) as dest:
-            dest.write(self.data, 1)
+        if name is None:
+            name = self.name
+        output_file = os.path.join(output_path,
+                                   name + f'.{type}')
+        if type == 'tif':
+            self.path = output_file
+            self.meta.update(compress='DEFLATE', driver='GTiff')
+            with rasterio.open(output_file, "w", **self.meta) as dest:
+                dest.write(self.data, 1)
+        elif type == 'gpkg':
+            self.meta.update(driver='GPKG')
+            if append_subdataset:
+                with rasterio.open(output_file, "r+", raster_table = self.name, APPEND_SUBDATASET = 'YES',
+                                   **self.meta) as dest:
+                    dest.write(self.data, 1)
+            else:
+                with rasterio.open(output_file, "w", **self.meta) as dest:
+                    dest.write(self.data, 1)
 
     def align(self, base_layer: Union['RasterLayer', str],
               rescale: Optional[bool] = None,
