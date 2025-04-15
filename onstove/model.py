@@ -2495,7 +2495,7 @@ class OnStove(DataProcessor):
 
     def create_layer(self, variable: str, name: Optional[str] = None,
                      labels: Optional[dict[str, str]] = None, cmap: Optional[dict[str, str]] = None,
-                     metric: str = 'mean', 
+                     metric: str = 'mean', scaling_factor: int = 1,
                      nodata: Optional[Union[float, int]] = None) -> tuple[RasterLayer, dict[int, str], dict[int, str]]:
         """Creates a :class:`RasterLayer` from a column of the main GeoDataFrame (:attr:`gdf`).
 
@@ -2563,6 +2563,9 @@ class OnStove(DataProcessor):
             * ``total``: the total value of the data accounting for all households in the cell.
             * ``per_100k``: the values are calculated per 100 thousand population withing each cell.
             * ``per_household``: average value per househol in each cell.
+        scaling_factor: int, default 1
+            Factor to divide the units of the data and change scale. For example, to change from grams to tons use
+            `scaling_factor=1.000`.
         nodata: float or int
             Defines nodata values to be ignored by the function.
 
@@ -2650,7 +2653,7 @@ class OnStove(DataProcessor):
         if name is not None:
             variable = name
         raster = RasterLayer('Output', variable)
-        raster.data = layer
+        raster.data = layer / scaling_factor
         raster.meta = meta
 
         return raster, codes, cmap
@@ -2658,7 +2661,7 @@ class OnStove(DataProcessor):
     def to_gpkg(self, name:str, variable: str,
                labels: Optional[dict[str, str]] = None,
                cmap: Optional[dict[str, str]] = None,
-               metric: str = 'mean',
+               metric: str = 'mean', scaling_factor: int = 1,
                nodata: Optional[Union[float, int]] = None,
                mask: bool = False,
                mask_nodata: Optional[Union[float, int]] = None,
@@ -2680,10 +2683,14 @@ class OnStove(DataProcessor):
         metric: str, default 'mean'
             Metric to use to aggregate data. It is only used for non-categorical data. For available metrics see
             :meth:`create_layer`.
+        scaling_factor: int, default 1
+            Factor to divide the units of the data and change scale. For example, to change from grams to tons use
+            `scaling_factor=1.000`.
         nodata: float or int
             Defines nodata values to be ignored by the function.
         """
-        raster, codes, cmap = self.create_layer(variable, labels=labels, cmap=cmap, metric=metric, nodata=nodata)
+        raster, codes, cmap = self.create_layer(variable, labels=labels, cmap=cmap, metric=metric, nodata=nodata,
+                                                scaling_factor=scaling_factor)
         if mask:
             raster.meta['nodata'] = mask_nodata
             raster.mask(self.mask_layer)
@@ -2715,7 +2722,7 @@ class OnStove(DataProcessor):
     def to_raster(self, variable: str,
                   labels: Optional[dict[str, str]] = None,
                   cmap: Optional[dict[str, str]] = None,
-                  metric: str = 'mean',
+                  metric: str = 'mean', scaling_factor: int = 1,
                   nodata: Optional[Union[float, int]] = None,
                   mask: bool = False,
                   mask_nodata: Optional[Union[float, int]] = None):
@@ -2734,10 +2741,14 @@ class OnStove(DataProcessor):
         metric: str, default 'mean'
             Metric to use to aggregate data. It is only used for non-categorical data. For available metrics see
             :meth:`create_layer`.
+        scaling_factor: int, default 1
+            Factor to divide the units of the data and change scale. For example, to change from grams to tons use
+            `scaling_factor=1.000`.
         nodata: float or int
             Defines nodata values to be ignored by the function.
         """
-        raster, codes, cmap = self.create_layer(variable, labels=labels, cmap=cmap, metric=metric, nodata=nodata)
+        raster, codes, cmap = self.create_layer(variable, labels=labels, cmap=cmap, metric=metric, nodata=nodata,
+                                                scaling_factor=scaling_factor)
         if mask:
             raster.meta['nodata'] = mask_nodata
             raster.mask(self.mask_layer)
