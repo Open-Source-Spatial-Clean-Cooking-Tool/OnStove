@@ -6,6 +6,7 @@ import pandas as pd
 import geopandas as gpd
 from typing import Optional, Callable
 from math import exp
+import re
 
 from onstove._layer_utils import raster_setter, vector_setter
 from onstove._utils import Processes
@@ -681,6 +682,63 @@ class Technology:
         """
         self.costs = (self.discounted_fuel_cost + self.discounted_investments +
                       self.discounted_om_costs - self.discounted_salvage_cost)
+        
+    def affordability_categories(self, model: 'onstove.OnStove', income_data: bool = False, categories: list = ['<5%', '5-15%', '15%+']):
+        """Assigns the affordability categories for each stove. The affordability categories are based on the
+        income estimation and user defined affordability thresholds. According to ESMAP [1], affordable cooking
+        solutions are those where the levelized cost of cooking solutions (stove and fuel) is less than 5%
+        of household income.
+
+        References
+        ----------
+
+        [1] “Bhatia, Mikul; Angelou, Niki. 2015. Beyond Connections: Energy Access Redefined. ESMAP Technical Report;008/15. 
+        © World Bank. http://hdl.handle.net/10986/24368 License: CC BY 3.0 IGO.”
+        
+        Parameters
+        ----------
+        model: OnStove model
+            Instance of the OnStove model containing the main data of the study case. See
+            :class:`onstove.OnStove`.
+        income_data: bool, default False
+            Whether the income data is available in the gdf or not. If True, the affordability categories are based on
+            the income data. If False, the affordability categories are based on the absolute wealth estimate.
+        categories: list, default ['<5%', '5-15%', '15%+']
+            List of affordability categories. If more categories want to be added, or different thresholds, please folloow the
+            notation used. First threshold with a < sign preceding, intermediate thresholds with a - sign in between the end values
+            for that threshold, and last threshold with a + sign.
+            Example: ['<5%', '5-15%', '15-25%', '25%+']        
+
+        See also
+        --------
+        onstove.OnStove.income_estimation
+        """
+        try:
+            if income_data:
+                model.gdf['cost_income_ratio_{}'.format(self.name)] = model.gdf['costs_{}'.format(self.name)] / model.gdf['income']
+            else:
+                model.gdf['cost_income_ratio_{}'.format(self.name)] = model.gdf['costs_{}'.format(self.name)] / model.gdf['absolute_wealth']
+        
+            bins = [0.0]
+            for cat in categories:
+                if '<' in cat:
+                    upper = float(cat.strip('<%')) / 100
+                    bins.append(upper)
+                elif '+' in cat:
+                    bins.append(1.0)
+                else:
+                    parts = re.findall(r'\d+', cat)
+                    upper = float(parts[1]) / 100
+                    bins.append(upper)
+                
+                bins = sorted(set(bins))
+
+            model.gdf['affordability_category_{}'.format(self.name)] = pd.cut(model.gdf['cost_income_ratio_{}'.format(self.name)], bins=bins, labels=categories, right=False)
+            model.gdf['affordability_category_{}'.format(self.name)] = model.gdf['affordability_category_{}'.format(self.name)].cat.add_categories(['Not available'])
+            model.gdf['affordability_category_{}'.format(self.name)].fillna('Not available', inplace=True)
+        except KeyError:
+            raise KeyError(f"The affordability categories could not be assigned for {self.name}.")
+
 
     def net_benefit(self, model: 'onstove.OnStove', w_health: int = 1, w_spillovers: int = 1,
                     w_environment: int = 1, w_time: int = 1, w_costs: int = 1):
@@ -1382,7 +1440,6 @@ class Biomass(Technology):
             self.solar_panel_investment(model)
         super().discounted_inv(model, relative=relative)
 
-
 class Charcoal(Technology):
     """Charcoal technology class used to model traditional and improved stoves.
 
@@ -1783,6 +1840,25 @@ class Electricity(Technology):
         factor[factor > 1] = 1
         self.factor = factor
         self.households = model.gdf['Households'] * factor
+
+    def affordability_categories(self, model: 'onstove.OnStove', income_data: bool = False, categories: list = ['<5%', '5-15%', '15%+']):
+        """This method expands :meth:`Technology.affordability_categories` by constraining the availability of biogas.
+        Parameters
+        ----------
+        model: OnStove model
+            Instance of the OnStove model containing the main data of the study case. See :class:`onstove.OnStove`.
+        income_data: bool, default False
+            Whether the income data is available in the gdf or not. If True, the affordability categories are based on
+            the income data. If False, the affordability categories are based on the absolute wealth estimate.
+        categories: list, default ['<5%', '5-15%', '15%+']
+            List of affordability categories. If more categories want to be added, or different thresholds, please folloow the
+            notation used. First threshold with a < sign preceding, intermediate thresholds with a - sign in between the end values
+            for that threshold, and last threshold with a + sign.
+            Example: ['<5%', '5-15%', '15-25%', '25%+'] 
+        
+        """
+        super().affordability_categories(model, income_data = income_data, categories = categories)
+        model.gdf.loc[model.gdf['Current_elec'] == 0, 'affordability_category_{}'.format(self.name)] = 'Not available'
 
 
 class MiniGrids(Electricity):
@@ -2211,6 +2287,7 @@ class Biogas(Technology):
                                       fill_nodata_method='interpolate')
             model.gdf.loc[model.gdf["Temperature"] < 10, "available_biogas"] = 0
 
+        # Urban restriction        
         model.gdf.loc[(model.gdf["IsUrban"] > 20), "available_biogas"] = 0
 
         # Water availability restriction
@@ -2321,3 +2398,22 @@ class Biogas(Technology):
         del model.gdf["Goats"]
         del model.gdf["Pigs"]
         del model.gdf["Poultry"]
+
+    def affordability_categories(self, model: 'onstove.OnStove', income_data: bool = False, categories: list = ['<5%', '5-15%', '15%+']):
+        """This method expands :meth:`Technology.affordability_categories` by constraining the availability of biogas.
+        Parameters
+        ----------
+        model: OnStove model
+            Instance of the OnStove model containing the main data of the study case. See :class:`onstove.OnStove`.
+        income_data: bool, default False
+            Whether the income data is available in the gdf or not. If True, the affordability categories are based on
+            the income data. If False, the affordability categories are based on the absolute wealth estimate.
+        categories: list, default ['<5%', '5-15%', '15%+']
+            List of affordability categories. If more categories want to be added, or different thresholds, please folloow the
+            notation used. First threshold with a < sign preceding, intermediate thresholds with a - sign in between the end values
+            for that threshold, and last threshold with a + sign.
+            Example: ['<5%', '5-15%', '15-25%', '25%+'] 
+        
+        """
+        super().affordability_categories(model, income_data = income_data, categories = categories)
+        model.gdf.loc[model.gdf['net_benefit_{}'.format(self.name)].isna(), 'affordability_category_{}'.format(self.name)] = 'Not available'
