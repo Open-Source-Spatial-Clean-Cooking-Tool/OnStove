@@ -735,7 +735,10 @@ class Technology:
 
             model.gdf['affordability_category_{}'.format(self.name)] = pd.cut(model.gdf['cost_income_ratio_{}'.format(self.name)], bins=bins, labels=categories, right=False)
             model.gdf['affordability_category_{}'.format(self.name)] = model.gdf['affordability_category_{}'.format(self.name)].cat.add_categories(['Not available'])
-            model.gdf['affordability_category_{}'.format(self.name)].fillna('Not available', inplace=True)
+            model.gdf.loc[model.gdf['cost_income_ratio_{}'.format(self.name)] > 1, 'affordability_category_{}'.format(self.name)] = categories[-1]
+            model.gdf.loc[model.gdf['cost_income_ratio_{}'.format(self.name)] < 0, 'affordability_category_{}'.format(self.name)] = categories[0]
+
+
         except KeyError:
             raise KeyError(f"The affordability categories could not be assigned for {self.name}.")
 
@@ -1842,7 +1845,7 @@ class Electricity(Technology):
         self.households = model.gdf['Households'] * factor
 
     def affordability_categories(self, model: 'onstove.OnStove', income_data: bool = False, categories: list = ['<5%', '5-15%', '15%+']):
-        """This method expands :meth:`Technology.affordability_categories` by constraining the availability of biogas.
+        """This method expands :meth:`Technology.affordability_categories` by constraining the availability of electricity.
         Parameters
         ----------
         model: OnStove model
