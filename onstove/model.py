@@ -2042,7 +2042,7 @@ class OnStove(DataProcessor):
         self.gdf['value_of_time'] = norm_layer * self.specs[
             'minimum_wage'] / 30 / 8  # convert $/months to $/h (8 working hours per day)
 
-    def run(self, technologies: Union[list[str], str] = 'all', restriction: bool = True):
+    def run(self, technologies: Union[list[str], str] = 'all', restriction: bool = True, affordability_categories: list = ['<5%', '5-15%', '15%+']):
         """Runs the model using the defined ``technologies`` as options to cook with.
 
         It loops through the ``technologies`` and calculates all costs, benefit and the net-benefit of cooking with
@@ -2067,6 +2067,12 @@ class OnStove(DataProcessor):
         restriction: bool, default True
             Whether to have the restriction of only selecting technologies producing a positive benefit compared to the
             baseline. This avoids selecting stoves simply due to them being cheaper.
+
+        affordability_categories: list, default ['<5%', '5-15%', '15%+']
+            List defining the affordability categories. If more categories want to be added, or different thresholds, please folloow the
+            notation used. First threshold with a < sign preceding, intermediate thresholds with a - sign in between the end values
+            for that threshold, and last threshold with a + sign.
+            Example: '['<5%', '5-15%', '15-25%', '25%+']'
 
         See also
         --------
@@ -2122,6 +2128,7 @@ class OnStove(DataProcessor):
             print(f'Calculating net benefit for {tech.name}...\n')
             tech.net_benefit(self, self.specs['w_health'], self.specs['w_spillovers'],
                              self.specs['w_environment'], self.specs['w_time'], self.specs['w_costs'])
+            tech.affordability_categories(self, categories=affordability_categories)
 
         print('Getting maximum net benefit technologies...')
         self.maximum_net_benefit(techs, restriction=restriction)
@@ -2373,7 +2380,7 @@ class OnStove(DataProcessor):
                 self.gdf.loc[is_tech, "emission_costs_avoided"] = self.techs[tech].decreased_carbon_costs[index]
 
     def extract_wealth_index(self, wealth_index: str, file_type: str = "csv", x_column: str =  "longitude",
-                             y_column: str = "latitude", wealth_column: str = "rwi", pareto_weight: float = 0.32):
+                             y_column: str = "latitude", wealth_column: str = "rwi"):
 
         """Extracts the relative wealth index to a column called relative wealth in the :attr:`gdf`.
 
@@ -2452,10 +2459,10 @@ class OnStove(DataProcessor):
         
         
         
-    def income_estimation(self, income_data: str, pareto_weight: float = 0.32):
+    def income_estimation(self, income_data: str = None, pareto_weight: float = 0.32):
         """Estimates income of each cell in the study area.
 
-        The function approaches income estimation in two possible ways. When income data is provided, it uses it to simply extrapolate income values
+        The function approaches income estimation in two possible ways. When income data is provided, it is used to simply interpolate income values
         in all cells, by corresponding the income values to the relative wealth index ranked (sorted) values. The income data should be a csv file with two columns:
         percentile and income. The other alternative is to use the relative wealth index to estimate the absolute wealth estimate.
         The absolute wealth is calculated using the relative wealth index, the Gini coefficient and the GDP per capita of the study area.
@@ -2468,7 +2475,7 @@ class OnStove(DataProcessor):
         Relative wealth index values are sorted (or rather ranked) and the ICDF aproximmation corresponds each cell rank. This is later scaled
         with the GDP per capita and the number of cells in the study area.
         
-        Formula: absolute_wealth = ICDF(relative_wealth) * GDP per capita * number of cells / sum(ICDF(relative_wealth))
+        'Formula: absolute_wealth = ICDF(relative_wealth) * GDP per capita * number of cells / sum(ICDF(relative_wealth))'
 
         References
         ----------
@@ -2532,7 +2539,10 @@ class OnStove(DataProcessor):
         sum_icdf = np.sum(self.gdf['icdf'])
         self.gdf['absolute_wealth'] = self.gdf['icdf']*gdp_pc*n/sum_icdf
 
+        self.income_data = False
+        
         if income_data and income_data.strip():
+            self.income_data = True
             income_data = pd.read_csv(income_data)
             income = np.array(income_data['income'])
             percentiles = np.array(income_data['percentile'])/100

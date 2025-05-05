@@ -27,3 +27,5 @@ pop_weight,1,float
 mort_stroke,42.1,float
 morb_stroke,667.7,float
 fnrb,0.647,float
+gdp_pc,1710.51,float
+gini,0.408,float

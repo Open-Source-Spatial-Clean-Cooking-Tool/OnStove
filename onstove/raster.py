@@ -1,7 +1,7 @@
 import glob
 import gzip
 
-import fiona
+#import fiona 
 import numpy as np
 
 import rasterio
@@ -46,38 +46,38 @@ def align_raster(raster_1, raster_2, method='nearest', compression='DEFLATE'):
 #         dest.write_band(1, arr_filled)
 
 
-def mask_raster(raster_path, mask_layer, output_file, nodata=0, compression='NONE',
-                all_touched=False):
-    if isinstance(mask_layer, str):
-        with fiona.open(mask_layer, "r") as shapefile:
-            shapes = [feature["geometry"] for feature in shapefile]
-            crs = 'EPSG:4326'
-    else:
-        shapes = [mask_layer.dissolve().geometry.loc[0]]
-        crs = mask_layer.crs
+#def mask_raster(raster_path, mask_layer, output_file, nodata=0, compression='NONE',
+    #             all_touched=False):
+    # if isinstance(mask_layer, str):
+    #     with fiona.open(mask_layer, "r") as shapefile:
+    #         shapes = [feature["geometry"] for feature in shapefile]
+    #         crs = 'EPSG:4326'
+    # else:
+    #     shapes = [mask_layer.dissolve().geometry.loc[0]]
+    #     crs = mask_layer.crs
 
-    if '.gz' in raster_path:
-        with gzip.open(raster_path) as gzip_infile:
-            with rasterio.open(gzip_infile) as src:
-                out_image, out_transform = rasterio.mask.mask(src, shapes, crop=True, nodata=nodata,
-                                                              all_touched=all_touched)
-                out_meta = src.meta
-    else:
-        with rasterio.open(raster_path) as src:
-            out_image, out_transform = rasterio.mask.mask(src, shapes, crop=True, nodata=nodata,
-                                                          all_touched=all_touched)
-            out_meta = src.meta
+    # if '.gz' in raster_path:
+    #     with gzip.open(raster_path) as gzip_infile:
+    #         with rasterio.open(gzip_infile) as src:
+    #             out_image, out_transform = rasterio.mask.mask(src, shapes, crop=True, nodata=nodata,
+    #                                                           all_touched=all_touched)
+    #             out_meta = src.meta
+    # else:
+    #     with rasterio.open(raster_path) as src:
+    #         out_image, out_transform = rasterio.mask.mask(src, shapes, crop=True, nodata=nodata,
+    #                                                       all_touched=all_touched)
+    #         out_meta = src.meta
 
-    out_meta.update({"driver": "GTiff",
-                     "height": out_image.shape[1],
-                     "width": out_image.shape[2],
-                     "transform": out_transform,
-                     'compress': compression,
-                     'nodata': nodata,
-                     "crs": crs})
+    # out_meta.update({"driver": "GTiff",
+    #                  "height": out_image.shape[1],
+    #                  "width": out_image.shape[2],
+    #                  "transform": out_transform,
+    #                  'compress': compression,
+    #                  'nodata': nodata,
+    #                  "crs": crs})
 
-    with rasterio.open(output_file, "w", **out_meta) as dest:
-        dest.write(out_image)
+    # with rasterio.open(output_file, "w", **out_meta) as dest:
+    #     dest.write(out_image)
 
 
 def reproject_raster(raster_path, dst_crs,

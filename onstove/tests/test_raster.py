@@ -4,7 +4,6 @@ import os
 from onstove.layer import VectorLayer, RasterLayer
 from onstove.raster import (
     align_raster,
-    mask_raster,
     normalize,
     reproject_raster,
     merge_rasters,
@@ -140,35 +139,35 @@ def test_align_raster(sample_raster_layer, sample_raster_layer_2):
     assert out_meta["dtype"] == sample_raster_layer_2.meta["dtype"]
 
 
-def test_mask_raster(raster_path, vector_path, output_path):
-    """Test for mask raster function
+# def test_mask_raster(raster_path, vector_path, output_path):
+#     """Test for mask raster function
 
-    Parameters
-    ----------
-    raster_path: str
-                Raster path.
-    vector_path: str
-                Vector path.
-    output_path: str
-                Output path
-    """
+#     Parameters
+#     ----------
+#     raster_path: str
+#                 Raster path.
+#     vector_path: str
+#                 Vector path.
+#     output_path: str
+#                 Output path
+#     """
 
-    path = os.path.join(
-        output_path,
-        "masked_raster.tif"
-    )
-    mask_raster(
-        raster_path=raster_path,
-        mask_layer=vector_path,
-        output_file=path,
-        nodata=0,
-        compression="NONE"
-    )
-    assert os.path.exists(path)
-    # compares file sizes in bytes
-    assert os.stat(path).st_size < os.stat(raster_path).st_size
-    print(f"\nmasked raster: {os.stat(path).st_size} bytes")
-    print(f"\noriginal raster: {os.stat(raster_path).st_size} bytes")
+#     path = os.path.join(
+#         output_path,
+#         "masked_raster.tif"
+#     )
+#     mask_raster(
+#         raster_path=raster_path,
+#         mask_layer=vector_path,
+#         output_file=path,
+#         nodata=0,
+#         compression="NONE"
+#     )
+#     assert os.path.exists(path)
+#     # compares file sizes in bytes
+#     assert os.stat(path).st_size < os.stat(raster_path).st_size
+#     print(f"\nmasked raster: {os.stat(path).st_size} bytes")
+#     print(f"\noriginal raster: {os.stat(raster_path).st_size} bytes")
 
 
 def test_reproject_raster(raster_path):
