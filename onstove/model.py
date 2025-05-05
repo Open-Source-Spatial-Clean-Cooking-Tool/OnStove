@@ -1161,6 +1161,7 @@ class OnStove(DataProcessor):
         self.clean_cooking_access_r = None
         self.electrified_weight = None
         self.tech_separator = 'and'
+        self.income_data = False
 
         self.specs = {'startyear': 2020, 'endyear': 2020,
                       'endyeartarget': 1.0, 'mealsperday': 3.0, 'infraweight': 1.0,
@@ -2088,6 +2089,8 @@ class OnStove(DataProcessor):
         extract_fuel_costs
         extract_om_costs
         extract_salvage
+        income_estimation
+        onstove.Technology.affordability_categories
         """
         for row in self._replace_dict.values():
             if row not in self.specs:
@@ -2539,8 +2542,6 @@ class OnStove(DataProcessor):
         sum_icdf = np.sum(self.gdf['icdf'])
         self.gdf['absolute_wealth'] = self.gdf['icdf']*gdp_pc*n/sum_icdf
 
-        self.income_data = False
-        
         if income_data and income_data.strip():
             self.income_data = True
             income_data = pd.read_csv(income_data)

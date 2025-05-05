@@ -14,6 +14,7 @@ def test_run_model():
     path = os.path.join('onstove', 'tests', 'tests_data', 'RWA',
                         'RWA_scenario_file.csv')
     model.read_scenario_data(path, delimiter=',')
+    model.income_estimation()
     
     # 3. Calculate new generation capacity cost
     model.techs['Electricity'].get_capacity_cost(model)
