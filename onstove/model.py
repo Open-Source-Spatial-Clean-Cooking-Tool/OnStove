@@ -56,6 +56,8 @@ from onstove.technology import Technology, LPG, Biomass, Electricity, Biogas, Ch
 from onstove.raster import sample_raster
 from onstove._utils import Processes, deep_update
 from onstove._layer_utils import raster_setter
+import scipy.stats as stats
+from scipy.interpolate import PchipInterpolator
 
 
 def timeit(func):
@@ -1159,6 +1161,7 @@ class OnStove(DataProcessor):
         self.clean_cooking_access_r = None
         self.electrified_weight = None
         self.tech_separator = 'and'
+        self.income_data = False
 
         self.specs = {'startyear': 2020, 'endyear': 2020,
                       'endyeartarget': 1.0, 'mealsperday': 3.0, 'infraweight': 1.0,
@@ -1249,7 +1252,9 @@ class OnStove(DataProcessor):
             'fnrb': 'fnrb',
             'vsl': 'vsl',
             'costofcarbonemissions': 'cost_of_carbon_emissions',
-            'minimumwage': 'minimum_wage'}
+            'minimumwage': 'minimum_wage',
+            'gdppc': 'gdp_pc',
+            'gini': 'gini'}
 
         self.specs = {self._replace_dict.get(k, k): v for k, v in self.specs.copy().items()}
 
@@ -2038,7 +2043,7 @@ class OnStove(DataProcessor):
         self.gdf['value_of_time'] = norm_layer * self.specs[
             'minimum_wage'] / 30 / 8  # convert $/months to $/h (8 working hours per day)
 
-    def run(self, technologies: Union[list[str], str] = 'all', restriction: bool = True):
+    def run(self, technologies: Union[list[str], str] = 'all', restriction: bool = True, affordability_categories: list = ['<5%', '5-15%', '15%+']):
         """Runs the model using the defined ``technologies`` as options to cook with.
 
         It loops through the ``technologies`` and calculates all costs, benefit and the net-benefit of cooking with
@@ -2064,6 +2069,12 @@ class OnStove(DataProcessor):
             Whether to have the restriction of only selecting technologies producing a positive benefit compared to the
             baseline. This avoids selecting stoves simply due to them being cheaper.
 
+        affordability_categories: list, default ['<5%', '5-15%', '15%+']
+            List defining the affordability categories. If more categories want to be added, or different thresholds, please folloow the
+            notation used. First threshold with a < sign preceding, intermediate thresholds with a - sign in between the end values
+            for that threshold, and last threshold with a + sign.
+            Example: '['<5%', '5-15%', '15-25%', '25%+']'
+
         See also
         --------
         set_base_fuel
@@ -2078,6 +2089,8 @@ class OnStove(DataProcessor):
         extract_fuel_costs
         extract_om_costs
         extract_salvage
+        income_estimation
+        onstove.Technology.affordability_categories
         """
         for row in self._replace_dict.values():
             if row not in self.specs:
@@ -2118,6 +2131,7 @@ class OnStove(DataProcessor):
             print(f'Calculating net benefit for {tech.name}...\n')
             tech.net_benefit(self, self.specs['w_health'], self.specs['w_spillovers'],
                              self.specs['w_environment'], self.specs['w_time'], self.specs['w_costs'])
+            tech.affordability_categories(self, categories=affordability_categories)
 
         print('Getting maximum net benefit technologies...')
         self.maximum_net_benefit(techs, restriction=restriction)
@@ -2386,7 +2400,7 @@ class OnStove(DataProcessor):
             The name of the column containing x-coordinates, only relevant when `file_type = csv`
         y_column: str, default "latitude"
             The name of the column containing y-coordinates, only relevant when `file_type = csv`
-        wealth_column: str, default "latitude"
+        wealth_column: str, default "rwi"
             The name of the column containing the wealth index, only relevant when file type is either `csv`, `point`
             or `polygon`
 
@@ -2444,6 +2458,102 @@ class OnStove(DataProcessor):
                                      fill_nodata_method='interpolate')
         else:
             raise ValueError("file_type needs to be either csv, raster, polygon or point.")
+
+        
+        
+        
+    def income_estimation(self, income_data: str = None, pareto_weight: float = 0.32):
+        """Estimates income of each cell in the study area.
+
+        The function approaches income estimation in two possible ways. When income data is provided, it is used to simply interpolate income values
+        in all cells, by corresponding the income values to the relative wealth index ranked (sorted) values. The income data should be a csv file with two columns:
+        percentile and income. The other alternative is to use the relative wealth index to estimate the absolute wealth estimate.
+        The absolute wealth is calculated using the relative wealth index, the Gini coefficient and the GDP per capita of the study area.
+        The relative wealth index, as indicated by [1], can be used to calculate an absolute wealth estimate. Given its use of GDP per capita and Gini coefficient,
+        it can be considered a rough estimation for income. This rough estimation is based on the work by [2], where a function describing wealth distribution in a
+        country was determined as the combination of a Pareto and a lognormal distribution. The two distributions are combined using a weight factor, 
+        which is set to 0.32 by default. The weight factor can be adjusted to fit the specific distribution of wealth in the study area. The authors of [2] 
+        argue that the weight factor of 0.32 captured best the wealth distribution in the study area of their analysis, especially in the case of poorer
+        households. The absolute wealth is then calculated using the inverse cumulative distribution function (ICDF) of the combined distribution function.
+        Relative wealth index values are sorted (or rather ranked) and the ICDF aproximmation corresponds each cell rank. This is later scaled
+        with the GDP per capita and the number of cells in the study area.
+        
+        'Formula: absolute_wealth = ICDF(relative_wealth) * GDP per capita * number of cells / sum(ICDF(relative_wealth))'
+
+        References
+        ----------
+        [1] G. Chi, H. Fang, S. Chatterjee, & J.E. Blumenstock, Microestimates of wealth for all low- and middle-income countries, 
+        Proc. Natl. Acad. Sci. U.S.A. 119 (3) e2113658119, https://doi.org/10.1073/pnas.2113658119 (2022).
+        [2] Hruschka DJ, Gerkey D, Hadley C. Estimating the absolute wealth of households. Bull World Health Organ. 
+        2015 Jul 1;93(7):483-90. doi: 10.2471/BLT.14.147082. Epub 2015 May 15. PMID: 26170506; PMCID: PMC4490812.
+
+        Parameters
+        ----------
+        income_data: str
+            The path to the income data used. The income data should be a csv file with two columns: percentile and income.
+        pareto_weight: float, default 0.32
+            Weight factor for the Pareto distribution to combine it with the lognormal distribution.
+
+        """
+
+        # Calculating the AWE
+
+        # First estimating the distributions
+
+        gdp_pc = self.specs['gdp_pc']
+        gini = self.specs['gini']
+
+        alpha_pareto = ((1+gini)/(2*gini))
+        xm_pareto = (1-(1/alpha_pareto))*gdp_pc
+
+        x_values = np.linspace(0, 5 * gdp_pc, 1000)  # Mock values to create the distributions
+                                                    # High income values captured by 5 times GPDpc, ASUMPTION
+
+        dist_pareto = stats.pareto(b=alpha_pareto, scale=xm_pareto)
+        cdf_pareto = dist_pareto.cdf(x_values)
+    
+        # Lognormal distribution
+    
+        sigma_lognorm = np.sqrt(2)*stats.norm.ppf((gini+1)/2)
+        mu_lognorm = np.log(gdp_pc)-((sigma_lognorm**2)/2)
+    
+        dist_lognorm = stats.lognorm(s=sigma_lognorm, scale=np.exp(mu_lognorm))
+        cdf_lognorm = dist_lognorm.cdf(x_values)
+
+        # Combined Distribution
+
+        w_pareto = pareto_weight
+        w_lognorm = 1 - w_pareto
+
+        cdf_combined = w_pareto * cdf_pareto + w_lognorm * cdf_lognorm
+
+        # Interpolation ICDF
+
+        icdf = PchipInterpolator(cdf_combined, x_values)
+        n = len(self.gdf)
+        probs = np.linspace(1/n, 1, n)          
+        icdf = icdf(probs)
+
+        #Calculating AWE
+
+        self.gdf = self.gdf.sort_values(by=['relative_wealth'], ascending=True)
+        
+        self.gdf["icdf"] = icdf
+        sum_icdf = np.sum(self.gdf['icdf'])
+        self.gdf['absolute_wealth'] = self.gdf['icdf']*gdp_pc*n/sum_icdf
+
+        if income_data and income_data.strip():
+            self.income_data = True
+            income_data = pd.read_csv(income_data)
+            income = np.array(income_data['income'])
+            percentiles = np.array(income_data['percentile'])/100
+            income = PchipInterpolator(percentiles, income)
+            income = income(probs)
+            self.gdf['income'] = income
+
+
+        self.gdf = self.gdf.sort_index()
+
 
     @staticmethod
     def _re_name(df, labels, variable):

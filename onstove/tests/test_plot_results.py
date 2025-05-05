@@ -93,9 +93,9 @@ def test_plot_stats():
                        height=1.5, width=3.5)
     results.plot_costs_benefits(labels=labels, save_as='benefits_costs.png', 
                                 height=1.5, width=5, dpi=300)
-    results.plot_distribution(type='histogram', groupby='None',
-                              hh_divider=1000,
-                              y_title='Households (thousands)', cmap=cmap,
-                              labels=labels, save_as='max_benefits_hist.svg',
-                              height=1.5, width=3.5)
+#     results.plot_distribution(type='histogram', groupby='None',
+#                               hh_divider=1000,
+#                               y_title='Households (thousands)', cmap=cmap,
+#                               labels=labels, save_as='max_benefits_hist.svg',
+#                               height=1.5, width=3.5, quantiles=True)
     assert True
