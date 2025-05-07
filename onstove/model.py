@@ -1252,9 +1252,10 @@ class OnStove(DataProcessor):
             'fnrb': 'fnrb',
             'vsl': 'vsl',
             'costofcarbonemissions': 'cost_of_carbon_emissions',
-            'minimumwage': 'minimum_wage',
-            'gdppc': 'gdp_pc',
-            'gini': 'gini'}
+            'minimumwage': 'minimum_wage'#,
+            #'gdppc': 'gdp_pc',
+            #'gini': 'gini'}
+        }
 
         self.specs = {self._replace_dict.get(k, k): v for k, v in self.specs.copy().items()}
 
@@ -2043,7 +2044,7 @@ class OnStove(DataProcessor):
         self.gdf['value_of_time'] = norm_layer * self.specs[
             'minimum_wage'] / 30 / 8  # convert $/months to $/h (8 working hours per day)
 
-    def run(self, technologies: Union[list[str], str] = 'all', restriction: bool = True, affordability_categories: list = ['<5%', '5-15%', '15%+']):
+    def run(self, technologies: Union[list, dict] = 'all', restriction: bool = True, affordability_categories: list = ['<5%', '5-15%', '15%+']):
         """Runs the model using the defined ``technologies`` as options to cook with.
 
         It loops through the ``technologies`` and calculates all costs, benefit and the net-benefit of cooking with
@@ -2108,10 +2109,8 @@ class OnStove(DataProcessor):
             techs = [tech for tech in self.techs.values()]
         elif isinstance(technologies, list):
             techs = [self.techs[name] for name in technologies]
-        else:
-            raise ValueError("technologies must be 'all' or a list of strings with the technology names to run.")
-
-        # Loop through each technology and calculate all benefits and costs
+        elif isinstance(technologies, dict):
+            techs = [self.techs[name] for name in technologies.keys()]
         for tech in techs:
             print(f'Calculating health benefits for {tech.name}...')
             if not tech.is_base:
@@ -2134,7 +2133,10 @@ class OnStove(DataProcessor):
             tech.affordability_categories(self, categories=affordability_categories)
 
         print('Getting maximum net benefit technologies...')
-        self.maximum_net_benefit(techs, restriction=restriction)
+        if isinstance(technologies, list):
+            self.maximum_net_benefit(techs, restriction=restriction)
+        elif isinstance(technologies, dict):
+            self.maximum_net_benefit_user_share(technologies, restriction=restriction)
         print('Extracting indicators...')
         print('    - Lives saved')
         self.extract_lives_saved()
@@ -2268,6 +2270,121 @@ class OnStove(DataProcessor):
         self.gdf.loc[isna, "maximum_net_benefit"] = self.gdf.loc[isna, temps].max(axis=1)
 
     # TODO: check if we need this method
+
+    def maximum_net_benefit_user_share(self, techs: dict[str:float], restriction: bool = True):
+        """Extracts the technology or technology combinations producing the highest net-benefit in each cell
+        while achieving user defined shares.
+
+        It saves the technology with highest net-benefit in the ``max_benefi_tech_user_share`` column of the :attr:`gdf`
+        GeoDataframe. This also dictates the benefits and costs extracted in the extract functions.
+
+        Parameters
+        ----------
+        techs: dict of str:float
+            Dictionary with technology names as keys and their user defined share as values.
+        restriction: bool, default True
+            Whether to have the restriction of only selecting technologies producing a positive benefit compared to the
+            baseline. This avoids selecting stoves simply due to them being cheaper.
+
+        See also
+        --------
+        run
+        extract_lives_saved
+        extract_health_costs_saved
+        extract_time_saved
+        extract_opportunity_cost
+        extract_reduced_emissions
+        extract_emissions_costs_saved
+        extract_investment_costs
+        extract_fuel_costs
+        extract_om_costs
+        extract_salvage
+
+        """
+        net_benefit_cols = [col for col in self.gdf if 'net_benefit_' in col]
+        benefits_cols = [col for col in self.gdf if 'benefits_' in col]
+
+        for benefit, net in zip(benefits_cols, net_benefit_cols):
+            if restriction in [True, 'yes', 'y', 'Y', 'Yes', 'PositiveBenefits', 'Positive_Benefits']:
+                self.gdf.loc[self.gdf[benefit] < 0, net] = np.nan
+
+        self.gdf["max_benefit_tech"] = self.gdf[net_benefit_cols].idxmax(axis=1).astype('string')
+
+        self.gdf['max_benefit_tech'] = self.gdf['max_benefit_tech'].str.replace("net_benefit_", "")
+        self.gdf['max_benefit_tech'] = self.gdf['max_benefit_tech'].str.replace("_temp", "")
+        self.gdf["maximum_net_benefit"] = self.gdf[net_benefit_cols].max(axis=1)
+        
+        
+        techs_shares = dict(sorted(techs.items(), key=lambda item: item[1], reverse=True))
+        total_pop = self.gdf['Calibrated_pop'].sum()
+        tech_target_pop = {tech: int(techs_shares[tech] * total_pop) for tech in techs_shares.keys()}
+
+        unassigned_ids = self.gdf.index.copy() # Control of cells that are unassigned
+        tech_target_pop_unassigned = tech_target_pop.copy() # Control of unassigned population for each technology
+        self.gdf['max_benefit_tech_target_share'] = None
+        self.gdf['maximum_benefit_target_share'] = None
+        
+        i = 1
+        while len(tech_target_pop_unassigned) > 0:
+            cols = [f'net_benefit_{tech}' for tech in tech_target_pop_unassigned]
+            for tech, pop_unassigned in tech_target_pop_unassigned.items():
+                print(f'Assigning {tech} with target population: ', pop_unassigned, f'Attempt as #{i} best technology')
+                target_pop_assign = pop_unassigned
+
+                condition = self.gdf['max_benefit_tech_target_share'].isna()
+                available_cells = self.gdf.loc[condition].copy() # Selects the cells that are available to be assigned a technology.
+                if len(available_cells) == 0:
+                    tech_target_pop_unassigned[tech] = -999
+                    print('No available cells to assign, since this the last technology to be assigned, i.e. worst technology.')
+                    continue
+                available_cells['max_benefit_tech_temp'] = available_cells[cols].idxmax(axis=1).astype('string') # Gets the technology with the maximum net benefit for the unassigned candidates.
+                available_cells['max_benefit_tech_temp'] = available_cells['max_benefit_tech_temp'].str.replace("net_benefit_", "")
+                available_cells['maximum_net_benefit'] = available_cells[cols].max(axis=1) # Gets the maximum net benefit for the available cells.
+
+                condition = (available_cells['max_benefit_tech_temp'] == tech)
+                candidates = available_cells.loc[condition]
+                if len(candidates) == 0:
+                    if available_cells[f'net_benefit_{tech}'].isna().all():
+                        tech_target_pop_unassigned[tech] = -999
+                        print('No candidates to assign, since remaining cells are unavailable for this technology.')
+                        continue
+                    else:
+                        print(f'No candidates to assign as #{i} best option')
+                        continue
+                candidates = candidates.sort_values('maximum_net_benefit', ascending=False)
+                candidates['cummulative_pop'] = candidates['Calibrated_pop'].cumsum()
+
+                assigned = candidates[candidates['cummulative_pop'] <= target_pop_assign] # Selects the candidates that are below the target population.
+                if candidates['Calibrated_pop'].sum() > target_pop_assign:
+                    len_assigned = [len(assigned)]
+                    assigned = pd.concat([assigned, candidates.iloc[len_assigned]])
+                    print('Share completed assigned plus one cell.') 
+                assigned_ids = assigned.index.to_list() # Gets the ids of the assigned candidates.
+                assigned_pop = assigned['Calibrated_pop'].sum() # Gets the population of the assigned candidates.
+
+                self.gdf.loc[assigned_ids, 'max_benefit_tech_target_share'] = tech # Assigns the technology to the assigned candidates.
+                self.gdf.loc[assigned_ids, 'maximum_benefit_target_share'] = assigned['maximum_net_benefit'] # Assigns the maximum net benefit to the assigned candidates.
+                unassigned_ids = unassigned_ids[~unassigned_ids.isin(assigned_ids)] # Updates the unassigned ids.
+                tech_target_pop_unassigned[tech] -= assigned_pop # Updates the target population of the technology.
+                
+            tech_target_pop_unassigned = {k: v for k, v in tech_target_pop_unassigned.items() if v > 0}
+            i += 1
+            
+
+        print('Shares after assignment attempt ', self.gdf.groupby('max_benefit_tech_target_share')['Calibrated_pop'].sum() / self.gdf['Calibrated_pop'].sum())
+        print('Still not assigned: ', tech_target_pop_unassigned, 'Cells withouth assignment: ', len(unassigned_ids))
+
+        if len(unassigned_ids) > 0:
+            condition = self.gdf['max_benefit_tech_target_share'].isna() # Masks the gdf to see rows where the technology is available and hasn't been assigned a technology yet.
+            self.gdf.loc[condition, 'max_benefit_tech_target_share'] = 'Unnasigned'
+
+
+        print('Final shares ', self.gdf.groupby('max_benefit_tech_target_share')['Calibrated_pop'].sum() / self.gdf['Calibrated_pop'].sum(), techs)
+
+        self.gdf['max_benefit_tech'] = self.gdf['max_benefit_tech_target_share']
+        self.gdf['maximum_net_benefit'] = self.gdf['maximum_benefit_target_share']
+        self.gdf = self.gdf.drop(columns=['max_benefit_tech_target_share', 'maximum_benefit_target_share'], axis=1)
+
     def _add_admin_names(self, admin, column_name):
         if isinstance(admin, str):
             admin = gpd.read_file(admin)
@@ -2500,47 +2617,47 @@ class OnStove(DataProcessor):
 
         # First estimating the distributions
 
-        gdp_pc = self.specs['gdp_pc']
-        gini = self.specs['gini']
+        # gdp_pc = self.specs['gdp_pc']
+        # gini = self.specs['gini']
 
-        alpha_pareto = ((1+gini)/(2*gini))
-        xm_pareto = (1-(1/alpha_pareto))*gdp_pc
+        # alpha_pareto = ((1+gini)/(2*gini))
+        # xm_pareto = (1-(1/alpha_pareto))*gdp_pc
 
-        x_values = np.linspace(0, 5 * gdp_pc, 1000)  # Mock values to create the distributions
-                                                    # High income values captured by 5 times GPDpc, ASUMPTION
+        # x_values = np.linspace(0, 5 * gdp_pc, 1000)  # Mock values to create the distributions
+        #                                             # High income values captured by 5 times GPDpc, ASUMPTION
 
-        dist_pareto = stats.pareto(b=alpha_pareto, scale=xm_pareto)
-        cdf_pareto = dist_pareto.cdf(x_values)
+        # dist_pareto = stats.pareto(b=alpha_pareto, scale=xm_pareto)
+        # cdf_pareto = dist_pareto.cdf(x_values)
     
-        # Lognormal distribution
+        # # Lognormal distribution
     
-        sigma_lognorm = np.sqrt(2)*stats.norm.ppf((gini+1)/2)
-        mu_lognorm = np.log(gdp_pc)-((sigma_lognorm**2)/2)
+        # sigma_lognorm = np.sqrt(2)*stats.norm.ppf((gini+1)/2)
+        # mu_lognorm = np.log(gdp_pc)-((sigma_lognorm**2)/2)
     
-        dist_lognorm = stats.lognorm(s=sigma_lognorm, scale=np.exp(mu_lognorm))
-        cdf_lognorm = dist_lognorm.cdf(x_values)
+        # dist_lognorm = stats.lognorm(s=sigma_lognorm, scale=np.exp(mu_lognorm))
+        # cdf_lognorm = dist_lognorm.cdf(x_values)
 
-        # Combined Distribution
+        # # Combined Distribution
 
-        w_pareto = pareto_weight
-        w_lognorm = 1 - w_pareto
+        # w_pareto = pareto_weight
+        # w_lognorm = 1 - w_pareto
 
-        cdf_combined = w_pareto * cdf_pareto + w_lognorm * cdf_lognorm
+        # cdf_combined = w_pareto * cdf_pareto + w_lognorm * cdf_lognorm
 
-        # Interpolation ICDF
+        # # Interpolation ICDF
 
-        icdf = PchipInterpolator(cdf_combined, x_values)
+        # icdf = PchipInterpolator(cdf_combined, x_values)
         n = len(self.gdf)
         probs = np.linspace(1/n, 1, n)          
-        icdf = icdf(probs)
+        # icdf = icdf(probs)
 
-        #Calculating AWE
+        # #Calculating AWE
 
-        self.gdf = self.gdf.sort_values(by=['relative_wealth'], ascending=True)
+        # self.gdf = self.gdf.sort_values(by=['relative_wealth'], ascending=True)
         
-        self.gdf["icdf"] = icdf
-        sum_icdf = np.sum(self.gdf['icdf'])
-        self.gdf['absolute_wealth'] = self.gdf['icdf']*gdp_pc*n/sum_icdf
+        # self.gdf["icdf"] = icdf
+        # sum_icdf = np.sum(self.gdf['icdf'])
+        # self.gdf['absolute_wealth'] = self.gdf['icdf']*gdp_pc*n/sum_icdf
 
         if income_data and income_data.strip():
             self.income_data = True
