@@ -2325,10 +2325,8 @@ class OnStove(DataProcessor):
         for region, shares in techs.items():
             print(f'Prioritizing technology shares in {region} areas.')
             if region == 'Urban':
-                techs = [shares[name] for name in shares.keys()]
                 isurban = self.gdf['IsUrban'] > 20
             else:
-                techs = [shares[name] for name in shares.keys()]
                 isurban = self.gdf['IsUrban'] < 20
 
             techs_shares = dict(sorted(shares.items(), key=lambda item: item[1], reverse=True))
@@ -4171,12 +4169,13 @@ class OnStove(DataProcessor):
                            ax: Optional['matplotlib.axes.Axes'] = None,
                            bar_variable: str = 'Households',
                            categories: list = ['<5%', '5-10%', '10-15%', '15-20%', '20-25%', '25-30%', '30%+'],
-                           colors: list = ['#51a655', '#b8ec61', '#dbec61', '#ecdd61', '#ecb661', '#ec8c61', '#f02424', 'grey']) -> matplotlib.axes.Axes:
-        """Expands map plotting function especifally for affordability maps.
+                           colors: list = ['#51a655', '#b8ec61', '#dbec61', '#ecdd61', '#ecb661', '#ec8c61', '#f02424', 'grey'],
+                           dpi: float = 150, save_as: Optional[str] = None) -> matplotlib.axes.Axes:
+        """Expands map plotting function specifically for affordability maps.
         Parameters
         """
         if colors:
-            cmap = cmap = ListedColormap(colors)
+            cmap = ListedColormap(colors)
 
         categories.append('Not available')
         patches = [mpatches.Patch(color=c, label=l) for c, l in zip(colors, categories)]
@@ -4206,6 +4205,9 @@ class OnStove(DataProcessor):
         for bar in bars:
             yval = bar.get_height()
             axins.text(bar.get_x() + bar.get_width()/2 + 0.1, yval + 0.025, f"{yval:.0%}", ha='center', fontsize=6)
+
+        if isinstance(save_as, str):
+            plt.savefig(os.path.join(self.output_directory, save_as), dpi=dpi, bbox_inches='tight', transparent=True)
 
     
     def to_csv(self, name: str):
