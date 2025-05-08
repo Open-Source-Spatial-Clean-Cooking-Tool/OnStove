@@ -2110,7 +2110,11 @@ class OnStove(DataProcessor):
         elif isinstance(technologies, list):
             techs = [self.techs[name] for name in technologies]
         elif isinstance(technologies, dict):
-            techs = [self.techs[name] for name in technologies.keys()]
+            techs = set()
+            for shares in technologies.values():
+                techs.update(shares.keys())
+            print(techs)
+            techs = [self.techs[name] for name in techs]
         for tech in techs:
             print(f'Calculating health benefits for {tech.name}...')
             if not tech.is_base:
@@ -2317,8 +2321,10 @@ class OnStove(DataProcessor):
         for region, shares in techs.items():
             print(f'Prioritizing technology shares in {region} areas.')
             if region == 'Urban':
+                techs = [shares[name] for name in shares.keys()]
                 isurban = self.gdf['IsUrban'] > 20
             else:
+                techs = [shares[name] for name in shares.keys()]
                 isurban = self.gdf['IsUrban'] < 20
 
             techs_shares = dict(sorted(shares.items(), key=lambda item: item[1], reverse=True))
@@ -2379,13 +2385,13 @@ class OnStove(DataProcessor):
                 tech_target_pop_unassigned = {k: v for k, v in tech_target_pop_unassigned.items() if v > 0}
                 i += 1
 
-        print('Shares after assignment attempt ', self.gdf.groupby('max_benefit_tech_target_share')['Calibrated_pop'].sum() / self.gdf['Calibrated_pop'].sum())
+            print('Shares after assignment attempt ', self.gdf.loc[isurban].groupby('max_benefit_tech_target_share')['Calibrated_pop'].sum() / self.gdf.loc[isurban, 'Calibrated_pop'].sum())
 
-        if len(unassigned_ids) > 0:
-            condition = self.gdf['max_benefit_tech_target_share'].isna() # Masks the gdf to see rows where the technology is available and hasn't been assigned a technology yet.
-            self.gdf.loc[condition, 'max_benefit_tech_target_share'] = 'None'
+            if len(unassigned_ids) > 0:
+                condition = self.gdf['max_benefit_tech_target_share'].isna() # Masks the gdf to see rows where the technology is available and hasn't been assigned a technology yet.
+                self.gdf.loc[condition, 'max_benefit_tech_target_share'] = 'None'
 
-        print('Final shares ', self.gdf.groupby('max_benefit_tech_target_share')['Calibrated_pop'].sum() / self.gdf['Calibrated_pop'].sum(), techs)
+        print('Final shares ', self.gdf.groupby('max_benefit_tech_target_share')['Calibrated_pop'].sum() / self.gdf['Calibrated_pop'].sum())
 
         self.gdf['max_benefit_tech'] = self.gdf['max_benefit_tech_target_share']
         self.gdf['maximum_net_benefit'] = self.gdf['maximum_benefit_target_share']
