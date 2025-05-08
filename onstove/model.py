@@ -2323,12 +2323,13 @@ class OnStove(DataProcessor):
         tech_target_pop_unassigned = tech_target_pop.copy() # Control of unassigned population for each technology
         self.gdf['max_benefit_tech_target_share'] = None
         self.gdf['maximum_benefit_target_share'] = None
+        self.gdf['technology_option'] = None
         
         i = 1
         while len(tech_target_pop_unassigned) > 0:
             cols = [f'net_benefit_{tech}' for tech in tech_target_pop_unassigned]
             for tech, pop_unassigned in tech_target_pop_unassigned.items():
-                print(f'Assigning {tech} with target population: ', pop_unassigned, f'Attempt as #{i} best technology')
+                print(f'Assigning {tech} with target population: ', f"{pop_unassigned:.2f}", f'Attempt as #{i} best technology')
                 target_pop_assign = pop_unassigned
 
                 condition = self.gdf['max_benefit_tech_target_share'].isna()
@@ -2364,19 +2365,20 @@ class OnStove(DataProcessor):
 
                 self.gdf.loc[assigned_ids, 'max_benefit_tech_target_share'] = tech # Assigns the technology to the assigned candidates.
                 self.gdf.loc[assigned_ids, 'maximum_benefit_target_share'] = assigned['maximum_net_benefit'] # Assigns the maximum net benefit to the assigned candidates.
+                self.gdf.loc[assigned_ids, 'technology_option'] = i
                 unassigned_ids = unassigned_ids[~unassigned_ids.isin(assigned_ids)] # Updates the unassigned ids.
                 tech_target_pop_unassigned[tech] -= assigned_pop # Updates the target population of the technology.
+                print('Assigned population: ', f"{assigned_pop:.2f}", 'Remaining population: ', f"{tech_target_pop_unassigned[tech]:.2f}")
                 
             tech_target_pop_unassigned = {k: v for k, v in tech_target_pop_unassigned.items() if v > 0}
             i += 1
             
 
         print('Shares after assignment attempt ', self.gdf.groupby('max_benefit_tech_target_share')['Calibrated_pop'].sum() / self.gdf['Calibrated_pop'].sum())
-        print('Still not assigned: ', tech_target_pop_unassigned, 'Cells withouth assignment: ', len(unassigned_ids))
 
         if len(unassigned_ids) > 0:
             condition = self.gdf['max_benefit_tech_target_share'].isna() # Masks the gdf to see rows where the technology is available and hasn't been assigned a technology yet.
-            self.gdf.loc[condition, 'max_benefit_tech_target_share'] = 'Unnasigned'
+            self.gdf.loc[condition, 'max_benefit_tech_target_share'] = 'None'
 
 
         print('Final shares ', self.gdf.groupby('max_benefit_tech_target_share')['Calibrated_pop'].sum() / self.gdf['Calibrated_pop'].sum(), techs)
