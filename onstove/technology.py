@@ -738,6 +738,10 @@ class Technology:
 
         except KeyError:
             raise KeyError(f"The affordability categories could not be assigned for {self.name}.")
+                    
+        affordability_target = float(categories[0].strip('<%')) / 100
+        model.gdf['affordability_support_required_{}'.format(self.name)] = model.gdf['costs_{}'.format(self.name)] / affordability_target - model.gdf['income']
+        model.gdf['affordability_support_required_{}'.format(self.name)] = model.gdf['affordability_support_required_{}'.format(self.name)].clip(lower=0)
 
 
     def net_benefit(self, model: 'onstove.OnStove', w_health: int = 1, w_spillovers: int = 1,
@@ -1856,7 +1860,7 @@ class Electricity(Technology):
         """
         super().affordability_categories(model, categories = categories)
         model.gdf.loc[model.gdf['Current_elec'] == 0, 'affordability_category_{}'.format(self.name)] = 'Not available'
-
+        model.gdf.loc[model.gdf['affordability_category_{}'.format(self.name)] == 'Not available', 'affordability_support_required_{}'.format(self.name)] = np.nan
 
 class MiniGrids(Electricity):
     """Mini-grids technology class used to model electrical stoves powered by mini-grids.
@@ -2411,3 +2415,5 @@ class Biogas(Technology):
         """
         super().affordability_categories(model, categories = categories)
         model.gdf.loc[model.gdf['net_benefit_{}'.format(self.name)].isna(), 'affordability_category_{}'.format(self.name)] = 'Not available'
+        model.gdf.loc[model.gdf['affordability_category_{}'.format(self.name)] == 'Not available', 'affordability_support_required_{}'.format(self.name)] = np.nan
+
