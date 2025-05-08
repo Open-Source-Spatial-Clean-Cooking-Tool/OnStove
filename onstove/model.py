@@ -58,6 +58,10 @@ from onstove._utils import Processes, deep_update
 from onstove._layer_utils import raster_setter
 import scipy.stats as stats
 from scipy.interpolate import PchipInterpolator
+from mpl_toolkits.axes_grid1.inset_locator import inset_axes
+import matplotlib.patches as mpatches
+from matplotlib.colors import ListedColormap
+
 
 
 def timeit(func):
@@ -2385,7 +2389,7 @@ class OnStove(DataProcessor):
                 tech_target_pop_unassigned = {k: v for k, v in tech_target_pop_unassigned.items() if v > 0}
                 i += 1
 
-            print('Shares after assignment attempt ', self.gdf.loc[isurban].groupby('max_benefit_tech_target_share')['Calibrated_pop'].sum() / self.gdf.loc[isurban, 'Calibrated_pop'].sum())
+            print(f'Shares after assignment attempt for {region} areas.', self.gdf.loc[isurban].groupby('max_benefit_tech_target_share')['Calibrated_pop'].sum() / self.gdf.loc[isurban, 'Calibrated_pop'].sum())
 
             if len(unassigned_ids) > 0:
                 condition = self.gdf['max_benefit_tech_target_share'].isna() # Masks the gdf to see rows where the technology is available and hasn't been assigned a technology yet.
@@ -2665,7 +2669,7 @@ class OnStove(DataProcessor):
 
         # #Calculating AWE
 
-        # self.gdf = self.gdf.sort_values(by=['relative_wealth'], ascending=True)
+        self.gdf = self.gdf.sort_values(by=['relative_wealth'], ascending=True)
         
         # self.gdf["icdf"] = icdf
         # sum_icdf = np.sum(self.gdf['icdf'])
@@ -4162,6 +4166,48 @@ class OnStove(DataProcessor):
 
         return p
 
+    def plot_affordability(self, variable: str, labels: Optional[dict[str, str]] = None,
+                           cmap: Optional[dict[str, str]] = 'viridis', title: Optional[str] = None,
+                           ax: Optional['matplotlib.axes.Axes'] = None,
+                           bar_variable: str = 'Households',
+                           categories: list = ['<5%', '5-10%', '10-15%', '15-20%', '20-25%', '25-30%', '30%+'],
+                           colors: list = ['#51a655', '#b8ec61', '#dbec61', '#ecdd61', '#ecb661', '#ec8c61', '#f02424', 'grey']) -> matplotlib.axes.Axes:
+        """Expands map plotting function especifally for affordability maps.
+        Parameters
+        """
+        if colors:
+            cmap = cmap = ListedColormap(colors)
+
+        categories.append('Not available')
+        patches = [mpatches.Patch(color=c, label=l) for c, l in zip(colors, categories)]
+        category_color_map = dict(zip(categories, colors))
+
+        fig, ax = plt.subplots(1, 1, figsize=(10, 8))
+        
+        self.gdf.plot(column=variable, legend=True, cmap=cmap, ax=ax, markersize=0.1)
+        ax.legend(handles=patches, title="Cost/Income ratio", 
+                  loc='upper left', bbox_to_anchor=(-0.25, 1.05), fontsize=9, title_fontsize=10)
+        ax.set_title(title, fontsize=12)
+        ax.axis('off')
+
+        counts = self.gdf.groupby(variable)[bar_variable].sum().pipe(lambda x: x / x.sum()).sort_index()
+        counts = counts.reindex(categories).fillna(0)
+        labels = counts.index
+        values = counts.values
+        bar_colors = [category_color_map[label] for label in labels]
+
+        axins = inset_axes(ax, width="23%", height="23%", loc='lower left', borderpad=1.5)
+        bars = axins.bar(labels, values, color=bar_colors, edgecolor='black')
+        axins.set_title(f'{bar_variable} share', fontsize=8)
+        axins.set_ylim(0, 1)
+        axins.tick_params(axis='x', labelrotation=45, labelsize=7)
+        axins.tick_params(axis='y', labelsize=7)
+
+        for bar in bars:
+            yval = bar.get_height()
+            axins.text(bar.get_x() + bar.get_width()/2 + 0.1, yval + 0.025, f"{yval:.0%}", ha='center', fontsize=6)
+
+    
     def to_csv(self, name: str):
         """Saves the main GeoDataFrame :attr:`gdf` as a ``.csv`` file into the :attr:`output_directory`.
 
