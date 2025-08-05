@@ -10,7 +10,6 @@ import csv
 from pyproj import CRS
 import pandas as pd
 import numpy as np
-import pulp
 import geopandas as gpd
 import rasterio
 import matplotlib.pyplot as plt
@@ -26,6 +25,9 @@ from rasterio import features
 from rasterio.fill import fillnodata
 from rasterio.warp import transform_bounds
 from scipy.interpolate import griddata
+import scipy.sparse as sp
+from scipy.optimize import linprog
+from collections import defaultdict
 from plotnine import (
     ggplot,
     element_text,
@@ -2762,95 +2764,158 @@ class OnStove(DataProcessor):
                 for value, key in codes.items():
                     writer.writerow({'KEY': key, 'VALUE': f'{key}: {value}'})
 
-    def conditional_opt(self, urban):
+    def conditional_opt(self, urban, tol=0.001):
 
-        self._techshare_sumtoone("future")
-        self._ecooking_adjustment("future")
-        if urban == False:
-            self._biogas_adjustment("future")
+        #aLLow users to set a constraint, from tests 0.001 seems to be speeding up stuff considerably while being rounded
+        #to "correct" shares in figures.
+        tolerance = tol
 
         tech = []
         share = []
         gdf = self.gdf.reset_index()
 
+        #Run twice in code, urban and rural shares. Creates columns that are named as the technologies only where
+        #the mask applies (see after the if)
         if urban:
             mask = gdf['IsUrban'] > 20
-            for item in iter(self.techs):
-                if self.techs[item].future_share_urban > 0:
-                    share.append(self.techs[item].future_share_urban)
-                    tech.append(item)
-                    if item not in self.gdf.columns:
-                        self.gdf[item] = 0.0
+            for name, tech_obj in self.techs.items():
+                if tech_obj.future_share_urban > 0:
+                    share.append(tech_obj.future_share_urban)
+                    tech.append(name)
+                    if name not in self.gdf.columns:
+                        self.gdf[name] = 0.0
         else:
             mask = gdf['IsUrban'] < 20
-            for item in iter(self.techs):
-                if self.techs[item].future_share_rural > 0:
-                    share.append(self.techs[item].future_share_rural)
-                    tech.append(item)
-                    if item not in self.gdf.columns:
-                        self.gdf[item] = 0.0
+            for name, tech_obj in self.techs.items():
+                if tech_obj.future_share_rural > 0:
+                    share.append(tech_obj.future_share_rural)
+                    tech.append(name)
+                    if name not in self.gdf.columns:
+                        self.gdf[name] = 0.0
 
         res = gdf[mask].copy()
         res1 = res.set_index('index')
 
+        #Vectorize to gain speed, households to make each row more unique. It worked on PuLP, not sure it is needed now
         populations = res1['Calibrated_pop'].to_numpy()
-        tech_dict = {t: (res1['net_benefit_' + t] * res1['Households']).fillna(0).to_numpy() for t in tech}
+        households = res1['Households'].to_numpy()
         total_population = populations.sum()
+
         n = len(res1)
+        m = len(tech)
 
-        prob = pulp.LpProblem("MaximizeNetBenefit", pulp.LpMaximize)
+        #c_vals = coefficients, this is the net-benefits of each stove
+        #var_idx_map = mapping of each variable
+        #rev_var_map = to bring the map back to default and assign the percentages at the end
+        c_vals = []
+        var_idx_map = {}
+        rev_var_map = []
+        var_counter = 0
 
-        x = pulp.LpVariable.dicts("x", [(i, j) for i in range(n) for j in range(len(tech))], lowBound=0, upBound=1,
-                                  cat="Continuous")
+        for j, tech_name in enumerate(tech):
+            net_benefit = (res1[f'net_benefit_{tech_name}'] * households).to_numpy()
+            for i in range(n):
+                if not np.isnan(net_benefit[i]):
+                    var_idx_map[(i, j)] = var_counter
+                    rev_var_map.append((i, j))
+                    c_vals.append(-net_benefit[i])  # scipy minimizes in HiGHS
+                    var_counter += 1
 
-        matrix = np.stack(list(tech_dict.values()), axis=1)
-
-        prob += pulp.lpSum(matrix[i, j] * x[i, j] for i in range(n) for j in range(len(tech))), "TotalMaxNetBenefit"
+        #Builds a sparse matrix (not sure this messes up accuracy, but makes things much faster).
+        #The sparse matrix removes all NaNs, revelant if no biogas or electricity in the settlement
+        #This would be used for the equality constraint later
+        row_i = []
+        col_i = []
+        data_i = []
 
         for i in range(n):
-            prob += pulp.lpSum(x[i, j] for j in range(len(tech))) == 1, f"RowSelection_{i}"
+            for j in range(m):
+                if (i, j) in var_idx_map:
+                    row_i.append(i)
+                    col_i.append(var_idx_map[(i, j)])
+                    data_i.append(1.0)
 
-        for idx, percentage in enumerate(share):
-            prob += pulp.lpSum(populations[i] * x[i, idx] for i in
-                               range(n)) == percentage * total_population, f"Population{chr(65 + idx)}"
+        #creates a sparse matrix. b_eq_row = each row equals one, A_eq_row = coefficients for the equality
+        A_eq_row = sp.coo_matrix((data_i, (row_i, col_i)), shape=(n, var_counter))
+        b_eq_row = np.ones(n)
 
-        prob.solve(pulp.PULP_CBC_CMD(msg=0))
 
-        print("Status:", pulp.LpStatus[prob.status])
+        row_t = []
+        col_t = []
+        data_t = []
 
-        selected = np.array([[x[i, j].varValue for j in range(len(tech))] for i in range(n)])
+        for j in range(m):
+            for i in range(n):
+                if (i, j) in var_idx_map:
+                    row_t.append(j)
+                    col_t.append(var_idx_map[(i, j)])
+                    data_t.append(populations[i])
 
-        selected_params = {tech[i]: selected[:, i] for i in range(len(tech))}
+        A_share = sp.coo_matrix((data_t, (row_t, col_t)), shape=(m, var_counter))
 
-        for tech_name, values in selected_params.items():
-            self.gdf.loc[mask, tech_name] = values
+        # creates an upper and lower boudary using the user defined shares and the tolercance.
+        b_ub_share = [(s + tolerance) * total_population for s in share]
+        b_lb_share = [-(s - tolerance) * total_population for s in share]
 
-    def prio(self, row):
-        priorities = []
-        filtered_techs = {key: value for key, value in self.techs.items() if (
-                    (hasattr(value, "future_share_urban") and getattr(value, "future_share_urban") > 0) or (
-                        hasattr(value, "future_share_rural") and getattr(value, "future_share_rural") > 0))}
-        for item in iter(filtered_techs):
-            if row[item] > 0:
-                priorities.append(item)
+        #Compressed sparse row to increase the efficiency
+        A_ub = sp.vstack([A_share, -A_share]).tocsr()
+        b_ub = np.array(b_ub_share + b_lb_share)
 
-        self.gdf['Prioritized_hh'] = self.gdf.apply(' and '.join(priorities), axis=1)
+        A_eq = A_eq_row.tocsr()
+        b_eq = b_eq_row
+
+        # boundaries of the problem (0->1), var_counter to get it for every element
+        bounds = [(0, 1)] * var_counter
+
+        # c= coefficients, A_eq = equality constraint (matrix), ensures that the sum of techs are 1 in each row,
+        # b_eq = equality constraint (vector), ensures that the sum of techs are 1 in each row
+        # A_ub and b_ub the same as the previous, but inequality constraints. In this case it ensures that each stove
+        # reaches its urban/rural targets +- a tolerance. bounds = limitsf
+        result = linprog(
+            c=c_vals,
+            A_eq=A_eq,
+            b_eq=b_eq,
+            A_ub=A_ub,
+            b_ub=b_ub,
+            bounds=bounds,
+            method='highs'
+        )
+
+        print("Status:", result.message)
+
+        if result.success:
+            x = result.x
+
+            updates = defaultdict(list)
+            for idx, (i, j) in enumerate(rev_var_map):
+                updates['index'].append(res1.index[i])
+                updates['tech'].append(tech[j])
+                updates['value'].append(x[idx])
+
+            updates_df = pd.DataFrame(updates)
+            pivot = updates_df.pivot(index="index", columns="tech", values="value").fillna(0.0)
+
+            for col in pivot.columns:
+                self.gdf.loc[mask, col] = self.gdf.loc[mask].index.map(pivot[col].get).fillna(0.0)
+
+            print("Achieved Shares")
+            pop = self.gdf.loc[mask, 'Calibrated_pop'].to_numpy()
+            for tech_name, target in zip(tech, share):
+                assign = self.gdf.loc[mask, tech_name].to_numpy()
+                achieved = np.sum(assign * pop) / total_population
+                print(f"{tech_name}: Target = {target:.3f}, Achieved = {achieved:.3f}")
+        else:
+            raise ValueError("Optimization failed:", result.message)
 
     def prio(self):
-        filtered_techs = {key: value for key, value in self.techs.items() if (
-                (hasattr(value, "future_share_urban") and getattr(value, "future_share_urban") > 0) or
-                (hasattr(value, "future_share_rural") and getattr(value, "future_share_rural") > 0))}
+        filtered_techs = [
+            key for key, value in self.techs.items()
+            if (getattr(value, "future_share_urban", 0) > 0 or getattr(value, "future_share_rural", 0) > 0)
+        ]
 
-        priorities_column = []
+        relevant_df = self.gdf[filtered_techs].gt(0)
 
-        for _, row in self.gdf.iterrows():
-            priorities = []
-            for item in filtered_techs:
-                if row[item] > 0:
-                    priorities.append(item)
-            priorities_column.append(' and '.join(priorities))
-
-        self.gdf['Prioritized_hh'] = priorities_column
+        self.gdf['Prioritized_hh'] = relevant_df.apply(lambda row: ' and '.join(row.index[row].tolist()), axis=1)
 
     def plot(self, variable: str, metric='mean',
              labels: Optional[dict[str, str]] = None,
