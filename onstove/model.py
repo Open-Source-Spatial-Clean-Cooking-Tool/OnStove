@@ -2878,7 +2878,7 @@ class OnStove(DataProcessor):
             A_ub=A_ub,
             b_ub=b_ub,
             bounds=bounds,
-            method='highs'
+            method='highs-ipm'
         )
 
         print("Status:", result.message)
