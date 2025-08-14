@@ -2766,16 +2766,15 @@ class OnStove(DataProcessor):
 
     def conditional_opt(self, urban, tol=0.001):
 
-        #aLLow users to set a constraint, from tests 0.001 seems to be speeding up stuff considerably while being rounded
-        #to "correct" shares in figures.
+        # Allow users to set a constraint, from tests 0.001 seems to be speeding up stuff considerably while being rounded
+        # to "correct" shares in figures.
         tolerance = tol
-
         tech = []
         share = []
         gdf = self.gdf.reset_index()
 
-        #Run twice in code, urban and rural shares. Creates columns that are named as the technologies only where
-        #the mask applies (see after the if)
+        # Run twice in code, urban and rural shares. Creates columns that are named as the technologies only where
+        # the mask applies (see after the if)
         if urban:
             mask = gdf['IsUrban'] > 20
             for name, tech_obj in self.techs.items():
@@ -2796,7 +2795,11 @@ class OnStove(DataProcessor):
         res = gdf[mask].copy()
         res1 = res.set_index('index')
 
-        #Vectorize to gain speed, households to make each row more unique. It worked on PuLP, not sure it is needed now
+        # Vectorize to gain speed. Households to make each row more unique, it worked on PuLP, not sure it is needed now
+        # At this point elec_factor and biogas_factor is also accounted for to not give those stoves in areas where it
+        # can not be used
+        elec_factor = (res1["Elec_pop_calib"] / res1["Calibrated_pop"]).to_numpy()
+        biogas_factor = self.techs["Biogas"].factor[res1.index].to_numpy()
         populations = res1['Calibrated_pop'].to_numpy()
         households = res1['Households'].to_numpy()
         total_population = populations.sum()
@@ -2804,30 +2807,28 @@ class OnStove(DataProcessor):
         n = len(res1)
         m = len(tech)
 
-        #c_vals = coefficients, this is the net-benefits of each stove
-        #var_idx_map = mapping of each variable
-        #rev_var_map = to bring the map back to default and assign the percentages at the end
+        # c_vals = coefficients, this is the net-benefits of each stove
+        # var_idx_map = mapping of each variable
+        # rev_var_map = to bring the map back to default and assign the percentages at the end
         c_vals = []
         var_idx_map = {}
         rev_var_map = []
         var_counter = 0
-
         for j, tech_name in enumerate(tech):
             net_benefit = (res1[f'net_benefit_{tech_name}'] * households).to_numpy()
             for i in range(n):
                 if not np.isnan(net_benefit[i]):
                     var_idx_map[(i, j)] = var_counter
                     rev_var_map.append((i, j))
-                    c_vals.append(-net_benefit[i])  # scipy minimizes in HiGHS
+                    c_vals.append(-net_benefit[i])
                     var_counter += 1
 
-        #Builds a sparse matrix (not sure this messes up accuracy, but makes things much faster).
-        #The sparse matrix removes all NaNs, revelant if no biogas or electricity in the settlement
-        #This would be used for the equality constraint later
+        # Builds a sparse matrix (not sure this messes up accuracy, but makes things much faster).
+        # The sparse matrix removes all NaNs, revelant if no biogas or electricity in the settlement
+        # This would be used for the equality constraint later
         row_i = []
         col_i = []
         data_i = []
-
         for i in range(n):
             for j in range(m):
                 if (i, j) in var_idx_map:
@@ -2835,37 +2836,41 @@ class OnStove(DataProcessor):
                     col_i.append(var_idx_map[(i, j)])
                     data_i.append(1.0)
 
-        #creates a sparse matrix. b_eq_row = each row equals one, A_eq_row = coefficients for the equality
+        # creates a sparse matrix. b_eq_row = each row equals one, A_eq_row = coefficients for the equality
         A_eq_row = sp.coo_matrix((data_i, (row_i, col_i)), shape=(n, var_counter))
         b_eq_row = np.ones(n)
 
-
+        # Inequality constraint
+        # Global shares ± tolerance
         row_t = []
         col_t = []
         data_t = []
-
         for j in range(m):
             for i in range(n):
                 if (i, j) in var_idx_map:
                     row_t.append(j)
                     col_t.append(var_idx_map[(i, j)])
                     data_t.append(populations[i])
-
         A_share = sp.coo_matrix((data_t, (row_t, col_t)), shape=(m, var_counter))
-
         # creates an upper and lower boudary using the user defined shares and the tolercance.
         b_ub_share = [(s + tolerance) * total_population for s in share]
         b_lb_share = [-(s - tolerance) * total_population for s in share]
-
-        #Compressed sparse row to increase the efficiency
+        #compressing to gain speed
         A_ub = sp.vstack([A_share, -A_share]).tocsr()
         b_ub = np.array(b_ub_share + b_lb_share)
 
-        A_eq = A_eq_row.tocsr()
-        b_eq = b_eq_row
-
-        # boundaries of the problem (0->1), var_counter to get it for every element
-        bounds = [(0, 1)] * var_counter
+        # Variable-specific bounds
+        # For electricity and biogas the limits are 0 and their potential
+        # For the rest it is 0 and 1
+        bounds = []
+        for i, j in rev_var_map:
+            tech_name = tech[j].lower()
+            if tech_name == "electric":
+                bounds.append((0, elec_factor[i]))
+            elif tech_name == "biogas":
+                bounds.append((0, biogas_factor[i]))
+            else:
+                bounds.append((0, 1.0))
 
         # c= coefficients, A_eq = equality constraint (matrix), ensures that the sum of techs are 1 in each row,
         # b_eq = equality constraint (vector), ensures that the sum of techs are 1 in each row
@@ -2873,8 +2878,8 @@ class OnStove(DataProcessor):
         # reaches its urban/rural targets +- a tolerance. bounds = limitsf
         result = linprog(
             c=c_vals,
-            A_eq=A_eq,
-            b_eq=b_eq,
+            A_eq=A_eq_row.tocsr(),
+            b_eq=b_eq_row,
             A_ub=A_ub,
             b_ub=b_ub,
             bounds=bounds,
@@ -2885,20 +2890,19 @@ class OnStove(DataProcessor):
 
         if result.success:
             x = result.x
+            updates = pd.DataFrame({
+                'index': [res1.index[i] for i, j in rev_var_map],
+                'tech': [tech[j] for i, j in rev_var_map],
+                'value': x
+            })
 
-            updates = defaultdict(list)
-            for idx, (i, j) in enumerate(rev_var_map):
-                updates['index'].append(res1.index[i])
-                updates['tech'].append(tech[j])
-                updates['value'].append(x[idx])
+            for tech_name in updates['tech'].unique():
+                mask_tech = updates['tech'] == tech_name
+                tech_updates = updates.loc[mask_tech, ['index', 'value']]
+                self.gdf.loc[mask, tech_name] = self.gdf.loc[mask].index.map(
+                    dict(zip(tech_updates['index'], tech_updates['value']))
+                ).fillna(0.0)
 
-            updates_df = pd.DataFrame(updates)
-            pivot = updates_df.pivot(index="index", columns="tech", values="value").fillna(0.0)
-
-            for col in pivot.columns:
-                self.gdf.loc[mask, col] = self.gdf.loc[mask].index.map(pivot[col].get).fillna(0.0)
-
-            print("Achieved Shares")
             pop = self.gdf.loc[mask, 'Calibrated_pop'].to_numpy()
             for tech_name, target in zip(tech, share):
                 assign = self.gdf.loc[mask, tech_name].to_numpy()
