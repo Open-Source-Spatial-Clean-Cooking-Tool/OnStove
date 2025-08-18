@@ -2795,6 +2795,8 @@ class OnStove(DataProcessor):
         res = gdf[mask].copy()
         res1 = res.set_index('index')
 
+        tech, share = self._check_tech(res1, tech, share)
+
         # Vectorize to gain speed. Households to make each row more unique, it worked on PuLP, not sure it is needed now
         # At this point elec_factor and biogas_factor is also accounted for to not give those stoves in areas where it
         # can not be used
@@ -2920,6 +2922,59 @@ class OnStove(DataProcessor):
         relevant_df = self.gdf[filtered_techs].gt(0)
 
         self.gdf['Prioritized_hh'] = relevant_df.apply(lambda row: ' and '.join(row.index[row].tolist()), axis=1)
+
+    def _check_tech(self, gdf, techs, shares):
+        tech_dict = dict(zip(techs, shares))
+
+        max_shares = []
+        total_pop = gdf['Calibrated_pop'].sum()
+        for key in tech_dict:
+            tech_pop = gdf.loc[gdf[f"net_benefit_{key}"].notna(), 'Calibrated_pop'].sum()
+            share = tech_pop / total_pop
+            max_shares.append(share)
+        max_dict = dict(zip(techs, max_shares))
+
+        if sum(max_dict.values()) < 1:
+            raise ValueError("Impossible to reach a total share of 100%. The stoves have too many restricitions, either "
+                             "add a new stove to the mix or loosen up the restriction")
+
+        current_sum = sum(tech_dict.values())
+        if current_sum != 1:
+            ratio = 1 / current_sum
+            tech_dict = {k: v * ratio for k, v in tech_dict.items()}
+
+        extra = 0.0
+        for k in tech_dict:
+            if tech_dict[k] > max_dict[k]:
+                extra += tech_dict[k] - max_dict[k]
+                tech_dict[k] = max_dict[k]
+
+        while extra > 0:
+            capacities = {k: max_dict[k] - tech_dict[k] for k in tech_dict if tech_dict[k] < max_dict[k]}
+            cap_sum = sum(capacities.values())
+
+            if cap_sum == 0:
+                raise ValueError("Impossible to redistribute shares to reach exactly 1.")
+
+            for k, cap in capacities.items():
+                add = min(cap, extra * (cap / cap_sum))
+                tech_dict[k] += add
+                extra -= add
+
+        updated_techs = list(tech_dict.keys())
+        updated_shares = list(tech_dict.values())
+        new_dict = dict(zip(updated_techs, updated_shares))
+
+        print(f"The stove shares have been updated to ensure that the sum equals 100% and that the maximum capacity"
+              f" of no stove is exceeded. The new shares are:"
+              f"              ")
+
+        for key in new_dict:
+            print(f"    - {key}: {new_dict[key]*100:.0f}%")
+
+        print(f"              ")
+
+        return updated_techs, updated_shares
 
     def plot(self, variable: str, metric='mean',
              labels: Optional[dict[str, str]] = None,
