@@ -2965,14 +2965,15 @@ class OnStove(DataProcessor):
         updated_shares = list(tech_dict.values())
         new_dict = dict(zip(updated_techs, updated_shares))
 
-        print(f"The stove shares have been updated to ensure that the sum equals 100% and that the maximum capacity"
-              f" of no stove is exceeded. The new shares are:"
-              f"              ")
+        if updated_shares != shares:
+            print(f"The stove shares have been updated to ensure that the sum equals 100% and that the maximum capacity"
+                  f" of no stove is exceeded. The new shares are:"
+                  f"              ")
 
-        for key in new_dict:
-            print(f"    - {key}: {new_dict[key]*100:.0f}%")
+            for key in new_dict:
+                print(f"    - {key}: {new_dict[key]*100:.0f}%")
 
-        print(f"              ")
+            print(f"              ")
 
         return updated_techs, updated_shares
 
