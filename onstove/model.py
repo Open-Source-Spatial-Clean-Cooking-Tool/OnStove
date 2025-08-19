@@ -2913,7 +2913,7 @@ class OnStove(DataProcessor):
         else:
             raise ValueError("Optimization failed:", result.message)
 
-    def prio(self):
+    def prio(self, restriction):
         filtered_techs = [
             key for key, value in self.techs.items()
             if (getattr(value, "future_share_urban", 0) > 0 or getattr(value, "future_share_rural", 0) > 0)
@@ -2921,7 +2921,31 @@ class OnStove(DataProcessor):
 
         relevant_df = self.gdf[filtered_techs].gt(0)
 
-        self.gdf['Prioritized_hh'] = relevant_df.apply(lambda row: ' and '.join(row.index[row].tolist()), axis=1)
+        self.gdf['max_benefit_tech'] = relevant_df.apply(lambda row: ' and '.join(row.index[row].tolist()), axis=1)
+
+        net_benefit_cols = [col for col in self.gdf if 'net_benefit_' in col]
+        benefits_cols = [col for col in self.gdf if 'benefits_' in col]
+
+        for benefit, net in zip(benefits_cols, net_benefit_cols):
+            self.gdf[net + '_temp'] = self.gdf[net]
+            if restriction in [True, 'yes', 'y', 'Y', 'Yes', 'PositiveBenefits', 'Positive_Benefits']:
+                self.gdf.loc[self.gdf[benefit] < 0, net + '_temp'] = np.nan
+
+        temps = [col for col in self.gdf if '_temp' in col]
+
+        self.gdf["maximum_net_benefit"] = 0.0
+
+        for idx, row in self.gdf.iterrows():
+            techs_in_row = row['max_benefit_tech'].split(" and ")
+            total_net = 0.0
+            for tech in techs_in_row:
+                net_col = f'net_benefit_{tech}_temp'
+                if net_col in self.gdf.columns:
+                    fraction = row[tech]
+                    net_value = row[net_col]
+                    if not pd.isna(net_value):
+                        total_net += net_value * fraction
+            self.gdf.at[idx, 'maximum_net_benefit'] = total_net
 
     def _check_tech(self, gdf, techs, shares):
         tech_dict = dict(zip(techs, shares))
