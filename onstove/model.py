@@ -6,6 +6,7 @@ from warnings import warn
 
 import dill
 import matplotlib
+import math
 import csv
 from pyproj import CRS
 import pandas as pd
@@ -28,6 +29,8 @@ from scipy.interpolate import griddata
 import scipy.sparse as sp
 from scipy.optimize import linprog
 from collections import defaultdict
+from itertools import combinations
+
 from plotnine import (
     ggplot,
     element_text,
@@ -2766,9 +2769,6 @@ class OnStove(DataProcessor):
 
     def conditional_opt(self, urban, tol=0.001):
 
-        # Allow users to set a constraint, from tests 0.001 seems to be speeding up stuff considerably while being rounded
-        # to "correct" shares in figures.
-        tolerance = tol
         tech = []
         share = []
         gdf = self.gdf.reset_index()
@@ -2795,11 +2795,12 @@ class OnStove(DataProcessor):
         res = gdf[mask].copy()
         res1 = res.set_index('index')
 
+        # Ensure shares work
         tech, share = self._check_tech(res1, tech, share)
 
         # Vectorize to gain speed. Households to make each row more unique, it worked on PuLP, not sure it is needed now
         # At this point elec_factor and biogas_factor is also accounted for to not give those stoves in areas where it
-        # can not be used
+        # can not be used (or too much of them in cases of partial electrificaiton/biogas potential)
         elec_factor = (res1["Elec_pop_calib"] / res1["Calibrated_pop"]).to_numpy()
         biogas_factor = self.techs["Biogas"].factor[res1.index].to_numpy()
         populations = res1['Calibrated_pop'].to_numpy()
@@ -2838,7 +2839,7 @@ class OnStove(DataProcessor):
                     col_i.append(var_idx_map[(i, j)])
                     data_i.append(1.0)
 
-        # creates a sparse matrix. b_eq_row = each row equals one, A_eq_row = coefficients for the equality
+        # b_eq_row = each row equals one, A_eq_row = coefficients for the equality
         A_eq_row = sp.coo_matrix((data_i, (row_i, col_i)), shape=(n, var_counter))
         b_eq_row = np.ones(n)
 
@@ -2854,9 +2855,11 @@ class OnStove(DataProcessor):
                     col_t.append(var_idx_map[(i, j)])
                     data_t.append(populations[i])
         A_share = sp.coo_matrix((data_t, (row_t, col_t)), shape=(m, var_counter))
+
         # creates an upper and lower boudary using the user defined shares and the tolercance.
-        b_ub_share = [(s + tolerance) * total_population for s in share]
-        b_lb_share = [-(s - tolerance) * total_population for s in share]
+        b_ub_share = [(s + tol) * total_population for s in share]
+        b_lb_share = [-(s - tol) * total_population for s in share]
+
         #compressing to gain speed
         A_ub = sp.vstack([A_share, -A_share]).tocsr()
         b_ub = np.array(b_ub_share + b_lb_share)
@@ -2867,9 +2870,9 @@ class OnStove(DataProcessor):
         bounds = []
         for i, j in rev_var_map:
             tech_name = tech[j].lower()
-            if tech_name == "electric":
+            if "electricity" in tech_name:
                 bounds.append((0, elec_factor[i]))
-            elif tech_name == "biogas":
+            elif "biogas" in tech_name:
                 bounds.append((0, biogas_factor[i]))
             else:
                 bounds.append((0, 1.0))
@@ -2877,7 +2880,7 @@ class OnStove(DataProcessor):
         # c= coefficients, A_eq = equality constraint (matrix), ensures that the sum of techs are 1 in each row,
         # b_eq = equality constraint (vector), ensures that the sum of techs are 1 in each row
         # A_ub and b_ub the same as the previous, but inequality constraints. In this case it ensures that each stove
-        # reaches its urban/rural targets +- a tolerance. bounds = limitsf
+        # reaches its urban/rural targets +- a tolerance. bounds = limits for each stove on each row
         result = linprog(
             c=c_vals,
             A_eq=A_eq_row.tocsr(),
@@ -2888,6 +2891,7 @@ class OnStove(DataProcessor):
             method='highs-ipm'
         )
 
+        # Print results
         print("Status:", result.message)
 
         if result.success:
@@ -2931,8 +2935,6 @@ class OnStove(DataProcessor):
             if restriction in [True, 'yes', 'y', 'Y', 'Yes', 'PositiveBenefits', 'Positive_Benefits']:
                 self.gdf.loc[self.gdf[benefit] < 0, net + '_temp'] = np.nan
 
-        temps = [col for col in self.gdf if '_temp' in col]
-
         self.gdf["maximum_net_benefit"] = 0.0
 
         for idx, row in self.gdf.iterrows():
@@ -2950,23 +2952,35 @@ class OnStove(DataProcessor):
     def _check_tech(self, gdf, techs, shares):
         tech_dict = dict(zip(techs, shares))
 
-        max_shares = []
+        biogas_factor = self.techs["Biogas"].factor[gdf.index].to_numpy()
+        gdf["Biogas_pop"] = gdf["Calibrated_pop"]*biogas_factor
+
+        # Determine max population for each stove
         total_pop = gdf['Calibrated_pop'].sum()
+        max_shares = []
         for key in tech_dict:
-            tech_pop = gdf.loc[gdf[f"net_benefit_{key}"].notna(), 'Calibrated_pop'].sum()
+            if "Electricity" in key:
+                tech_pop = gdf.loc[gdf[f"net_benefit_{key}"].notna(), 'Elec_pop_calib'].sum()
+            elif "Biogas" in key:
+                tech_pop = gdf.loc[gdf[f"net_benefit_{key}"].notna(), 'Biogas_pop'].sum()
+            else:
+                tech_pop = gdf.loc[gdf[f"net_benefit_{key}"].notna(), 'Calibrated_pop'].sum()
             share = tech_pop / total_pop
             max_shares.append(share)
         max_dict = dict(zip(techs, max_shares))
 
+        # Ensure at least 100% is achievable
         if sum(max_dict.values()) < 1:
-            raise ValueError("Impossible to reach a total share of 100%. The stoves have too many restricitions, either "
-                             "add a new stove to the mix or loosen up the restriction")
+            raise ValueError("Impossible to reach a total share of 100%. The stoves have too many restrictions."
+                             " Either add additional stoves, or remove some restrictions")
 
+        # Shares to 100%
         current_sum = sum(tech_dict.values())
         if current_sum != 1:
             ratio = 1 / current_sum
             tech_dict = {k: v * ratio for k, v in tech_dict.items()}
 
+        # Ensure no stove is above its max_share
         extra = 0.0
         for k in tech_dict:
             if tech_dict[k] > max_dict[k]:
@@ -2976,28 +2990,63 @@ class OnStove(DataProcessor):
         while extra > 0:
             capacities = {k: max_dict[k] - tech_dict[k] for k in tech_dict if tech_dict[k] < max_dict[k]}
             cap_sum = sum(capacities.values())
-
             if cap_sum == 0:
-                raise ValueError("Impossible to redistribute shares to reach exactly 1.")
-
+                raise ValueError("Impossible to reach a total share of 100%. The stoves have too many restrictions."
+                             " Either add additional stoves, or remove some restrictions")
             for k, cap in capacities.items():
                 add = min(cap, extra * (cap / cap_sum))
                 tech_dict[k] += add
                 extra -= add
 
+        # Check if we have overlaps that would make stoves with max_share < 1 infeasible
+        restricted_techs = [t for t in techs if max_dict[t] < 1]
+        if len(restricted_techs) > 1:
+            overlap_rows = (gdf[[f"net_benefit_{t}" for t in restricted_techs]].notna().sum(axis=1) > 1)
+            overlap_pop = gdf.loc[overlap_rows, 'Calibrated_pop'].sum()
+            overlap_share = overlap_pop / total_pop
+
+            if overlap_share > 0:
+                requested_sum = sum(tech_dict[t] for t in restricted_techs)
+                feasible_sum = sum(max_dict[t] for t in restricted_techs) - overlap_share
+
+                if requested_sum > feasible_sum:
+                    adjustment_needed = requested_sum - feasible_sum
+                    print(f"Overlap detected among restricted stoves: {restricted_techs}")
+                    print(
+                        f"Requested = {requested_sum:.2%}, Feasible = {feasible_sum:.2%}, Adjustment = {adjustment_needed:.2%}")
+
+                    # Reduce restricted stoves proportionally
+                    reduction_ratio = (requested_sum - adjustment_needed) / requested_sum
+                    for t in restricted_techs:
+                        tech_dict[t] *= reduction_ratio
+
+                    # Redistribute the adjustment to free stoves (max_share = 1)
+                    free_stoves = [t for t in techs if max_dict[t] == 1]
+                    if free_stoves:
+                        for t in free_stoves:
+                            tech_dict[t] += adjustment_needed / len(free_stoves)
+
+        # All changes might have changed the sum, bring back to one
+        total = sum(tech_dict.values())
+        if abs(total - 1.0) > 1e-9:
+            diff = 1.0 - total
+            free_stoves = [t for t in techs if max_dict[t] == 1]
+            if free_stoves:
+                free_total = sum(tech_dict[s] for s in free_stoves)
+                if free_total > 0:
+                    for s in free_stoves:
+                        tech_dict[s] += diff * (tech_dict[s] / free_total)
+                else:
+                    tech_dict[free_stoves[0]] += diff
+
+        # Print the results
         updated_techs = list(tech_dict.keys())
         updated_shares = list(tech_dict.values())
-        new_dict = dict(zip(updated_techs, updated_shares))
-
         if updated_shares != shares:
-            print(f"The stove shares have been updated to ensure that the sum equals 100% and that the maximum capacity"
-                  f" of no stove is exceeded. The new shares are:"
-                  f"              ")
-
-            for key in new_dict:
-                print(f"    - {key}: {new_dict[key]*100:.0f}%")
-
-            print(f"              ")
+            print("\nThe stove shares have been updated to ensure feasibility and that the total share is 100%:")
+            for key in updated_techs:
+                print(f" - {key}: {tech_dict[key] * 100:.1f}%")
+            print("\n")
 
         return updated_techs, updated_shares
 
