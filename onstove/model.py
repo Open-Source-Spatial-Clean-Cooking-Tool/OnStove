@@ -2917,37 +2917,29 @@ class OnStove(DataProcessor):
         else:
             raise ValueError("Optimization failed:", result.message)
 
-    def prio(self, restriction):
-        filtered_techs = [
-            key for key, value in self.techs.items()
-            if (getattr(value, "future_share_urban", 0) > 0 or getattr(value, "future_share_rural", 0) > 0)
-        ]
+    def prio(self):
+        filtered_techs = [key for key, value in self.techs.items() if getattr(value, "future_share_urban", 0) > 0 or
+                          getattr(value, "future_share_rural", 0) > 0]
 
         relevant_df = self.gdf[filtered_techs].gt(0)
+        bool_matrix = relevant_df.to_numpy(dtype=bool)
+        tech_names = np.array(relevant_df.columns)
 
-        self.gdf['max_benefit_tech'] = relevant_df.apply(lambda row: ' and '.join(row.index[row].tolist()), axis=1)
+        self.gdf['max_benefit_tech'] = [' and '.join(tech_names[mask]) if mask.any() else '' for mask in bool_matrix]
 
-        net_benefit_cols = [col for col in self.gdf if 'net_benefit_' in col]
-        benefits_cols = [col for col in self.gdf if 'benefits_' in col]
+        net_benefit_cols = [col for col in self.gdf.columns if 'net_benefit_' in col]
+        for col in net_benefit_cols:
+            self.gdf[col + '_temp'] = self.gdf[col]
 
-        for benefit, net in zip(benefits_cols, net_benefit_cols):
-            self.gdf[net + '_temp'] = self.gdf[net]
-            if restriction in [True, 'yes', 'y', 'Y', 'Yes', 'PositiveBenefits', 'Positive_Benefits']:
-                self.gdf.loc[self.gdf[benefit] < 0, net + '_temp'] = np.nan
+        tech_cols = [col for col in filtered_techs if col in self.gdf.columns]
 
-        self.gdf["maximum_net_benefit"] = 0.0
+        share_matrix = self.gdf[tech_cols].fillna(0).to_numpy()
 
-        for idx, row in self.gdf.iterrows():
-            techs_in_row = row['max_benefit_tech'].split(" and ")
-            total_net = 0.0
-            for tech in techs_in_row:
-                net_col = f'net_benefit_{tech}_temp'
-                if net_col in self.gdf.columns:
-                    fraction = row[tech]
-                    net_value = row[net_col]
-                    if not pd.isna(net_value):
-                        total_net += net_value * fraction
-            self.gdf.at[idx, 'maximum_net_benefit'] = total_net
+        benefit_matrix = np.column_stack([
+            self.gdf.get(f'net_benefit_{tech}_temp', pd.Series(0, index=self.gdf.index)).fillna(0)
+            for tech in tech_cols])
+
+        self.gdf['maximum_net_benefit'] = (share_matrix * benefit_matrix).sum(axis=1)
 
     def _check_tech(self, gdf, techs, shares):
         tech_dict = dict(zip(techs, shares))
@@ -2998,33 +2990,63 @@ class OnStove(DataProcessor):
                 tech_dict[k] += add
                 extra -= add
 
-        # Check if we have overlaps that would make stoves with max_share < 1 infeasible
         restricted_techs = [t for t in techs if max_dict[t] < 1]
         if len(restricted_techs) > 1:
-            overlap_rows = (gdf[[f"net_benefit_{t}" for t in restricted_techs]].notna().sum(axis=1) > 1)
-            overlap_pop = gdf.loc[overlap_rows, 'Calibrated_pop'].sum()
-            overlap_share = overlap_pop / total_pop
+            overlap_cols = [f"net_benefit_{t}" for t in restricted_techs]
 
-            if overlap_share > 0:
+            overlap_rows = gdf[overlap_cols].notna().all(axis=1)
+            if overlap_rows.any():
+                print(f"Overlap detected among restricted stoves: {restricted_techs}")
+
+                sub = gdf.loc[overlap_rows, overlap_cols]
+
+                best_col = sub.idxmax(axis=1)
+
+                mask = pd.DataFrame(False, index=sub.index, columns=sub.columns)
+                mask.values[np.arange(len(sub)), sub.columns.get_indexer(best_col)] = True
+
+                pop_arrays = []
+                for t in restricted_techs:
+                    if "Electricity" in t:
+                        pop_arrays.append(gdf.loc[overlap_rows, "Elec_pop_calib"].values)
+                    elif "Biogas" in t:
+                        pop_arrays.append(gdf.loc[overlap_rows, "Biogas_pop"].values)
+                    else:
+                        pop_arrays.append(gdf.loc[overlap_rows, "Calibrated_pop"].values)
+                overlap_pop_array = np.column_stack(pop_arrays)
+
+                winning_pop_per_row = (mask.values * overlap_pop_array).max(axis=1)  # shape: (num_rows,)
+                kept_pop_array = np.where(mask.values,
+                                          overlap_pop_array,
+                                          np.maximum(0, overlap_pop_array - winning_pop_per_row[:, None]))
+
+                removed_pop_per_stove = (overlap_pop_array - kept_pop_array).sum(axis=0)
+                total_removed_pop = removed_pop_per_stove.sum()
+
+                print(f"Total removed population from overlaps: {round(total_removed_pop):,}".replace(",", " "))
+                for i, t in enumerate(restricted_techs):
+                    share = removed_pop_per_stove[i] / total_pop
+                    print(f" - {t}: {share:.2%} of removed pop, {round(removed_pop_per_stove[i]):,} people".replace(",",
+                                                                                                                    " "))
+
+                removed_fraction_per_stove = (overlap_pop_array - kept_pop_array).sum(axis=0) / total_pop
+                feasible_shares = {t: max_dict[t] - removed_fraction_per_stove[i]
+                                   for i, t in enumerate(restricted_techs)}
+
                 requested_sum = sum(tech_dict[t] for t in restricted_techs)
-                feasible_sum = sum(max_dict[t] for t in restricted_techs) - overlap_share
-
+                feasible_sum = sum(feasible_shares.values())
                 if requested_sum > feasible_sum:
-                    adjustment_needed = requested_sum - feasible_sum
-                    print(f"Overlap detected among restricted stoves: {restricted_techs}")
-                    print(
-                        f"Requested = {requested_sum:.2%}, Feasible = {feasible_sum:.2%}, Adjustment = {adjustment_needed:.2%}")
-
-                    # Reduce restricted stoves proportionally
-                    reduction_ratio = (requested_sum - adjustment_needed) / requested_sum
+                    reduction_ratio = feasible_sum / requested_sum
                     for t in restricted_techs:
                         tech_dict[t] *= reduction_ratio
 
-                    # Redistribute the adjustment to free stoves (max_share = 1)
-                    free_stoves = [t for t in techs if max_dict[t] == 1]
-                    if free_stoves:
+                free_stoves = [t for t in techs if max_dict[t] == 1]
+                if free_stoves:
+                    extra = 1.0 - sum(tech_dict.values())
+                    if extra > 0:
+                        redistribute = extra / len(free_stoves)
                         for t in free_stoves:
-                            tech_dict[t] += adjustment_needed / len(free_stoves)
+                            tech_dict[t] += redistribute
 
         # All changes might have changed the sum, bring back to one
         total = sum(tech_dict.values())
