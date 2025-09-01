@@ -3569,51 +3569,83 @@ class OnStove(DataProcessor):
             A dataframe containing the summary information grouped by the selected `variable`.
         """
         dff = self.gdf.copy()
+
         if labels is not None:
             dff = self._re_name(dff, labels, variable)
-        for attribute in ['maximum_net_benefit', 'deaths_avoided', 'health_costs_avoided', 'time_saved',
-                          'opportunity_cost_gained', 'reduced_emissions', 'emission_costs_avoided',
-                          'investment_costs', 'fuel_costs', 'om_costs', 'salvage_value']:
-            dff[attribute] *= dff['Households']
-        summary = dff.groupby([variable]).agg({'Calibrated_pop': lambda row: np.nansum(row) / 1000000,
-                                                         'Households': lambda row: np.nansum(row) / 1000000,
-                                                         'maximum_net_benefit': lambda row: np.nansum(row) / 1000000,
-                                                         'deaths_avoided': 'sum',
-                                                         'health_costs_avoided': lambda row: np.nansum(row) / 1000000,
-                                                         'time_saved': 'sum',
-                                                         'opportunity_cost_gained': lambda row: np.nansum(
-                                                             row) / 1000000,
-                                                         'reduced_emissions': lambda row: np.nansum(row) / 1000000000,
-                                                         'emission_costs_avoided': lambda row: np.nansum(row) / 1000000,
-                                                         'investment_costs': lambda row: np.nansum(row) / 1000000,
-                                                         'fuel_costs': lambda row: np.nansum(row) / 1000000,
-                                                         'om_costs': lambda row: np.nansum(row) / 1000000,
-                                                         'salvage_value': lambda row: np.nansum(row) / 1000000,
-                                                         })
+
+        # Split combined stoves into separate rows
+        dff[variable] = dff[variable].astype(str)
+        dff['split_cats'] = dff[variable].str.split(' and ')
+        dff = dff.explode('split_cats').rename(columns={'split_cats': 'category'})
+
+        # Get share values from columns matching stove names
+        share_values = dff.to_numpy()
+        cat_cols = list(dff.columns)
+        category_idx = [cat_cols.index(cat) if cat in cat_cols else None for cat in dff['category']]
+        shares = np.array([row[idx] if idx is not None else 0 for row, idx in zip(share_values, category_idx)])
+        dff['share'] = shares
+
+        # Scale numeric columns by share
+        scale_cols = ['Calibrated_pop', 'Households', 'maximum_net_benefit', 'deaths_avoided',
+                      'health_costs_avoided', 'time_saved', 'opportunity_cost_gained',
+                      'reduced_emissions', 'emission_costs_avoided', 'investment_costs',
+                      'fuel_costs', 'om_costs', 'salvage_value']
+
+        dff[scale_cols] = dff[scale_cols].multiply(dff['share'], axis=0)
+
+        # Update grouping variable
+        dff[variable] = dff['category']
+        dff.drop(columns=['category', 'share'], inplace=True)
+
+        for col in ['maximum_net_benefit', 'deaths_avoided', 'health_costs_avoided', 'time_saved',
+                    'opportunity_cost_gained', 'reduced_emissions', 'emission_costs_avoided',
+                    'investment_costs', 'fuel_costs', 'om_costs', 'salvage_value']:
+            dff[col] *= dff['Households']
+
+        agg_map = {
+            'Calibrated_pop': lambda x: np.nansum(x) / 1000000,
+            'Households': lambda x: np.nansum(x) / 1000000,
+            'maximum_net_benefit': lambda x: np.nansum(x) / 1000000,
+            'deaths_avoided': 'sum',
+            'health_costs_avoided': lambda x: np.nansum(x) / 1000000,
+            'time_saved': 'sum',
+            'opportunity_cost_gained': lambda x: np.nansum(x) / 1000000,
+            'reduced_emissions': lambda x: np.nansum(x) / 1000000000,
+            'emission_costs_avoided': lambda x: np.nansum(x) / 1000000,
+            'investment_costs': lambda x: np.nansum(x) / 1000000,
+            'fuel_costs': lambda x: np.nansum(x) / 1000000,
+            'om_costs': lambda x: np.nansum(x) / 1000000,
+            'salvage_value': lambda x: np.nansum(x) / 1000000,
+        }
+
+        summary = dff.groupby(variable).agg(agg_map)
+
         if remove_none:
             summary.drop('None', errors='ignore', inplace=True)
         summary.reset_index(inplace=True)
         if total:
-            total = summary[summary.columns[1:]].sum().rename('total')
-            total[variable] = 'total'
-            summary = pd.concat([summary, total.to_frame().T])
+            total_row = summary[summary.columns[1:]].sum().rename('total')
+            total_row[variable] = 'total'
+            summary = pd.concat([summary, total_row.to_frame().T], ignore_index=True)
 
         summary['time_saved'] /= (summary['Households'] * 1000000 * 365)
         if pretty:
-            summary.rename(columns={variable: 'Max benefit technology',
-                                    'Calibrated_pop': 'Population (Million)',
-                                    'Households': 'Households (Millions)',
-                                    'maximum_net_benefit': 'Total net benefit (MUSD)',
-                                    'deaths_avoided': 'Total deaths avoided (pp/yr)',
-                                    'health_costs_avoided': 'Health costs avoided (MUSD)',
-                                    'time_saved': 'hours/hh.day',
-                                    'opportunity_cost_gained': 'Opportunity cost avoided (MUSD)',
-                                    'reduced_emissions': 'Reduced emissions (Mton CO2eq)',
-                                    'emission_costs_avoided': 'Emission costs avoided (MUSD)',
-                                    'investment_costs': 'Investment costs (MUSD)',
-                                    'fuel_costs': 'Fuel costs (MUSD)',
-                                    'om_costs': 'O&M costs (MUSD)',
-                                    'salvage_value': 'Salvage value (MUSD)'}, inplace=True)
+            summary.rename(columns={
+                variable: 'Max benefit technology',
+                'Calibrated_pop': 'Population (Million)',
+                'Households': 'Households (Millions)',
+                'maximum_net_benefit': 'Total net benefit (MUSD)',
+                'deaths_avoided': 'Total deaths avoided (pp/yr)',
+                'health_costs_avoided': 'Health costs avoided (MUSD)',
+                'time_saved': 'hours/hh.day',
+                'opportunity_cost_gained': 'Opportunity cost avoided (MUSD)',
+                'reduced_emissions': 'Reduced emissions (Mton CO2eq)',
+                'emission_costs_avoided': 'Emission costs avoided (MUSD)',
+                'investment_costs': 'Investment costs (MUSD)',
+                'fuel_costs': 'Fuel costs (MUSD)',
+                'om_costs': 'O&M costs (MUSD)',
+                'salvage_value': 'Salvage value (MUSD)'
+            }, inplace=True)
 
         return summary
 
