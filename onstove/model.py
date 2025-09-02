@@ -2950,10 +2950,12 @@ class OnStove(DataProcessor):
                 ).fillna(0.0)
 
             pop = self.gdf.loc[mask, 'Calibrated_pop'].to_numpy()
+            print("   ")
             for tech_name, target in zip(tech, share):
                 assign = self.gdf.loc[mask, tech_name].to_numpy()
                 achieved = np.sum(assign * pop) / total_population
                 print(f"{tech_name}: Target = {target:.3f}, Achieved = {achieved:.3f}")
+            print("   ")
         else:
             raise ValueError("Optimization failed:", result.message)
 
@@ -3062,7 +3064,7 @@ class OnStove(DataProcessor):
                 extra += tech_dict[k] - max_dict[k]
                 tech_dict[k] = max_dict[k]
 
-        while extra > 0:
+        while extra > 1e-9:
             capacities = {k: max_dict[k] - tech_dict[k] for k in tech_dict if tech_dict[k] < max_dict[k]}
             cap_sum = sum(capacities.values())
             if cap_sum == 0:
