@@ -2783,7 +2783,31 @@ class OnStove(DataProcessor):
                 for value, key in codes.items():
                     writer.writerow({'KEY': key, 'VALUE': f'{key}: {value}'})
 
-    def conditional_opt(self, urban, tol=0.001):
+    def conditional_opt(self, urban: bool = True, tol: float =0.001):
+        """Does a linear optimization with stoves given by the user`
+
+        Determines where people should be adopting each stove to achieve shares given by `future_share_urban` or
+        `future_share_rural`. This is done using highs-ipm optimization where the objective function is to maximize
+        net-benefits. This function also calls the :meth:`_check_tech` method to ensure that each stove has a future
+        share that is possible. The function adds columns for each stove with values between 0 and 1 in each row, 0
+        being 0% of the population having a stove and 1 being that 100% have the stove in the settlement. The function
+        has to be run for urban and rural areas separately.
+
+        Parameters
+        ----------
+        urban: bool, default True
+            Determines if the urban or rural settlements are assessed. Default is True (Urban)
+        tol: float, default 0.001
+            The tolerance given to shares in the linear optmization determining how much each share can differ from
+            what the user entered into the future_share_urban` or `future_share_rural`
+
+        See also
+        --------
+        run
+        _check_tech
+        prio
+        """
+
 
         tech = []
         share = []
@@ -2934,6 +2958,17 @@ class OnStove(DataProcessor):
             raise ValueError("Optimization failed:", result.message)
 
     def prio(self):
+        """Extracts the technology or technology combinations producing the highest net-benefit in each cell.
+
+        It saves the technology with highest net-benefit in the ``max_benefi_tech`` column of the :attr:`gdf`
+        GeoDataframe. This also dictates the benefits and costs extracted in the extract functions. This function is
+        onl used in cases when :meth:`conditional_opt` method is used
+
+        See also
+        --------
+        conditional_opt
+        maximum_net_benefit
+        """
         filtered_techs = [key for key, value in self.techs.items() if getattr(value, "future_share_urban", 0) > 0 or
                           getattr(value, "future_share_rural", 0) > 0]
 
@@ -2957,7 +2992,39 @@ class OnStove(DataProcessor):
 
         self.gdf['maximum_net_benefit'] = (share_matrix * benefit_matrix).sum(axis=1)
 
-    def _check_tech(self, gdf, techs, shares):
+    def _check_tech(self, gdf, techs: list, shares: list):
+        """Checks and modifies the shares given by the user in `future_share_urban` or `future_share_rural` for the
+        conditional optimizaton.
+
+        Function does three things: 1) ensures that the share is 100%, if the share is lower the shares of each stove
+        will be increased, otherwise decreased, 2) ensures that the entered stoves can reach a total of 100%, 3) ensures
+        that restricted stoves that can not reach the entire population have feasible shares. The function reads in a
+        geodataframe with the rows currently assessed in :meth:`conditional_opt` method, a list with the stove with
+        future shares and a list with the shares of each stove. The function returns new lists, one with the stove names
+        and one with the new adjusted shares.
+
+        Parameters
+        ----------
+        gdf: GeoDataFrame
+            Geodataframe created from the main input file including only the rows that correspond to either urban or
+            rural areas depending on what the user is running in the :meth:`conditional_opt` method.
+        techs: list of Technology
+            List of stoves included in the analysis. These stoves are those with either `future_share_urban` or
+            `future_share_rural`
+        shares:
+            Shares of each stove read from `future_share_urban` or `future_share_rural`.
+
+        Returns
+        -------
+        updated_techs
+            List stove names
+        updated_shares
+            List of updated shares
+
+        See also
+        --------
+        conditional_opt
+        """
         tech_dict = dict(zip(techs, shares))
 
         biogas_factor = self.techs["Biogas"].factor[gdf.index].to_numpy()
