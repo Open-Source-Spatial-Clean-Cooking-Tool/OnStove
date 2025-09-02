@@ -2351,11 +2351,10 @@ class OnStove(DataProcessor):
         self.gdf['time_saved'] = 0.0
 
         tech_lists = self.gdf['max_benefit_tech'].replace('None', '').str.split(' and ')
-
         unique_techs = set(tech for sublist in tech_lists for tech in sublist if tech)
 
         for tech in unique_techs:
-            self.gdf['time_saved'] += self.techs[tech].total_time_saved * self.gdf[tech]
+            self.gdf['time_saved'] += self.techs[tech].total_time_saved.fillna(0) * self.gdf[tech]
 
     def extract_opportunity_cost(self):
         self.gdf['opportunity_cost_gained'] = 0.0
@@ -2365,7 +2364,7 @@ class OnStove(DataProcessor):
         unique_techs = set(tech for sublist in tech_lists for tech in sublist if tech)
 
         for tech in unique_techs:
-            self.gdf['opportunity_cost_gained'] += self.techs[tech].time_value * self.gdf[tech]
+            self.gdf['opportunity_cost_gained'] += self.techs[tech].time_value.fillna(0) * self.gdf[tech]
 
     def extract_reduced_emissions(self):
         self.gdf['reduced_emissions'] = 0.0
@@ -2932,6 +2931,7 @@ class OnStove(DataProcessor):
         )
 
         # Print results
+        print("   ")
         print("Status:", result.message)
 
         if result.success:
@@ -2950,7 +2950,6 @@ class OnStove(DataProcessor):
                 ).fillna(0.0)
 
             pop = self.gdf.loc[mask, 'Calibrated_pop'].to_numpy()
-            print("   ")
             for tech_name, target in zip(tech, share):
                 assign = self.gdf.loc[mask, tech_name].to_numpy()
                 achieved = np.sum(assign * pop) / total_population
