@@ -2084,7 +2084,7 @@ class OnStove(DataProcessor):
         self.gdf['value_of_time'] = norm_layer * self.specs[
             'minimum_wage'] / 30 / 8  # convert $/months to $/h (8 working hours per day)
 
-    def run(self, technologies: Union[list[str], str] = 'all', restriction: bool = True):
+    def run(self, technologies: Union[list[str], str] = 'all', restriction: bool = True, optimization: bool = True):
         """Runs the model using the defined ``technologies`` as options to cook with.
 
         It loops through the ``technologies`` and calculates all costs, benefit and the net-benefit of cooking with
@@ -2109,10 +2109,14 @@ class OnStove(DataProcessor):
         restriction: bool, default True
             Whether to have the restriction of only selecting technologies producing a positive benefit compared to the
             baseline. This avoids selecting stoves simply due to them being cheaper.
+        optimization: bool, default True
+            Whether the analysis will do a conditional optimization where net-benefits are maximized while reaching
+            shares given in `future_share_urban` and `future_share_rural` or just maximize the net-benefits.
 
         See also
         --------
         set_base_fuel
+        conditional_opt
         maximum_net_benefit
         extract_lives_saved
         extract_health_costs_saved
@@ -2128,7 +2132,7 @@ class OnStove(DataProcessor):
         for row in self._replace_dict.values():
             if row not in self.specs:
                 raise ValueError("The socio-economic data has to include the " + row + " field. " + \
-				 "See the read_scenario_data method for more information.")
+                                 "See the read_scenario_data method for more information.")
         print(f'[{self.specs["country_name"]}] Calculating clean cooking access')
         # Based on wealth index, minimum wage and a lower an upper range for cost of opportunity
         print(f'[{self.specs["country_name"]}] Getting value of time')
@@ -2137,7 +2141,10 @@ class OnStove(DataProcessor):
             print(f'[{self.specs["country_name"]}] Calculating base fuel properties')
 
             self.set_base_fuel(list(self.techs.values()))
-        if technologies == 'all':
+        if (technologies == 'all') & (optimization == True):
+            techs = [tech for tech in self.techs.values() if (getattr(tech, "future_share_urban", 0) > 0
+                                                              and getattr(tech, "future_share_rural", 0) > 0)]
+        elif technologies == 'all':
             techs = [tech for tech in self.techs.values()]
         elif isinstance(technologies, list):
             techs = [self.techs[name] for name in technologies]
@@ -2166,7 +2173,12 @@ class OnStove(DataProcessor):
                              self.specs['w_environment'], self.specs['w_time'], self.specs['w_costs'])
 
         print('Getting maximum net benefit technologies...')
-        self.maximum_net_benefit(techs, restriction=restriction)
+        if optimization:
+            self.conditional_opt(True)
+            self.conditional_opt(False)
+            self.prio()
+        else:
+            self.maximum_net_benefit(techs, restriction=restriction)
         print('Extracting indicators...')
         print('    - Lives saved')
         self.extract_lives_saved()
