@@ -2314,6 +2314,7 @@ class OnStove(DataProcessor):
         dummies = pd.get_dummies(self.gdf['max_benefit_tech'], dtype=int)
         self.gdf = pd.concat([self.gdf, dummies], axis=1)
 
+
     # TODO: check if we need this method
     def _add_admin_names(self, admin, column_name):
         if isinstance(admin, str):
@@ -2839,6 +2840,7 @@ class OnStove(DataProcessor):
         # Run twice in code, urban and rural shares. Creates columns that are named as the technologies only where
         # the mask applies (see after the if)
         if urban:
+            print("\n---URBAN---")
             mask = gdf['IsUrban'] > 20
             for name, tech_obj in self.techs.items():
                 if tech_obj.future_share_urban > 0:
@@ -2847,6 +2849,7 @@ class OnStove(DataProcessor):
                     if name not in self.gdf.columns:
                         self.gdf[name] = 0.0
         else:
+            print("\n---Rural---")
             mask = gdf['IsUrban'] < 20
             for name, tech_obj in self.techs.items():
                 if tech_obj.future_share_rural > 0:
@@ -2955,7 +2958,6 @@ class OnStove(DataProcessor):
         )
 
         # Print results
-        print("   ")
         print("Status:", result.message)
 
         if result.success:
@@ -3069,6 +3071,10 @@ class OnStove(DataProcessor):
             max_shares.append(share)
         max_dict = dict(zip(techs, max_shares))
 
+        print("\nThe max possible shares for included stoves are:")
+        for key in max_dict:
+            print(f" - {key}: {max_dict[key] * 100:.1f}%")
+
         # Ensure at least 100% is achievable
         if sum(max_dict.values()) < 1:
             raise ValueError("Impossible to reach a total share of 100%. The stoves have too many restrictions."
@@ -3079,6 +3085,8 @@ class OnStove(DataProcessor):
         if current_sum != 1:
             ratio = 1 / current_sum
             tech_dict = {k: v * ratio for k, v in tech_dict.items()}
+            print("\nThe total shares are not 100%, the shares have been updated to ensure the sum is equal to "
+                  "100%.")
 
         # Ensure no stove is above its max_share
         extra = 0.0
@@ -3104,7 +3112,8 @@ class OnStove(DataProcessor):
 
             overlap_rows = gdf[overlap_cols].notna().all(axis=1)
             if overlap_rows.any():
-                print(f"Overlap detected among restricted stoves: {restricted_techs}")
+                formatted = ', '.join(restricted_techs[:-1]) + ' and ' + restricted_techs[-1]
+                print(f"\nOverlap detected among restricted stoves: {formatted} ")
 
                 sub = gdf.loc[overlap_rows, overlap_cols]
 
@@ -3131,10 +3140,11 @@ class OnStove(DataProcessor):
                 removed_pop_per_stove = (overlap_pop_array - kept_pop_array).sum(axis=0)
                 total_removed_pop = removed_pop_per_stove.sum()
 
-                print(f"Total removed population from overlaps: {round(total_removed_pop):,}".replace(",", " "))
+                print(f"Total population removed due to overlaps: {round(total_removed_pop):,}".replace(",", " "))
                 for i, t in enumerate(restricted_techs):
-                    share = removed_pop_per_stove[i] / total_pop
-                    print(f" - {t}: {share:.2%} of removed pop, {round(removed_pop_per_stove[i]):,} people".replace(",",
+                    share = removed_pop_per_stove[i] / (total_pop*tech_dict[t])
+                    print(f" - {t}: {share:.2%} of the adjusted share was removed, "
+                          f"{round(removed_pop_per_stove[i]):,} people".replace(",",
                                                                                                                     " "))
 
                 removed_fraction_per_stove = (overlap_pop_array - kept_pop_array).sum(axis=0) / total_pop
@@ -3151,7 +3161,7 @@ class OnStove(DataProcessor):
                 free_stoves = [t for t in techs if max_dict[t] == 1]
                 if free_stoves:
                     extra = 1.0 - sum(tech_dict.values())
-                    if extra > 0:
+                    if extra > 1e-9:
                         redistribute = extra / len(free_stoves)
                         for t in free_stoves:
                             tech_dict[t] += redistribute
@@ -3163,7 +3173,7 @@ class OnStove(DataProcessor):
             free_stoves = [t for t in techs if max_dict[t] == 1]
             if free_stoves:
                 free_total = sum(tech_dict[s] for s in free_stoves)
-                if free_total > 0:
+                if free_total > 1e-9:
                     for s in free_stoves:
                         tech_dict[s] += diff * (tech_dict[s] / free_total)
                 else:
