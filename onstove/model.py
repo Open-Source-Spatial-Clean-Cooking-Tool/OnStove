@@ -2311,6 +2311,9 @@ class OnStove(DataProcessor):
         self.gdf['max_benefit_tech'] = self.gdf['max_benefit_tech'].str.replace("_temp", "")
         self.gdf.loc[isna, "maximum_net_benefit"] = self.gdf.loc[isna, temps].max(axis=1)
 
+        dummies = pd.get_dummies(self.gdf['max_benefit_tech'], dtype=int)
+        self.gdf = pd.concat([self.gdf, dummies], axis=1)
+
     # TODO: check if we need this method
     def _add_admin_names(self, admin, column_name):
         if isinstance(admin, str):
@@ -2326,26 +2329,29 @@ class OnStove(DataProcessor):
         self.gdf['deaths_avoided'] = 0.0
 
         tech_lists = self.gdf['max_benefit_tech'].replace('None', '').str.split(' and ')
-
         unique_techs = set(tech for sublist in tech_lists for tech in sublist if tech)
 
         for tech in unique_techs:
-            self.gdf['deaths_avoided'] += self.techs[tech].deaths_avoided * self.gdf[tech]
+            is_tech = self.gdf[tech] > 0
+            index = self.gdf.loc[is_tech].index
+            self.gdf.loc[is_tech, "deaths_avoided"] += (self.techs[tech].deaths_avoided[index] *
+                                                        self.gdf.loc[is_tech,tech])
 
     def extract_health_costs_saved(self):
         self.gdf['health_costs_avoided'] = 0.0
 
         tech_lists = self.gdf['max_benefit_tech'].replace('None', '').str.split(' and ')
-
         unique_techs = set(tech for sublist in tech_lists for tech in sublist if tech)
 
         for tech in unique_techs:
-            self.gdf['health_costs_avoided'] += (
-                    self.techs[tech].distributed_morbidity +
-                    self.techs[tech].distributed_mortality +
-                    self.techs[tech].distributed_spillovers_morb +
-                    self.techs[tech].distributed_spillovers_mort
-                                                    ) * self.gdf[tech]
+            is_tech = self.gdf[tech] > 0
+            index = self.gdf.loc[is_tech].index
+            self.gdf.loc[is_tech,'health_costs_avoided'] += (
+                    self.techs[tech].distributed_morbidity[index] +
+                    self.techs[tech].distributed_mortality[index] +
+                    self.techs[tech].distributed_spillovers_morb[index] +
+                    self.techs[tech].distributed_spillovers_mort[index]
+                                                    ) * self.gdf.loc[is_tech,tech]
 
     def extract_time_saved(self):
         self.gdf['time_saved'] = 0.0
@@ -2354,37 +2360,46 @@ class OnStove(DataProcessor):
         unique_techs = set(tech for sublist in tech_lists for tech in sublist if tech)
 
         for tech in unique_techs:
-            self.gdf['time_saved'] += self.techs[tech].total_time_saved.fillna(0) * self.gdf[tech]
+            is_tech = self.gdf[tech] > 0
+            index = self.gdf.loc[is_tech].index
+            self.gdf.loc[is_tech, "time_saved"] += (self.techs[tech].total_time_saved.fillna(0)[index] *
+                                                        self.gdf.loc[is_tech,tech])
 
     def extract_opportunity_cost(self):
         self.gdf['opportunity_cost_gained'] = 0.0
 
         tech_lists = self.gdf['max_benefit_tech'].replace('None', '').str.split(' and ')
-
         unique_techs = set(tech for sublist in tech_lists for tech in sublist if tech)
 
         for tech in unique_techs:
-            self.gdf['opportunity_cost_gained'] += self.techs[tech].time_value.fillna(0) * self.gdf[tech]
+            is_tech = self.gdf[tech] > 0
+            index = self.gdf.loc[is_tech].index
+            self.gdf.loc[is_tech, "opportunity_cost_gained"] += (self.techs[tech].time_value.fillna(0)[index] *
+                                                        self.gdf.loc[is_tech,tech])
 
     def extract_reduced_emissions(self):
         self.gdf['reduced_emissions'] = 0.0
 
         tech_lists = self.gdf['max_benefit_tech'].replace('None', '').str.split(' and ')
-
         unique_techs = set(tech for sublist in tech_lists for tech in sublist if tech)
 
         for tech in unique_techs:
-            self.gdf['reduced_emissions'] += self.techs[tech].decreased_carbon_emissions * self.gdf[tech]
+            is_tech = self.gdf[tech] > 0
+            index = self.gdf.loc[is_tech].index
+            self.gdf.loc[is_tech, "reduced_emissions"] += (self.techs[tech].decreased_carbon_emissions[index] *
+                                                        self.gdf.loc[is_tech, tech])
 
     def extract_investment_costs(self):
         self.gdf['investment_costs'] = 0.0
 
         tech_lists = self.gdf['max_benefit_tech'].replace('None', '').str.split(' and ')
-
         unique_techs = set(tech for sublist in tech_lists for tech in sublist if tech)
 
         for tech in unique_techs:
-            self.gdf['investment_costs'] += self.techs[tech].discounted_investments * self.gdf[tech]
+            is_tech = self.gdf[tech] > 0
+            index = self.gdf.loc[is_tech].index
+            self.gdf.loc[is_tech, "investment_costs"] += (self.techs[tech].discounted_investments[index] *
+                                                        self.gdf.loc[is_tech, tech])
 
     def extract_om_costs(self):
         self.gdf['om_costs'] = 0.0
@@ -2394,7 +2409,10 @@ class OnStove(DataProcessor):
         unique_techs = set(tech for sublist in tech_lists for tech in sublist if tech)
 
         for tech in unique_techs:
-            self.gdf['om_costs'] += self.techs[tech].discounted_om_costs * self.gdf[tech]
+            is_tech = self.gdf[tech] > 0
+            index = self.gdf.loc[is_tech].index
+            self.gdf.loc[is_tech, "om_costs"] += (self.techs[tech].discounted_om_costs[index] *
+                                                        self.gdf.loc[is_tech, tech])
 
     def extract_fuel_costs(self):
         self.gdf['fuel_costs'] = 0.0
@@ -2404,8 +2422,10 @@ class OnStove(DataProcessor):
         unique_techs = set(tech for sublist in tech_lists for tech in sublist if tech)
 
         for tech in unique_techs:
-            self.gdf['fuel_costs'] += self.techs[tech].discounted_fuel_cost * self.gdf[tech]
-
+            is_tech = self.gdf[tech] > 0
+            index = self.gdf.loc[is_tech].index
+            self.gdf.loc[is_tech, "fuel_costs"] += (self.techs[tech].discounted_fuel_cost[index] *
+                                                        self.gdf.loc[is_tech, tech])
 
     def extract_salvage(self):
         self.gdf['salvage_value'] = 0.0
@@ -2415,7 +2435,10 @@ class OnStove(DataProcessor):
         unique_techs = set(tech for sublist in tech_lists for tech in sublist if tech)
 
         for tech in unique_techs:
-            self.gdf['salvage_value'] += self.techs[tech].discounted_salvage_cost * self.gdf[tech]
+            is_tech = self.gdf[tech] > 0
+            index = self.gdf.loc[is_tech].index
+            self.gdf.loc[is_tech, "salvage_value"] += (self.techs[tech].discounted_salvage_cost[index] *
+                                                        self.gdf.loc[is_tech, tech])
 
     def extract_emissions_costs_saved(self):
         self.gdf['emission_costs_avoided'] = 0.0
@@ -2425,9 +2448,10 @@ class OnStove(DataProcessor):
         unique_techs = set(tech for sublist in tech_lists for tech in sublist if tech)
 
         for tech in unique_techs:
-            self.gdf['emission_costs_avoided'] += self.techs[tech].decreased_carbon_costs * self.gdf[tech]
-
-
+            is_tech = self.gdf[tech] > 0
+            index = self.gdf.loc[is_tech].index
+            self.gdf.loc[is_tech, "emission_costs_avoided"] += (self.techs[tech].decreased_carbon_costs[index] *
+                                                        self.gdf.loc[is_tech, tech])
 
     def extract_wealth_index(self, wealth_index: str, file_type: str = "csv", x_column: str =  "longitude",
                              y_column: str = "latitude", wealth_column: str = "rwi"):
