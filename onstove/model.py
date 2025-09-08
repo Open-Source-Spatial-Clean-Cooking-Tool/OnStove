@@ -6,7 +6,7 @@ from warnings import warn
 
 import dill
 import matplotlib
-import math
+from scipy import sparse as sp
 import csv
 from pyproj import CRS
 import pandas as pd
@@ -26,10 +26,7 @@ from rasterio import features
 from rasterio.fill import fillnodata
 from rasterio.warp import transform_bounds
 from scipy.interpolate import griddata
-import scipy.sparse as sp
 from scipy.optimize import linprog
-from collections import defaultdict
-from itertools import combinations
 
 from plotnine import (
     ggplot,
@@ -2831,117 +2828,140 @@ class OnStove(DataProcessor):
         _check_tech
         prio
         """
-
-
         tech = []
         share = []
-        gdf = self.gdf.reset_index()
 
         # Run twice in code, urban and rural shares. Creates columns that are named as the technologies only where
         # the mask applies (see after the if)
         if urban:
             print("\n---URBAN---")
-            mask = gdf['IsUrban'] > 20
+            mask = self.gdf['IsUrban'] > 20
             for name, tech_obj in self.techs.items():
                 if tech_obj.future_share_urban > 0:
                     share.append(tech_obj.future_share_urban)
                     tech.append(name)
                     if name not in self.gdf.columns:
                         self.gdf[name] = 0.0
+                        # Add dummy columns to avoid the case where you enter an infinite solve
+                        self.gdf['net_benefit_dummy'] = 0.0
+                        self.gdf["dummy"] = 0.0
         else:
-            print("\n---Rural---")
-            mask = gdf['IsUrban'] < 20
+            print("\n---RURAL---")
+            mask = self.gdf['IsUrban'] < 20
             for name, tech_obj in self.techs.items():
                 if tech_obj.future_share_rural > 0:
                     share.append(tech_obj.future_share_rural)
                     tech.append(name)
                     if name not in self.gdf.columns:
                         self.gdf[name] = 0.0
+                        # Add dummy columns to avoid the case where you enter an infinite solve
+                        self.gdf["dummy"] = 0.0
+                        self.gdf['net_benefit_dummy'] = 0.0
 
-        res = gdf[mask].copy()
-        res1 = res.set_index('index')
+        # Add a dummy technology with a very small share. This ensures that in the _check_techs the share will not
+        # increase to any level that will be noticed in the code
+        tech.append("dummy")
+        share.append(1e-12)
 
-        # Ensure shares work
-        tech, share = self._check_tech(res1, tech, share)
-
-        # Vectorize to gain speed. Households to make each row more unique, it worked on PuLP, not sure it is needed now
-        # At this point elec_factor and biogas_factor is also accounted for to not give those stoves in areas where it
-        # can not be used (or too much of them in cases of partial electrificaiton/biogas potential)
-        elec_factor = (res1["Elec_pop_calib"] / res1["Calibrated_pop"]).to_numpy()
-        biogas_factor = self.techs["Biogas"].factor[res1.index].to_numpy()
-        populations = res1['Calibrated_pop'].to_numpy()
-        households = res1['Households'].to_numpy()
-        total_population = populations.sum()
-
-        n = len(res1)
+        # Filter data
+        res = self.gdf[mask].copy()
         m = len(tech)
 
-        # c_vals = coefficients, this is the net-benefits of each stove
-        # var_idx_map = mapping of each variable
-        # rev_var_map = to bring the map back to default and assign the percentages at the end
-        c_vals = []
-        var_idx_map = {}
-        rev_var_map = []
-        var_counter = 0
-        for j, tech_name in enumerate(tech):
-            net_benefit = (res1[f'net_benefit_{tech_name}'] * households).to_numpy()
-            for i in range(n):
-                if not np.isnan(net_benefit[i]):
-                    var_idx_map[(i, j)] = var_counter
-                    rev_var_map.append((i, j))
-                    c_vals.append(-net_benefit[i])
-                    var_counter += 1
+        # Ensure shares work
+        res, tech, share = self._check_tech(res, tech, share)
 
-        # Builds a sparse matrix (not sure this messes up accuracy, but makes things much faster).
-        # The sparse matrix removes all NaNs, revelant if no biogas or electricity in the settlement
-        # This would be used for the equality constraint later
-        row_i = []
-        col_i = []
-        data_i = []
-        for i in range(n):
-            for j in range(m):
-                if (i, j) in var_idx_map:
-                    row_i.append(i)
-                    col_i.append(var_idx_map[(i, j)])
-                    data_i.append(1.0)
+        # Count number of options per row and determine which rows only have one option and which ones do not
+        nb_cols = [f'net_benefit_{t}' for t in tech]
+        net_benefit_mat = res[nb_cols].to_numpy()
+        feasible_mask = ~np.isnan(net_benefit_mat)
+        feasible_counts = feasible_mask.sum(axis=1)
+        single_option_mask = feasible_counts == 1
+        preassigned_rows = res.index[single_option_mask]
+        multioption_rows = res.index[feasible_counts > 1]
 
-        # b_eq_row = each row equals one, A_eq_row = coefficients for the equality
-        A_eq_row = sp.coo_matrix((data_i, (row_i, col_i)), shape=(n, var_counter))
-        b_eq_row = np.ones(n)
+        # Determine which stove to pre-assign, this may reduce number of variables in our optimization later
+        # which helps time and memory
+        stove_indices = feasible_mask[single_option_mask].argmax(axis=1)
+        tech_array = np.array(tech)
+        stove_names = tech_array[stove_indices]
 
-        # Inequality constraint
-        # Global shares ± tolerance
-        row_t = []
-        col_t = []
-        data_t = []
-        for j in range(m):
-            for i in range(n):
-                if (i, j) in var_idx_map:
-                    row_t.append(j)
-                    col_t.append(var_idx_map[(i, j)])
-                    data_t.append(populations[i])
-        A_share = sp.coo_matrix((data_t, (row_t, col_t)), shape=(m, var_counter))
+        # Update the unfiltered dataframe with preassigned stoves
+        row_idx = self.gdf.index.get_indexer(preassigned_rows)
+        col_idx_map = {name: i for i, name in enumerate(tech)}
+        col_idx = np.array([col_idx_map[t] for t in stove_names], dtype=int)
+        gdf_array = self.gdf[tech].to_numpy()
+        gdf_array[row_idx, col_idx] = 1.0
+        self.gdf[tech] = gdf_array
 
-        # creates an upper and lower boudary using the user defined shares and the tolercance.
-        b_ub_share = [(s + tol) * total_population for s in share]
-        b_lb_share = [-(s - tol) * total_population for s in share]
+        # Track population assigned through pre-assignments
+        pop_preassigned = res.loc[preassigned_rows, 'Calibrated_pop'].to_numpy()
+        achieved_share = np.zeros(m)
+        for j, stove in enumerate(tech):
+            achieved_share[j] = pop_preassigned[stove_indices == j].sum()
+        total_preassigned = pop_preassigned.sum()
 
-        #compressing to gain speed
-        A_ub = sp.vstack([A_share, -A_share]).tocsr()
-        b_ub = np.array(b_ub_share + b_lb_share)
+        # Only keep the multioption_rows which have not been given a stove yet
+        res = res.loc[multioption_rows]
+
+        # Numpy arrays needed later for maximization
+        populations = res['Calibrated_pop'].to_numpy()
+        households = res['Households'].to_numpy()
+        total_population = populations.sum()
+
+        # Will be used for bounds ensureing that we never exceed biogas_factor and elec_factor in partly electrified/biogas
+        # cells
+        elec_factor = (res["Elec_pop_calib"] / populations).to_numpy()
+        biogas_factor = self.techs["Biogas"].factor[res.index].to_numpy()
+
+        # Recalculate shares of all stoves after pre-assignments have been done
+        share = [max(0, share[j] * (total_population + total_preassigned) - achieved_share[j]) / total_population
+            if total_population > 0 else 0.0 for j in range(m)]
+        share = [round(s, 2) for s in share]
+
+        # Build optimization vectors
+        net_benefit_mat = res[nb_cols].to_numpy() * households[:, None]
+        valid_mask = ~np.isnan(net_benefit_mat)
+        row_idx_lp, col_idx_lp = np.where(valid_mask)
+        c_vals = -net_benefit_mat[valid_mask]
+        rev_var_map = list(zip(row_idx_lp, col_idx_lp))
+        var_counter = len(c_vals)
 
         # Variable-specific bounds
         # For electricity and biogas the limits are 0 and their potential
         # For the rest it is 0 and 1
-        bounds = []
-        for i, j in rev_var_map:
-            tech_name = tech[j].lower()
-            if "electricity" in tech_name:
-                bounds.append((0, elec_factor[i]))
-            elif "biogas" in tech_name:
-                bounds.append((0, biogas_factor[i]))
+        bounds = np.zeros((var_counter, 2))
+        tech_lower = [t.lower() for t in tech]
+        for j, tname in enumerate(tech_lower):
+            mask_j = col_idx_lp == j
+            if "electricity" in tname:
+                bounds[mask_j, 1] = elec_factor[row_idx_lp[mask_j]]
+            elif "biogas" in tname:
+                bounds[mask_j, 1] = biogas_factor[row_idx_lp[mask_j]]
             else:
-                bounds.append((0, 1.0))
+                bounds[mask_j, 1] = 1.0
+        bounds = [tuple(b) for b in bounds]
+
+        # Builds a sparse matrix (not sure this messes up accuracy, but makes things much faster).
+        # The sparse matrix removes all NaNs, revelant if no biogas or electricity in the settlement
+        # This would be used for the equality constraint later
+        # b_eq_row = each row equals one, A_eq_row = coefficients for the equality
+        data_eq = np.ones_like(c_vals)
+        A_eq_row = sp.coo_matrix((data_eq, (row_idx_lp, np.arange(var_counter))), shape=(len(res),                                                                                     var_counter)).tocsr()
+        b_eq_row = np.ones(len(res))
+
+        # Determine the inequality constraints
+        # Total shares ± tolerance
+        data_share = populations[row_idx_lp]
+        A_share = sp.coo_matrix((data_share, (col_idx_lp, np.arange(var_counter))), shape=(m, var_counter))
+        # Creates an upper and lower boudary using the user defined shares and the tolercance.
+        b_ub_share = [(s + tol) * total_population for s in share]
+        b_lb_share = [-(s - tol) * total_population for s in share]
+        # Compressing to gain speed
+        A_ub = sp.vstack([A_share, -A_share]).tocsr()
+        b_ub = np.array(b_ub_share + b_lb_share)
+
+        # Print problem size
+        print(f"Settlements: {len(res)}, Stoves: {m-1}, Variables: {var_counter-len(res)}")
 
         # c= coefficients, A_eq = equality constraint (matrix), ensures that the sum of techs are 1 in each row,
         # b_eq = equality constraint (vector), ensures that the sum of techs are 1 in each row
@@ -2954,16 +2974,15 @@ class OnStove(DataProcessor):
             A_ub=A_ub,
             b_ub=b_ub,
             bounds=bounds,
-            method='highs-ipm'
+            method='highs-ipm',
         )
 
         # Print results
         print("Status:", result.message)
-
         if result.success:
             x = result.x
             updates = pd.DataFrame({
-                'index': [res1.index[i] for i, j in rev_var_map],
+                'index': [res.index[i] for i, j in rev_var_map],
                 'tech': [tech[j] for i, j in rev_var_map],
                 'value': x
             })
@@ -2979,10 +2998,15 @@ class OnStove(DataProcessor):
             for tech_name, target in zip(tech, share):
                 assign = self.gdf.loc[mask, tech_name].to_numpy()
                 achieved = np.sum(assign * pop) / total_population
-                print(f"{tech_name}: Target = {target:.3f}, Achieved = {achieved:.3f}")
+                if tech_name != "dummy":
+                    print(f"{tech_name}: Target = {target:.3f}, Achieved = {achieved:.3f}")
             print("   ")
         else:
             raise ValueError("Optimization failed:", result.message)
+
+        del self.gdf["dummy"]
+        del self.gdf["net_benefit_dummy"]
+
 
     def prio(self):
         """Extracts the technology or technology combinations producing the highest net-benefit in each cell.
@@ -3052,33 +3076,90 @@ class OnStove(DataProcessor):
         --------
         conditional_opt
         """
-        tech_dict = dict(zip(techs, shares))
-
         biogas_factor = self.techs["Biogas"].factor[gdf.index].to_numpy()
         gdf["Biogas_pop"] = gdf["Calibrated_pop"]*biogas_factor
-
-        # Determine max population for each stove
         total_pop = gdf['Calibrated_pop'].sum()
+
+        # Remove overlaps
+        restricted_techs = [t for t in techs if sum(gdf[f"net_benefit_{t}"].isna()) > 0]
+        if len(restricted_techs) > 1:
+            overlap_cols = [f"net_benefit_{t}" for t in restricted_techs]
+            overlap_rows = gdf[overlap_cols].notna().all(axis=1)
+
+            if overlap_rows.any():
+                formatted = ', '.join(restricted_techs[:-1]) + ' and ' + restricted_techs[-1]
+                print(f"\nOverlap detected among restricted stoves: {formatted} ")
+
+                sub = gdf.loc[overlap_rows, overlap_cols]
+
+                best_col = sub.idxmax(axis=1)
+                mask = pd.DataFrame(False, index=sub.index, columns=sub.columns)
+                mask.values[np.arange(len(sub)), sub.columns.get_indexer(best_col)] = True
+
+                pop_arrays = []
+                for t in restricted_techs:
+                    if "Electricity" in t:
+                        pop_arrays.append(gdf.loc[overlap_rows, "Elec_pop_calib"].values)
+                    elif "Biogas" in t:
+                        pop_arrays.append(gdf.loc[overlap_rows, "Biogas_pop"].values)
+                    else:
+                        pop_arrays.append(gdf.loc[overlap_rows, "Calibrated_pop"].values)
+                overlap_pop_array = np.column_stack(pop_arrays)
+
+                num_rows, num_stoves = overlap_pop_array.shape
+                kept_pop_array = np.zeros_like(overlap_pop_array)
+                for i in range(num_rows):
+                    winner_idx = np.argmax(mask.values[i])
+                    winner_pop = overlap_pop_array[i, winner_idx]
+                    for j in range(num_stoves):
+                        if j == winner_idx:
+                            kept_pop_array[i, j] = overlap_pop_array[i, j]
+                        else:
+                            kept_pop_array[i, j] = max(0, overlap_pop_array[i, j] - winner_pop)
+
+                removed_pop_per_stove = (overlap_pop_array - kept_pop_array).sum(axis=0)
+                total_removed_pop = removed_pop_per_stove.sum()
+                print(f"Total population removed due to overlaps: {round(total_removed_pop):,}".replace(",", " "))
+                for i, t in enumerate(restricted_techs):
+                    share = removed_pop_per_stove[i] / total_pop
+                    print(f" - {t}: {share:.2%} of the share was removed, "
+                          f"{round(removed_pop_per_stove[i]):,} people".replace(",", " "))
+
+        # Determine max capacities of each stove
         max_shares = []
-        for key in tech_dict:
-            if "Electricity" in key:
-                tech_pop = gdf.loc[gdf[f"net_benefit_{key}"].notna(), 'Elec_pop_calib'].sum()
-            elif "Biogas" in key:
-                tech_pop = gdf.loc[gdf[f"net_benefit_{key}"].notna(), 'Biogas_pop'].sum()
+        for t in techs:
+            if "Electricity" in t:
+                stove_pop = gdf["Elec_pop_calib"].to_numpy()
+            elif "Biogas" in t:
+                stove_pop = gdf["Biogas_pop"].to_numpy()
             else:
-                tech_pop = gdf.loc[gdf[f"net_benefit_{key}"].notna(), 'Calibrated_pop'].sum()
-            share = tech_pop / total_pop
-            max_shares.append(share)
+                stove_pop = gdf["Calibrated_pop"].to_numpy()
+
+            if len(restricted_techs) > 1 and t in restricted_techs and overlap_rows.any():
+                j_idx = restricted_techs.index(t)
+                stove_pop[np.where(overlap_rows)[0]] = kept_pop_array[:, j_idx]
+
+                zero_mask = kept_pop_array[:, j_idx] == 0
+                if zero_mask.any():
+                    rows_to_nan_labels = gdf.index[np.where(overlap_rows)[0]][zero_mask]
+                    gdf.loc[rows_to_nan_labels, f"net_benefit_{t}"] = np.nan
+
+            max_shares.append(stove_pop.sum() / total_pop)
         max_dict = dict(zip(techs, max_shares))
 
-        print("\nThe max possible shares for included stoves are:")
+        # Print max capacities, do not include dummy
+        print("\nThe max possible shares for each included stove is:")
         for key in max_dict:
-            print(f" - {key}: {max_dict[key] * 100:.1f}%")
+            if key != "dummy":
+                print(f" - {key}: {max_dict[key] * 100:.1f}%")
 
-        # Ensure at least 100% is achievable
+        # Ensure at least 100% is achievable, set dummy to 0 to not skew results
+        max_dict["dummy"] = 0
         if sum(max_dict.values()) < 1:
             raise ValueError("Impossible to reach a total share of 100%. The stoves have too many restrictions."
                              " Either add additional stoves, or remove some restrictions")
+
+        tech_dict = dict(zip(techs, shares))
 
         # Shares to 100%
         current_sum = sum(tech_dict.values())
@@ -3086,7 +3167,7 @@ class OnStove(DataProcessor):
             ratio = 1 / current_sum
             tech_dict = {k: v * ratio for k, v in tech_dict.items()}
             print("\nThe total shares are not 100%, the shares have been updated to ensure the sum is equal to "
-                  "100%.")
+                   "100%.")
 
         # Ensure no stove is above its max_share
         extra = 0.0
@@ -3106,89 +3187,22 @@ class OnStove(DataProcessor):
                 tech_dict[k] += add
                 extra -= add
 
-        restricted_techs = [t for t in techs if max_dict[t] < 1]
-        if len(restricted_techs) > 1:
-            overlap_cols = [f"net_benefit_{t}" for t in restricted_techs]
-
-            overlap_rows = gdf[overlap_cols].notna().all(axis=1)
-            if overlap_rows.any():
-                formatted = ', '.join(restricted_techs[:-1]) + ' and ' + restricted_techs[-1]
-                print(f"\nOverlap detected among restricted stoves: {formatted} ")
-
-                sub = gdf.loc[overlap_rows, overlap_cols]
-
-                best_col = sub.idxmax(axis=1)
-
-                mask = pd.DataFrame(False, index=sub.index, columns=sub.columns)
-                mask.values[np.arange(len(sub)), sub.columns.get_indexer(best_col)] = True
-
-                pop_arrays = []
-                for t in restricted_techs:
-                    if "Electricity" in t:
-                        pop_arrays.append(gdf.loc[overlap_rows, "Elec_pop_calib"].values)
-                    elif "Biogas" in t:
-                        pop_arrays.append(gdf.loc[overlap_rows, "Biogas_pop"].values)
-                    else:
-                        pop_arrays.append(gdf.loc[overlap_rows, "Calibrated_pop"].values)
-                overlap_pop_array = np.column_stack(pop_arrays)
-
-                winning_pop_per_row = (mask.values * overlap_pop_array).max(axis=1)  # shape: (num_rows,)
-                kept_pop_array = np.where(mask.values,
-                                          overlap_pop_array,
-                                          np.maximum(0, overlap_pop_array - winning_pop_per_row[:, None]))
-
-                removed_pop_per_stove = (overlap_pop_array - kept_pop_array).sum(axis=0)
-                total_removed_pop = removed_pop_per_stove.sum()
-
-                print(f"Total population removed due to overlaps: {round(total_removed_pop):,}".replace(",", " "))
-                for i, t in enumerate(restricted_techs):
-                    share = removed_pop_per_stove[i] / (total_pop*tech_dict[t])
-                    print(f" - {t}: {share:.2%} of the adjusted share was removed, "
-                          f"{round(removed_pop_per_stove[i]):,} people".replace(",",
-                                                                                                                    " "))
-
-                removed_fraction_per_stove = (overlap_pop_array - kept_pop_array).sum(axis=0) / total_pop
-                feasible_shares = {t: max_dict[t] - removed_fraction_per_stove[i]
-                                   for i, t in enumerate(restricted_techs)}
-
-                requested_sum = sum(tech_dict[t] for t in restricted_techs)
-                feasible_sum = sum(feasible_shares.values())
-                if requested_sum > feasible_sum:
-                    reduction_ratio = feasible_sum / requested_sum
-                    for t in restricted_techs:
-                        tech_dict[t] *= reduction_ratio
-
-                free_stoves = [t for t in techs if max_dict[t] == 1]
-                if free_stoves:
-                    extra = 1.0 - sum(tech_dict.values())
-                    if extra > 1e-9:
-                        redistribute = extra / len(free_stoves)
-                        for t in free_stoves:
-                            tech_dict[t] += redistribute
-
-        # All changes might have changed the sum, bring back to one
-        total = sum(tech_dict.values())
-        if abs(total - 1.0) > 1e-9:
-            diff = 1.0 - total
-            free_stoves = [t for t in techs if max_dict[t] == 1]
-            if free_stoves:
-                free_total = sum(tech_dict[s] for s in free_stoves)
-                if free_total > 1e-9:
-                    for s in free_stoves:
-                        tech_dict[s] += diff * (tech_dict[s] / free_total)
-                else:
-                    tech_dict[free_stoves[0]] += diff
-
         # Print the results
         updated_techs = list(tech_dict.keys())
         updated_shares = list(tech_dict.values())
         if updated_shares != shares:
             print("\nThe stove shares have been updated to ensure feasibility and that the total share is 100%:")
             for key in updated_techs:
-                print(f" - {key}: {tech_dict[key] * 100:.1f}%")
+                if key != "dummy":
+                    print(f" - {key}: {tech_dict[key] * 100:.1f}%")
             print("\n")
-
-        return updated_techs, updated_shares
+        else:
+            print("\nThe entered stove shares are:")
+            for key in updated_techs:
+                if key != "dummy":
+                    print(f" - {key}: {tech_dict[key] * 100:.1f}%")
+            print("\n")
+        return gdf, updated_techs, updated_shares
 
     def plot(self, variable: str, metric='mean',
              labels: Optional[dict[str, str]] = None,

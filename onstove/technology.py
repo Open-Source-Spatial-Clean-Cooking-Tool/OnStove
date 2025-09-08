@@ -1098,7 +1098,7 @@ class LPG(Technology):
             dist_roads = self.roads.proximity(base_layer=model.base_layer, create_raster=False)
             dist_roads.data = dist_roads.data > self.distance_limit
             limit = model.raster_to_dataframe(dist_roads, method='read')
-            model.gdf.loc[limit == 1, "benefits_{}".format(self.name)] = -999999
+            model.gdf.loc[limit == 1, "net_benefit_{}".format(self.name)] = np.nan
 
 
 class Biomass(Technology):
