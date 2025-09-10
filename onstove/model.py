@@ -6,6 +6,7 @@ from warnings import warn
 
 import dill
 import matplotlib
+import math
 from scipy import sparse as sp
 import csv
 from pyproj import CRS
@@ -2831,6 +2832,13 @@ class OnStove(DataProcessor):
         tech = []
         share = []
 
+        # Add a dummy technology with a very small share. This ensures that in the _check_techs the share will not
+        # increase to any level that will be noticed in the code
+        self.gdf['net_benefit_dummy'] = 0.0
+        self.gdf["dummy"] = 0.0
+        tech.append("dummy")
+        share.append(1e-12)
+
         # Run twice in code, urban and rural shares. Creates columns that are named as the technologies only where
         # the mask applies (see after the if)
         if urban:
@@ -2842,9 +2850,6 @@ class OnStove(DataProcessor):
                     tech.append(name)
                     if name not in self.gdf.columns:
                         self.gdf[name] = 0.0
-                        # Add dummy columns to avoid the case where you enter an infinite solve
-                        self.gdf['net_benefit_dummy'] = 0.0
-                        self.gdf["dummy"] = 0.0
         else:
             print("\n---RURAL---")
             mask = self.gdf['IsUrban'] < 20
@@ -2854,14 +2859,6 @@ class OnStove(DataProcessor):
                     tech.append(name)
                     if name not in self.gdf.columns:
                         self.gdf[name] = 0.0
-                        # Add dummy columns to avoid the case where you enter an infinite solve
-                        self.gdf["dummy"] = 0.0
-                        self.gdf['net_benefit_dummy'] = 0.0
-
-        # Add a dummy technology with a very small share. This ensures that in the _check_techs the share will not
-        # increase to any level that will be noticed in the code
-        tech.append("dummy")
-        share.append(1e-12)
 
         # Filter data
         res = self.gdf[mask].copy()
@@ -2916,7 +2913,6 @@ class OnStove(DataProcessor):
         # Recalculate shares of all stoves after pre-assignments have been done
         share = [max(0, share[j] * (total_population + total_preassigned) - achieved_share[j]) / total_population
             if total_population > 0 else 0.0 for j in range(m)]
-        share = [round(s, 2) for s in share]
 
         # Build optimization vectors
         net_benefit_mat = res[nb_cols].to_numpy() * households[:, None]
@@ -3078,6 +3074,7 @@ class OnStove(DataProcessor):
         """
         biogas_factor = self.techs["Biogas"].factor[gdf.index].to_numpy()
         gdf["Biogas_pop"] = gdf["Calibrated_pop"]*biogas_factor
+        gdf.loc[gdf["net_benefit_Biogas"].isna(), "Biogas_pop"] = 0
         total_pop = gdf['Calibrated_pop'].sum()
 
         # Remove overlaps
@@ -3144,6 +3141,7 @@ class OnStove(DataProcessor):
                     rows_to_nan_labels = gdf.index[np.where(overlap_rows)[0]][zero_mask]
                     gdf.loc[rows_to_nan_labels, f"net_benefit_{t}"] = np.nan
 
+            #max_shares.append(math.floor(stove_pop.sum() / total_pop*100)/100)
             max_shares.append(stove_pop.sum() / total_pop)
         max_dict = dict(zip(techs, max_shares))
 
