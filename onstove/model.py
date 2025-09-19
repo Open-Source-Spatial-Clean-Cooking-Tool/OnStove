@@ -2897,6 +2897,8 @@ class OnStove(DataProcessor):
             achieved_share[j] = pop_preassigned[stove_indices == j].sum()
         total_preassigned = pop_preassigned.sum()
 
+        #TODO: Automatically pre-assign stoves that reach their max_share to all rows they can be used at
+
         # Only keep the multioption_rows which have not been given a stove yet
         res = res.loc[multioption_rows]
 
@@ -3072,14 +3074,40 @@ class OnStove(DataProcessor):
         --------
         conditional_opt
         """
+        #Setting overlap_rows to False so that the code can run without necessarily calculating this
+        overlap_rows = pd.Series(False, index=gdf.index)
+
+        #Population that can technicall use biogas
         biogas_factor = self.techs["Biogas"].factor[gdf.index].to_numpy()
         gdf["Biogas_pop"] = gdf["Calibrated_pop"]*biogas_factor
         gdf.loc[gdf["net_benefit_Biogas"].isna(), "Biogas_pop"] = 0
+        #Total Population
         total_pop = gdf['Calibrated_pop'].sum()
 
-        # Remove overlaps
+        #Determine which stoves are restricted to some extent
         restricted_techs = [t for t in techs if sum(gdf[f"net_benefit_{t}"].isna()) > 0]
-        if len(restricted_techs) > 1:
+
+        #Create a dict with the maximum possible shares for restricted techs
+        restricted_shares = []
+        for t in restricted_techs:
+            if "Electricity" in t:
+                stove_pop = gdf["Elec_pop_calib"].to_numpy()
+            elif "Biogas" in t:
+                stove_pop = gdf["Biogas_pop"].to_numpy()
+            else:
+                stove_pop = gdf["Calibrated_pop"].to_numpy()
+            restricted_shares.append(stove_pop.sum() / total_pop)
+        restricted_share_dict = dict(zip(restricted_techs, restricted_shares))
+        #Total possible share of restricted techs
+        restricted_sum = sum(restricted_share_dict.values())
+
+        #Create a dict of user given shares and determine the total share that restricted have
+        tech_dict = dict(zip(techs, shares))
+        total = sum(tech_dict.get(t, 0) for t in restricted_techs)
+
+        # Remove overlaps, only if more than 1 restricted stove and the sum of them as given by the user is more than
+        # the sum of their max_shares
+        if (len(restricted_techs) > 1) & (total > restricted_sum):
             overlap_cols = [f"net_benefit_{t}" for t in restricted_techs]
             overlap_rows = gdf[overlap_cols].notna().all(axis=1)
 
@@ -3122,7 +3150,8 @@ class OnStove(DataProcessor):
                     print(f" - {t}: {share:.2%} of the share was removed, "
                           f"{round(removed_pop_per_stove[i]):,} people".replace(",", " "))
 
-        # Determine max capacities of each stove
+
+        # Determine new max capacities of each stove after removing overlaps
         max_shares = []
         for t in techs:
             if "Electricity" in t:
