@@ -3100,7 +3100,7 @@ class OnStove(DataProcessor):
             elif "Biogas" in t:
                 stove_pop = gdf["Biogas_pop"].to_numpy()
             else:
-                stove_pop = gdf["Calibrated_pop"].to_numpy()
+                stove_pop = gdf.loc[~gdf[f"net_benefit_{t}"].isna(), "Calibrated_pop"].to_numpy()
             restricted_shares.append(stove_pop.sum() / total_pop)
         restricted_share_dict = dict(zip(restricted_techs, restricted_shares))
         #Total possible share of restricted techs
@@ -3164,7 +3164,7 @@ class OnStove(DataProcessor):
             elif "Biogas" in t:
                 stove_pop = gdf["Biogas_pop"].to_numpy()
             else:
-                stove_pop = gdf["Calibrated_pop"].to_numpy()
+                stove_pop = gdf.loc[~gdf[f"net_benefit_{t}"].isna(), "Calibrated_pop"].sum()
 
             if len(restricted_techs) > 1 and t in restricted_techs and overlap_rows.any():
                 j_idx = restricted_techs.index(t)
