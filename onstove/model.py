@@ -3190,10 +3190,10 @@ class OnStove(DataProcessor):
 
         # Shares to 100%
         current_sum = sum(tech_dict.values())
-        if current_sum != 1:
+        if abs(current_sum - 1) > 1e-9:
             ratio = 1 / current_sum
             tech_dict = {k: v * ratio for k, v in tech_dict.items()}
-            print("\nThe total shares are not 100%, the shares have been updated to ensure the sum is equal to "
+            print("\nThe total share is not 100%, the shares have been updated to ensure the sum is equal to "
                    "100%.")
 
         # Ensure no stove is above its max_share
@@ -3217,18 +3217,20 @@ class OnStove(DataProcessor):
         # Print the results
         updated_techs = list(tech_dict.keys())
         updated_shares = list(tech_dict.values())
-        if updated_shares != shares:
-            print("\nThe stove shares have been updated to ensure feasibility and that the total share is 100%:")
-            for key in updated_techs:
-                if key != "dummy":
-                    print(f" - {key}: {tech_dict[key] * 100:.1f}%")
-            print("\n")
-        else:
+
+        if np.allclose(updated_shares, shares, atol=1e-9):
             print("\nThe entered stove shares are:")
             for key in updated_techs:
                 if key != "dummy":
                     print(f" - {key}: {tech_dict[key] * 100:.1f}%")
             print("\n")
+        else:
+            print("\nThe stove shares have been updated to ensure feasibility and that the total share is 100%:")
+            for key in updated_techs:
+                if key != "dummy":
+                    print(f" - {key}: {tech_dict[key] * 100:.1f}%")
+            print("\n")
+
         return gdf, updated_techs, updated_shares
 
     def plot(self, variable: str, metric='mean',
