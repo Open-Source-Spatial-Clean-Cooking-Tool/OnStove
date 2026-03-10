@@ -127,6 +127,7 @@ class Technology:
         self.net_benefits = None
         self.gdf = gpd.GeoDataFrame()
         self.categories = []
+        self.restrictions = []
 
     def __setitem__(self, idx, value):
         self.__dict__[idx] = value
@@ -796,7 +797,31 @@ class Technology:
         model.gdf["net_benefit_{}".format(self.name)] = self.benefits - w_costs * self.costs
         self.factor = pd.Series(np.ones(model.gdf.shape[0]), index=model.gdf.index)
         self.households = model.gdf['Households']
+        for restriction in self.restrictions:
+            model.gdf.loc[np.isnan(restriction), "net_benefit_{}".format(self.name)] = np.nan
+            model.gdf.loc[np.isnan(restriction), "benefits_{}".format(self.name)] = np.nan
 
+    def add_restriction(self, model: 'onstove.OnStove', 
+                        restriction: np.array, name: Optional[str] = 'Restriction',
+                        condition: Optional[Callable[[np.ndarray], np.ndarray]] = None):
+        """Adds a restriction to the model.
+
+        Parameters
+        ----------
+        model: OnStove model
+            Instance of the OnStove model containing the main data of the study case. See
+            :class:`onstove.OnStove`.
+        raster: RasterLayer
+            Raster layer containing the restriction.
+        name: str, optional
+            Name of the restriction.
+        condition: Callable[[np.ndarray], np.ndarray], optional
+            Condition to apply to the raster data, in the form of a lambda function.
+        """
+        if condition is not None:
+            restriction[condition(restriction)] = np.nan
+        self.restrictions.append(restriction)
+        
 
 class LPG(Technology):
     """LPG technology class used to model LPG stoves.
@@ -898,14 +923,37 @@ class LPG(Technology):
         self.diesel_cost = diesel_cost
         self.diesel_per_hour = diesel_per_hour
         self.transport_cost = None
-        self.lpg_path = lpg_path
+        self.supply_points = lpg_path
         self.friction_path = friction_path
         self.cylinder_cost = cylinder_cost
         self.cylinder_life = cylinder_life
         self.roads = None
 
-    def add_travel_time(self, model: 'onstove.OnStove', lpg_path: Optional[str] = None,
-                        friction_path: Optional[str] = None, align: bool = False):
+    def traveltime_restriction(self, model: 'onstove.OnStove', 
+                               condition_motorized: Callable[[np.ndarray], np.ndarray],
+                               condition_walking: Callable[[np.ndarray], np.ndarray],
+                               wealth_index: str = 'relative_wealth',
+                               wealth_threshold: float = -0.5,
+                               supply_points: Optional[VectorLayer] = None,
+                               motorized_friction_path: Optional[RasterLayer] = None,
+                               walking_friction_path: Optional[RasterLayer] = None):
+        if self.travel_time is None:
+            self.calculate_traveltime(model, supply_points=supply_points, 
+                                      motorized_friction_path=motorized_friction_path, 
+                                      walking_friction_path=walking_friction_path, 
+                                      wealth_index=wealth_index,
+                                      wealth_threshold=wealth_threshold)
+        self.travel_time[(model.gdf[wealth_index] <= wealth_threshold).values & condition_motorized(self.travel_time)] = np.nan
+        self.travel_time[(model.gdf[wealth_index] > wealth_threshold).values & condition_walking(self.travel_time)] = np.nan
+        super().add_restriction(model, self.travel_time, name='Travel time')
+
+    def calculate_traveltime(self, model: 'onstove.OnStove', 
+                             supply_points: str,
+                             motorized_friction_path: str, 
+                             walking_friction_path: str, 
+                             wealth_index: str = 'relative_wealth',
+                             wealth_threshold: float = -0.5,
+                             align: bool = False):
         """This method calculates the travel time needed to transport LPG.
 
         The travel time is calculated as the time needed (in hours) to reach the closest LPG supplier from each
@@ -927,33 +975,30 @@ class LPG(Technology):
             Boolean parameter to indicate if the friction layer need to be align with the population
             data in the `model`.
         """
+        supply_points_motorized = vector_setter(supply_points, 'LPG', name='Supply Points')
+        supply_points_walking = supply_points_motorized.copy()
 
-        if lpg_path is None:
-            if self.lpg_path is not None:
-                lpg_path = self.lpg_path
-            else:
-                raise ValueError('A path to a LPG point layer must be passed or stored in the `lpg_path` attribute.')
-
-        lpg = VectorLayer(self.name, 'Suppliers', path=lpg_path)
-
-        if friction_path is None:
-            if self.friction_path is not None:
-                friction_path = self.friction_path
-            else:
-                raise ValueError('A path to a friction raster layer must be passed or stored in the `friction_path`'
-                                 ' attribute.')
-
-        friction = RasterLayer(self.name, 'Friction', path=friction_path, resample='average')
+        motorized_friction = raster_setter(motorized_friction_path, 'LPG', name='Motorized Friction', resample='average')
+        walking_friction = raster_setter(walking_friction_path, 'LPG', name='Walking Friction', resample='average')
 
         if align:
             os.makedirs(os.path.join(model.output_directory, self.name, 'Suppliers'), exist_ok=True)
-            lpg.reproject(model.base_layer.meta['crs'], os.path.join(model.output_directory, self.name, 'Suppliers'))
-            friction.align(model.base_layer.path, os.path.join(model.output_directory, self.name, 'Friction'))
+            supply_points_motorized.reproject(model.base_layer.meta['crs'], os.path.join(model.output_directory, self.name, 'Suppliers'))
+            motorized_friction.align(model.base_layer.path, os.path.join(model.output_directory, self.name, 'Motorized Friction'))
+            walking_friction.align(model.base_layer.path, os.path.join(model.output_directory, self.name, 'Walking Friction'))
 
-        lpg.friction = friction
-        lpg.travel_time(create_raster=True)
-        self.travel_time = 2 * model.raster_to_dataframe(lpg.distance_raster,
+        supply_points_motorized.friction = motorized_friction
+        supply_points_walking.friction = walking_friction
+        supply_points_motorized.travel_time(create_raster=True)
+        supply_points_walking.travel_time(create_raster=True)
+
+        travel_time_motorized = 2 * model.raster_to_dataframe(supply_points_motorized.distance_raster,
                                                          fill_nodata_method='interpolate', method='read')
+        travel_time_walking = 2 * model.raster_to_dataframe(supply_points_walking.distance_raster,
+                                                         fill_nodata_method='interpolate', method='read')
+
+        self.travel_time = travel_time_motorized
+        self.travel_time[model.gdf[wealth_index] <= wealth_threshold] = travel_time_walking[model.gdf[wealth_index] <= wealth_threshold]
 
     def transportation_cost(self, model: 'onstove.OnStove'):
         """The cost of transporting LPG.

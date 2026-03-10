@@ -3,9 +3,10 @@ from typing import Union, Optional
 
 def raster_setter(layer: Union[RasterLayer, str, None],
                   category: Optional[str] = None,
-                  name: Optional[str] = ''):
+                  name: Optional[str] = '',
+                  **kwargs):
     if isinstance(layer, str):
-        return RasterLayer(category=category, name=name, path=layer)
+        return RasterLayer(category=category, name=name, path=layer, **kwargs)
     elif isinstance(layer, RasterLayer):
         return layer
     elif layer is None:
