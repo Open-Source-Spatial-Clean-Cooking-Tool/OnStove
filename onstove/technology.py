@@ -795,11 +795,16 @@ class Technology:
         model.gdf["costs_{}".format(self.name)] = self.costs + base_costs
         model.gdf["benefits_{}".format(self.name)] = self.benefits
         model.gdf["net_benefit_{}".format(self.name)] = self.benefits - w_costs * self.costs
-        self.factor = pd.Series(np.ones(model.gdf.shape[0]), index=model.gdf.index)
-        self.households = model.gdf['Households']
+
         for restriction in self.restrictions:
             model.gdf.loc[np.isnan(restriction), "net_benefit_{}".format(self.name)] = np.nan
             model.gdf.loc[np.isnan(restriction), "benefits_{}".format(self.name)] = np.nan
+
+        self.benefits = model.gdf["benefits_{}".format(self.name)].copy()
+        self.net_benefits = model.gdf["net_benefit_{}".format(self.name)].copy()
+        factor = self.net_benefits.notna().astype(int)
+        self.factor = factor
+        self.households = model.gdf['Households'] * factor
 
     def add_restriction(self, model: 'onstove.OnStove', 
                         restriction: np.array, name: Optional[str] = 'Restriction',
@@ -943,9 +948,10 @@ class LPG(Technology):
                                       walking_friction_path=walking_friction_path, 
                                       wealth_index=wealth_index,
                                       wealth_threshold=wealth_threshold)
-        self.travel_time[(model.gdf[wealth_index] <= wealth_threshold).values & condition_motorized(self.travel_time)] = np.nan
-        self.travel_time[(model.gdf[wealth_index] > wealth_threshold).values & condition_walking(self.travel_time)] = np.nan
-        super().add_restriction(model, self.travel_time, name='Travel time')
+        restriction = self.travel_time.copy()
+        restriction[(model.gdf[wealth_index] > wealth_threshold).values & condition_motorized(restriction)] = np.nan
+        restriction[(model.gdf[wealth_index] <= wealth_threshold).values & condition_walking(restriction)] = np.nan
+        super().add_restriction(model, restriction, name='Travel time')
 
     def calculate_traveltime(self, model: 'onstove.OnStove', 
                              supply_points: str,
@@ -975,11 +981,11 @@ class LPG(Technology):
             Boolean parameter to indicate if the friction layer need to be align with the population
             data in the `model`.
         """
-        supply_points_motorized = vector_setter(supply_points, 'LPG', name='Supply Points')
+        supply_points_motorized = vector_setter(supply_points, self.name, name='Supply Points')
         supply_points_walking = supply_points_motorized.copy()
 
-        motorized_friction = raster_setter(motorized_friction_path, 'LPG', name='Motorized Friction', resample='average')
-        walking_friction = raster_setter(walking_friction_path, 'LPG', name='Walking Friction', resample='average')
+        motorized_friction = raster_setter(motorized_friction_path, self.name, name='Motorized Friction', resample='average')
+        walking_friction = raster_setter(walking_friction_path, self.name, name='Walking Friction', resample='average')
 
         if align:
             os.makedirs(os.path.join(model.output_directory, self.name, 'Suppliers'), exist_ok=True)
@@ -1212,6 +1218,24 @@ class LPG(Technology):
             dist_roads.data = dist_roads.data > self.distance_limit
             limit = model.raster_to_dataframe(dist_roads, method='read')
             model.gdf.loc[limit == 1, "benefits_{}".format(self.name)] = -999999
+
+    def affordability_categories(self, model: 'onstove.OnStove', categories: list = ['<5%', '5-15%', '15%+']):
+        """This method expands :meth:`Technology.affordability_categories` by constraining the availability of LPG.
+        Parameters
+        ----------
+        model: OnStove model
+            Instance of the OnStove model containing the main data of the study case. See :class:`onstove.OnStove`.
+        categories: list, default ['<5%', '5-15%', '15%+']
+            List of affordability categories. If more categories want to be added, or different thresholds, please folloow the
+            notation used. First threshold with a < sign preceding, intermediate thresholds with a - sign in between the end values
+            for that threshold, and last threshold with a + sign.
+            Example: ['<5%', '5-15%', '15-25%', '25%+'] 
+        
+        """
+        super().affordability_categories(model, categories = categories)
+        model.gdf.loc[self.net_benefits.isna(), 'affordability_category_{}'.format(self.name)] = 'Not available'
+        model.gdf.loc[model.gdf['affordability_category_{}'.format(self.name)] == 'Not available', 'affordability_support_required_{}'.format(self.name)] = np.nan
+        model.gdf.loc[model.gdf['affordability_category_{}'.format(self.name)] == 'Not available', 'cost_income_ratio_{}'.format(self.name)] = np.nan
 
 
 class Biomass(Technology):

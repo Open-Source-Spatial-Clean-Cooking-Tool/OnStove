@@ -2519,14 +2519,15 @@ class OnStove(DataProcessor):
                         continue
 
                     # Pick winning tech per cell within the group based on target metric
+                    clear_all_none_columns = available_cells[group_cols].notna().any(axis=1)
                     if target == 'net_benefit':
                         # TODO: to prevent idxmax from raising an error when all values are NaN, we need to filterout all rows with nans first
-                        available_cells[result_tech] = available_cells[group_cols].idxmax(axis=1).astype('string')
-                        available_cells[result_value] = available_cells[group_cols].max(axis=1)
+                        available_cells.loc[clear_all_none_columns, result_tech] = available_cells[group_cols].loc[clear_all_none_columns].idxmax(axis=1).astype('string')
+                        available_cells.loc[clear_all_none_columns, result_value] = available_cells[group_cols].loc[clear_all_none_columns].max(axis=1)
                         sort_ascending = False
                     else:  # cost_income_ratio
-                        available_cells[result_tech] = available_cells[group_cols].idxmin(axis=1).astype('string')
-                        available_cells[result_value] = available_cells[group_cols].min(axis=1)
+                        available_cells.loc[clear_all_none_columns, result_tech] = available_cells[group_cols].loc[clear_all_none_columns].idxmin(axis=1).astype('string')
+                        available_cells.loc[clear_all_none_columns, result_value] = available_cells[group_cols].loc[clear_all_none_columns].min(axis=1)
                         sort_ascending = False
                     available_cells[result_tech] = available_cells[result_tech].str.replace(f"{target}_", "")
 
@@ -2584,18 +2585,19 @@ class OnStove(DataProcessor):
                         tech_target_pop_unassigned[tech] = -999
                         print('No available cells to assign, since this is the last technology to be assigned, i.e. worst technology.\n')
                         continue
-
+                    
+                    clear_all_none_columns = available_cells[col].notna().any(axis=1)
                     if target == 'net_benefit':
                         # TODO: to prevent idxmax from raising an error when all values are NaN, we need to filterout all rows with nans first
-                        available_cells[result_tech] = available_cells[col].idxmax(axis=1).astype('string')
+                        available_cells.loc[clear_all_none_columns, result_tech] = available_cells[col].loc[clear_all_none_columns].idxmax(axis=1).astype('string')
                     elif target == 'cost_income_ratio':
-                        available_cells[result_tech] = available_cells[col].idxmin(axis=1).astype('string')
+                        available_cells.loc[clear_all_none_columns, result_tech] = available_cells[col].loc[clear_all_none_columns].idxmin(axis=1).astype('string')
                     available_cells[result_tech] = available_cells[result_tech].str.replace(f"{target}_", "")
 
                     if target == 'net_benefit':
-                        available_cells[result_value] = available_cells[col].max(axis=1)
+                        available_cells.loc[clear_all_none_columns, result_value] = available_cells[col].loc[clear_all_none_columns].max(axis=1)
                     elif target == 'cost_income_ratio':
-                        available_cells[result_value] = available_cells[col].min(axis=1)
+                        available_cells.loc[clear_all_none_columns, result_value] = available_cells[col].loc[clear_all_none_columns].min(axis=1)
 
                     condition = (available_cells[result_tech] == tech)
                     candidates = available_cells.loc[condition]
@@ -2637,19 +2639,21 @@ class OnStove(DataProcessor):
 
                     condition = self.gdf.loc[isurban, result_tech].isna()
                     available_cells = self.gdf.loc[condition & isurban].copy() # Selects the cells that are available to be assigned a technology.
+                    clear_all_none_columns = available_cells[cols].notna().any(axis=1)
                     if len(available_cells) == 0:
                         tech_target_pop_unassigned[tech] = -999
                         print('No available cells to assign, since this the last technology to be assigned, i.e. worst technology.\n')
                         continue
                     if target == 'net_benefit':
-                        available_cells[result_tech] = available_cells[cols].idxmax(axis=1).astype('string') # Gets the technology with the maximum net benefit for the unassigned candidates.
+                        # TODO: fix nan values
+                        available_cells.loc[clear_all_none_columns, result_tech] = available_cells[cols].loc[clear_all_none_columns].idxmax(axis=1).astype('string') # Gets the technology with the maximum net benefit for the unassigned candidates.
                     elif target == 'cost_income_ratio':
-                        available_cells[result_tech] = available_cells[cols].idxmin(axis=1).astype('string')
+                        available_cells.loc[clear_all_none_columns, result_tech] = available_cells[cols].loc[clear_all_none_columns].idxmin(axis=1).astype('string')
                     available_cells[result_tech] = available_cells[result_tech].str.replace(f"{target}_", "")
                     if target == 'net_benefit':
-                        available_cells[result_value] = available_cells[cols].max(axis=1) # Gets the maximum net benefit for the available cells.
+                        available_cells.loc[clear_all_none_columns, result_value] = available_cells[cols].loc[clear_all_none_columns].max(axis=1) # Gets the maximum net benefit for the available cells.
                     elif target == 'cost_income_ratio':
-                        available_cells[result_value] = available_cells[cols].min(axis=1)
+                        available_cells.loc[clear_all_none_columns, result_value] = available_cells[cols].loc[clear_all_none_columns].min(axis=1)
 
                     condition = (available_cells[result_tech] == tech)
                     candidates = available_cells.loc[condition]
@@ -2704,17 +2708,19 @@ class OnStove(DataProcessor):
             
             # Only consider technologies where net_benefit > 0 (restrictions already set NaN for negative benefits earlier)
             # Additional filter: explicitly check net_benefit > 0
-            for val_col, net_col in zip(value_cols, net_benefit_cols):
-                if net_col in self.gdf.columns:
-                    # Set to NaN where net_benefit is not positive (includes NaN and <=0)
-                    are_none.loc[~(are_none[net_col] > 0), val_col] = np.nan
+            if restriction in [True, 'yes', 'y', 'Y', 'Yes', 'PositiveBenefits', 'Positive_Benefits']:
+                for val_col, net_col in zip(value_cols, net_benefit_cols):
+                    if net_col in self.gdf.columns:
+                        # Set to NaN where net_benefit is not positive (includes NaN and <=0)
+                        are_none.loc[~(are_none[net_col] > 0), val_col] = np.nan
             
+            clear_all_none_columns = are_none[value_cols].notna().any(axis=1)
             if target == 'net_benefit':
-                are_none[result_tech] = are_none[value_cols].idxmax(axis=1).astype('string')
-                are_none[result_value] = are_none[value_cols].max(axis=1)
+                are_none.loc[clear_all_none_columns, result_tech] = are_none[value_cols].loc[clear_all_none_columns].idxmax(axis=1).astype('string')
+                are_none.loc[clear_all_none_columns, result_value] = are_none[value_cols].loc[clear_all_none_columns].max(axis=1)
             elif target == 'cost_income_ratio':
-                are_none[result_tech] = are_none[value_cols].idxmin(axis=1).astype('string')
-                are_none[result_value] = are_none[value_cols].min(axis=1)
+                are_none.loc[clear_all_none_columns, result_tech] = are_none[value_cols].loc[clear_all_none_columns].idxmin(axis=1).astype('string')
+                are_none.loc[clear_all_none_columns, result_value] = are_none[value_cols].loc[clear_all_none_columns].min(axis=1)
             
             are_none[result_tech] = are_none[result_tech].str.replace(f"{target}_", "")
 
