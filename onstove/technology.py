@@ -948,9 +948,22 @@ class LPG(Technology):
                                       walking_friction_path=walking_friction_path, 
                                       wealth_index=wealth_index,
                                       wealth_threshold=wealth_threshold)
+        
         restriction = self.travel_time.copy()
-        restriction[(model.gdf[wealth_index] > wealth_threshold).values & condition_motorized(restriction)] = np.nan
-        restriction[(model.gdf[wealth_index] <= wealth_threshold).values & condition_walking(restriction)] = np.nan
+
+        if wealth_index == 'absolute_wealth':
+            wealth = model.gdf[wealth_index] * model.gdf['Households'] / model.gdf['Calibrated_pop'] # income per capita
+        else:
+            wealth = model.gdf[wealth_index]
+        if isinstance(wealth_threshold, dict):
+            isurban = model.gdf['IsUrban'] > 20
+            restriction[isurban & (wealth <= wealth_threshold['urban']) & condition_walking(restriction)] = np.nan
+            restriction[~isurban & (wealth <= wealth_threshold['rural']) & condition_walking(restriction)] = np.nan
+            restriction[isurban & (wealth > wealth_threshold['urban']) & condition_motorized(restriction)] = np.nan
+            restriction[~isurban & (wealth > wealth_threshold['rural']) & condition_motorized(restriction)] = np.nan
+        else:
+            restriction[(wealth > wealth_threshold).values & condition_motorized(restriction)] = np.nan
+            restriction[(wealth <= wealth_threshold).values & condition_walking(restriction)] = np.nan
         super().add_restriction(model, restriction, name='Travel time')
 
     def calculate_traveltime(self, model: 'onstove.OnStove', 
@@ -1003,8 +1016,18 @@ class LPG(Technology):
         travel_time_walking = 2 * model.raster_to_dataframe(supply_points_walking.distance_raster,
                                                          fill_nodata_method='interpolate', method='read')
 
-        self.travel_time = travel_time_motorized
-        self.travel_time[model.gdf[wealth_index] <= wealth_threshold] = travel_time_walking[model.gdf[wealth_index] <= wealth_threshold]
+        if wealth_index == 'absolute_wealth':
+            wealth = model.gdf[wealth_index] * model.gdf['Households'] / model.gdf['Calibrated_pop'] # income per capita
+        else:
+            wealth = model.gdf[wealth_index]
+        if isinstance(wealth_threshold, dict):
+            isurban = model.gdf['IsUrban'] > 20
+            self.travel_time = travel_time_motorized
+            self.travel_time[isurban & (wealth <= wealth_threshold['urban'])] = travel_time_walking[isurban & (wealth <= wealth_threshold['urban'])]
+            self.travel_time[~isurban & (wealth <= wealth_threshold['rural'])] = travel_time_walking[~isurban & (wealth <= wealth_threshold['rural'])]
+        else:
+            self.travel_time = travel_time_motorized
+            self.travel_time[wealth <= wealth_threshold] = travel_time_walking[wealth <= wealth_threshold]
 
     def transportation_cost(self, model: 'onstove.OnStove'):
         """The cost of transporting LPG.
