@@ -786,22 +786,26 @@ class Technology:
          carbon_emissions
         """
         self.total_costs(w_salvage=w_salvage)
-        self.benefits = w_health * (self.distributed_morbidity + self.distributed_mortality) + \
-                        w_spillovers * (self.distributed_spillovers_morb + self.distributed_spillovers_mort) + \
-                        w_environment * self.decreased_carbon_costs + w_time * self.time_value
-        self.net_benefits = self.benefits - w_costs * self.costs
+        self.benefits = self.distributed_morbidity + self.distributed_mortality + \
+                        self.distributed_spillovers_morb + self.distributed_spillovers_mort + \
+                        self.decreased_carbon_costs + self.time_value
         model.gdf["relative_costs_{}".format(self.name)] = self.costs
         base_costs = model.base_fuel.discounted_fuel_cost + model.base_fuel.discounted_investments + model.base_fuel.om_cost
         model.gdf["costs_{}".format(self.name)] = self.costs + base_costs
         model.gdf["benefits_{}".format(self.name)] = self.benefits
-        model.gdf["net_benefit_{}".format(self.name)] = self.benefits - w_costs * self.costs
+        model.gdf["net_benefit_{}".format(self.name)] = w_health * (self.distributed_morbidity + self.distributed_mortality) + \
+                                                        w_spillovers * (self.distributed_spillovers_morb + self.distributed_spillovers_mort) + \
+                                                        w_environment * self.decreased_carbon_costs + w_time * self.time_value - w_costs * (self.costs + base_costs)
 
         for restriction in self.restrictions:
             model.gdf.loc[np.isnan(restriction), "net_benefit_{}".format(self.name)] = np.nan
             model.gdf.loc[np.isnan(restriction), "benefits_{}".format(self.name)] = np.nan
+            model.gdf.loc[np.isnan(restriction), "costs_{}".format(self.name)] = np.nan
+
 
         self.benefits = model.gdf["benefits_{}".format(self.name)].copy()
         self.net_benefits = model.gdf["net_benefit_{}".format(self.name)].copy()
+        self.costs = model.gdf["costs_{}".format(self.name)].copy()
         factor = self.net_benefits.notna().astype(int)
         self.factor = factor
         self.households = model.gdf['Households'] * factor
@@ -1744,7 +1748,8 @@ class Electricity(Technology):
                  om_cost: float = 3.7,  # percentage of investement cost
                  efficiency: float = 0.85,  # ratio
                  pm25: float = 32,
-                 grid_cost_factor: float = 1):
+                 grid_cost_factor: float = 1,
+                 coincidence_factor: float = 0.5):
         super().__init__(name, carbon_intensity, None, None, None,
                          None, None, None, energy_content, tech_life,
                          inv_cost, fuel_cost, time_of_cooking,
@@ -1756,6 +1761,7 @@ class Electricity(Technology):
         self.tiers_path = None
         self.connection_cost = connection_cost
         self.grid_cost_factor = grid_cost_factor
+        self.coincidence_factor = coincidence_factor
         self.carbon_intensities = {'coal': 0.090374363, 'natural_gas': 0.050300655,
                                    'crude_oil': 0.070650288, 'heavy_fuel_oil': 0.074687989,
                                    'oil': 0.072669139, 'diesel': 0.069332823,
@@ -1818,7 +1824,7 @@ class Electricity(Technology):
         else:
             salvage = self.grid_salvage(model, True)
 
-        self.capacity = self.energy * add_capacity / (3.6 * self.time_of_cooking * 365)
+        self.capacity = self.energy * self.coincidence_factor * add_capacity / (3.6 * self.time_of_cooking * 365)
         self.capacity_cost = self.capacity * (self.grid_capacity_cost - salvage)
 
     def get_carbon_intensity(self, model: 'onstove.OnStove'):
@@ -1870,7 +1876,7 @@ class Electricity(Technology):
                 salvage = self.grid_capacity_costs[tech] * (1 - used_life / self.grid_techs_life[tech])
                 salvage_values.append(salvage * cap / sum(self.capacities.values()))
 
-            salvage = sum(salvage_values)
+            salvage = sum(salvage_values) * model.specs['w_salvage']
 
         # TODO: vectorize this
         return salvage / discount_rate[0]
@@ -1941,6 +1947,8 @@ class Electricity(Technology):
         """
         super().net_benefit(model, w_health, w_spillovers, w_environment, w_time, w_costs, w_salvage)
         model.gdf.loc[model.gdf['Current_elec'] == 0, "net_benefit_{}".format(self.name)] = np.nan
+        model.gdf.loc[model.gdf['Current_elec'] == 0, "benefits_{}".format(self.name)] = np.nan
+        model.gdf.loc[model.gdf['Current_elec'] == 0, "costs_{}".format(self.name)] = np.nan
         self.net_benefits.loc[model.gdf['Current_elec'] == 0] = np.nan
         factor = model.gdf['Elec_pop_calib'] / model.gdf['Calibrated_pop']
         factor[factor > 1] = 1
@@ -2188,6 +2196,8 @@ class MiniGrids(Electricity):
         self.calculate_potential(model)
         self.households = self.gdf['supported_hh']
         model.gdf.loc[self.households == 0, "net_benefit_{}".format(self.name)] = np.nan
+        model.gdf.loc[self.households == 0, "benefits_{}".format(self.name)] = np.nan
+        model.gdf.loc[self.households == 0, "costs_{}".format(self.name)] = np.nan
         self.net_benefits.loc[self.households == 0] = np.nan
         # factor = self.gdf['Elec_pop_calib'] / self.gdf['Calibrated_pop']
         factor = np.ones(self.households.shape[0])
@@ -2490,6 +2500,7 @@ class Biogas(Technology):
         required_energy_hh = self.required_energy_hh(model)
         model.gdf.loc[(model.gdf['biogas_energy'] < required_energy_hh), "benefits_{}".format(self.name)] = np.nan
         model.gdf.loc[(model.gdf['biogas_energy'] < required_energy_hh), "net_benefit_{}".format(self.name)] = np.nan
+        model.gdf.loc[(model.gdf['biogas_energy'] < required_energy_hh), "costs_{}".format(self.name)] = np.nan
         self.net_benefits = model.gdf["benefits_{}".format(self.name)].copy()
         factor = model.gdf['biogas_energy'] / (required_energy_hh * model.gdf['Households'])
         factor[factor > 1] = 1

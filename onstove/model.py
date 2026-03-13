@@ -1644,8 +1644,6 @@ class OnStove(DataProcessor):
 
             self.get_clean_cooking_access(base_fuels=base_fuels)
 
-                
-
             for name, tech in base_fuels.items():
 
                 tech.carb(self)
@@ -2183,7 +2181,6 @@ class OnStove(DataProcessor):
             techs = set()
             for shares in technologies.values():
                 techs.update(shares.keys())
-            print(techs)
             # Expand technology groups into individual technology names
             if tech_groups is not None:
                 expanded_techs = set()
@@ -2477,8 +2474,9 @@ class OnStove(DataProcessor):
             value_cols = [col for col in self.gdf if 'cost_income_ratio_' in col]
             benefit_cols = [col.replace('cost_income_ratio_', 'benefits_') for col in value_cols]
             for cost_col, ben_col in zip(value_cols, benefit_cols):
-                if ben_col in self.gdf.columns:
-                    self.gdf.loc[self.gdf[ben_col] < 0, cost_col] = np.nan
+                if restriction in [True, 'yes', 'y', 'Y', 'Yes', 'PositiveBenefits', 'Positive_Benefits']:
+                    if ben_col in self.gdf.columns:
+                        self.gdf.loc[self.gdf[ben_col] < 0, cost_col] = np.nan
 
             result_tech = 'most_affordable_tech'
             result_value = 'most_affordable_cost_income_ratio'
@@ -2521,7 +2519,6 @@ class OnStove(DataProcessor):
                     # Pick winning tech per cell within the group based on target metric
                     clear_all_none_columns = available_cells[group_cols].notna().any(axis=1)
                     if target == 'net_benefit':
-                        # TODO: to prevent idxmax from raising an error when all values are NaN, we need to filterout all rows with nans first
                         available_cells.loc[clear_all_none_columns, result_tech] = available_cells[group_cols].loc[clear_all_none_columns].idxmax(axis=1).astype('string')
                         available_cells.loc[clear_all_none_columns, result_value] = available_cells[group_cols].loc[clear_all_none_columns].max(axis=1)
                         sort_ascending = False
@@ -2645,7 +2642,6 @@ class OnStove(DataProcessor):
                         print('No available cells to assign, since this the last technology to be assigned, i.e. worst technology.\n')
                         continue
                     if target == 'net_benefit':
-                        # TODO: fix nan values
                         available_cells.loc[clear_all_none_columns, result_tech] = available_cells[cols].loc[clear_all_none_columns].idxmax(axis=1).astype('string') # Gets the technology with the maximum net benefit for the unassigned candidates.
                     elif target == 'cost_income_ratio':
                         available_cells.loc[clear_all_none_columns, result_tech] = available_cells[cols].loc[clear_all_none_columns].idxmin(axis=1).astype('string')
@@ -2705,14 +2701,16 @@ class OnStove(DataProcessor):
             # Get corresponding net_benefit columns to check for positive values
             net_benefit_cols = [col.replace('cost_income_ratio_', 'net_benefit_') if 'cost_income_ratio_' in col else col 
                                for col in value_cols]
+            benefits_cols = [col.replace('cost_income_ratio_', 'benefits_') if 'cost_income_ratio_' in col else col 
+                               for col in value_cols]
             
             # Only consider technologies where net_benefit > 0 (restrictions already set NaN for negative benefits earlier)
             # Additional filter: explicitly check net_benefit > 0
             if restriction in [True, 'yes', 'y', 'Y', 'Yes', 'PositiveBenefits', 'Positive_Benefits']:
-                for val_col, net_col in zip(value_cols, net_benefit_cols):
-                    if net_col in self.gdf.columns:
+                for val_col, benefits_col in zip(value_cols, benefits_cols):
+                    if benefits_col in self.gdf.columns:
                         # Set to NaN where net_benefit is not positive (includes NaN and <=0)
-                        are_none.loc[~(are_none[net_col] > 0), val_col] = np.nan
+                        are_none.loc[are_none[benefits_col] < 0, val_col] = np.nan
             
             clear_all_none_columns = are_none[value_cols].notna().any(axis=1)
             if target == 'net_benefit':
