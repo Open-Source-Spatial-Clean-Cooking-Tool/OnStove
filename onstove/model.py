@@ -2101,7 +2101,7 @@ class OnStove(DataProcessor):
         self.gdf['value_of_time'] = norm_layer * self.specs[
             'minimum_wage'] / 30 / 8  # convert $/months to $/h (8 working hours per day)
 
-    def run(self, technologies: Optional[Union[list, dict, str]] = 'all', restriction: bool = True, prioritize: bool = True,
+    def run(self, technologies: Optional[Union[list, dict, str]] = 'all', restriction: bool = True, priority: Optional[dict[str, list[str]]] = None,
             affordability_categories: list = ['<5%', '5-15%', '15%+'], target: str = 'net_benefit', partial_access: bool = False,
             tech_groups: Optional[dict[str, list[str]]] = None):
         """Runs the model using the defined ``technologies`` as options to cook with.
@@ -2138,6 +2138,8 @@ class OnStove(DataProcessor):
         target: str, default 'net_benefit'
             Target to use for the assignment of stoves according to the user defined shares. Options are 'net_benefit' or
             'cost_income_ratio'.
+        priority: dict[str, list[str]], optional
+            Optional dictionary mapping region name to a priority-ordered list of technologies (or group keys) to assign first.
 
         tech_groups: dict[str, list[str]], optional
             Optional dictionary mapping group names to lists of technology names. If a share key is a group,
@@ -2220,7 +2222,7 @@ class OnStove(DataProcessor):
         if isinstance(technologies, list):
             self.maximum_net_benefit(techs, restriction=restriction, partial_access = partial_access, target=target)
         elif isinstance(technologies, dict):
-            self.stove_share_assignment(technologies, restriction=restriction, target=target, prioritize=prioritize, tech_groups=tech_groups)
+            self.stove_share_assignment(technologies, restriction=restriction, target=target, priority=priority, tech_groups=tech_groups)
         if target == 'net_benefit':
             column = 'max_benefit_tech'
         elif target == 'cost_income_ratio':
@@ -2421,7 +2423,7 @@ class OnStove(DataProcessor):
     # TODO: check if we need this method
 
     def stove_share_assignment(self, techs: dict[str,dict[str,float]], target: str = 'net_benefit', 
-                               restriction: bool = True, prioritize: bool = True, clear_none: bool = True,
+                               restriction: bool = True, priority: Optional[dict[str, list[str]]] = None, clear_none: bool = True,
                                tech_groups: Optional[dict[str, list[str]]] = None):
         """Extracts the technology or technology combinations producing the highest net-benefit in each cell
         while achieving user defined shares.
@@ -2433,6 +2435,8 @@ class OnStove(DataProcessor):
         ----------
         techs: dict of str:float
             Dictionary with technology names or group names as keys and their user defined share as values.
+        priority: dict[str, list[str]], optional
+            Optional dictionary mapping region name to a priority-ordered list of technologies (or group keys) to assign first.
         tech_groups: dict[str, list[str]], optional
             Optional dictionary mapping group names to lists of technology names. If a share key is a group,
             the share is treated as a single competitive pool among the group's technologies, assigned by
@@ -2497,83 +2501,61 @@ class OnStove(DataProcessor):
             self.gdf.loc[isurban, result_value] = None
             self.gdf.loc[isurban, 'technology_option'] = None
 
-            # First, handle group shares competitively (no equal split): assign best within-group until group target is met
+            # Precompute virtual group columns so groups compete alongside individual techs in the main loop
+            group_value_cols = {}
+            group_winner_cols = {}
             if tech_groups:
-                group_targets = {k: v for k, v in tech_target_pop.items() if k in tech_groups}
-                for group_name, group_target in group_targets.items():
-                    if group_target <= 0:
+                for group_name, members in tech_groups.items():
+                    if group_name not in tech_target_pop:
+                        continue  # ignore groups not requested in this region
+                    member_cols = [f"{target}_{t}" for t in members if f"{target}_{t}" in self.gdf.columns]
+                    if len(member_cols) == 0:
                         continue
-                    group_cols = [f"{target}_{t}" for t in tech_groups[group_name] if f"{target}_{t}" in self.gdf.columns]
-                    if len(group_cols) == 0:
-                        # No valid target columns found for this group
-                        tech_target_pop[group_name] = -999
-                        continue
+                    value_col = f"{target}_{group_name}"
+                    winner_col = f"{result_tech}_{group_name}_winner"
+                    group_value_cols[group_name] = value_col
+                    group_winner_cols[group_name] = winner_col
 
-                    # Available cells for assignment
-                    condition = self.gdf.loc[isurban, result_tech].isna()
-                    available_cells = self.gdf.loc[condition & isurban].copy()
-                    if len(available_cells) == 0:
-                        tech_target_pop[group_name] = -999
-                        continue
+                    # Compute group best value and winner per row (apply on the regional mask only)
+                    member_values = self.gdf.loc[isurban, member_cols]
+                    all_na = member_values.isna().all(axis=1)
 
-                    # Pick winning tech per cell within the group based on target metric
-                    clear_all_none_columns = available_cells[group_cols].notna().any(axis=1)
+                    # Compute best value/index only on rows with at least one non-NA to avoid pandas all-NA deprecation
                     if target == 'net_benefit':
-                        available_cells.loc[clear_all_none_columns, result_tech] = available_cells[group_cols].loc[clear_all_none_columns].idxmax(axis=1).astype('string')
-                        available_cells.loc[clear_all_none_columns, result_value] = available_cells[group_cols].loc[clear_all_none_columns].max(axis=1)
-                        sort_ascending = False
+                        best_val = pd.Series(np.nan, index=member_values.index)
+                        best_idx = pd.Series(pd.NA, index=member_values.index, dtype='object')
+                        valid = member_values.loc[~all_na]
+                        best_val.loc[~all_na] = valid.max(axis=1, skipna=True)
+                        best_idx.loc[~all_na] = valid.idxmax(axis=1, skipna=True)
                     else:  # cost_income_ratio
-                        available_cells.loc[clear_all_none_columns, result_tech] = available_cells[group_cols].loc[clear_all_none_columns].idxmin(axis=1).astype('string')
-                        available_cells.loc[clear_all_none_columns, result_value] = available_cells[group_cols].loc[clear_all_none_columns].min(axis=1)
-                        sort_ascending = False
-                    available_cells[result_tech] = available_cells[result_tech].str.replace(f"{target}_", "")
+                        best_val = pd.Series(np.nan, index=member_values.index)
+                        best_idx = pd.Series(pd.NA, index=member_values.index, dtype='object')
+                        valid = member_values.loc[~all_na]
+                        best_val.loc[~all_na] = valid.min(axis=1, skipna=True)
+                        best_idx.loc[~all_na] = valid.idxmin(axis=1, skipna=True)
 
-                    # Consider only rows where winner is in the group
-                    candidates = available_cells[available_cells[result_tech].isin(tech_groups[group_name])]
-                    if len(candidates) == 0:
-                        tech_target_pop[group_name] = -999
-                        continue
+                    self.gdf.loc[isurban, value_col] = best_val
+                    self.gdf.loc[isurban, winner_col] = best_idx.str.replace(f"{target}_", "")
 
-                    candidates = candidates.sort_values(result_value, ascending=sort_ascending)
-                    candidates['cummulative_pop'] = candidates['Calibrated_pop'].cumsum()
+            tech_target_pop_unassigned = tech_target_pop.copy()
 
-                    assigned = candidates[candidates['cummulative_pop'] <= group_target]
-                    if candidates['Calibrated_pop'].sum() > group_target and len(candidates) > len(assigned):
-                        assigned = pd.concat([assigned, candidates.iloc[[len(assigned)]]])
+            priority_order = []
+            if priority and region in priority:
+                priority_order = priority[region]
 
-                    assigned_ids = assigned.index.to_list()
-                    assigned_pop = assigned['Calibrated_pop'].sum()
-
-                    # Assign each row to its winning tech within the group
-                    self.gdf.loc[assigned_ids, result_tech] = assigned[result_tech]
-                    self.gdf.loc[assigned_ids, result_value] = assigned[result_value]
-                    self.gdf.loc[assigned_ids, 'technology_option'] = 1
-                    unassigned_ids = unassigned_ids[~unassigned_ids.isin(assigned_ids)]
-                    tech_target_pop[group_name] -= assigned_pop
-                    # remove consumed group share from unassigned dict so tech-level loop ignores group key
-                    if tech_target_pop[group_name] <= 0:
-                        tech_target_pop[group_name] = -999
-
-                # Clean up invalid group entries
-                tech_target_pop_unassigned = {k: v for k, v in tech_target_pop.items() if v > 0 and k not in (tech_groups or {}).keys()}
-            else:
-                tech_target_pop_unassigned = tech_target_pop.copy()
-
-            if prioritize:
+            if priority_order:
                 print(f'Prioritizing technology shares in {region} areas.\n')
-                if region == 'Urban':
-                    priority = ['Electricity', 'Biogas']
-                else:
-                    priority = ['Biogas', 'Electricity']
 
-                for tech in priority:
+                for tech in priority_order:
                     if tech not in tech_target_pop_unassigned:
                         continue  
 
                     pop_unassigned = tech_target_pop_unassigned[tech]
                     print(f'Prioritizing {tech}.\n')
 
-                    col = [f'{target}_{tech}']
+                    # Use group virtual column if tech is a group placeholder
+                    col_name = group_value_cols.get(tech, f'{target}_{tech}')
+                    col = [col_name]
                     target_pop_assign = pop_unassigned
 
                     condition = self.gdf.loc[isurban, result_tech].isna()
@@ -2606,7 +2588,11 @@ class OnStove(DataProcessor):
                             print(f'No candidates to assign as prioritized technology.\n')
                         continue
 
-                    candidates = candidates.sort_values(result_value, ascending=False)
+                    if target == 'net_benefit':
+                        candidates = candidates.sort_values(result_value, ascending=False)
+                    elif target == 'cost_income_ratio':
+                        candidates = candidates.sort_values(result_value, ascending=True) # ascending = True, depends on the question being asked regarding affordability.                    
+                    
                     candidates['cummulative_pop'] = candidates['Calibrated_pop'].cumsum()
 
                     assigned = candidates[candidates['cummulative_pop'] <= target_pop_assign]
@@ -2618,7 +2604,11 @@ class OnStove(DataProcessor):
                     assigned_ids = assigned.index.to_list()
                     assigned_pop = assigned['Calibrated_pop'].sum()
 
-                    self.gdf.loc[assigned_ids, result_tech] = tech
+                    # If tech is a group, assign the actual winning member per row
+                    if tech in group_winner_cols:
+                        self.gdf.loc[assigned_ids, result_tech] = assigned[group_winner_cols[tech]].values
+                    else:
+                        self.gdf.loc[assigned_ids, result_tech] = tech
                     self.gdf.loc[assigned_ids, result_value] = assigned[result_value]
                     self.gdf.loc[assigned_ids, 'technology_option'] = 1
                     unassigned_ids = unassigned_ids[~unassigned_ids.isin(assigned_ids)]
@@ -2629,7 +2619,7 @@ class OnStove(DataProcessor):
                 
             i = 1
             while len(tech_target_pop_unassigned) > 0:
-                cols = [f'{target}_{tech}' for tech in tech_target_pop_unassigned]
+                cols = [group_value_cols.get(tech, f'{target}_{tech}') for tech in tech_target_pop_unassigned]
                 for tech, pop_unassigned in tech_target_pop_unassigned.items():
                     print(f'Assigning {tech} with target population: ', f"{pop_unassigned:.2f}", f'Attempt as #{i} best technology for the target {target}.')
                     target_pop_assign = pop_unassigned
@@ -2675,7 +2665,10 @@ class OnStove(DataProcessor):
                     assigned_ids = assigned.index.to_list() # Gets the ids of the assigned candidates.
                     assigned_pop = assigned['Calibrated_pop'].sum() # Gets the population of the assigned candidates.
 
-                    self.gdf.loc[assigned_ids, result_tech] = tech # Assigns the technology to the assigned candidates.
+                    if tech in group_winner_cols:
+                        self.gdf.loc[assigned_ids, result_tech] = assigned[group_winner_cols[tech]].values
+                    else:
+                        self.gdf.loc[assigned_ids, result_tech] = tech # Assigns the technology to the assigned candidates.
                     self.gdf.loc[assigned_ids, result_value] = assigned[result_value] # Assigns the maximum net benefit to the assigned candidates.
                     self.gdf.loc[assigned_ids, 'technology_option'] = i
                     unassigned_ids = unassigned_ids[~unassigned_ids.isin(assigned_ids)] # Updates the unassigned ids.
@@ -2696,7 +2689,13 @@ class OnStove(DataProcessor):
         if clear_none:
             print(f'\nClearing None assignments by assigning the best available technology for the {target} target.')
             are_none = self.gdf[self.gdf[result_tech] == 'None'].copy()
-            value_cols = [col for col in self.gdf.columns if col.startswith(f'{target}_')]
+
+            # Use only individual technology columns for fallback; skip group virtual columns
+            group_keys = set(tech_groups.keys()) if tech_groups else set()
+            value_cols = [
+                col for col in self.gdf.columns
+                if col.startswith(f'{target}_') and col.replace(f'{target}_', '') not in group_keys
+            ]
             
             # Get corresponding net_benefit columns to check for positive values
             net_benefit_cols = [col.replace('cost_income_ratio_', 'net_benefit_') if 'cost_income_ratio_' in col else col 
@@ -2726,7 +2725,8 @@ class OnStove(DataProcessor):
             self.gdf.loc[assigned_ids, result_tech] = are_none[result_tech].values
             self.gdf.loc[assigned_ids, result_value] = are_none[result_value].values
             self.gdf.loc[assigned_ids, 'technology_option'] = i
-            print('Final shares after clearing None assignments ', self.gdf.groupby(result_tech)['Calibrated_pop'].sum() / self.gdf['Calibrated_pop'].sum())
+            final_shares = (self.gdf.groupby(result_tech)['Calibrated_pop'].sum() / self.gdf['Calibrated_pop'].sum()).round(6)
+            print('Final shares after clearing None assignments ', final_shares)
             
         if target == 'cost_income_ratio':
             self.gdf['maximum_net_benefit'] = np.nan
