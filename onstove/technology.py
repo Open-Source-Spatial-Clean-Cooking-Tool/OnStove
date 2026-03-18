@@ -685,7 +685,8 @@ class Technology:
         self.costs = (self.discounted_fuel_cost + self.discounted_investments +
                       self.discounted_om_costs - w_salvage * self.discounted_salvage_cost)
         
-    def affordability_categories(self, model: 'onstove.OnStove', categories: list = ['<5%', '5-15%', '15%+']):
+    def affordability_categories(self, model: 'onstove.OnStove', categories: list = ['<5%', '5-15%', '15%+'],
+                                 support_target: Optional[float] = None):
         """Assigns the affordability categories for each stove. The affordability categories are based on the
         income estimation and user defined affordability thresholds. According to ESMAP [1], affordable cooking
         solutions are those where the levelized cost of cooking solutions (stove and fuel) is less than 5%
@@ -706,7 +707,13 @@ class Technology:
             List defining the affordability categories. If more categories want to be added, or different thresholds, please follow the
             notation used. First threshold with a < sign preceding, intermediate thresholds with a - sign in between the end values
             for that threshold, and last threshold with a + sign.
-            Example: '['<5%', '5-15%', '15-25%', '25%+']'        
+            Example: '['<5%', '5-15%', '15-25%', '25%+']'
+        support_target: float, optional
+            If the user wants to calculate the required support to make a stove affordable for a certain target.
+            Expressed as percentage of the income share that the user considers affordable. 
+            If None, the affordability categories will be assigned based on the first category threshold. 
+            If a value is given, the affordability categories will be assigned based on the support target threshold 
+            and the required support to reach this target will be calculated.
 
         See also
         --------
@@ -745,7 +752,10 @@ class Technology:
         except KeyError:
             raise KeyError(f"The affordability categories could not be assigned for {self.name}.")
                     
-        affordability_target = float(self.categories[0].strip('<%')) / 100
+        if support_target is None:
+            affordability_target = float(self.categories[0].strip('<%')) / 100
+        else:
+            affordability_target = support_target / 100
         if model.income_data:
             model.gdf['affordability_support_required_{}'.format(self.name)] = model.gdf['costs_{}'.format(self.name)] / affordability_target - model.gdf['income']
         else:
@@ -1246,7 +1256,8 @@ class LPG(Technology):
             limit = model.raster_to_dataframe(dist_roads, method='read')
             model.gdf.loc[limit == 1, "benefits_{}".format(self.name)] = -999999
 
-    def affordability_categories(self, model: 'onstove.OnStove', categories: list = ['<5%', '5-15%', '15%+']):
+    def affordability_categories(self, model: 'onstove.OnStove', categories: list = ['<5%', '5-15%', '15%+'],
+                                 support_target: Optional[float] = None):
         """This method expands :meth:`Technology.affordability_categories` by constraining the availability of LPG.
         Parameters
         ----------
@@ -1259,7 +1270,7 @@ class LPG(Technology):
             Example: ['<5%', '5-15%', '15-25%', '25%+'] 
         
         """
-        super().affordability_categories(model, categories = categories)
+        super().affordability_categories(model, categories = categories, support_target=support_target)
         model.gdf.loc[self.net_benefits.isna(), 'affordability_category_{}'.format(self.name)] = 'Not available'
         model.gdf.loc[model.gdf['affordability_category_{}'.format(self.name)] == 'Not available', 'affordability_support_required_{}'.format(self.name)] = np.nan
         model.gdf.loc[model.gdf['affordability_category_{}'.format(self.name)] == 'Not available', 'cost_income_ratio_{}'.format(self.name)] = np.nan
@@ -1955,7 +1966,8 @@ class Electricity(Technology):
         self.factor = factor
         self.households = model.gdf['Households'] * factor
 
-    def affordability_categories(self, model: 'onstove.OnStove', categories: list = ['<5%', '5-15%', '15%+']):
+    def affordability_categories(self, model: 'onstove.OnStove', categories: list = ['<5%', '5-15%', '15%+'],
+                                 support_target: Optional[float] = None):
         """This method expands :meth:`Technology.affordability_categories` by constraining the availability of electricity.
         Parameters
         ----------
@@ -1968,7 +1980,7 @@ class Electricity(Technology):
             Example: ['<5%', '5-15%', '15-25%', '25%+'] 
         
         """
-        super().affordability_categories(model, categories = categories)
+        super().affordability_categories(model, categories = categories, support_target = support_target)
         model.gdf.loc[model.gdf['Current_elec'] == 0, 'affordability_category_{}'.format(self.name)] = 'Not available'
         model.gdf.loc[model.gdf['affordability_category_{}'.format(self.name)] == 'Not available', 'affordability_support_required_{}'.format(self.name)] = np.nan
         model.gdf.loc[model.gdf['affordability_category_{}'.format(self.name)] == 'Not available', 'cost_income_ratio_{}'.format(self.name)] = np.nan
@@ -2514,7 +2526,8 @@ class Biogas(Technology):
         del model.gdf["Pigs"]
         del model.gdf["Poultry"]
 
-    def affordability_categories(self, model: 'onstove.OnStove', categories: list = ['<5%', '5-15%', '15%+']):
+    def affordability_categories(self, model: 'onstove.OnStove', categories: list = ['<5%', '5-15%', '15%+'], 
+                                 support_target: Optional[float] = None):
         """This method expands :meth:`Technology.affordability_categories` by constraining the availability of biogas.
         Parameters
         ----------
@@ -2527,7 +2540,7 @@ class Biogas(Technology):
             Example: ['<5%', '5-15%', '15-25%', '25%+'] 
         
         """
-        super().affordability_categories(model, categories = categories)
+        super().affordability_categories(model, categories = categories, support_target = support_target)
         model.gdf.loc[model.gdf['net_benefit_{}'.format(self.name)].isna(), 'affordability_category_{}'.format(self.name)] = 'Not available'
         model.gdf.loc[model.gdf['affordability_category_{}'.format(self.name)] == 'Not available', 'affordability_support_required_{}'.format(self.name)] = np.nan
         model.gdf.loc[model.gdf['affordability_category_{}'.format(self.name)] == 'Not available', 'cost_income_ratio_{}'.format(self.name)] = np.nan

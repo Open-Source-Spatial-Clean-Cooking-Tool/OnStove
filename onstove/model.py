@@ -2103,7 +2103,7 @@ class OnStove(DataProcessor):
 
     def run(self, technologies: Optional[Union[list, dict, str]] = 'all', restriction: bool = True, priority: Optional[dict[str, list[str]]] = None,
             affordability_categories: list = ['<5%', '5-15%', '15%+'], target: str = 'net_benefit', partial_access: bool = False,
-            tech_groups: Optional[dict[str, list[str]]] = None):
+            tech_groups: Optional[dict[str, list[str]]] = None, support_target: Optional[float] = None):
         """Runs the model using the defined ``technologies`` as options to cook with.
 
         It loops through the ``technologies`` and calculates all costs, benefit and the net-benefit of cooking with
@@ -2216,7 +2216,7 @@ class OnStove(DataProcessor):
                              self.specs['w_environment'], self.specs['w_time'], self.specs['w_costs'],
                              self.specs['w_salvage'])
             if 'absolute_wealth' in self.gdf.columns or 'income' in self.gdf.columns:
-                tech.affordability_categories(self, categories=affordability_categories)
+                tech.affordability_categories(self, categories=affordability_categories, support_target=support_target)
 
         print('Getting maximum net benefit technologies...')
         if isinstance(technologies, list):
