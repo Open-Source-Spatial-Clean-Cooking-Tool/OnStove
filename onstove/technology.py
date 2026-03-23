@@ -7,6 +7,7 @@ import geopandas as gpd
 from typing import Optional, Callable
 from math import exp
 import re
+import matplotlib.pyplot as plt
 
 from onstove._layer_utils import raster_setter, vector_setter
 from onstove._utils import Processes
@@ -932,7 +933,8 @@ class LPG(Technology):
                  lpg_path: Optional[str] = None,
                  friction_path: Optional[str] = None,
                  cylinder_cost: float = 2.78,  # USD/kg,
-                 cylinder_life: float = 15):
+                 cylinder_life: float = 15,
+                 transport_cost_method: str = 'motorized'):
         super().__init__(name, carbon_intensity, co2_intensity, ch4_intensity,
                          n2o_intensity, co_intensity, bc_intensity, oc_intensity,
                          energy_content, tech_life, inv_cost, fuel_cost, time_of_cooking,
@@ -947,6 +949,8 @@ class LPG(Technology):
         self.cylinder_cost = cylinder_cost
         self.cylinder_life = cylinder_life
         self.roads = None
+        self.transport_cost_method = transport_cost_method
+        self._cost_decay_function = None
 
     def traveltime_restriction(self, model: 'onstove.OnStove', 
                                condition_motorized: Callable[[np.ndarray], np.ndarray],
@@ -1070,13 +1074,59 @@ class LPG(Technology):
             Instance of the OnStove model containing the main data of the study case. See
             :class:`onstove.OnStove`.
         """
+        if self.transport_cost_method == 'motorized':
+            transport_cost = (self.diesel_per_hour * self.diesel_cost * self.travel_time) / self.truck_capacity
+            kg_yr = (model.specs["meals_per_day"] * 365 * model.energy_per_meal) / (
+                    self.efficiency * self.energy_content)  # energy content in MJ/kg
+            transport_cost = transport_cost * kg_yr
+            transport_cost[transport_cost < 0] = np.nan
+            self.transport_cost = transport_cost
+        elif self.transport_cost_method == 'decay_function':
+            if self._cost_decay_function is None:
+                self.set_cost_decay_function(t0=5, k=0.2, L=1.5)
+            if self.transport_cost is None:
+                self.transport_cost = 0
+                self.fuel_cost *= self._cost_decay_function
 
-        transport_cost = (self.diesel_per_hour * self.diesel_cost * self.travel_time) / self.truck_capacity
-        kg_yr = (model.specs["meals_per_day"] * 365 * model.energy_per_meal) / (
-                self.efficiency * self.energy_content)  # energy content in MJ/kg
-        transport_cost = transport_cost * kg_yr
-        transport_cost[transport_cost < 0] = np.nan
-        self.transport_cost = transport_cost
+    def cost_decay_function(self):
+        if self._cost_decay_function is None:
+            self.set_cost_decay_function(t0=5, k=0.2, L=1.5)
+            return None
+        sorted_traveltime, sorted_cost_decay = zip(*sorted(zip(self.travel_time, self._cost_decay_function)))
+        plt.plot(sorted_traveltime, sorted_cost_decay)
+        # plt.xscale('log')
+        plt.title('Travel time penalty')
+        plt.xlabel('Travel time (hours)')
+        plt.ylabel('Cost multiplier')
+        plt.show()
+
+    def set_cost_decay_function(self, t0, k, L):
+        # CALCULATING THE MATH LIMIT
+        # Instead of picking a random time, we pick a time far enough
+        # that the S-curve has naturally flattened out.
+        # At k=0.1, the curve is 99% done by t0 + 50 minutes.
+        t_math_limit = t0 + (6 / k) 
+
+        def f(t):
+            return 1 / (1 + np.exp(-k * (t - t0)))
+
+        # Constant anchors
+        v_0 = f(0)
+        v_limit = f(t_math_limit)
+
+        # Calculate for input
+        v_t = f(self.travel_time)
+
+        # NORMALIZE: This stretches the full 'S' to fit between [0, 1]
+        # No clipping occurs unless time > t_math_limit
+        normalized_v = (v_t - v_0) / (v_limit - v_0)
+
+        # Final Multiplier
+        # We use np.clip ONLY to handle the tiny tail after the S is done
+        multipliers = 1 + (L * np.clip(normalized_v, 0, 1))
+        self._cost_decay_function = multipliers
+        return self.cost_decay_function()
+            
 
     def discount_fuel_cost(self, model: 'onstove.OnStove', relative: bool = True):
         """This method expands :meth:`discount_fuel_cost` when LPG is the stove assessed in order to ensure that the
@@ -1095,8 +1145,8 @@ class LPG(Technology):
         --------
         discount_fuel_cost
         """
-
-        self.transportation_cost(model)
+        if self.transport_cost is None:
+            self.transportation_cost(model)
         super().discount_fuel_cost(model, relative)
 
     def transport_emissions(self, model: 'onstove.OnStove'):
