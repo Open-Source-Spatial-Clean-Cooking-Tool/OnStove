@@ -2464,7 +2464,16 @@ class Biogas(Technology):
             model.gdf.loc[model.gdf["Temperature"] < 10, "available_biogas"] = 0
 
         # Urban restriction        
-        model.gdf.loc[(model.gdf["IsUrban"] > 20), "available_biogas"] = 0
+        # model.gdf.loc[(model.gdf["IsUrban"] > 20), "available_biogas"] = 0
+        model.gdf.loc[(model.gdf["Calibrated_pop"] > 800), "available_biogas"] = 0 # changed restriction for highly populated cells rather than urban
+
+        # Manure collection efficiency based on urban/rural status
+        model.gdf.loc[model.gdf["IsUrban"] == 30, "available_biogas"] *= 0
+        model.gdf.loc[model.gdf["IsUrban"].isin([21, 22, 23]), "available_biogas"] *= 0.8
+        model.gdf.loc[model.gdf["IsUrban"]== 13, "available_biogas"] *= 0.6
+        model.gdf.loc[model.gdf["IsUrban"]== 12, "available_biogas"] *= 0.5
+        model.gdf.loc[model.gdf["IsUrban"]== 11, "available_biogas"] *= 0.25
+        model.gdf.loc[model.gdf["IsUrban"]== 10, "available_biogas"] *= 0.1
 
         # Water availability restriction
         if self.water is not None:
