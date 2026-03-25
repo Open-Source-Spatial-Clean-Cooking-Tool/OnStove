@@ -2105,7 +2105,7 @@ class OnStove(DataProcessor):
 
     def run(self, technologies: Optional[Union[list, dict, str]] = 'all', restriction: bool = True, priority: Optional[dict[str, list[str]]] = None,
             affordability_categories: list = ['<5%', '5-15%', '15%+'], target: str = 'net_benefit', partial_access: bool = False,
-            tech_groups: Optional[dict[str, list[str]]] = None, support_target: Optional[float] = None):
+            tech_groups: Optional[dict[str, list[str]]] = None, support_target: Optional[float] = None, allocation_mode: str = 'pro-poor'):
         """Runs the model using the defined ``technologies`` as options to cook with.
 
         It loops through the ``technologies`` and calculates all costs, benefit and the net-benefit of cooking with
@@ -2147,6 +2147,7 @@ class OnStove(DataProcessor):
             Optional dictionary mapping group names to lists of technology names. If a share key is a group,
             the share is treated as a single competitive pool among the group's technologies, assigned by
             the selected target metric (idxmax/idxmin) without equal pre-splitting.
+        allocation_mode: str, default 'pro-poor'
 
         See also
         --------
@@ -2231,7 +2232,7 @@ class OnStove(DataProcessor):
         if isinstance(technologies, list):
             self.maximum_net_benefit(techs, restriction=restriction, partial_access = partial_access, target=target)
         elif isinstance(technologies, dict):
-            self.stove_share_assignment(technologies, restriction=restriction, target=target, priority=priority, tech_groups=tech_groups)
+            self.stove_share_assignment(technologies, restriction=restriction, target=target, priority=priority, tech_groups=tech_groups, allocation_mode=allocation_mode)
         if target == 'net_benefit':
             column = 'max_benefit_tech'
         elif target == 'cost_income_ratio':
@@ -2433,7 +2434,7 @@ class OnStove(DataProcessor):
 
     def stove_share_assignment(self, techs: Union[dict[str,float],dict[str,dict[str,float]]], target: str = 'net_benefit', 
                                restriction: bool = True, priority: Optional[dict[str, list[str]]] = None, clear_none: bool = True,
-                               tech_groups: Optional[dict[str, list[str]]] = None):
+                               tech_groups: Optional[dict[str, list[str]]] = None, allocation_mode: str = 'pro-poor'):
         """Extracts the technology or technology combinations producing the highest net-benefit in each cell
         while achieving user defined shares.
 
@@ -2456,6 +2457,9 @@ class OnStove(DataProcessor):
         restriction: bool, default True
             Whether to have the restriction of only selecting technologies producing a positive benefit compared to the
             baseline. This avoids selecting stoves simply due to them being cheaper.
+        allocation_mode: str, default 'pro-poor'
+            The mode of allocation for distributing technologies among cells. Options are 'pro-poor' or 'pro-clean'.
+
 
         See also
         --------
@@ -2535,11 +2539,18 @@ class OnStove(DataProcessor):
                         best_val.loc[~all_na] = valid.max(axis=1, skipna=True)
                         best_idx.loc[~all_na] = valid.idxmax(axis=1, skipna=True)
                     else:  # cost_income_ratio
-                        best_val = pd.Series(np.nan, index=member_values.index)
-                        best_idx = pd.Series(pd.NA, index=member_values.index, dtype='object')
-                        valid = member_values.loc[~all_na]
-                        best_val.loc[~all_na] = valid.min(axis=1, skipna=True)
-                        best_idx.loc[~all_na] = valid.idxmin(axis=1, skipna=True)
+                        if allocation_mode == 'pro-poor':
+                            best_val = pd.Series(np.nan, index=member_values.index)
+                            best_idx = pd.Series(pd.NA, index=member_values.index, dtype='object')
+                            valid = member_values.loc[~all_na]
+                            best_val.loc[~all_na] = valid.min(axis=1, skipna=True)
+                            best_idx.loc[~all_na] = valid.idxmin(axis=1, skipna=True)
+                        elif allocation_mode == 'pro-clean':
+                            best_val = pd.Series(np.nan, index=member_values.index)
+                            best_idx = pd.Series(pd.NA, index=member_values.index, dtype='object')
+                            valid = member_values.loc[~all_na]
+                            best_val.loc[~all_na] = valid.max(axis=1, skipna=True)
+                            best_idx.loc[~all_na] = valid.idxmax(axis=1, skipna=True)
 
                     self.gdf[value_col] = best_val
                     self.gdf[winner_col] = best_idx.str.replace(f"{target}_", "")
@@ -2576,13 +2587,19 @@ class OnStove(DataProcessor):
                         if target == 'net_benefit':
                             available_cells.loc[clear_all_none_columns, result_tech] = available_cells[col].loc[clear_all_none_columns].idxmax(axis=1).astype('string')
                         elif target == 'cost_income_ratio':
-                            available_cells.loc[clear_all_none_columns, result_tech] = available_cells[col].loc[clear_all_none_columns].idxmin(axis=1).astype('string')
+                            if allocation_mode == 'pro-poor':
+                                available_cells.loc[clear_all_none_columns, result_tech] = available_cells[col].loc[clear_all_none_columns].idxmin(axis=1).astype('string')
+                            elif allocation_mode == 'pro-clean':
+                                available_cells.loc[clear_all_none_columns, result_tech] = available_cells[col].loc[clear_all_none_columns].idxmax(axis=1).astype('string')
                         available_cells[result_tech] = available_cells[result_tech].str.replace(f"{target}_", "")
 
                         if target == 'net_benefit':
                             available_cells.loc[clear_all_none_columns, result_value] = available_cells[col].loc[clear_all_none_columns].max(axis=1)
                         elif target == 'cost_income_ratio':
-                            available_cells.loc[clear_all_none_columns, result_value] = available_cells[col].loc[clear_all_none_columns].min(axis=1)
+                            if allocation_mode == 'pro-poor':
+                                available_cells.loc[clear_all_none_columns, result_value] = available_cells[col].loc[clear_all_none_columns].min(axis=1)
+                            elif allocation_mode == 'pro-clean':
+                                available_cells.loc[clear_all_none_columns, result_value] = available_cells[col].loc[clear_all_none_columns].max(axis=1)
 
                         condition = (available_cells[result_tech] == tech)
                         candidates = available_cells.loc[condition]
@@ -2597,6 +2614,7 @@ class OnStove(DataProcessor):
                         if target == 'net_benefit':
                             candidates = candidates.sort_values(result_value, ascending=False)
                         elif target == 'cost_income_ratio':
+                            # NOT CHANGED
                             candidates = candidates.sort_values(result_value, ascending=True) # ascending = True, depends on the question being asked regarding affordability.                    
                         
                         candidates['cummulative_pop'] = candidates['Calibrated_pop'].cumsum()
@@ -2641,13 +2659,19 @@ class OnStove(DataProcessor):
                         if target == 'net_benefit':
                             available_cells.loc[clear_all_none_columns, result_tech] = available_cells[cols].loc[clear_all_none_columns].idxmax(axis=1).astype('string')
                         elif target == 'cost_income_ratio':
-                            available_cells.loc[clear_all_none_columns, result_tech] = available_cells[cols].loc[clear_all_none_columns].idxmin(axis=1).astype('string')
+                            if allocation_mode == 'pro-poor':
+                                available_cells.loc[clear_all_none_columns, result_tech] = available_cells[cols].loc[clear_all_none_columns].idxmin(axis=1).astype('string')
+                            elif allocation_mode == 'pro-clean':
+                                available_cells.loc[clear_all_none_columns, result_tech] = available_cells[cols].loc[clear_all_none_columns].idxmax(axis=1).astype('string')
                         available_cells[result_tech] = available_cells[result_tech].str.replace(f"{target}_", "")
 
                         if target == 'net_benefit':
                             available_cells.loc[clear_all_none_columns, result_value] = available_cells[cols].loc[clear_all_none_columns].max(axis=1)
                         elif target == 'cost_income_ratio':
-                            available_cells.loc[clear_all_none_columns, result_value] = available_cells[cols].loc[clear_all_none_columns].min(axis=1)
+                            if allocation_mode == 'pro-poor':
+                                available_cells.loc[clear_all_none_columns, result_value] = available_cells[cols].loc[clear_all_none_columns].min(axis=1)
+                            elif allocation_mode == 'pro-clean':
+                                available_cells.loc[clear_all_none_columns, result_value] = available_cells[cols].loc[clear_all_none_columns].max(axis=1)
 
                         condition = (available_cells[result_tech] == tech)
                         candidates = available_cells.loc[condition]
@@ -2662,7 +2686,10 @@ class OnStove(DataProcessor):
                         if target == 'net_benefit':
                             candidates = candidates.sort_values(result_value, ascending=False)
                         elif target == 'cost_income_ratio':
-                            candidates = candidates.sort_values(result_value, ascending=False) # ascending = True, depends on the question being asked regarding affordability.
+                            if allocation_mode == 'pro-poor':
+                                candidates = candidates.sort_values(result_value, ascending=False)
+                            elif allocation_mode == 'pro-clean':
+                                candidates = candidates.sort_values(result_value, ascending=True)
                         candidates['cummulative_pop'] = candidates['Calibrated_pop'].cumsum()
 
                         assigned = candidates[candidates['cummulative_pop'] <= target_pop_assign]
