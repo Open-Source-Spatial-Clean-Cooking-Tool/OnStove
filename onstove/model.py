@@ -2265,6 +2265,7 @@ class OnStove(DataProcessor):
             # Initialize columns
             self.gdf[f'affordability_category_{column}'] = None
             self.gdf[f'affordability_support_required_{column}'] = np.nan
+            self.gdf[f'affordability_cost_subsidy_required_{column}'] = np.nan
             
             # Populate from tech-specific columns based on selected tech
             for tech_name in self.gdf[column].dropna().unique():
@@ -2281,6 +2282,11 @@ class OnStove(DataProcessor):
                 support_col = f'affordability_support_required_{tech_name}'
                 if support_col in self.gdf.columns:
                     self.gdf.loc[mask, f'affordability_support_required_{column}'] = self.gdf.loc[mask, support_col]
+        
+                # Copy affordability cost subsidy required if it exists
+                subsidy_col = f'affordability_cost_subsidy_required_{tech_name}'
+                if subsidy_col in self.gdf.columns:
+                    self.gdf.loc[mask, f'affordability_cost_subsidy_required_{column}'] = self.gdf.loc[mask, subsidy_col]
         
         print('Done')
 

@@ -759,9 +759,12 @@ class Technology:
             affordability_target = support_target / 100
         if model.income_data:
             model.gdf['affordability_support_required_{}'.format(self.name)] = model.gdf['costs_{}'.format(self.name)] / affordability_target - model.gdf['income']
+            model.gdf['affordability_cost_subsidy_required_{}'.format(self.name)] = model.gdf['costs_{}'.format(self.name)] - affordability_target * model.gdf['income']
         else:
             model.gdf['affordability_support_required_{}'.format(self.name)] = model.gdf['costs_{}'.format(self.name)] / affordability_target - model.gdf['absolute_wealth']
+            model.gdf['affordability_cost_subsidy_required_{}'.format(self.name)] = model.gdf['costs_{}'.format(self.name)] - affordability_target * model.gdf['absolute_wealth']
         model.gdf['affordability_support_required_{}'.format(self.name)] = model.gdf['affordability_support_required_{}'.format(self.name)].clip(lower=0)
+        model.gdf['affordability_cost_subsidy_required_{}'.format(self.name)] = model.gdf['affordability_cost_subsidy_required_{}'.format(self.name)].clip(lower=0)
 
 
     def net_benefit(self, model: 'onstove.OnStove', w_health: int = 1, w_spillovers: int = 1,
@@ -1324,6 +1327,7 @@ class LPG(Technology):
         model.gdf.loc[self.net_benefits.isna(), 'affordability_category_{}'.format(self.name)] = 'Not available'
         model.gdf.loc[model.gdf['affordability_category_{}'.format(self.name)] == 'Not available', 'affordability_support_required_{}'.format(self.name)] = np.nan
         model.gdf.loc[model.gdf['affordability_category_{}'.format(self.name)] == 'Not available', 'cost_income_ratio_{}'.format(self.name)] = np.nan
+        model.gdf.loc[model.gdf['affordability_category_{}'.format(self.name)] == 'Not available', 'affordability_cost_subsidy_required_{}'.format(self.name)] = np.nan
 
 
 class Biomass(Technology):
@@ -2034,6 +2038,8 @@ class Electricity(Technology):
         model.gdf.loc[model.gdf['Current_elec'] == 0, 'affordability_category_{}'.format(self.name)] = 'Not available'
         model.gdf.loc[model.gdf['affordability_category_{}'.format(self.name)] == 'Not available', 'affordability_support_required_{}'.format(self.name)] = np.nan
         model.gdf.loc[model.gdf['affordability_category_{}'.format(self.name)] == 'Not available', 'cost_income_ratio_{}'.format(self.name)] = np.nan
+        model.gdf.loc[model.gdf['affordability_category_{}'.format(self.name)] == 'Not available', 'affordability_cost_subsidy_required_{}'.format(self.name)] = np.nan
+
 
 class MiniGrids(Electricity):
     """Mini-grids technology class used to model electrical stoves powered by mini-grids.
@@ -2603,4 +2609,6 @@ class Biogas(Technology):
         model.gdf.loc[model.gdf['net_benefit_{}'.format(self.name)].isna(), 'affordability_category_{}'.format(self.name)] = 'Not available'
         model.gdf.loc[model.gdf['affordability_category_{}'.format(self.name)] == 'Not available', 'affordability_support_required_{}'.format(self.name)] = np.nan
         model.gdf.loc[model.gdf['affordability_category_{}'.format(self.name)] == 'Not available', 'cost_income_ratio_{}'.format(self.name)] = np.nan
+        model.gdf.loc[model.gdf['affordability_category_{}'.format(self.name)] == 'Not available', 'affordability_cost_subsidy_required_{}'.format(self.name)] = np.nan
+
 
