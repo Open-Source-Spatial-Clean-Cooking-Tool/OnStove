@@ -2940,18 +2940,17 @@ class OnStove(DataProcessor):
                 if col.startswith(f'{target}_') and col.replace(f'{target}_', '') not in group_keys
             ]
             
-            # Get corresponding net_benefit columns to check for positive values
-            net_benefit_cols = [col.replace('cost_income_ratio_', 'net_benefit_') if 'cost_income_ratio_' in col else col 
-                               for col in value_cols]
-            benefits_cols = [col.replace('cost_income_ratio_', 'benefits_') if 'cost_income_ratio_' in col else col 
-                               for col in value_cols]
+            # Get corresponding benefits columns for gating (always use benefits_*, regardless of target)
+            # Gating is based on health benefits by design—allows high-cost high-benefit technologies
+            benefits_cols = [col.replace('net_benefit_', 'benefits_') if 'net_benefit_' in col 
+                             else col.replace('cost_income_ratio_', 'benefits_') 
+                             for col in value_cols]
             
-            # Only consider technologies where net_benefit > 0 (restrictions already set NaN for negative benefits earlier)
-            # Additional filter: explicitly check net_benefit > 0
+            # Only consider technologies where benefits > 0 (restrictions already set NaN for negative benefits earlier)
             if restriction in [True, 'yes', 'y', 'Y', 'Yes', 'PositiveBenefits', 'Positive_Benefits']:
                 for val_col, benefits_col in zip(value_cols, benefits_cols):
                     if benefits_col in self.gdf.columns:
-                        # Set to NaN where net_benefit is not positive (includes NaN and <=0)
+                        # Set to NaN where benefits is not positive (includes NaN and <=0)
                         are_none.loc[are_none[benefits_col] < 0, val_col] = np.nan
             
             clear_all_none_columns = are_none[value_cols].notna().any(axis=1)
