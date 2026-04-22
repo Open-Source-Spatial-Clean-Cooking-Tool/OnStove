@@ -2105,7 +2105,8 @@ class OnStove(DataProcessor):
 
     def run(self, technologies: Optional[Union[list, dict, str]] = 'all', restriction: bool = True, priority: Optional[dict[str, list[str]]] = None,
             affordability_categories: list = ['<5%', '5-15%', '15%+'], target: str = 'net_benefit', partial_access: bool = False,
-            tech_groups: Optional[dict[str, list[str]]] = None, support_target: Optional[float] = None, allocation_mode: str = 'pro-poor'):
+            tech_groups: Optional[dict[str, list[str]]] = None, support_target: Optional[float] = None,
+            allocation_metric: Optional[str] = None, cost_income_direction: str = 'poor_first'):
         """Runs the model using the defined ``technologies`` as options to cook with.
 
         It loops through the ``technologies`` and calculates all costs, benefit and the net-benefit of cooking with
@@ -2147,7 +2148,11 @@ class OnStove(DataProcessor):
             Optional dictionary mapping group names to lists of technology names. If a share key is a group,
             the share is treated as a single competitive pool among the group's technologies, assigned by
             the selected target metric (idxmax/idxmin) without equal pre-splitting.
-        allocation_mode: str, default 'pro-poor'
+        allocation_metric: str, optional
+            Metric used to rank candidate rows when allocating shares. If ``None``, the function uses ``target``.
+        cost_income_direction: str, default 'poor_first'
+            Direction used when cost-income ratio is used for selection or ordering. Options are
+            ``'poor_first'`` (idxmin, then sort high to low) or ``'wealthy_first'`` (idxmax, then sort low to high).
 
         See also
         --------
@@ -2228,11 +2233,25 @@ class OnStove(DataProcessor):
             if 'absolute_wealth' in self.gdf.columns or 'income' in self.gdf.columns:
                 tech.affordability_categories(self, categories=affordability_categories, support_target=support_target)
 
+            # Keep the frame consolidated while many tech-specific columns are being appended.
+            self.gdf = self.gdf.copy()
+
+        # Defragment once after iterative column additions from technology calculations.
+        self.gdf = self.gdf.copy()
+
         print(f'Getting best {target} technologies...')
         if isinstance(technologies, list):
             self.maximum_net_benefit(techs, restriction=restriction, partial_access = partial_access, target=target)
         elif isinstance(technologies, dict):
-            self.stove_share_assignment(technologies, restriction=restriction, target=target, priority=priority, tech_groups=tech_groups, allocation_mode=allocation_mode)
+            self.stove_share_assignment(
+                technologies,
+                restriction=restriction,
+                target=target,
+                priority=priority,
+                tech_groups=tech_groups,
+                allocation_metric=allocation_metric,
+                cost_income_direction=cost_income_direction,
+            )
         if target == 'net_benefit':
             column = 'max_benefit_tech'
         elif target == 'cost_income_ratio':
@@ -2440,7 +2459,8 @@ class OnStove(DataProcessor):
 
     def stove_share_assignment(self, techs: Union[dict[str,float],dict[str,dict[str,float]]], target: str = 'net_benefit', 
                                restriction: bool = True, priority: Optional[dict[str, list[str]]] = None, clear_none: bool = True,
-                               tech_groups: Optional[dict[str, list[str]]] = None, allocation_mode: str = 'pro-poor'):
+                               tech_groups: Optional[dict[str, list[str]]] = None, allocation_metric: Optional[str] = None,
+                               cost_income_direction: str = 'poor_first'):
         """Extracts the technology or technology combinations producing the highest net-benefit in each cell
         while achieving user defined shares.
 
@@ -2463,8 +2483,11 @@ class OnStove(DataProcessor):
         restriction: bool, default True
             Whether to have the restriction of only selecting technologies producing a positive benefit compared to the
             baseline. This avoids selecting stoves simply due to them being cheaper.
-        allocation_mode: str, default 'pro-poor'
-            The mode of allocation for distributing technologies among cells. Options are 'pro-poor' or 'pro-clean'.
+        allocation_metric: str, optional
+            Metric used to rank candidate rows when allocating shares. If ``None``, the function uses ``target``.
+        cost_income_direction: str, default 'poor_first'
+            Direction used when cost-income ratio is used for selection or ordering. Options are
+            ``'poor_first'`` (idxmin, then sort high to low) or ``'wealthy_first'`` (idxmax, then sort low to high).
 
 
         See also
@@ -2483,6 +2506,18 @@ class OnStove(DataProcessor):
 
         """      
         restriction_values = [True, 'yes', 'y', 'Y', 'Yes', 'PositiveBenefits', 'Positive_Benefits']
+
+        valid_metrics = ['net_benefit', 'cost_income_ratio']
+        if target not in valid_metrics:
+            raise ValueError("target must be 'net_benefit' or 'cost_income_ratio'")
+
+        if allocation_metric is None:
+            allocation_metric = target
+        if allocation_metric not in valid_metrics:
+            raise ValueError("allocation_metric must be 'net_benefit' or 'cost_income_ratio'")
+
+        if cost_income_direction not in ['poor_first', 'wealthy_first']:
+            raise ValueError("cost_income_direction must be 'poor_first' or 'wealthy_first'")
 
         if target == 'net_benefit':
             net_benefit_cols = [col for col in self.gdf if 'net_benefit_' in col] # type: ignore
@@ -2527,21 +2562,70 @@ class OnStove(DataProcessor):
             return best_val, best_idx
 
         def _pick_highest_for_selection(target_name: str) -> bool:
-            return target_name == 'net_benefit' or allocation_mode == 'pro-clean'
-
-        def _sorted_candidates(candidates: pd.DataFrame, target_name: str) -> pd.DataFrame:
             if target_name == 'net_benefit':
-                return candidates.sort_values(result_value, ascending=False)
-            if allocation_mode == 'pro-poor':
-                return candidates.sort_values(result_value, ascending=False)
-            return candidates.sort_values(result_value, ascending=True)
+                return True
+            return cost_income_direction == 'wealthy_first'
+
+        def _pick_highest_for_target_only(target_name: str) -> bool:
+            if target_name == 'net_benefit':
+                return True
+            # For cost-income clear_none, run opposite to the initial direction:
+            # poor_first -> idxmax (remaining wealthy cells),
+            # wealthy_first -> idxmin (remaining poorer cells).
+            return cost_income_direction == 'poor_first'
+
+        def _cost_income_sort_ascending() -> bool:
+            # Global rule for cost-income allocation ordering (all passes):
+            # wealthy_first -> ascending (lower burden first),
+            # poor_first -> descending (higher burden first).
+            return cost_income_direction == 'wealthy_first'
+
+        def _attach_allocation_order_value(candidates: pd.DataFrame) -> pd.DataFrame:
+            order_col = '_allocation_order_value'
+            candidates = candidates.copy()
+            if allocation_metric == target:
+                candidates[order_col] = candidates[result_value]
+                return candidates
+
+            candidates[order_col] = np.nan
+            for tech_name in candidates[result_tech].dropna().unique():
+                metric_col = f'{allocation_metric}_{tech_name}'
+                if metric_col in candidates.columns:
+                    mask = candidates[result_tech] == tech_name
+                    candidates.loc[mask, order_col] = candidates.loc[mask, metric_col]
+                elif tech_name in group_winner_cols:
+                    winner_col = group_winner_cols[tech_name]
+                    if winner_col in candidates.columns:
+                        mask = candidates[result_tech] == tech_name
+                        winner_techs = candidates.loc[mask, winner_col]
+                        for winner_tech in winner_techs.dropna().unique():
+                            winner_mask = mask & candidates[winner_col].eq(winner_tech)
+                            winner_metric_col = f'{allocation_metric}_{winner_tech}'
+                            if winner_metric_col in candidates.columns:
+                                candidates.loc[winner_mask, order_col] = candidates.loc[winner_mask, winner_metric_col]
+            return candidates
+
+        def _sorted_candidates(candidates: pd.DataFrame) -> pd.DataFrame:
+            candidates = _attach_allocation_order_value(candidates)
+            if allocation_metric == 'net_benefit':
+                # Always rank higher net benefits first.
+                return candidates.sort_values('_allocation_order_value', ascending=False)
+            # For cost-income ratio ordering:
+            # Direction semantics depend on target context; see _cost_income_sort_ascending.
+            if allocation_metric == 'cost_income_ratio':
+                return candidates.sort_values(
+                    '_allocation_order_value',
+                    ascending=_cost_income_sort_ascending()
+                )
+            return candidates
 
         def _assign_best_available(available_cells: pd.DataFrame,
                                    cols: list[str],
-                                   target_name: str) -> tuple[pd.DataFrame, pd.Series]:
+                                   target_name: str,
+                                   target_only: bool = False) -> tuple[pd.DataFrame, pd.Series]:
             """Assign best available technology/value over candidate columns for each row."""
             clear_all_none_columns = available_cells[cols].notna().any(axis=1)
-            pick_highest = _pick_highest_for_selection(target_name)
+            pick_highest = _pick_highest_for_target_only(target_name) if target_only else _pick_highest_for_selection(target_name)
             if pick_highest:
                 available_cells.loc[clear_all_none_columns, result_tech] = available_cells[cols].loc[
                     clear_all_none_columns].idxmax(axis=1).astype('string')
@@ -2587,12 +2671,22 @@ class OnStove(DataProcessor):
 
                 best_val, best_idx = _best_value_and_index(member_values, pick_highest)
 
+                winner_values = best_idx.str.replace(f"{target}_", "")
                 if isurban is None:
-                    self.gdf[value_col] = best_val
-                    self.gdf[winner_col] = best_idx.str.replace(f"{target}_", "")
+                    group_data = pd.DataFrame({value_col: best_val, winner_col: winner_values}, index=self.gdf.index)
+                    existing_cols = [col for col in group_data.columns if col in self.gdf.columns]
+                    if existing_cols:
+                        self.gdf = self.gdf.drop(columns=existing_cols)
+                    self.gdf = pd.concat([self.gdf, group_data], axis=1)
                 else:
+                    missing_cols = [col for col in [value_col, winner_col] if col not in self.gdf.columns]
+                    if missing_cols:
+                        self.gdf = pd.concat(
+                            [self.gdf, pd.DataFrame({col: pd.Series(np.nan, index=self.gdf.index) for col in missing_cols})],
+                            axis=1,
+                        )
                     self.gdf.loc[isurban, value_col] = best_val
-                    self.gdf.loc[isurban, winner_col] = best_idx.str.replace(f"{target}_", "")
+                    self.gdf.loc[isurban, winner_col] = winner_values
 
             return group_value_cols, group_winner_cols
         
@@ -2656,7 +2750,7 @@ class OnStove(DataProcessor):
                             print(f'No candidates to assign as prioritized technology.\n')
                         continue
 
-                    candidates = _sorted_candidates(candidates, target)
+                    candidates = _sorted_candidates(candidates)
 
                     candidates['cummulative_pop'] = candidates['Calibrated_pop'].cumsum()
 
@@ -2712,7 +2806,7 @@ class OnStove(DataProcessor):
                             print(f'No candidates to assign as #{i} best option.\n')
                         continue
 
-                    candidates = _sorted_candidates(candidates, target)
+                    candidates = _sorted_candidates(candidates)
                     candidates['cummulative_pop'] = candidates['Calibrated_pop'].cumsum()
 
                     assigned = candidates[candidates['cummulative_pop'] <= target_pop_assign]
@@ -2811,7 +2905,7 @@ class OnStove(DataProcessor):
                                 print(f'No candidates to assign as prioritized technology.\n')
                             continue
 
-                        candidates = _sorted_candidates(candidates, target)
+                        candidates = _sorted_candidates(candidates)
                         
                         candidates['cummulative_pop'] = candidates['Calibrated_pop'].cumsum()
 
@@ -2867,7 +2961,7 @@ class OnStove(DataProcessor):
                             else:
                                 print(f'No candidates to assign as #{i} best option.\n')
                                 continue
-                        candidates = _sorted_candidates(candidates, target)
+                        candidates = _sorted_candidates(candidates)
                         candidates['cummulative_pop'] = candidates['Calibrated_pop'].cumsum()
 
                         assigned = candidates[candidates['cummulative_pop'] <= target_pop_assign] # Selects the candidates that are below the target population.
@@ -2921,12 +3015,13 @@ class OnStove(DataProcessor):
                 for val_col, benefits_col in zip(value_cols, benefits_cols):
                     if benefits_col in self.gdf.columns:
                         # Set to NaN where benefits is not positive (includes NaN and <=0)
-                        are_none.loc[are_none[benefits_col] < 0, val_col] = np.nan
+                        are_none.loc[are_none[benefits_col] <= 0, val_col] = np.nan
             
             are_none, _ = _assign_best_available(
                 are_none,
                 value_cols,
-                target_name=target
+                target_name=target,
+                target_only=True
             )
 
             assigned_ids = are_none.index.to_list()
@@ -4912,7 +5007,7 @@ class OnStove(DataProcessor):
                            ha='center', fontsize=6)
 
             if isinstance(save_as, str):
-                path = os.path.join(self.output_directory, 'Cost_income')
+                path = os.path.join(self.output_directory)
                 os.makedirs(path, exist_ok=True)
                 plt.savefig(os.path.join(path, save_as), dpi=dpi, bbox_inches='tight', transparent=True)
         finally:
