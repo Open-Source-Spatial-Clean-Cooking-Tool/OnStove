@@ -3245,7 +3245,7 @@ class OnStove(DataProcessor):
         
         
         
-    def income_estimation(self, awe: bool = True, income_data: str = None, pareto_weight: float = 0.32):
+    def income_estimation(self, awe: bool = True, income_data: str = None, pareto_weight: float = 0.32, gdp_data: str = None):
         """Estimates income of each cell in the study area.
 
         The function approaches income estimation in two possible ways. When income data is provided, it is used to simply interpolate income values
@@ -3276,6 +3276,8 @@ class OnStove(DataProcessor):
             The path to the income data used. The income data should be a csv file with two columns: percentile and income.
         pareto_weight: float, default 0.32
             Weight factor for the Pareto distribution to combine it with the lognormal distribution.
+        gdp_data: Optional str
+            Path to a raster with GDP per capita data. Used for scaling the final income obtained if available.
 
         """
 
@@ -3324,7 +3326,16 @@ class OnStove(DataProcessor):
             
             self.gdf["icdf"] = icdf
             sum_icdf = np.sum(self.gdf['icdf'])
-            self.gdf['absolute_wealth'] = self.gdf['icdf']*gdp_pc*n/sum_icdf
+            if gdp_data:
+                with rasterio.open(gdp_data) as src:
+                    coords = [(geom.x, geom.y) for geom in self.gdf['geometry']]
+                    gdp_local = [val[0] for val in src.sample(coords)]
+                
+                scale = gdp_local / gdp_pc
+                absolute_wealth = self.gdf['icdf'] * gdp_pc* n / sum_icdf
+                self.gdf['absolute_wealth'] = absolute_wealth * scale
+            else:
+                self.gdf['absolute_wealth'] = self.gdf['icdf']*gdp_pc*n/sum_icdf
 
         if income_data and income_data.strip():
             self.income_data = True
