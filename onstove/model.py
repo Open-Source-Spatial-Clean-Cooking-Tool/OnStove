@@ -3329,11 +3329,34 @@ class OnStove(DataProcessor):
             if gdp_data:
                 with rasterio.open(gdp_data) as src:
                     coords = [(geom.x, geom.y) for geom in self.gdf['geometry']]
-                    gdp_local = [val[0] for val in src.sample(coords)]
-                
+                    gdp_local = np.array([val[0] for val in src.sample(coords)], dtype=float)
+
+                # Local multiplier relative to national GDP per capita
                 scale = gdp_local / gdp_pc
-                absolute_wealth = self.gdf['icdf'] * gdp_pc* n / sum_icdf
-                self.gdf['absolute_wealth'] = absolute_wealth * scale
+
+                # Base absolute wealth from ICDF (before local adjustment)
+                absolute_wealth_base = self.gdf['icdf'] * gdp_pc * n / sum_icdf
+
+                # Apply local scaling
+                absolute_wealth_scaled = absolute_wealth_base * scale
+
+                # Population-weighted renormalization: enforce national mean == gdp_pc
+                if 'Calibrated_pop' in self.gdf.columns:
+                    pop = self.gdf['Calibrated_pop'].to_numpy(dtype=float)
+                    pop_sum = np.nansum(pop)
+                    if pop_sum > 0:
+                        mean_scaled = np.nansum(absolute_wealth_scaled * pop) / pop_sum
+                    else:
+                        mean_scaled = np.nanmean(absolute_wealth_scaled)
+                else:
+                    mean_scaled = np.nanmean(absolute_wealth_scaled)
+
+                if np.isfinite(mean_scaled) and mean_scaled != 0:
+                    k = gdp_pc / mean_scaled
+                else:
+                    k = 1.0
+
+                self.gdf['absolute_wealth'] = absolute_wealth_scaled * k
             else:
                 self.gdf['absolute_wealth'] = self.gdf['icdf']*gdp_pc*n/sum_icdf
 
