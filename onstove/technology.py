@@ -1182,7 +1182,7 @@ class LPG(Technology):
         bc_fraction = 0.55  # BC fraction of pm2.5
         oc_fraction = 0.70  # OC fraction of BC
         pm_diesel = 1.52  # g/kg_diesel
-        diesel_ef = {'co2': 3.169, 'co': 7.40, 'n2o': 0.056,
+        diesel_ef = {'co2': 3169, 'co': 7.40, 'n2o': 0.056,
                      'bc': bc_fraction * pm_diesel, 'oc': oc_fraction * bc_fraction * pm_diesel}  # g/kg_Diesel
         kg_yr = self.energy / self.energy_content  # LPG use (kg/yr). Energy required (MJ/yr)/LPG energy content (MJ/kg)
         diesel_consumption = self.travel_time * (14 / 1000) * diesel_density  # kg of diesel per trip
@@ -2527,7 +2527,7 @@ class Biogas(Technology):
             layer = RasterLayer('Livestock', name,
                                 path=path)
             model.raster_to_dataframe(layer, name=name, method='read',
-                                      fill_nodata_method='interpolate')
+                                      fill_nodata_method='nearest')
 
     def total_time(self, model: 'onstove.OnStove'):
         """This method expands :meth:`Technology.total_time` by adding the biogas collection time
