@@ -1265,7 +1265,8 @@ class OnStove(DataProcessor):
             'costofcarbonemissions': 'cost_of_carbon_emissions',
             'minimumwage': 'minimum_wage',
             'gdppc': 'gdp_pc',
-            'gini': 'gini'}
+            'gini': 'gini',
+            'gnipc': 'gni_pc'}
 
         self.specs = {self._replace_dict.get(k, k): v for k, v in self.specs.copy().items()}
 
