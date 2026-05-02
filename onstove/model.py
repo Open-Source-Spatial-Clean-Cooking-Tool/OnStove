@@ -1266,7 +1266,7 @@ class OnStove(DataProcessor):
             'minimumwage': 'minimum_wage',
             'gdppc': 'gdp_pc',
             'gini': 'gini',
-            'gnipc': 'gni_pc'}
+            'gnipcppp': 'gni_pc_ppp'}
 
         self.specs = {self._replace_dict.get(k, k): v for k, v in self.specs.copy().items()}
 
@@ -3329,7 +3329,10 @@ class OnStove(DataProcessor):
             sum_icdf = np.sum(self.gdf['icdf'])
             if gdp_data:
                 with rasterio.open(gdp_data) as src:
-                    coords = [(geom.x, geom.y) for geom in self.gdf['geometry']]
+                    gdf_for_sampling = self.gdf[['geometry']].copy()
+                    if gdf_for_sampling.crs != src.crs:
+                        gdf_for_sampling = gdf_for_sampling.to_crs(src.crs)
+                    coords = [(geom.x, geom.y) for geom in gdf_for_sampling['geometry']]
                     gdp_local = np.array([val[0] for val in src.sample(coords)], dtype=float)
 
                 # Local multiplier relative to national GDP per capita
