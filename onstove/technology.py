@@ -2450,12 +2450,20 @@ class Biogas(Technology):
 
         """
 
-        from_cattle = model.gdf["Cattles"] * 12 * 0.15 * 0.8 * 305
-        from_buffalo = model.gdf["Buffaloes"] * 14 * 0.2 * 0.75 * 305
-        from_sheep = model.gdf["Sheeps"] * 0.7 * 0.25 * 0.8 * 452
-        from_goat = model.gdf["Goats"] * 0.6 * 0.3 * 0.85 * 450
-        from_pig = model.gdf["Pigs"] * 5 * 0.75 * 0.14 * 470
-        from_poultry = model.gdf["Poultry"] * 0.12 * 0.25 * 0.75 * 450
+        # Treat missing livestock raster values as zero to avoid full-column NaN propagation.
+        cattle = model.gdf["Cattles"].fillna(0)
+        buffalo = model.gdf["Buffaloes"].fillna(0)
+        sheep = model.gdf["Sheeps"].fillna(0)
+        goats = model.gdf["Goats"].fillna(0)
+        pigs = model.gdf["Pigs"].fillna(0)
+        poultry = model.gdf["Poultry"].fillna(0)
+
+        from_cattle = cattle * 12 * 0.15 * 0.8 * 305
+        from_buffalo = buffalo * 14 * 0.2 * 0.75 * 305
+        from_sheep = sheep * 0.7 * 0.25 * 0.8 * 452
+        from_goat = goats * 0.6 * 0.3 * 0.85 * 450
+        from_pig = pigs * 5 * 0.75 * 0.14 * 470
+        from_poultry = poultry * 0.12 * 0.25 * 0.75 * 450
 
         model.gdf["available_biogas"] = ((from_cattle + from_buffalo + from_goat + from_pig + from_poultry +
                                           from_sheep) * self.digester_eff / 1000) * 365
@@ -2486,7 +2494,7 @@ class Biogas(Technology):
             if isinstance(self.water, str):
                 self.water = VectorLayer('Biogas', 'Water scarcity', self.water, bbox=model.mask_layer.data)
             model.raster_to_dataframe(self.water, name="Water",
-                                      fill_nodata_method='interpolate', method='read')
+                                      fill_default_value = 0, method='read')
             model.gdf.loc[model.gdf["Water"] == 0, "available_biogas"] = 0
 
         # Available biogas energy per year in MJ (energy content in MJ/m3)
