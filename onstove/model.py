@@ -3335,6 +3335,11 @@ class OnStove(DataProcessor):
                     coords = [(geom.x, geom.y) for geom in gdf_for_sampling['geometry']]
                     gdp_local = np.array([val[0] for val in src.sample(coords)], dtype=float)
 
+                # Fallback for nodata/invalid GDP samples: keep national GDP scaling for those cells.
+                invalid = (~np.isfinite(gdp_local)) | (gdp_local <= 0)
+                if np.any(invalid):
+                    gdp_local[invalid] = gdp_pc
+
                 # Local multiplier relative to national GDP per capita
                 scale = gdp_local / gdp_pc
 
