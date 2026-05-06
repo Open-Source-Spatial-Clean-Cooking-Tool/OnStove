@@ -600,7 +600,8 @@ class Technology:
             discounted_base_investments = 0
 
         investments_discounted = np.array([sum(x / discount_rate) for x in investments])
-        self.discounted_investments = pd.Series(investments_discounted, index=model.gdf.index) - discounted_base_investments
+        self.discounted_investments = pd.Series(investments_discounted, index=model.gdf.index) + self.inv_cost - \
+                                      discounted_base_investments
 
     def discount_fuel_cost(self, model: 'onstove.OnStove', relative: bool = True):
         """Calls discount_factor function and calculates discounted fuel costs. Function does not return anything but
