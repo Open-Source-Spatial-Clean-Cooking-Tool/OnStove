@@ -2107,7 +2107,7 @@ class OnStove(DataProcessor):
     def run(self, technologies: Optional[Union[list, dict, str]] = 'all', restriction: bool = True, priority: Optional[dict[str, list[str]]] = None,
             affordability_categories: list = ['<5%', '5-15%', '15%+'], target: str = 'net_benefit', partial_access: bool = False,
             tech_groups: Optional[dict[str, list[str]]] = None, support_target: Optional[float] = None,
-            allocation_metric: Optional[str] = None, cost_income_direction: str = 'poor_first'):
+            allocation_metric: Optional[str] = None, max_tech_share: Optional[dict[str, float]] = None, cost_income_direction: str = 'poor_first'):
         """Runs the model using the defined ``technologies`` as options to cook with.
 
         It loops through the ``technologies`` and calculates all costs, benefit and the net-benefit of cooking with
@@ -2251,6 +2251,7 @@ class OnStove(DataProcessor):
                 priority=priority,
                 tech_groups=tech_groups,
                 allocation_metric=allocation_metric,
+                max_tech_share=max_tech_share,
                 cost_income_direction=cost_income_direction,
             )
         if target == 'net_benefit':
@@ -2461,6 +2462,7 @@ class OnStove(DataProcessor):
     def stove_share_assignment(self, techs: Union[dict[str,float],dict[str,dict[str,float]]], target: str = 'net_benefit', 
                                restriction: bool = True, priority: Optional[dict[str, list[str]]] = None, clear_none: bool = True,
                                tech_groups: Optional[dict[str, list[str]]] = None, allocation_metric: Optional[str] = None,
+                               max_tech_share: Optional[dict[str, float]] = None,
                                cost_income_direction: str = 'poor_first'):
         """Extracts the technology or technology combinations producing the highest net-benefit in each cell
         while achieving user defined shares.
@@ -2486,6 +2488,12 @@ class OnStove(DataProcessor):
             baseline. This avoids selecting stoves simply due to them being cheaper.
         allocation_metric: str, optional
             Metric used to rank candidate rows when allocating shares. If ``None``, the function uses ``target``.
+        max_tech_share: dict[str, float], optional
+            Optional upper bounds on final shares, expressed as fractions of total population. This is enforced
+            as a final cap after ``clear_none`` so it can trim the extra row from the row-based share assignment.
+            For individual technologies, if the target share and the cap are the same, the cap may remove the
+            final overshoot row; if you want to preserve the standard row-based assignment before capping,
+            use a cap slightly above the nominal target share.
         cost_income_direction: str, default 'poor_first'
             Direction used when cost-income ratio is used for selection or ordering. Options are
             ``'poor_first'`` (idxmin, then sort high to low) or ``'wealthy_first'`` (idxmax, then sort low to high).
@@ -2520,6 +2528,28 @@ class OnStove(DataProcessor):
         if cost_income_direction not in ['poor_first', 'wealthy_first']:
             raise ValueError("cost_income_direction must be 'poor_first' or 'wealthy_first'")
 
+        def is_global_share(d):  # Checks shape dict[str, float]
+            return isinstance(d, Mapping) and all(
+                isinstance(k, str) and isinstance(v, (int, float)) for k, v in d.items()
+            )
+
+        if is_global_share(techs):
+            active_share_keys = set(techs.keys())
+        else:
+            active_share_keys = set()
+            for shares in techs.values():
+                active_share_keys.update(shares.keys())
+
+        active_tech_names = set()
+        if tech_groups:
+            for share_key in active_share_keys:
+                if share_key in tech_groups:
+                    active_tech_names.update(tech_groups[share_key])
+                else:
+                    active_tech_names.add(share_key)
+        else:
+            active_tech_names = set(active_share_keys)
+
         if target == 'net_benefit':
             net_benefit_cols = [col for col in self.gdf if 'net_benefit_' in col] # type: ignore
             benefits_cols = [col for col in self.gdf if 'benefits_' in col] # type: ignore
@@ -2541,11 +2571,6 @@ class OnStove(DataProcessor):
 
             result_tech = 'most_affordable_tech'
             result_value = 'most_affordable_cost_income_ratio'
-
-        def is_global_share(d):  # Checks shape dict[str, float]
-            return isinstance(d, Mapping) and all(
-                isinstance(k, str) and isinstance(v, (int, float)) for k, v in d.items()
-                )
 
         def _best_value_and_index(member_values: pd.DataFrame, pick_highest: bool) -> tuple[pd.Series, pd.Series]:
             """Return best value and winning column per row, skipping all-NaN rows."""
@@ -2998,11 +3023,10 @@ class OnStove(DataProcessor):
             print(f'\nClearing None assignments by assigning the best available technology for the {target} target.')
             are_none = self.gdf[self.gdf[result_tech] == 'None'].copy()
 
-            # Use only individual technology columns for fallback; skip group virtual columns
-            group_keys = set(tech_groups.keys()) if tech_groups else set()
+            # Use only active individual technology columns for fallback; skip group virtual columns
             value_cols = [
                 col for col in self.gdf.columns
-                if col.startswith(f'{target}_') and col.replace(f'{target}_', '') not in group_keys
+                if col.startswith(f'{target}_') and col.replace(f'{target}_', '') in active_tech_names
             ]
             
             # Get corresponding benefits columns for gating (always use benefits_*, regardless of target)
@@ -3031,6 +3055,113 @@ class OnStove(DataProcessor):
             self.gdf.loc[assigned_ids, 'technology_option'] = i
             final_shares = (self.gdf.groupby(result_tech)['Calibrated_pop'].sum() / self.gdf['Calibrated_pop'].sum()).round(6)
             print('Final shares after clearing None assignments ', final_shares)
+
+        # Enforce optional upper bounds as the final step so they remain hard end caps.
+        if max_tech_share:
+            total_pop = self.gdf['Calibrated_pop'].sum()
+
+            if 'share_cap_action' not in self.gdf.columns:
+                self.gdf['share_cap_action'] = None
+
+            def _reallocate_removed_rows(removed: pd.DataFrame, capped_tech: str) -> None:
+                available = removed.copy()
+                if tech_groups:
+                    groups_with_tech = [
+                        g for g, members in tech_groups.items()
+                        if g in active_share_keys and capped_tech in members
+                    ]
+                else:
+                    groups_with_tech = []
+
+                if len(removed) > 0:
+                    print(f'Applying share cap reallocation for {capped_tech}: {len(removed)} removed rows to redistribute.')
+
+                for group in groups_with_tech:
+                    members = tech_groups.get(group, [])
+                    member_cols = [
+                        f'{target}_{m}'
+                        for m in members
+                        if m != capped_tech
+                        and m in active_tech_names
+                        and f'{target}_{m}' in self.gdf.columns
+                    ]
+                    if not member_cols:
+                        continue
+                    print(f'  Reallocating within group {group} for {capped_tech}.')
+                    available, _ = _assign_best_available(available, member_cols, target_name=target)
+                    to_assign = available[available[result_tech].notna()]
+                    if not to_assign.empty:
+                        ids = to_assign.index.to_list()
+                        self.gdf.loc[ids, result_tech] = to_assign[result_tech].values
+                        self.gdf.loc[ids, result_value] = to_assign[result_value].values
+                        self.gdf.loc[ids, 'technology_option'] = i
+                        self.gdf.loc[ids, 'share_cap_action'] = 'reallocated_group'
+                        available = available.loc[available[result_tech].isna()]
+                        print(f'    Assigned {len(ids)} rows back inside group {group}.')
+                    if available.empty:
+                        return
+
+                if not available.empty:
+                    value_cols = [
+                        col for col in self.gdf.columns
+                        if col.startswith(f'{target}_')
+                        and col.replace(f'{target}_', '') in active_tech_names
+                        and col.replace(f'{target}_', '') != capped_tech
+                    ]
+                    if value_cols:
+                        print(f'  Falling back to global reallocation for {capped_tech}.')
+                        available, _ = _assign_best_available(available, value_cols, target_name=target)
+                        to_assign = available[available[result_tech].notna()]
+                        if not to_assign.empty:
+                            ids = to_assign.index.to_list()
+                            self.gdf.loc[ids, result_tech] = to_assign[result_tech].values
+                            self.gdf.loc[ids, result_value] = to_assign[result_value].values
+                            self.gdf.loc[ids, 'technology_option'] = i
+                            self.gdf.loc[ids, 'share_cap_action'] = 'reallocated'
+                            print(f'    Assigned {len(ids)} rows outside the group via global fallback.')
+
+            for tech_name, max_frac in max_tech_share.items():
+                try:
+                    max_frac = float(max_frac)
+                except Exception:
+                    continue
+                if not (0 <= max_frac <= 1):
+                    continue
+
+                cap_pop = max_frac * total_pop
+                assigned_mask = self.gdf[result_tech] == tech_name
+                assigned_pop = self.gdf.loc[assigned_mask, 'Calibrated_pop'].sum()
+                if assigned_pop <= cap_pop:
+                    continue
+
+                excess = assigned_pop - cap_pop
+                assigned_rows = self.gdf.loc[assigned_mask].copy()
+                if assigned_rows.empty:
+                    continue
+                ordered = _sorted_candidates(_attach_allocation_order_value(assigned_rows))
+
+                remove_ids = []
+                csum = 0.0
+                for idx, row in ordered.iloc[::-1].iterrows():
+                    remove_ids.append(idx)
+                    csum += float(row['Calibrated_pop'])
+                    if csum >= excess:
+                        break
+
+                if not remove_ids:
+                    continue
+
+                print(f'Share cap triggered for {tech_name}: assigned {assigned_pop:.2f}, cap {cap_pop:.2f}, excess {excess:.2f}.')
+
+                removed_rows = self.gdf.loc[remove_ids].copy()
+                self.gdf.loc[remove_ids, result_tech] = None
+                self.gdf.loc[remove_ids, result_value] = None
+                self.gdf.loc[remove_ids, 'technology_option'] = None
+
+                _reallocate_removed_rows(removed_rows, tech_name)
+
+            final_cap_shares = (self.gdf.groupby(result_tech)['Calibrated_pop'].sum() / self.gdf['Calibrated_pop'].sum()).round(6)
+            print('Final shares after share cap enforcement ', final_cap_shares)
             
         if target == 'cost_income_ratio':
             self.gdf['maximum_net_benefit'] = np.nan
