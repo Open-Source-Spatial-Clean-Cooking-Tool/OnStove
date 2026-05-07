@@ -1932,7 +1932,7 @@ class Electricity(Technology):
         discount_rate, proj_life = self.discount_factor(model.specs)
         if single:
             used_life = proj_life % self.grid_cap_life
-            salvage = self.grid_capacity_cost * (1 - used_life / self.grid_cap_life)
+            salvage = self.grid_capacity_cost * (1 - used_life / self.grid_cap_life) * model.specs['w_salvage']
         else:
             salvage_values = []
 
