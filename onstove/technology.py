@@ -1096,11 +1096,11 @@ class LPG(Technology):
             self.set_cost_decay_function(t0=5, k=0.2, L=1.5)
             return None
         sorted_traveltime, sorted_cost_decay = zip(*sorted(zip(self.travel_time, self._cost_decay_function)))
-        plt.plot(sorted_traveltime, sorted_cost_decay)
-        # plt.xscale('log')
-        plt.title('Travel time penalty')
-        plt.xlabel('Travel time (hours)')
-        plt.ylabel('Cost multiplier')
+        # plt.plot(sorted_traveltime, sorted_cost_decay)
+        # # plt.xscale('log')
+        # plt.title('Travel time penalty')
+        # plt.xlabel('Travel time (hours)')
+        # plt.ylabel('Cost multiplier')
         plt.show()
 
     def set_cost_decay_function(self, t0, k, L):
