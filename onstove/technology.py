@@ -1887,8 +1887,8 @@ class Electricity(Technology):
             self.get_grid_capacity_cost()
             salvage = self.grid_salvage(model)
         else:
-            salvage = self.grid_salvage(model, True)
-
+            # salvage = self.grid_salvage(model, True)
+            salvage = self.grid_salvage(model)
         self.capacity = self.energy * self.coincidence_factor * add_capacity / (3.6 * self.time_of_cooking * 365)
         self.capacity_cost = self.capacity * (self.grid_capacity_cost - salvage)
 
