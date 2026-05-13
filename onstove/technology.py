@@ -1890,7 +1890,8 @@ class Electricity(Technology):
             # salvage = self.grid_salvage(model, True)
             salvage = self.grid_salvage(model)
         self.capacity = self.energy * self.coincidence_factor * add_capacity / (3.6 * self.time_of_cooking * 365)
-        self.capacity_cost = self.capacity * (self.grid_capacity_cost - salvage)
+        #self.capacity_cost = self.capacity * (self.grid_capacity_cost - salvage)
+        self.capacity_cost = self.capacity * (self.grid_capacity_cost)
 
     def get_carbon_intensity(self, model: 'onstove.OnStove'):
         """This function determines the carbon intensity of generated electricity based on the power plant mix in the
