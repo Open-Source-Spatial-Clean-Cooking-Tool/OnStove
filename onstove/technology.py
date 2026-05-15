@@ -308,6 +308,23 @@ class Technology:
         pollutants = ['co2', 'ch4', 'n2o', 'co', 'bc', 'oc']
         self.carbon_intensity = sum([self[f'{pollutant}_intensity'] * model.gwp[pollutant] for pollutant in pollutants])
 
+    def _fnrb_by_cell(self, model: 'onstove.OnStove'):
+        """Return the biomass fNRB fraction for each model cell."""
+        isurban = model.gdf["IsUrban"] > 20
+        rural_fnrb = model.specs["fnrb"]
+        urban_fnrb = model.specs.get("fnrb_urban", rural_fnrb)
+        return pd.Series(np.where(isurban, urban_fnrb, rural_fnrb), index=model.gdf.index)
+
+    def _carbon_intensity_with_fnrb(self, model: 'onstove.OnStove'):
+        """Return a cell-wise carbon intensity series for biomass fuels."""
+        fnrb = self._fnrb_by_cell(model)
+        pollutants = ['co2', 'ch4', 'n2o', 'co', 'bc', 'oc']
+        non_co2 = sum([
+            self[f'{pollutant}_intensity'] * model.gwp[pollutant]
+            for pollutant in pollutants if pollutant != 'co2'
+        ])
+        return pd.Series(self['co2_intensity'] * model.gwp['co2'] * fnrb + non_co2, index=model.gdf.index)
+
     def carb(self, model: 'onstove.OnStove'):
         """Checks if carbon_emission is given in the socio-economic specification file. If it is given this is read
         directly, otherwise the get_carbon_intensity function is called. Function does not return anything but saves the
@@ -1568,10 +1585,13 @@ class Biomass(Technology):
         .. [1] R. Bailis, R. Drigo, A. Ghilardi, O. Masera, The carbon footprint of traditional woodfuels,
            Nature Clim Change. 5 (2015) 266–272. https://doi.org/10.1038/nclimate2491.
         """
-        intensity = self['co2_intensity']
-        self['co2_intensity'] *= model.specs['fnrb']
-        super().get_carbon_intensity(model)
-        self['co2_intensity'] = intensity
+        self.carbon_intensity = self._carbon_intensity_with_fnrb(model)
+
+    def carb(self, model: 'onstove.OnStove'):
+        self.required_energy(model)
+        if self.carbon_intensity is None:
+            self.get_carbon_intensity(model)
+        self.carbon = pd.Series(self.energy * self.carbon_intensity / 1000, index=model.gdf.index)
 
     def solar_panel_investment(self, model: 'onstove.OnStove'):
         """This method adds the cost of a solar panel to unelectrified areas.
@@ -1702,10 +1722,7 @@ class Charcoal(Technology):
         .. [1] R. Bailis, R. Drigo, A. Ghilardi, O. Masera, The carbon footprint of traditional woodfuels,
            Nature Clim Change. 5 (2015) 266–272. https://doi.org/10.1038/nclimate2491.
         """
-        intensity = self['co2_intensity']
-        self['co2_intensity'] *= model.specs['fnrb']
-        super().get_carbon_intensity(model)
-        self['co2_intensity'] = intensity
+        self.carbon_intensity = self._carbon_intensity_with_fnrb(model)
 
     def production_emissions(self, model: 'onstove.OnStove'):
         """Calculates the emissions caused by the production of Charcoal. The function uses emission factors in regards
@@ -1753,7 +1770,10 @@ class Charcoal(Technology):
         --------
         carbon
         """
-        super().carb(model)
+        self.required_energy(model)
+        if self.carbon_intensity is None:
+            self.get_carbon_intensity(model)
+        self.carbon = pd.Series(self.energy * self.carbon_intensity / 1000, index=model.gdf.index)
         self.carbon += self.production_emissions(model)
 
 

@@ -1261,6 +1261,7 @@ class OnStove(DataProcessor):
             'coilc': 'coi_lc',
             'coistroke': 'coi_stroke',
             'fnrb': 'fnrb',
+            'fbnrburban': 'fnrb_urban',
             'vsl': 'vsl',
             'costofcarbonemissions': 'cost_of_carbon_emissions',
             'minimumwage': 'minimum_wage',
