@@ -2651,6 +2651,8 @@ class OnStove(DataProcessor):
                                    target_name: str,
                                    target_only: bool = False) -> tuple[pd.DataFrame, pd.Series]:
             """Assign best available technology/value over candidate columns for each row."""
+            if result_tech not in available_cells.columns or not pd.api.types.is_string_dtype(available_cells[result_tech]):
+                available_cells[result_tech] = pd.Series(pd.NA, index=available_cells.index, dtype='string')
             clear_all_none_columns = available_cells[cols].notna().any(axis=1)
             pick_highest = _pick_highest_for_target_only(target_name) if target_only else _pick_highest_for_selection(target_name)
             if pick_highest:
@@ -2724,7 +2726,7 @@ class OnStove(DataProcessor):
 
             unassigned_ids = self.gdf.index.copy() # Control of cells that are unassigned
             tech_target_pop_unassigned = tech_target_pop.copy() # Control of unassigned population for each technology
-            self.gdf[result_tech] = None
+            self.gdf[result_tech] = pd.Series(pd.NA, index=self.gdf.index, dtype='string')
             self.gdf[result_value] = None
             self.gdf['technology_option'] = None
 
