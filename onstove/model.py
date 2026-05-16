@@ -3450,17 +3450,32 @@ class OnStove(DataProcessor):
 
             # Interpolation ICDF
 
-            icdf = PchipInterpolator(cdf_combined, x_values)
-            n = len(self.gdf)
-            probs = np.linspace(1/n, 1, n)          
-            icdf = icdf(probs)
+            # icdf = PchipInterpolator(cdf_combined, x_values)
+            # n = len(self.gdf)
+            # probs = np.linspace(1/n, 1, n)          
+            # icdf = icdf(probs)
 
             #Calculating AWE
 
             self.gdf = self.gdf.sort_values(by=['relative_wealth'], ascending=True)
+
+            # Population weighted assignation of income
+            # Quantile sampled is created as a fraction of total population
             
-            self.gdf["icdf"] = icdf
-            sum_icdf = np.sum(self.gdf['icdf'])
+            pop = self.gdf['Calibrated_pop']
+
+            cum_pop = pop.cumsum()
+            total_pop = pop.sum()
+
+            probs = (cum_pop - pop / 2) / total_pop
+
+            icdf_interp = PchipInterpolator(cdf_combined, x_values)
+            self.gdf['icdf'] = icdf_interp(probs)
+
+            sum_icdf = (self.gdf['icdf'] * pop).sum()
+            
+            # self.gdf["icdf"] = icdf # Part of old equidistant quantile sampling approach, replaced by population-weighted quantiles to better reflect income distribution in the population.
+            # sum_icdf = np.sum(self.gdf['icdf'])
             if gdp_data:
                 with rasterio.open(gdp_data) as src:
                     gdf_for_sampling = self.gdf[['geometry']].copy()
@@ -3501,7 +3516,9 @@ class OnStove(DataProcessor):
 
                 self.gdf['absolute_wealth'] = absolute_wealth_scaled * k
             else:
-                self.gdf['absolute_wealth'] = self.gdf['icdf']*gdp_pc*n/sum_icdf
+                self.gdf['absolute_wealth'] = self.gdf['icdf'] * gdp_pc * total_pop / sum_icdf
+                # self.gdf['absolute_wealth'] = self.gdf['absolute_wealth_pp'] * self.gdf['Calibrated_pop'] / self.gdf['Households']
+                #self.gdf['absolute_wealth'] = self.gdf['icdf']*gdp_pc*n/sum_icdf
 
         if income_data and income_data.strip():
             self.income_data = True
@@ -5128,15 +5145,49 @@ class OnStove(DataProcessor):
                 numeric_mask = working_series.notna() & (working_series.astype(str) != 'Not available')
                 working_series.loc[not_allocated_mask & numeric_mask] = 'Not allocated'
 
-            base_categories = list(next(iter(self.techs.values())).categories or [])
+            # Defensive sanitization: strip surrounding quotes and whitespace from category labels
+            def _clean_str(x):
+                if pd.isna(x):
+                    return x
+                try:
+                    s = str(x)
+                except Exception:
+                    return x
+                return s.strip().strip("'\"")
+
+            # Sanitize working_series values (handle categorical or object dtype)
+            if pd.api.types.is_categorical_dtype(working_series):
+                # convert to object to clean actual stored values, preserve NA
+                working_series = working_series.astype(object).where(working_series.notna(), None)
+            else:
+                working_series = working_series.astype(object).where(working_series.notna(), None)
+            working_series = working_series.apply(_clean_str)
+
+            # Sanitize tech.categories used to build the palette for the specific fuel tech
+            tech_obj = self.techs.get(fuel, None)
+            if tech_obj is None:
+                # fallback to first tech if fuel name not found
+                tech_obj = next(iter(self.techs.values()))
+            base_categories = list(getattr(tech_obj, 'categories', []) or [])
+            base_categories = [_clean_str(c) for c in base_categories]
+            # normalize the stored tech.categories in-place so subsequent calls see clean labels
+            try:
+                if getattr(tech_obj, 'categories', None):
+                    tech_obj.categories = base_categories
+            except Exception:
+                pass
+
             grad_categories = [c for c in base_categories if c not in ('Not available', 'Not allocated')]
             categories = grad_categories + ['Not available'] + (['Not allocated'] if filter_allocated else [])
 
-            if pd.api.types.is_categorical_dtype(working_series):
-                working_series = working_series.astype('category')
-                needed = [c for c in categories if c not in working_series.cat.categories]
-                if needed:
-                    working_series = working_series.cat.add_categories(needed)
+            # Ensure working_series has these categories defined (for categorical operations downstream)
+            try:
+                working_series = pd.Categorical(working_series, categories=categories, ordered=True)
+            except Exception:
+                # fallback: keep as object series but ensure categories exist in values
+                working_series = working_series
+
+            # assign sanitized series back to the gdf for plotting
             self.gdf[variable] = working_series
 
             # Build color map: gradient across numeric categories; greys for statuses
