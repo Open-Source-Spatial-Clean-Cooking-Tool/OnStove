@@ -3462,17 +3462,17 @@ class OnStove(DataProcessor):
             # Population weighted assignation of income
             # Quantile sampled is created as a fraction of total population
             
-            pop = self.gdf['Calibrated_pop']
+            hh = self.gdf['Households']
 
-            cum_pop = pop.cumsum()
-            total_pop = pop.sum()
+            cum_hh = hh.cumsum()
+            total_hh = hh.sum()
 
-            probs = (cum_pop - pop / 2) / total_pop
+            probs = (cum_hh - hh / 2) / total_hh
 
             icdf_interp = PchipInterpolator(cdf_combined, x_values)
             self.gdf['icdf'] = icdf_interp(probs)
 
-            sum_icdf = (self.gdf['icdf'] * pop).sum()
+            sum_icdf = (self.gdf['icdf'] * hh).sum()
             
             # self.gdf["icdf"] = icdf # Part of old equidistant quantile sampling approach, replaced by population-weighted quantiles to better reflect income distribution in the population.
             # sum_icdf = np.sum(self.gdf['icdf'])
@@ -3516,7 +3516,7 @@ class OnStove(DataProcessor):
 
                 self.gdf['absolute_wealth'] = absolute_wealth_scaled * k
             else:
-                self.gdf['absolute_wealth'] = self.gdf['icdf'] * gdp_pc * total_pop / sum_icdf
+                self.gdf['absolute_wealth'] = self.gdf['icdf'] * gdp_pc * total_hh / sum_icdf
                 # self.gdf['absolute_wealth'] = self.gdf['absolute_wealth_pp'] * self.gdf['Calibrated_pop'] / self.gdf['Households']
                 #self.gdf['absolute_wealth'] = self.gdf['icdf']*gdp_pc*n/sum_icdf
 
