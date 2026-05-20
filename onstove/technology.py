@@ -1981,6 +1981,11 @@ class Electricity(Technology):
         """
         super().discounted_inv(model, relative=relative)
         if relative:
+            # Temporary hardcoded per-cell capacity cost for testing.
+            self.capacity_cost = pd.Series(
+                np.where(model.gdf["IsUrban"] > 20, 75, 225),
+                index=model.gdf.index,
+            )
             self.discounted_investments += (self.connection_cost + self.capacity_cost * (1 - self.pop_sqkm))
 
     def net_benefit(self, model: 'onstove.OnStove', w_health: int = 1, w_spillovers: int = 1,
