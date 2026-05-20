@@ -4144,7 +4144,19 @@ class OnStove(DataProcessor):
                               classes=style_classes)
 
         if isinstance(save_as, str):
-            plt.savefig(os.path.join(self.output_directory, save_as), dpi=dpi, bbox_inches='tight', transparent=True)
+            # Ensure the legend (if placed outside the axes) is included when saving
+            fig = ax.figure if 'ax' in locals() else plt.gcf()
+            legend = None
+            for a in fig.axes:
+                legend = a.get_legend()
+                if legend is not None:
+                    break
+
+            save_path = os.path.join(self.output_directory, save_as)
+            if legend is not None:
+                fig.savefig(save_path, dpi=dpi, bbox_inches='tight', bbox_extra_artists=(legend,), pad_inches=0.05, transparent=True)
+            else:
+                fig.savefig(save_path, dpi=dpi, bbox_inches='tight', pad_inches=0.05, transparent=True)
 
         return ax
 
@@ -4459,6 +4471,7 @@ class OnStove(DataProcessor):
                    theme_name: str = 'minimal',
                    height: float = 1.5, width: float = 2.5,
                    save_as: Optional[str] = None,
+                   label_format: str = '{:.0%}',
                    dpi: int = 150) -> 'matplotlib.Figure':
         """Displays a bar plot with the population or households share using the technologies with highest net-benefits
         over the study area.
@@ -4507,6 +4520,9 @@ class OnStove(DataProcessor):
             Dictionary with arguments for the annotations text of the plot such as text size, color, vertical and
             horizontal alignment. It defaults to
             ``annotation_kwargs=dict(color='black', size=10, va='center', ha='left')``.
+        label_format: str, optional
+            Python format string used for the annotation labels. Examples: ``'{:.1%}'`` (percent with one decimal),
+            ``'{:.0%}'`` (percent no decimals), or ``'{:.2f}'`` (two decimals).
         labs_kwargs: dict, optional
             Dictionary with arguments for the x, y and fill labels. It defaults to
             ``labs_kwargs=dict(x='Stove share', y='Population (Millions)', fill='Cooking technology')``.
@@ -4572,7 +4588,7 @@ class OnStove(DataProcessor):
              + geom_col(aes(x=fill, y=x_variable, fill=fill))
              + geom_text(aes(y=df[x_variable], x=fill,
                              label=df['labels']),
-                         format_string='{:.0%}',
+                         format_string=label_format,
                          **annotation_kwargs)
              + ylim(0, df[x_variable].max() * 1.15)
              + scale_x_discrete(limits=tech_list)
