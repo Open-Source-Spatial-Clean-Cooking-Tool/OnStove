@@ -2880,7 +2880,11 @@ class OnStove(DataProcessor):
 
                 unassigned_ids = self.gdf.loc[isurban].index.copy() # Control of cells that are unassigned
                 tech_target_pop_unassigned = tech_target_pop.copy() # Control of unassigned population for each technology
-                self.gdf.loc[isurban, result_tech] = None
+                if result_tech not in self.gdf.columns:
+                    self.gdf[result_tech] = pd.Series(pd.NA, index=self.gdf.index, dtype='string')
+                else:
+                    self.gdf[result_tech] = self.gdf[result_tech].astype('string')
+                self.gdf.loc[isurban, result_tech] = pd.NA
                 self.gdf.loc[isurban, result_value] = None
                 self.gdf.loc[isurban, 'technology_option'] = None
 
