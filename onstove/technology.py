@@ -1229,7 +1229,11 @@ class LPG(Technology):
         LPG. The function calls ``infrastructure_salvage``. The function does not return anything but saves the
         infrastructure cost (cylinder cost) in the `discounted_infra_cost` attribute of the LPG technology class.
 
-        The function uses the ``cylinder_cost`` attribute of the model.
+        The function uses the ``cylinder_cost`` attribute of the model. The salvage credit is
+        weighted by ``model.specs['w_salvage']``, consistent with how the stove's own salvage is
+        weighted in :meth:`total_costs` (this method is called from :meth:`discounted_inv`, before
+        :meth:`net_benefit` runs, so it cannot rely on a ``w_salvage`` argument being passed in and
+        reads it from ``model.specs`` directly instead).
 
         Parameters
         ----------
@@ -1243,7 +1247,7 @@ class LPG(Technology):
         """
         cost = self.cylinder_cost * 12.5
         salvage = self.infrastructure_salvage(model, cost, self.cylinder_life)
-        self.discounted_infra_cost = (cost - salvage)
+        self.discounted_infra_cost = cost - model.specs['w_salvage'] * salvage
 
     def infrastructure_salvage(self, model: 'onstove.OnStove', cost: float, life: float):
         """Calculates the salvaged cylinder cost. The function calls ``discount_factor``.
@@ -1397,7 +1401,9 @@ class Ethanol(LPG):
         gas capacity using a hardcoded 12.5 kg cylinder size, this uses the same unit-price ×
         capacity structure but with ``canister_cost``/``canister_capacity`` sized for a cheap
         plastic ethanol jerrycan rather than a pressurized cylinder. The function does not return
-        anything but saves the infrastructure cost in the `discounted_infra_cost` attribute.
+        anything but saves the infrastructure cost in the `discounted_infra_cost` attribute. The
+        salvage credit is weighted by ``model.specs['w_salvage']``, consistent with
+        :meth:`LPG.infrastructure_cost`.
 
         Parameters
         ----------
@@ -1411,7 +1417,7 @@ class Ethanol(LPG):
         """
         cost = self.canister_cost * self.canister_capacity
         salvage = self.infrastructure_salvage(model, cost, self.canister_life)
-        self.discounted_infra_cost = cost - salvage
+        self.discounted_infra_cost = cost - model.specs['w_salvage'] * salvage
 
 
 class Biomass(Technology):
