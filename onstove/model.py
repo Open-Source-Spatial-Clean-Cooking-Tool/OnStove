@@ -52,11 +52,11 @@ from plotnine import (
 )
 from plotnine.stats.stat_boxplot import weighted_percentile
 
-from onstove.layer import VectorLayer, RasterLayer
-from onstove.technology import Technology, LPG, Biomass, Electricity, Biogas, Charcoal, MiniGrids
-from onstove.raster import sample_raster
-from onstove._utils import Processes, deep_update
-from onstove._layer_utils import raster_setter
+from onstove.layer import VectorLayer, RasterLayer  # type: ignore
+from onstove.technology import Technology, LPG, Ethanol, Biomass, Electricity, Biogas, Charcoal, MiniGrids  # type: ignore
+from onstove.raster import sample_raster    # type: ignore
+from onstove._utils import Processes, deep_update   # type: ignore
+from onstove._layer_utils import raster_setter  # type: ignore
 import scipy.stats as stats
 from scipy.interpolate import PchipInterpolator
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
@@ -1702,7 +1702,7 @@ class OnStove(DataProcessor):
                         elif 'biomass' in row['Fuel'].lower():
                             techs[row['Fuel']] = Biomass()
                         elif 'ethanol' in row['Fuel'].lower():
-                            techs[row['Fuel']] = LPG()
+                            techs[row['Fuel']] = Ethanol()
                         elif 'pellets' in row['Fuel'].lower():
                             techs[row['Fuel']] = Biomass()
                         elif 'charcoal' in row['Fuel'].lower():

@@ -1245,7 +1245,7 @@ class LPG(Technology):
         salvage = self.infrastructure_salvage(model, cost, self.cylinder_life)
         self.discounted_infra_cost = (cost - salvage)
 
-    def infrastructure_salvage(self, model: 'onstove.OnStove', cost: float, life: int):
+    def infrastructure_salvage(self, model: 'onstove.OnStove', cost: float, life: float):
         """Calculates the salvaged cylinder cost. The function calls ``discount_factor``.
 
         Parameters
@@ -1345,6 +1345,73 @@ class LPG(Technology):
         model.gdf.loc[model.gdf['affordability_category_{}'.format(self.name)] == 'Not available', 'affordability_support_required_{}'.format(self.name)] = np.nan
         model.gdf.loc[model.gdf['affordability_category_{}'.format(self.name)] == 'Not available', 'cost_income_ratio_{}'.format(self.name)] = np.nan
         model.gdf.loc[model.gdf['affordability_category_{}'.format(self.name)] == 'Not available', 'affordability_cost_subsidy_required_{}'.format(self.name)] = np.nan
+
+
+class Ethanol(LPG):
+    """Ethanol technology class used to model ethanol stoves.
+
+    This class inherits the standard :class:`LPG` class and reuses its transportation-cost,
+    fuel-cost and transport-emissions mechanics, since ethanol is assumed to be delivered by the
+    same diesel-truck network and the same travel-time-to-market data as LPG. The one part of the
+    LPG mechanics that does not apply to ethanol is the LPG-specific steel cylinder: first-time
+    ethanol users need a canister (jerrycan) rather than a pressurized cylinder, i.e. a cheap
+    plastic container bought as a single unit and with a much shorter usable life, rather than a
+    durable pressure vessel priced per kg of gas capacity. This class therefore overrides
+    :meth:`infrastructure_cost` to use a flat ``canister_cost``/``canister_life`` instead of LPG's
+    per-kg ``cylinder_cost`` and hardcoded 12.5 kg cylinder assumption.
+
+    Parameters
+    ----------
+    canister_cost: float, default 1
+        Cost of an ethanol canister/jerrycan, in USD/kg of capacity. Mirrors LPG's ``cylinder_cost``
+        semantics (a unit price rather than a flat total), but at a much lower per-kg price since a
+        plastic jerrycan is far cheaper than a pressurized steel cylinder. This is a placeholder
+        estimate; replace with sourced jerrycan pricing if available.
+    canister_capacity: float, default 4
+        Capacity of an ethanol canister/jerrycan, in kg (mirrors LPG's hardcoded 12.5 kg cylinder
+        assumption; ~4 kg approximates a typical 5 L jerrycan at ethanol's density of ~0.79 kg/L).
+        This is a placeholder estimate; replace with sourced data if available.
+    canister_life: float, default 2
+        Lifetime of an ethanol canister/jerrycan, in years. Plastic jerrycans wear out much faster
+        than a steel LPG cylinder (15-year default in the parent class). This is a placeholder
+        estimate; replace with sourced data if available.
+    **kwargs
+        All other parameters are identical to :class:`LPG` (``fuel_cost``, ``energy_content``,
+        ``efficiency``, ``tech_life``, ``inv_cost``, ``om_cost``, ``diesel_cost``, ``travel_time``,
+        ``truck_capacity``, ``diesel_per_hour``, etc.) and are passed through unchanged.
+        ``cylinder_cost``/``cylinder_life`` are still accepted for compatibility with :class:`LPG`
+        but are unused by this class.
+    """
+
+    def __init__(self, canister_cost: float = 1.0, canister_capacity: float = 4.0,
+                 canister_life: float = 2.0, **kwargs):
+        super().__init__(**kwargs)
+        self.canister_cost = canister_cost
+        self.canister_capacity = canister_capacity
+        self.canister_life = canister_life
+
+    def infrastructure_cost(self, model: 'onstove.OnStove'):
+        """Calculates the cost of an ethanol canister/jerrycan for first-time ethanol users.
+
+        Unlike :meth:`LPG.infrastructure_cost`, which prices a reusable steel cylinder per kg of
+        gas capacity using a hardcoded 12.5 kg cylinder size, this uses the same unit-price ×
+        capacity structure but with ``canister_cost``/``canister_capacity`` sized for a cheap
+        plastic ethanol jerrycan rather than a pressurized cylinder. The function does not return
+        anything but saves the infrastructure cost in the `discounted_infra_cost` attribute.
+
+        Parameters
+        ----------
+        model: OnStove model
+            Instance of the OnStove model containing the main data of the study case. See
+            :class:`onstove.OnStove`.
+
+        See also
+        --------
+        infrastructure_salvage
+        """
+        cost = self.canister_cost * self.canister_capacity
+        salvage = self.infrastructure_salvage(model, cost, self.canister_life)
+        self.discounted_infra_cost = cost - salvage
 
 
 class Biomass(Technology):
