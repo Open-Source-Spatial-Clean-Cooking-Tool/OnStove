@@ -1247,7 +1247,7 @@ class LPG(Technology):
         """
         cost = self.cylinder_cost * 12.5
         salvage = self.infrastructure_salvage(model, cost, self.cylinder_life)
-        self.discounted_infra_cost = cost - salvage # model.specs['w_salvage'] * salvage
+        self.discounted_infra_cost = cost - model.specs['w_salvage'] * salvage
 
     def infrastructure_salvage(self, model: 'onstove.OnStove', cost: float, life: float):
         """Calculates the salvaged cylinder cost. The function calls ``discount_factor``.
@@ -1417,7 +1417,7 @@ class Ethanol(LPG):
         """
         cost = self.canister_cost * self.canister_capacity
         salvage = self.infrastructure_salvage(model, cost, self.canister_life)
-        self.discounted_infra_cost = cost - salvage# model.specs['w_salvage'] * salvage
+        self.discounted_infra_cost = cost - model.specs['w_salvage'] * salvage
 
 
 class Biomass(Technology):
