@@ -2710,10 +2710,13 @@ class OnStove(DataProcessor):
                 else:
                     missing_cols = [col for col in [value_col, winner_col] if col not in self.gdf.columns]
                     if missing_cols:
-                        self.gdf = pd.concat(
-                            [self.gdf, pd.DataFrame({col: pd.Series(np.nan, index=self.gdf.index) for col in missing_cols})],
-                            axis=1,
-                        )
+                        new_cols = {}
+                        for col in missing_cols:
+                            if col == winner_col:
+                                new_cols[col] = pd.Series(pd.NA, index=self.gdf.index, dtype='string')
+                            else:
+                                new_cols[col] = pd.Series(np.nan, index=self.gdf.index)
+                        self.gdf = pd.concat([self.gdf, pd.DataFrame(new_cols)], axis=1)
                     self.gdf.loc[isurban, value_col] = best_val
                     self.gdf.loc[isurban, winner_col] = winner_values
 
