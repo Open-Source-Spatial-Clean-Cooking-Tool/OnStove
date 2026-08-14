@@ -1774,33 +1774,15 @@ class Charcoal(Technology):
                          inv_cost, fuel_cost, time_of_cooking,
                          om_cost, efficiency, pm25, is_clean=False)
 
-    def get_carbon_intensity(self, model: 'onstove.OnStove'):
-        """This method expands :meth:`Technology.get_carbon_intensity`.
-
-        It excludes the CO2 emissions from the share of firewood that is sustainably harvested (i.e. it does not affect
-        other emissions such as CH4) by using the fraction of Non-Renewable Biomass (fNRB).
-
-        Parameters
-        ----------
-        model: OnStove model
-            Instance of the OnStove model containing the main data of the study case. See
-            :class:`onstove.OnStove`.
-
-        Notes
-        -----
-        For more information about fNRB see [1]_.
-
-        References
-        ----------
-        .. [1] R. Bailis, R. Drigo, A. Ghilardi, O. Masera, The carbon footprint of traditional woodfuels,
-           Nature Clim Change. 5 (2015) 266–272. https://doi.org/10.1038/nclimate2491.
-        """
-        self.carbon_intensity = self._carbon_intensity_with_fnrb(model)
-
     def production_emissions(self, model: 'onstove.OnStove'):
         """Calculates the emissions caused by the production of Charcoal. The function uses emission factors in regards
         to CO2, CO, CH4, BC and OC as well as the ``energy`` and ``energy_content`` attributes of te model.
         Emissions factors for the production of charcoal are taken from [1]_.
+
+        The CO2 emission factor is scaled by the (rural) fraction of Non-Renewable Biomass (fNRB), since this is
+        the point in the Charcoal life cycle where the non-renewable share of the harvested wood is accounted for;
+        combustion of the charcoal itself (see :meth:`Technology.get_carbon_intensity`) is not scaled again to
+        avoid double-counting fNRB. Other pollutants (CO, CH4, BC, OC) are not affected by fNRB.
 
 
         References
@@ -1824,8 +1806,9 @@ class Charcoal(Technology):
         emission_factors = {'co2': 1626, 'co': 255, 'ch4': 39.6, 'bc': 0.02, 'oc': 0.74}  # g/kg_Charcoal
         # Charcoal produced (kg/yr). Energy required (MJ/yr)/Charcoal energy content (MJ/kg)
         kg_yr = self.energy / self.energy_content
-        hh_emissions = sum([ef * model.gwp[pollutant] * kg_yr for pollutant, ef in
-                            emission_factors.items()])  # gCO2eq/yr
+        fnrb = model.specs["fnrb"]  # always the rural fNRB, regardless of urban/rural cell
+        hh_emissions = sum([ef * model.gwp[pollutant] * kg_yr * (fnrb if pollutant == 'co2' else 1)
+                            for pollutant, ef in emission_factors.items()])  # gCO2eq/yr
         return hh_emissions / 1000  # kgCO2/yr
 
     def carb(self, model: 'onstove.OnStove'):
