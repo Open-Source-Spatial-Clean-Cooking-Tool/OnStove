@@ -1195,7 +1195,7 @@ class OnStove(DataProcessor):
             reader = DictReader(csvfile, delimiter=delimiter)
             config_file = list(reader)
             for row in config_file:
-                if row['Value'] is not None:
+                if row['Value']:
                     param = row['Param'].replace('_', '').replace(' ', '').lower()
                     if row['data_type'] == 'int':
                         config[param] = int(row['Value'])
@@ -1266,6 +1266,7 @@ class OnStove(DataProcessor):
             'costofcarbonemissions': 'cost_of_carbon_emissions',
             'minimumwage': 'minimum_wage',
             'gdppc': 'gdp_pc',
+            'consumptionpc': 'consumption_pc',
             'gini': 'gini',
             'gnipcppp': 'gni_pc_ppp'}
 
@@ -2108,7 +2109,8 @@ class OnStove(DataProcessor):
     def run(self, technologies: Optional[Union[list, dict, str]] = 'all', restriction: bool = True, priority: Optional[dict[str, list[str]]] = None,
             affordability_categories: list = ['<5%', '5-15%', '15%+'], target: str = 'net_benefit', partial_access: bool = False,
             tech_groups: Optional[dict[str, list[str]]] = None, support_target: Optional[float] = None,
-            allocation_metric: Optional[str] = None, max_tech_share: Optional[dict[str, float]] = None, cost_income_direction: str = 'poor_first'):
+            allocation_metric: Optional[str] = None, max_tech_share: Optional[dict[str, float]] = None, cost_income_direction: str = 'poor_first',
+            health_only: bool = False):
         """Runs the model using the defined ``technologies`` as options to cook with.
 
         It loops through the ``technologies`` and calculates all costs, benefit and the net-benefit of cooking with
@@ -2133,6 +2135,12 @@ class OnStove(DataProcessor):
         restriction: bool, default True
             Whether to have the restriction of only selecting technologies producing a positive benefit compared to the
             baseline. This avoids selecting stoves simply due to them being cheaper.
+        health_only: bool, default False
+            When True, the ``restriction`` gate above is computed from the four health-related benefit terms only
+            (mortality, morbidity and their spillovers) instead of the full benefit total (which also includes
+            avoided carbon costs and time saved). This prevents a technology with a net-negative health impact from
+            passing the gate purely because carbon or time benefits offset it — relevant in particular for
+            weighting presets (e.g. least-cost) where health is not part of the selection ranking itself.
 
         affordability_categories: list, default ['<5%', '5-15%', '15%+']
             List defining the affordability categories. If more categories want to be added, or different thresholds, please folloow the
@@ -2174,6 +2182,8 @@ class OnStove(DataProcessor):
         onstove.Technology.affordability_categories
         """
         for row in self._replace_dict.values():
+            if row == 'consumption_pc':
+                continue  # Optional: income_estimation falls back to gdp_pc when absent.
             if row not in self.specs:
                 raise ValueError("The socio-economic data has to include the " + row + " field. " + \
 				 "See the read_scenario_data method for more information.")
@@ -2232,7 +2242,7 @@ class OnStove(DataProcessor):
             tech.net_benefit(self, self.specs['w_health'], self.specs['w_spillovers'],
                              self.specs['w_environment'], self.specs['w_time'], self.specs['w_costs'],
                              self.specs['w_salvage'])
-            if 'absolute_wealth' in self.gdf.columns or 'income' in self.gdf.columns:
+            if 'absolute_wealth_household' in self.gdf.columns or 'income' in self.gdf.columns:
                 tech.affordability_categories(self, categories=affordability_categories, support_target=support_target)
 
             # Keep the frame consolidated while many tech-specific columns are being appended.
@@ -2243,7 +2253,7 @@ class OnStove(DataProcessor):
 
         print(f'Getting best {target} technologies...')
         if isinstance(technologies, list):
-            self.maximum_net_benefit(techs, restriction=restriction, partial_access = partial_access, target=target)
+            self.maximum_net_benefit(techs, restriction=restriction, partial_access = partial_access, target=target, health_only=health_only)
         elif isinstance(technologies, dict):
             self.stove_share_assignment(
                 technologies,
@@ -2254,6 +2264,7 @@ class OnStove(DataProcessor):
                 allocation_metric=allocation_metric,
                 max_tech_share=max_tech_share,
                 cost_income_direction=cost_income_direction,
+                health_only=health_only,
             )
         if target == 'net_benefit':
             column = 'max_benefit_tech'
@@ -2282,7 +2293,7 @@ class OnStove(DataProcessor):
         self.extract_salvage(column=column)
         
         # Create affordability columns for the selected technology
-        if 'absolute_wealth' in self.gdf.columns or 'income' in self.gdf.columns:
+        if 'absolute_wealth_household' in self.gdf.columns or 'income' in self.gdf.columns:
             print('    - Affordability for selected technologies')
             # Initialize columns
             self.gdf[f'affordability_category_{column}'] = None
@@ -2321,7 +2332,7 @@ class OnStove(DataProcessor):
         return columns_dict
 
     def maximum_net_benefit(self, techs: list['Technology'], restriction: bool = True, partial_access = True,
-                            target: str = 'net_benefit'):
+                            target: str = 'net_benefit', health_only: bool = False):
         """Extracts the technology or technology combinations producing the highest net-benefit in each cell.
 
         It saves the technology with highest net-benefit in the ``max_benefi_tech`` column of the :attr:`gdf`
@@ -2335,6 +2346,9 @@ class OnStove(DataProcessor):
         restriction: bool, default True
             Whether to have the restriction of only selecting technologies producing a positive benefit compared to the
             baseline. This avoids selecting stoves simply due to them being cheaper.
+        health_only: bool, default False
+            When True, ``restriction`` gates on the health-only benefit total (mortality, morbidity and their
+            spillovers) instead of the full benefit total that also includes avoided carbon costs and time saved.
 
         See also
         --------
@@ -2350,9 +2364,10 @@ class OnStove(DataProcessor):
         extract_om_costs
         extract_salvage
         """
+        benefit_prefix = 'health_benefits_' if health_only else 'benefits_'
         if target == 'net_benefit':
             value_cols = [col for col in self.gdf if 'net_benefit_' in col]
-            benefit_cols = [col for col in self.gdf if 'benefits_' in col]
+            benefit_cols = [col for col in self.gdf if col.startswith(benefit_prefix)]
             result_tech = 'max_benefit_tech'
             result_value = 'maximum_net_benefit'
             pick_func = 'max'
@@ -2363,7 +2378,7 @@ class OnStove(DataProcessor):
                     self.gdf.loc[self.gdf[benefit] < 0, net + '_temp'] = np.nan
         elif target == 'cost_income_ratio':
             value_cols = [col for col in self.gdf if 'cost_income_ratio_' in col]
-            benefit_cols = [col.replace('cost_income_ratio_', 'benefits_') for col in value_cols]
+            benefit_cols = [col.replace('cost_income_ratio_', benefit_prefix) for col in value_cols]
             result_tech = 'most_affordable_tech'
             result_value = 'most_affordable_cost_income_ratio'
             pick_func = 'min'
@@ -2460,11 +2475,11 @@ class OnStove(DataProcessor):
 
     # TODO: check if we need this method
 
-    def stove_share_assignment(self, techs: Union[dict[str,float],dict[str,dict[str,float]]], target: str = 'net_benefit', 
+    def stove_share_assignment(self, techs: Union[dict[str,float],dict[str,dict[str,float]]], target: str = 'net_benefit',
                                restriction: bool = True, priority: Optional[dict[str, list[str]]] = None, clear_none: bool = True,
                                tech_groups: Optional[dict[str, list[str]]] = None, allocation_metric: Optional[str] = None,
                                max_tech_share: Optional[dict[str, float]] = None,
-                               cost_income_direction: str = 'poor_first'):
+                               cost_income_direction: str = 'poor_first', health_only: bool = False):
         """Extracts the technology or technology combinations producing the highest net-benefit in each cell
         while achieving user defined shares.
 
@@ -2487,6 +2502,9 @@ class OnStove(DataProcessor):
         restriction: bool, default True
             Whether to have the restriction of only selecting technologies producing a positive benefit compared to the
             baseline. This avoids selecting stoves simply due to them being cheaper.
+        health_only: bool, default False
+            When True, ``restriction`` gates on the health-only benefit total (mortality, morbidity and their
+            spillovers) instead of the full benefit total that also includes avoided carbon costs and time saved.
         allocation_metric: str, optional
             Metric used to rank candidate rows when allocating shares. If ``None``, the function uses ``target``.
         max_tech_share: dict[str, float], optional
@@ -2551,20 +2569,22 @@ class OnStove(DataProcessor):
         else:
             active_tech_names = set(active_share_keys)
 
+        benefit_prefix = 'health_benefits_' if health_only else 'benefits_'
+
         if target == 'net_benefit':
             net_benefit_cols = [col for col in self.gdf if 'net_benefit_' in col] # type: ignore
-            benefits_cols = [col for col in self.gdf if 'benefits_' in col] # type: ignore
+            benefits_cols = [col for col in self.gdf if col.startswith(benefit_prefix)] # type: ignore
 
             for benefit, net in zip(benefits_cols, net_benefit_cols):
                 if restriction in restriction_values:
                     self.gdf.loc[self.gdf[benefit] < 0, net] = np.nan
-            
+
             result_tech = 'max_benefit_tech'
             result_value = 'maximum_net_benefit'
 
         elif target == 'cost_income_ratio':
             value_cols = [col for col in self.gdf if 'cost_income_ratio_' in col] # type: ignore
-            benefit_cols = [col.replace('cost_income_ratio_', 'benefits_') for col in value_cols] # type: ignore
+            benefit_cols = [col.replace('cost_income_ratio_', benefit_prefix) for col in value_cols] # type: ignore
             for cost_col, ben_col in zip(value_cols, benefit_cols):
                 if restriction in restriction_values:
                     if ben_col in self.gdf.columns:
@@ -3039,10 +3059,10 @@ class OnStove(DataProcessor):
                 if col.startswith(f'{target}_') and col.replace(f'{target}_', '') in active_tech_names
             ]
             
-            # Get corresponding benefits columns for gating (always use benefits_*, regardless of target)
-            # Gating is based on health benefits by design—allows high-cost high-benefit technologies
-            benefits_cols = [col.replace('net_benefit_', 'benefits_') if 'net_benefit_' in col 
-                             else col.replace('cost_income_ratio_', 'benefits_') 
+            # Get corresponding benefits columns for gating (benefits_* or health_benefits_* per
+            # health_only, regardless of target) — allows high-cost high-benefit technologies
+            benefits_cols = [col.replace('net_benefit_', benefit_prefix) if 'net_benefit_' in col
+                             else col.replace('cost_income_ratio_', benefit_prefix)
                              for col in value_cols]
             
             # Only consider technologies where benefits > 0 (restrictions already set NaN for negative benefits earlier)
@@ -3393,8 +3413,9 @@ class OnStove(DataProcessor):
         The function approaches income estimation in two possible ways. When income data is provided, it is used to simply interpolate income values
         in all cells, by corresponding the income values to the relative wealth index ranked (sorted) values. The income data should be a csv file with two columns:
         percentile and income. The other alternative is to use the relative wealth index to estimate the absolute wealth estimate.
-        The absolute wealth is calculated using the relative wealth index, the Gini coefficient and the GDP per capita of the study area.
-        The relative wealth index, as indicated by [1], can be used to calculate an absolute wealth estimate. Given its use of GDP per capita and Gini coefficient,
+        The absolute wealth is calculated using the relative wealth index, the Gini coefficient and an income anchor for the study area — household
+        final consumption expenditure per capita (``consumption_pc``) when present in the socio-economic specs, otherwise GDP per capita (``gdp_pc``).
+        The relative wealth index, as indicated by [1], can be used to calculate an absolute wealth estimate. Given its use of this income anchor and Gini coefficient,
         it can be considered a rough estimation for income. This rough estimation is based on the work by [2], where a function describing wealth distribution in a
         country was determined as the combination of a Pareto and a lognormal distribution. The two distributions are combined using a weight factor, 
         which is set to 0.32 by default. The weight factor can be adjusted to fit the specific distribution of wealth in the study area. The authors of [2] 
@@ -3428,39 +3449,28 @@ class OnStove(DataProcessor):
         # First estimating the distributions
 
         if awe:
-            gdp_pc = self.specs['gdp_pc']
+            # consumption_pc (household final consumption per capita) is an optional,
+            # preferred alternative anchor to gdp_pc for the wealth distributions below.
+            # Falls back to gdp_pc when consumption_pc isn't present in the prep file
+            # or a country has no WDI coverage for it.
+            consumption_pc = self.specs.get('consumption_pc', np.nan)
+            using_consumption_pc = not np.isnan(consumption_pc)
+            gdp_pc = consumption_pc if using_consumption_pc else self.specs['gdp_pc']
+            print(f'[{self.specs["country_name"]}] Income anchor: '
+                  f'{"consumption_pc" if using_consumption_pc else "gdp_pc"} = {gdp_pc}')
             gini = self.specs['gini']
 
             alpha_pareto = ((1+gini)/(2*gini))
             xm_pareto = (1-(1/alpha_pareto))*gdp_pc
 
-            x_values = np.linspace(0, 5 * gdp_pc, 1000)  # Mock values to create the distributions
-                                                        # High income values captured by 5 times GPDpc, ASUMPTION
-
             dist_pareto = stats.pareto(b=alpha_pareto, scale=xm_pareto)
-            cdf_pareto = dist_pareto.cdf(x_values)
-        
+
             # Lognormal distribution
-        
+
             sigma_lognorm = np.sqrt(2)*stats.norm.ppf((gini+1)/2)
             mu_lognorm = np.log(gdp_pc)-((sigma_lognorm**2)/2)
-        
+
             dist_lognorm = stats.lognorm(s=sigma_lognorm, scale=np.exp(mu_lognorm))
-            cdf_lognorm = dist_lognorm.cdf(x_values)
-
-            # Combined Distribution
-
-            w_pareto = pareto_weight
-            w_lognorm = 1 - w_pareto
-
-            cdf_combined = w_pareto * cdf_pareto + w_lognorm * cdf_lognorm
-
-            # Interpolation ICDF
-
-            # icdf = PchipInterpolator(cdf_combined, x_values)
-            # n = len(self.gdf)
-            # probs = np.linspace(1/n, 1, n)          
-            # icdf = icdf(probs)
 
             #Calculating AWE
 
@@ -3476,13 +3486,19 @@ class OnStove(DataProcessor):
 
             probs = (cum_hh - hh / 2) / total_hh
 
-            icdf_interp = PchipInterpolator(cdf_combined, x_values)
-            self.gdf['icdf'] = icdf_interp(probs)
+            icdf_pareto = dist_pareto.ppf(probs)
+            icdf_lognorm = dist_lognorm.ppf(probs)
 
-            sum_icdf = (self.gdf['icdf'] * hh).sum()
-            
-            # self.gdf["icdf"] = icdf # Part of old equidistant quantile sampling approach, replaced by population-weighted quantiles to better reflect income distribution in the population.
-            # sum_icdf = np.sum(self.gdf['icdf'])
+            sum_icdf_pareto = (icdf_pareto * hh).sum()
+            sum_icdf_lognorm = (icdf_lognorm * hh).sum()
+
+            wealth_pareto = icdf_pareto * gdp_pc * total_hh / sum_icdf_pareto
+            wealth_lognorm = icdf_lognorm * gdp_pc * total_hh / sum_icdf_lognorm
+
+            w_pareto = pareto_weight
+            w_lognorm = 1 - w_pareto
+            absolute_wealth_percap = (wealth_lognorm ** w_lognorm) * (wealth_pareto ** w_pareto)
+
             if gdp_data:
                 with rasterio.open(gdp_data) as src:
                     gdf_for_sampling = self.gdf[['geometry']].copy()
@@ -3499,11 +3515,8 @@ class OnStove(DataProcessor):
                 # Local multiplier relative to national GDP per capita
                 scale = gdp_local / gdp_pc
 
-                # Base absolute wealth from ICDF (before local adjustment)
-                absolute_wealth_base = self.gdf['icdf'] * gdp_pc * n / sum_icdf
-
                 # Apply local scaling
-                absolute_wealth_scaled = absolute_wealth_base * scale
+                absolute_wealth_scaled = absolute_wealth_percap * scale
 
                 # Population-weighted renormalization: enforce national mean == gdp_pc
                 if 'Calibrated_pop' in self.gdf.columns:
@@ -3521,11 +3534,13 @@ class OnStove(DataProcessor):
                 else:
                     k = 1.0
 
-                self.gdf['absolute_wealth'] = absolute_wealth_scaled * k
-            else:
-                self.gdf['absolute_wealth'] = self.gdf['icdf'] * gdp_pc * total_hh / sum_icdf
-                # self.gdf['absolute_wealth'] = self.gdf['absolute_wealth_pp'] * self.gdf['Calibrated_pop'] / self.gdf['Households']
-                #self.gdf['absolute_wealth'] = self.gdf['icdf']*gdp_pc*n/sum_icdf
+                absolute_wealth_percap = absolute_wealth_scaled * k
+
+            self.gdf['absolute_wealth_percap'] = absolute_wealth_percap
+
+            is_urban = self.gdf['IsUrban'] > 20
+            household_size = np.where(is_urban, self.specs['urban_hh_size'], self.specs['rural_hh_size'])
+            self.gdf['absolute_wealth_household'] = self.gdf['absolute_wealth_percap'] * household_size
 
         if income_data and income_data.strip():
             self.income_data = True

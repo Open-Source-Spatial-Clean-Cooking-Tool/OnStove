@@ -743,7 +743,7 @@ class Technology:
             if model.income_data:
                 model.gdf['cost_income_ratio_{}'.format(self.name)] = model.gdf['costs_{}'.format(self.name)] / model.gdf['income']
             else:
-                model.gdf['cost_income_ratio_{}'.format(self.name)] = model.gdf['costs_{}'.format(self.name)] / model.gdf['absolute_wealth']
+                model.gdf['cost_income_ratio_{}'.format(self.name)] = model.gdf['costs_{}'.format(self.name)] / model.gdf['absolute_wealth_household']
             
             model.gdf['cost_income_ratio_{}'.format(self.name)] = model.gdf['cost_income_ratio_{}'.format(self.name)].clip(lower=0)
         
@@ -778,8 +778,8 @@ class Technology:
             model.gdf['affordability_support_required_{}'.format(self.name)] = model.gdf['costs_{}'.format(self.name)] / affordability_target - model.gdf['income']
             model.gdf['affordability_cost_subsidy_required_{}'.format(self.name)] = model.gdf['costs_{}'.format(self.name)] - affordability_target * model.gdf['income']
         else:
-            model.gdf['affordability_support_required_{}'.format(self.name)] = model.gdf['costs_{}'.format(self.name)] / affordability_target - model.gdf['absolute_wealth']
-            model.gdf['affordability_cost_subsidy_required_{}'.format(self.name)] = model.gdf['costs_{}'.format(self.name)] - affordability_target * model.gdf['absolute_wealth']
+            model.gdf['affordability_support_required_{}'.format(self.name)] = model.gdf['costs_{}'.format(self.name)] / affordability_target - model.gdf['absolute_wealth_household']
+            model.gdf['affordability_cost_subsidy_required_{}'.format(self.name)] = model.gdf['costs_{}'.format(self.name)] - affordability_target * model.gdf['absolute_wealth_household']
         model.gdf['affordability_support_required_{}'.format(self.name)] = model.gdf['affordability_support_required_{}'.format(self.name)].clip(lower=0)
         model.gdf['affordability_cost_subsidy_required_{}'.format(self.name)] = model.gdf['affordability_cost_subsidy_required_{}'.format(self.name)].clip(lower=0)
 
@@ -817,13 +817,14 @@ class Technology:
          carbon_emissions
         """
         self.total_costs(w_salvage=w_salvage)
-        self.benefits = self.distributed_morbidity + self.distributed_mortality + \
-                        self.distributed_spillovers_morb + self.distributed_spillovers_mort + \
-                        self.decreased_carbon_costs + self.time_value
+        self.health_benefits = self.distributed_morbidity + self.distributed_mortality + \
+                                self.distributed_spillovers_morb + self.distributed_spillovers_mort
+        self.benefits = self.health_benefits + self.decreased_carbon_costs + self.time_value
         model.gdf["relative_costs_{}".format(self.name)] = self.costs
         base_costs = model.base_fuel.discounted_fuel_cost + model.base_fuel.discounted_investments + model.base_fuel.om_cost
         model.gdf["costs_{}".format(self.name)] = self.costs + base_costs
         model.gdf["benefits_{}".format(self.name)] = self.benefits
+        model.gdf["health_benefits_{}".format(self.name)] = self.health_benefits
         model.gdf["net_benefit_{}".format(self.name)] = w_health * (self.distributed_morbidity + self.distributed_mortality) + \
                                                         w_spillovers * (self.distributed_spillovers_morb + self.distributed_spillovers_mort) + \
                                                         w_environment * self.decreased_carbon_costs + w_time * self.time_value - w_costs * (self.costs + base_costs)
@@ -831,6 +832,7 @@ class Technology:
         for restriction in self.restrictions:
             model.gdf.loc[np.isnan(restriction), "net_benefit_{}".format(self.name)] = np.nan
             model.gdf.loc[np.isnan(restriction), "benefits_{}".format(self.name)] = np.nan
+            model.gdf.loc[np.isnan(restriction), "health_benefits_{}".format(self.name)] = np.nan
             model.gdf.loc[np.isnan(restriction), "costs_{}".format(self.name)] = np.nan
 
 
@@ -989,7 +991,7 @@ class LPG(Technology):
         
         restriction = self.travel_time.copy()
 
-        if wealth_index == 'absolute_wealth':
+        if wealth_index == 'absolute_wealth_household':
             wealth = model.gdf[wealth_index] * model.gdf['Households'] / model.gdf['Calibrated_pop'] # income per capita
         else:
             wealth = model.gdf[wealth_index]
@@ -1054,7 +1056,7 @@ class LPG(Technology):
         travel_time_walking = 2 * model.raster_to_dataframe(supply_points_walking.distance_raster,
                                                          fill_nodata_method='interpolate', method='read')
 
-        if wealth_index == 'absolute_wealth':
+        if wealth_index == 'absolute_wealth_household':
             wealth = model.gdf[wealth_index] * model.gdf['Households'] / model.gdf['Calibrated_pop'] # income per capita
         else:
             wealth = model.gdf[wealth_index]
