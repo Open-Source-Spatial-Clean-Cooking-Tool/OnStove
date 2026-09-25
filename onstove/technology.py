@@ -1876,6 +1876,10 @@ class Electricity(Technology):
         Efficiency of the stove.
     pm25: float, default 32
         Particulate Matter emissions (PM25) in mg/kg of fuel.
+    fold_system_cost: bool, default True
+        If True, the added grid capacity cost (system cost) is folded into the household investment costs. If False,
+        it is excluded from the household costs but still calculated and reported in the `system_cost_{name}` and
+        `system_costs` columns.
     """
 
     def __init__(self,
@@ -1892,7 +1896,8 @@ class Electricity(Technology):
                  efficiency: float = 0.85,  # ratio
                  pm25: float = 32,
                  grid_cost_factor: float = 1,
-                 coincidence_factor: float = 0.5):
+                 coincidence_factor: float = 0.5,
+                 fold_system_cost: bool = True):
         super().__init__(name, carbon_intensity, None, None, None,
                          None, None, None, energy_content, tech_life,
                          inv_cost, fuel_cost, time_of_cooking,
@@ -1905,6 +1910,7 @@ class Electricity(Technology):
         self.connection_cost = connection_cost
         self.grid_cost_factor = grid_cost_factor
         self.coincidence_factor = coincidence_factor
+        self.fold_system_cost = fold_system_cost
         self.carbon_intensities = {'coal': 0.090374363, 'natural_gas': 0.050300655,
                                    'crude_oil': 0.070650288, 'heavy_fuel_oil': 0.074687989,
                                    'oil': 0.072669139, 'diesel': 0.069332823,
@@ -2060,7 +2066,11 @@ class Electricity(Technology):
         """
         super().discounted_inv(model, relative=relative)
         if relative:
-            self.discounted_investments += (self.connection_cost + self.capacity_cost * (1 - self.pop_sqkm))
+            # Added grid capacity cost per household (USD/hh), always calculated so it can be reported
+            self.system_cost = self.capacity_cost * (1 - self.pop_sqkm)
+            self.discounted_investments += self.connection_cost
+            if self.fold_system_cost:
+                self.discounted_investments += self.system_cost
 
     def net_benefit(self, model: 'onstove.OnStove', w_health: int = 1, w_spillovers: int = 1,
                     w_environment: int = 1, w_time: int = 1, w_costs: int = 1, w_salvage = 1):
@@ -2090,9 +2100,11 @@ class Electricity(Technology):
         net_benefit
         """
         super().net_benefit(model, w_health, w_spillovers, w_environment, w_time, w_costs, w_salvage)
+        model.gdf["system_cost_{}".format(self.name)] = self.system_cost
         model.gdf.loc[model.gdf['Current_elec'] == 0, "net_benefit_{}".format(self.name)] = np.nan
         model.gdf.loc[model.gdf['Current_elec'] == 0, "benefits_{}".format(self.name)] = np.nan
         model.gdf.loc[model.gdf['Current_elec'] == 0, "costs_{}".format(self.name)] = np.nan
+        model.gdf.loc[model.gdf['Current_elec'] == 0, "system_cost_{}".format(self.name)] = np.nan
         self.net_benefits.loc[model.gdf['Current_elec'] == 0] = np.nan
         factor = model.gdf['Elec_pop_calib'] / model.gdf['Calibrated_pop']
         factor[factor > 1] = 1

@@ -2291,6 +2291,8 @@ class OnStove(DataProcessor):
         self.extract_om_costs(column=column)
         print('    - Salvage value')
         self.extract_salvage(column=column)
+        print('    - System costs')
+        self.extract_system_costs(column=column)
         
         # Create affordability columns for the selected technology
         if 'absolute_wealth_household' in self.gdf.columns or 'income' in self.gdf.columns:
@@ -3316,6 +3318,18 @@ class OnStove(DataProcessor):
                 is_tech = self.gdf[column] == tech
                 index = self.gdf.loc[is_tech].index
                 self.gdf.loc[is_tech, "salvage_value"] = self.techs[tech].discounted_salvage_cost[index]
+
+    def extract_system_costs(self, column: str = 'max_benefit_tech'):
+        """
+        Extracts the added grid capacity (system) costs per household of the selected stove type across the study
+        area. Only technologies with a `system_cost` attribute (i.e. Electricity) contribute; other cells get 0.
+        """
+        self.gdf["system_costs"] = 0.0
+        for tech in self.gdf[column].unique():
+            if tech != 'None' and hasattr(self.techs[tech], 'system_cost'):
+                is_tech = self.gdf[column] == tech
+                index = self.gdf.loc[is_tech].index
+                self.gdf.loc[is_tech, "system_costs"] = self.techs[tech].system_cost[index]
 
     def extract_emissions_costs_saved(self, column: str = 'max_benefit_tech'):
         """
@@ -4434,11 +4448,13 @@ class OnStove(DataProcessor):
         dff = self.gdf.copy()
         if labels is not None:
             dff = self._re_name(dff, labels, variable)
+        cost_attributes = ['investment_costs', 'fuel_costs', 'om_costs', 'salvage_value']
+        if 'system_costs' in dff.columns:
+            cost_attributes.append('system_costs')
         for attribute in [variable_value, 'deaths_avoided', 'health_costs_avoided', 'time_saved',
-                          'opportunity_cost_gained', 'reduced_emissions', 'emission_costs_avoided',
-                          'investment_costs', 'fuel_costs', 'om_costs', 'salvage_value']:
+                          'opportunity_cost_gained', 'reduced_emissions', 'emission_costs_avoided'] + cost_attributes:
             dff[attribute] *= dff['Households']
-        summary = dff.groupby([variable]).agg({'Calibrated_pop': lambda row: np.nansum(row) / 1000000,
+        agg_dict = {'Calibrated_pop': lambda row: np.nansum(row) / 1000000,
                                                          'Households': lambda row: np.nansum(row) / 1000000,
                                                          variable_value: lambda row: np.nansum(row) / 1000000,
                                                          'deaths_avoided': 'sum',
@@ -4452,7 +4468,10 @@ class OnStove(DataProcessor):
                                                          'fuel_costs': lambda row: np.nansum(row) / 1000000,
                                                          'om_costs': lambda row: np.nansum(row) / 1000000,
                                                          'salvage_value': lambda row: np.nansum(row) / 1000000,
-                                                         })
+                                                         }
+        if 'system_costs' in dff.columns:
+            agg_dict['system_costs'] = lambda row: np.nansum(row) / 1000000
+        summary = dff.groupby([variable]).agg(agg_dict)
         if remove_none:
             summary.drop('None', errors='ignore', inplace=True)
         summary.reset_index(inplace=True)
@@ -4476,7 +4495,8 @@ class OnStove(DataProcessor):
                                     'investment_costs': 'Investment costs (MUSD)',
                                     'fuel_costs': 'Fuel costs (MUSD)',
                                     'om_costs': 'O&M costs (MUSD)',
-                                    'salvage_value': 'Salvage value (MUSD)'}, inplace=True)
+                                    'salvage_value': 'Salvage value (MUSD)',
+                                    'system_costs': 'System costs (MUSD)'}, inplace=True)
 
         return summary
 
