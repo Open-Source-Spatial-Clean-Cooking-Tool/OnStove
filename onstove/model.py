@@ -3470,8 +3470,6 @@ class OnStove(DataProcessor):
             consumption_pc = self.specs.get('consumption_pc', np.nan)
             using_consumption_pc = not np.isnan(consumption_pc)
             gdp_pc = consumption_pc if using_consumption_pc else self.specs['gdp_pc']
-            print(f'[{self.specs["country_name"]}] Income anchor: '
-                  f'{"consumption_pc" if using_consumption_pc else "gdp_pc"} = {gdp_pc}')
             gini = self.specs['gini']
 
             alpha_pareto = ((1+gini)/(2*gini))
