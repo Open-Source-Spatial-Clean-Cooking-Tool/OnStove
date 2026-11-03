@@ -1,5 +1,6 @@
 import pytest
 import os
+import numpy as np
 
 from onstove.model import OnStove
 
@@ -284,6 +285,47 @@ def test_discounted_inv_electricity(model_object):
     model_object.electricity.get_capacity_cost(model=model_object)
     model_object.electricity.discounted_inv(model=model_object)
     assert model_object.electricity.discounted_investments is not None
+
+
+def test_distribution_cost_electricity(model_object):
+    """Test for the urban/rural distribution costs of electricity
+
+        Parameters
+        ----------
+        model_object: Onstove model
+                    Instance of Onstove model.
+                    See :class:`onstove.Onstove` and :class:`onstove.Electricity`.
+    """
+    elec = model_object.electricity
+    elec.get_capacity_cost(model=model_object)
+    isurban = model_object.gdf['IsUrban'] > 20
+    share_new = 1 - elec.pop_sqkm
+
+    # Without distribution costs: system cost is the capacity cost
+    elec.distribution_cost_urban = None
+    elec.distribution_cost_rural = None
+    elec.fold_system_cost = True
+    elec.discounted_inv(model=model_object)
+    base_investments = elec.discounted_investments.copy()
+    assert np.allclose(elec.system_cost, elec.capacity_cost * share_new, equal_nan=True)
+
+    # With distribution costs and folding: only distribution reaches the households,
+    # while the reported system cost has both capacity and distribution
+    elec.distribution_cost_urban = 75
+    elec.distribution_cost_rural = 225
+    elec.discounted_inv(model=model_object)
+    distribution = np.where(isurban, 75, 225)
+    assert np.allclose(elec.system_cost, (elec.capacity_cost + distribution) * share_new, equal_nan=True)
+    assert np.allclose(elec.discounted_investments,
+                       base_investments - elec.capacity_cost * share_new + distribution * share_new,
+                       equal_nan=True)
+
+    # Without folding: nothing from the system cost reaches the households, but it is still reported
+    elec.fold_system_cost = False
+    elec.discounted_inv(model=model_object)
+    assert np.allclose(elec.discounted_investments,
+                       base_investments - elec.capacity_cost * share_new, equal_nan=True)
+    assert np.allclose(elec.system_cost, (elec.capacity_cost + distribution) * share_new, equal_nan=True)
 
 
 # Biogas

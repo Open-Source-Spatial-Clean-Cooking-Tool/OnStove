@@ -7,6 +7,7 @@ import geopandas as gpd
 from typing import Optional, Callable
 from math import exp
 import re
+import warnings
 import matplotlib.pyplot as plt
 
 from onstove._layer_utils import raster_setter, vector_setter
@@ -1880,6 +1881,13 @@ class Electricity(Technology):
         If True, the added grid capacity cost (system cost) is folded into the household investment costs. If False,
         it is excluded from the household costs but still calculated and reported in the `system_cost_{name}` and
         `system_costs` columns.
+    distribution_cost_urban: float, optional
+        Estimated cost (USD/hh) of increasing and improving the low voltage distribution lines in urban cells
+        (``IsUrban > 20``). If declared (here or for rural cells), the reported system cost is the sum of the
+        capacity and distribution costs, and, when `fold_system_cost` is True, only the distribution cost is passed
+        to the households. If not declared, the capacity cost is used as before.
+    distribution_cost_rural: float, optional
+        Same as `distribution_cost_urban` but for rural cells.
     """
 
     def __init__(self,
@@ -1897,11 +1905,15 @@ class Electricity(Technology):
                  pm25: float = 32,
                  grid_cost_factor: float = 1,
                  coincidence_factor: float = 0.5,
-                 fold_system_cost: bool = True):
+                 fold_system_cost: bool = True,
+                 distribution_cost_urban: float = None,
+                 distribution_cost_rural: float = None):
         super().__init__(name, carbon_intensity, None, None, None,
                          None, None, None, energy_content, tech_life,
                          inv_cost, fuel_cost, time_of_cooking,
                          om_cost, efficiency, pm25, is_clean=True)
+        self.distribution_cost_urban = distribution_cost_urban
+        self.distribution_cost_rural = distribution_cost_rural
         # Carbon intensity of fossil fuel plants in kg/GWh
         self.generation = {}
         self.capacities = {}
@@ -1933,6 +1945,10 @@ class Electricity(Technology):
             self.generation[idx.lower().replace('generation_', '')] = value
         elif 'grid_capacity_cost' in idx:
             self.grid_capacity_cost = value
+        elif 'distribution_cost_urban' == idx:
+            self.distribution_cost_urban = value
+        elif 'distribution_cost_rural' == idx:
+            self.distribution_cost_rural = value
         elif 'capacity' in idx:
             self.capacities[idx.lower().replace('capacity_', '')] = value
         elif 'carbon_intensity' == idx:
@@ -2066,11 +2082,27 @@ class Electricity(Technology):
         """
         super().discounted_inv(model, relative=relative)
         if relative:
-            # Added grid capacity cost per household (USD/hh), always calculated so it can be reported
-            self.system_cost = self.capacity_cost * (1 - self.pop_sqkm)
+            share_new = 1 - self.pop_sqkm
+            capacity_system_cost = self.capacity_cost * share_new
+            # Distribution (low voltage lines) cost per household (USD/hh), by urban/rural, if declared
+            use_distribution = (self.distribution_cost_urban is not None) or (self.distribution_cost_rural is not None)
+            if use_distribution:
+                if (self.distribution_cost_urban is None) or (self.distribution_cost_rural is None):
+                    warnings.warn('Only one of distribution_cost_urban and distribution_cost_rural is declared, '
+                                  'the other one is assumed to be 0.')
+                urban_cost = self.distribution_cost_urban or 0
+                rural_cost = self.distribution_cost_rural or 0
+                self.distribution_cost = pd.Series(np.where(model.gdf['IsUrban'] > 20, urban_cost, rural_cost),
+                                                   index=model.gdf.index)
+                distribution_system_cost = self.distribution_cost * share_new
+            else:
+                distribution_system_cost = 0
+            # Reported system cost, always calculated (capacity plus distribution if declared)
+            self.system_cost = capacity_system_cost + distribution_system_cost
             self.discounted_investments += self.connection_cost
             if self.fold_system_cost:
-                self.discounted_investments += self.system_cost
+                # Only distribution costs reach the households when declared, otherwise the capacity cost
+                self.discounted_investments += distribution_system_cost if use_distribution else capacity_system_cost
 
     def net_benefit(self, model: 'onstove.OnStove', w_health: int = 1, w_spillovers: int = 1,
                     w_environment: int = 1, w_time: int = 1, w_costs: int = 1, w_salvage = 1):

@@ -1696,7 +1696,7 @@ class OnStove(DataProcessor):
             reader = DictReader(csvfile, delimiter=delimiter)
             config_file = list(reader)
             for row in config_file:
-                if row['Value'] is not None:
+                if row['Value'] is not None and str(row['Value']).strip() != '':
                     if row['Fuel'] not in techs:
                         if 'lpg' in row['Fuel'].lower():
                             techs[row['Fuel']] = LPG()
