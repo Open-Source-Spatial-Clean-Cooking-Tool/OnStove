@@ -1798,7 +1798,21 @@ class Electricity(Technology):
         Efficiency of the stove.
     pm25: float, default 32
         Particulate Matter emissions (PM25) in mg/kg of fuel.
+    fold_system_cost: bool, default True
+        If True, the system cost (added grid capacity cost, or the distribution cost if declared) is folded into
+        the household investment costs. If False, it is excluded from the household costs.
+    distribution_cost_urban: float, optional
+        Cost (USD/hh) of increasing and improving the low voltage distribution lines in urban cells
+        (``IsUrban > 20``). If declared (here or for rural cells), it replaces the computed capacity cost as the
+        system cost. If not declared, the computed capacity cost is used.
+    distribution_cost_rural: float, optional
+        Same as `distribution_cost_urban` but for rural cells.
     """
+
+    # Class-level defaults so that models pickled before these attributes existed can still be run.
+    fold_system_cost = True
+    distribution_cost_urban = None
+    distribution_cost_rural = None
 
     def __init__(self,
                  name: Optional[str] = None,
@@ -1814,11 +1828,17 @@ class Electricity(Technology):
                  efficiency: float = 0.85,  # ratio
                  pm25: float = 32,
                  grid_cost_factor: float = 1,
-                 coincidence_factor: float = 0.5):
+                 coincidence_factor: float = 0.5,
+                 fold_system_cost: bool = True,
+                 distribution_cost_urban: float = None,
+                 distribution_cost_rural: float = None):
         super().__init__(name, carbon_intensity, None, None, None,
                          None, None, None, energy_content, tech_life,
                          inv_cost, fuel_cost, time_of_cooking,
                          om_cost, efficiency, pm25, is_clean=True)
+        self.fold_system_cost = fold_system_cost
+        self.distribution_cost_urban = distribution_cost_urban
+        self.distribution_cost_rural = distribution_cost_rural
         # Carbon intensity of fossil fuel plants in kg/GWh
         self.generation = {}
         self.capacities = {}
@@ -1849,6 +1869,12 @@ class Electricity(Technology):
             self.generation[idx.lower().replace('generation_', '')] = value
         elif 'grid_capacity_cost' in idx:
             self.grid_capacity_cost = value
+        elif 'distribution_cost_urban' == idx:
+            self.distribution_cost_urban = value
+        elif 'distribution_cost_rural' == idx:
+            self.distribution_cost_rural = value
+        elif 'fold_system_cost' == idx:
+            self.fold_system_cost = value
         elif 'capacity' in idx:
             self.capacities[idx.lower().replace('capacity_', '')] = value
         elif 'carbon_intensity' == idx:
@@ -1981,12 +2007,21 @@ class Electricity(Technology):
         """
         super().discounted_inv(model, relative=relative)
         if relative:
-            # Temporary hardcoded per-cell capacity cost for testing.
-            self.capacity_cost = pd.Series(
-                np.where(model.gdf["IsUrban"] > 20, 75, 225),
-                index=model.gdf.index,
-            )
-            self.discounted_investments += (self.connection_cost + self.capacity_cost * (1 - self.pop_sqkm))
+            share_new = 1 - self.pop_sqkm
+            if (self.distribution_cost_urban is not None) or (self.distribution_cost_rural is not None):
+                # Declared distribution costs (USD/hh) replace the computed capacity cost, by urban/rural cell.
+                self.system_cost = pd.Series(
+                    np.where(model.gdf['IsUrban'] > 20,
+                             self.distribution_cost_urban or 0,
+                             self.distribution_cost_rural or 0),
+                    index=model.gdf.index) * share_new
+            elif getattr(self, 'capacity_cost', None) is not None:
+                self.system_cost = self.capacity_cost * share_new
+            else:
+                self.system_cost = 0
+            self.discounted_investments += self.connection_cost
+            if self.fold_system_cost:
+                self.discounted_investments += self.system_cost
 
     def net_benefit(self, model: 'onstove.OnStove', w_health: int = 1, w_spillovers: int = 1,
                     w_environment: int = 1, w_time: int = 1, w_costs: int = 1, w_salvage = 1):
