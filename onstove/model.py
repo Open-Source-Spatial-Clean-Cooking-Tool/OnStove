@@ -2106,11 +2106,11 @@ class OnStove(DataProcessor):
         self.gdf['value_of_time'] = norm_layer * self.specs[
             'minimum_wage'] / 30 / 8  # convert $/months to $/h (8 working hours per day)
 
-    def run(self, technologies: Optional[Union[list, dict, str]] = 'all', restriction: bool = True, priority: Optional[dict[str, list[str]]] = None,
+    def run(self, technologies: Optional[Union[list, dict, str]] = 'all',
+            restriction: Optional[Union[bool, str, list[str]]] = 'positive_benefits', priority: Optional[dict[str, list[str]]] = None,
             affordability_categories: list = ['<5%', '5-15%', '15%+'], target: str = 'net_benefit', partial_access: bool = False,
             tech_groups: Optional[dict[str, list[str]]] = None, support_target: Optional[float] = None,
-            allocation_metric: Optional[str] = None, max_tech_share: Optional[dict[str, float]] = None, cost_income_direction: str = 'poor_first',
-            health_only: bool = False):
+            allocation_metric: Optional[str] = None, max_tech_share: Optional[dict[str, float]] = None, cost_income_direction: str = 'poor_first'):
         """Runs the model using the defined ``technologies`` as options to cook with.
 
         It loops through the ``technologies`` and calculates all costs, benefit and the net-benefit of cooking with
@@ -2132,15 +2132,20 @@ class OnStove(DataProcessor):
                be added here as well. There is also no requirement to have all of the stoves in techno-economic file
                included in the run (some may only be relevant for the base line)
 
-        restriction: bool, default True
-            Whether to have the restriction of only selecting technologies producing a positive benefit compared to the
-            baseline. This avoids selecting stoves simply due to them being cheaper.
-        health_only: bool, default False
-            When True, the ``restriction`` gate above is computed from the four health-related benefit terms only
-            (mortality, morbidity and their spillovers) instead of the full benefit total (which also includes
-            avoided carbon costs and time saved). This prevents a technology with a net-negative health impact from
-            passing the gate purely because carbon or time benefits offset it — relevant in particular for
-            weighting presets (e.g. least-cost) where health is not part of the selection ranking itself.
+        restriction: None, bool, str or list of str, default 'positive_benefits'
+            Restricts which technologies can be selected in each cell. Options:
+
+            - ``'positive_benefits'``: only technologies with a positive total benefit compared to the baseline.
+              This avoids selecting stoves simply due to them being cheaper.
+            - ``'positive_health_benefits'``: same, but using only the health benefits (mortality, morbidity and
+              their spillovers), ignoring time saved and avoided emissions. Prevents a technology with a net-negative
+              health impact from passing the gate because carbon or time benefits offset it.
+            - ``'affordability'``: only technologies whose cost-income ratio is not above ``support_target``
+              (percent of income; defaults to the upper bound of the first affordability category, e.g. 5 for '<5%').
+
+            The two benefit options cannot be combined, but ``'affordability'`` can be combined with either
+            one (e.g. ``['positive_benefits', 'affordability']``). ``True`` is equivalent to ``'positive_benefits'``;
+            ``None``/``False`` applies no restriction.
 
         affordability_categories: list, default ['<5%', '5-15%', '15%+']
             List defining the affordability categories. If more categories want to be added, or different thresholds, please folloow the
@@ -2252,8 +2257,14 @@ class OnStove(DataProcessor):
         self.gdf = self.gdf.copy()
 
         print(f'Getting best {target} technologies...')
+        # Affordability restriction threshold (percent of income), consistent with the support target
+        if support_target is not None:
+            affordability_threshold = support_target
+        else:
+            affordability_threshold = float(affordability_categories[0].strip('<%'))
         if isinstance(technologies, list):
-            self.maximum_net_benefit(techs, restriction=restriction, partial_access = partial_access, target=target, health_only=health_only)
+            self.maximum_net_benefit(techs, restriction=restriction, partial_access = partial_access, target=target,
+                                     affordability_threshold=affordability_threshold)
         elif isinstance(technologies, dict):
             self.stove_share_assignment(
                 technologies,
@@ -2264,7 +2275,7 @@ class OnStove(DataProcessor):
                 allocation_metric=allocation_metric,
                 max_tech_share=max_tech_share,
                 cost_income_direction=cost_income_direction,
-                health_only=health_only,
+                affordability_threshold=affordability_threshold,
             )
         if target == 'net_benefit':
             column = 'max_benefit_tech'
@@ -2333,8 +2344,79 @@ class OnStove(DataProcessor):
         columns_dict['max_benefit_tech'] = 'first'
         return columns_dict
 
-    def maximum_net_benefit(self, techs: list['Technology'], restriction: bool = True, partial_access = True,
-                            target: str = 'net_benefit', health_only: bool = False):
+    @staticmethod
+    def _parse_restriction(restriction, affordability_threshold: Optional[float] = None,
+                           categories: Optional[list] = None) -> tuple[Optional[str], bool, Optional[float]]:
+        """Validates the ``restriction`` lever.
+
+        Parameters
+        ----------
+        restriction: None, bool, str or list of str
+            ``'positive_benefits'``, ``'positive_health_benefits'`` and/or ``'affordability'``. The two benefit
+            options are mutually exclusive; ``'affordability'`` can be combined with either. ``True`` is treated as
+            ``'positive_benefits'``; ``False``/``None`` as no restriction.
+        affordability_threshold: float, optional
+            Maximum cost-income ratio in percent (same units as ``support_target`` in :meth:`run`). If ``None``
+            and ``'affordability'`` is requested, the upper bound of the first of ``categories`` is used.
+        categories: list of str, optional
+            Affordability categories, default ``['<5%', '5-15%', '15%+']``.
+
+        Returns
+        -------
+        tuple
+            ``(benefit_prefix, use_affordability, threshold_fraction)``. ``benefit_prefix`` is ``'benefits_'``,
+            ``'health_benefits_'`` or ``None``; the threshold is a fraction of income (or ``None``).
+        """
+        if restriction is None or restriction is False:
+            options = []
+        elif restriction is True:
+            options = ['positive_benefits']
+        elif isinstance(restriction, str):
+            options = [restriction.lower()]
+        else:
+            options = [str(r).lower() for r in restriction]
+
+        valid = {'positive_benefits', 'positive_health_benefits', 'affordability'}
+        unknown = set(options) - valid
+        if unknown:
+            raise ValueError(f"Unknown restriction(s) {sorted(unknown)}. Valid options are {sorted(valid)}.")
+        if 'positive_benefits' in options and 'positive_health_benefits' in options:
+            raise ValueError("'positive_benefits' and 'positive_health_benefits' cannot be used together.")
+
+        if 'positive_benefits' in options:
+            prefix = 'benefits_'
+        elif 'positive_health_benefits' in options:
+            prefix = 'health_benefits_'
+        else:
+            prefix = None
+
+        use_aff = 'affordability' in options
+        threshold = None
+        if use_aff:
+            if affordability_threshold is None:
+                categories = categories if categories is not None else ['<5%', '5-15%', '15%+']
+                affordability_threshold = float(categories[0].strip('<%'))
+            threshold = affordability_threshold / 100
+        return prefix, use_aff, threshold
+
+    def _restriction_mask(self, tech_name: str, benefit_prefix: Optional[str], use_affordability: bool,
+                          threshold: Optional[float], df: Optional[pd.DataFrame] = None) -> pd.Series:
+        """Boolean Series, True where ``tech_name`` is disallowed by the restriction (NaN values are not masked)."""
+        df = self.gdf if df is None else df
+        mask = pd.Series(False, index=df.index)
+        if benefit_prefix is not None and f'{benefit_prefix}{tech_name}' in df.columns:
+            mask |= df[f'{benefit_prefix}{tech_name}'] < 0
+        if use_affordability:
+            ratio_col = f'cost_income_ratio_{tech_name}'
+            if ratio_col not in df.columns:
+                raise ValueError("The 'affordability' restriction requires cost_income_ratio columns "
+                                 "(income or absolute_wealth_household data).")
+            mask |= df[ratio_col] > threshold
+        return mask
+
+    def maximum_net_benefit(self, techs: list['Technology'], restriction: Optional[Union[bool, str, list[str]]] = 'positive_benefits',
+                            partial_access = True, target: str = 'net_benefit',
+                            affordability_threshold: Optional[float] = None):
         """Extracts the technology or technology combinations producing the highest net-benefit in each cell.
 
         It saves the technology with highest net-benefit in the ``max_benefi_tech`` column of the :attr:`gdf`
@@ -2345,12 +2427,20 @@ class OnStove(DataProcessor):
         techs: list of Technology like objects
             Technologies to compare and select the one, or combination of two, that produces the highest net-benefit in
             each cell.
-        restriction: bool, default True
-            Whether to have the restriction of only selecting technologies producing a positive benefit compared to the
-            baseline. This avoids selecting stoves simply due to them being cheaper.
-        health_only: bool, default False
-            When True, ``restriction`` gates on the health-only benefit total (mortality, morbidity and their
-            spillovers) instead of the full benefit total that also includes avoided carbon costs and time saved.
+        restriction: None, bool, str or list of str, default 'positive_benefits'
+            Restricts which technologies can be selected in each cell. Options:
+
+            - ``'positive_benefits'``: only technologies with a positive total benefit compared to the baseline.
+            - ``'positive_health_benefits'``: same, but using only the health benefits (mortality, morbidity and
+              their spillovers), ignoring time saved and avoided emissions.
+            - ``'affordability'``: only technologies whose cost-income ratio is not above ``affordability_threshold``.
+
+            The two benefit options cannot be combined, but ``'affordability'`` can be combined with either
+            one (e.g. ``['positive_benefits', 'affordability']``). ``True`` is equivalent to ``'positive_benefits'``;
+            ``None``/``False`` applies no restriction.
+        affordability_threshold: float, optional
+            Maximum cost-income ratio in percent used by the ``'affordability'`` restriction. In :meth:`run` this
+            defaults to ``support_target``.
 
         See also
         --------
@@ -2366,28 +2456,26 @@ class OnStove(DataProcessor):
         extract_om_costs
         extract_salvage
         """
-        benefit_prefix = 'health_benefits_' if health_only else 'benefits_'
+        benefit_prefix, use_aff, threshold = self._parse_restriction(restriction, affordability_threshold)
+
+        def _restrict_temps(value_prefix: str):
+            """Creates the ``*_temp`` columns and NaNs the disallowed technologies."""
+            for col in [c for c in self.gdf if value_prefix in c and not c.endswith('_temp')]:
+                self.gdf[col + '_temp'] = self.gdf[col]
+                tech_name = col.replace(value_prefix, '', 1)
+                mask = self._restriction_mask(tech_name, benefit_prefix, use_aff, threshold)
+                self.gdf.loc[mask, col + '_temp'] = np.nan
+
         if target == 'net_benefit':
-            value_cols = [col for col in self.gdf if 'net_benefit_' in col]
-            benefit_cols = [col for col in self.gdf if col.startswith(benefit_prefix)]
             result_tech = 'max_benefit_tech'
             result_value = 'maximum_net_benefit'
             pick_func = 'max'
-            # apply restriction only for net-benefit
-            for benefit, net in zip(benefit_cols, value_cols):
-                self.gdf[net + '_temp'] = self.gdf[net]
-                if restriction in [True, 'yes', 'y', 'Y', 'Yes', 'PositiveBenefits', 'Positive_Benefits']:
-                    self.gdf.loc[self.gdf[benefit] < 0, net + '_temp'] = np.nan
+            _restrict_temps('net_benefit_')
         elif target == 'cost_income_ratio':
-            value_cols = [col for col in self.gdf if 'cost_income_ratio_' in col]
-            benefit_cols = [col.replace('cost_income_ratio_', benefit_prefix) for col in value_cols]
             result_tech = 'most_affordable_tech'
             result_value = 'most_affordable_cost_income_ratio'
             pick_func = 'min'
-            for cost_col, ben_col in zip(value_cols, benefit_cols):
-                self.gdf[cost_col + '_temp'] = self.gdf[cost_col].copy()
-                if ben_col in self.gdf.columns:
-                    self.gdf.loc[self.gdf[ben_col] < 0, cost_col + '_temp'] = np.nan
+            _restrict_temps('cost_income_ratio_')
         else:
             raise ValueError("target must be 'net_benefit' or 'cost_income_ratio'")
 
@@ -2418,6 +2506,8 @@ class OnStove(DataProcessor):
 
         # Partial access adjustment only meaningful for net-benefit
         if target != 'net_benefit':
+            # Cells with no allowed technology (e.g. all options restricted) are labelled 'None'
+            self.gdf[result_tech] = self.gdf[result_tech].fillna('None')
             return
         if partial_access:
             # ...existing partial_access block remains unchanged...
@@ -2459,8 +2549,7 @@ class OnStove(DataProcessor):
 
             self.gdf = pd.concat([self.gdf, gdf])
 
-            for net in value_cols:
-                self.gdf[net + '_temp'] = self.gdf[net]
+            _restrict_temps('net_benefit_')
 
             temps = [col for col in self.gdf if 'temp' in col]
 
@@ -2470,18 +2559,25 @@ class OnStove(DataProcessor):
 
             isna = self.gdf[result_tech].isna()
 
-            if isna.sum() > 0:
-                self.gdf.loc[isna, result_tech] = self.gdf.loc[isna, temps].idxmax(axis=1).astype(str)
+            # Only rows with at least one allowed option get a technology; the rest stay NA (-> 'None' below)
+            has_option = isna & self.gdf[temps].notna().any(axis=1)
+            if has_option.sum() > 0:
+                self.gdf.loc[has_option, result_tech] = self.gdf.loc[has_option, temps].idxmax(axis=1).astype(str)
             self.gdf[result_tech] = self.gdf[result_tech].str.replace("net_benefit_", "").str.replace("_temp", "")
             self.gdf.loc[isna, result_value] = self.gdf.loc[isna, temps].max(axis=1)
+
+        # Cells with no allowed technology (e.g. all options restricted) are labelled 'None'
+        self.gdf[result_tech] = self.gdf[result_tech].fillna('None')
 
     # TODO: check if we need this method
 
     def stove_share_assignment(self, techs: Union[dict[str,float],dict[str,dict[str,float]]], target: str = 'net_benefit',
-                               restriction: bool = True, priority: Optional[dict[str, list[str]]] = None, clear_none: bool = True,
+                               restriction: Optional[Union[bool, str, list[str]]] = 'positive_benefits',
+                               priority: Optional[dict[str, list[str]]] = None, clear_none: bool = True,
                                tech_groups: Optional[dict[str, list[str]]] = None, allocation_metric: Optional[str] = None,
                                max_tech_share: Optional[dict[str, float]] = None,
-                               cost_income_direction: str = 'poor_first', health_only: bool = False):
+                               cost_income_direction: str = 'poor_first',
+                               affordability_threshold: Optional[float] = None):
         """Extracts the technology or technology combinations producing the highest net-benefit in each cell
         while achieving user defined shares.
 
@@ -2501,12 +2597,20 @@ class OnStove(DataProcessor):
         target: str, default 'net_benefit'
             Target to use for the assignment of stoves according to the user defined shares. Options are 'net_benefit' or
             'cost_income_ratio'.
-        restriction: bool, default True
-            Whether to have the restriction of only selecting technologies producing a positive benefit compared to the
-            baseline. This avoids selecting stoves simply due to them being cheaper.
-        health_only: bool, default False
-            When True, ``restriction`` gates on the health-only benefit total (mortality, morbidity and their
-            spillovers) instead of the full benefit total that also includes avoided carbon costs and time saved.
+        restriction: None, bool, str or list of str, default 'positive_benefits'
+            Restricts which technologies can be assigned. Options:
+
+            - ``'positive_benefits'``: only technologies with a positive total benefit compared to the baseline.
+            - ``'positive_health_benefits'``: same, but using only the health benefits (mortality, morbidity and
+              their spillovers), ignoring time saved and avoided emissions.
+            - ``'affordability'``: only technologies whose cost-income ratio is not above ``affordability_threshold``.
+
+            The two benefit options cannot be combined, but ``'affordability'`` can be combined with either
+            one (e.g. ``['positive_benefits', 'affordability']``). ``True`` is equivalent to ``'positive_benefits'``;
+            ``None``/``False`` applies no restriction.
+        affordability_threshold: float, optional
+            Maximum cost-income ratio in percent used by the ``'affordability'`` restriction. In :meth:`run` this
+            defaults to ``support_target``.
         allocation_metric: str, optional
             Metric used to rank candidate rows when allocating shares. If ``None``, the function uses ``target``.
         max_tech_share: dict[str, float], optional
@@ -2535,7 +2639,7 @@ class OnStove(DataProcessor):
         extract_salvage
 
         """      
-        restriction_values = [True, 'yes', 'y', 'Y', 'Yes', 'PositiveBenefits', 'Positive_Benefits']
+        benefit_prefix, use_aff, threshold = self._parse_restriction(restriction, affordability_threshold)
 
         valid_metrics = ['net_benefit', 'cost_income_ratio']
         if target not in valid_metrics:
@@ -2571,29 +2675,21 @@ class OnStove(DataProcessor):
         else:
             active_tech_names = set(active_share_keys)
 
-        benefit_prefix = 'health_benefits_' if health_only else 'benefits_'
-
         if target == 'net_benefit':
-            net_benefit_cols = [col for col in self.gdf if 'net_benefit_' in col] # type: ignore
-            benefits_cols = [col for col in self.gdf if col.startswith(benefit_prefix)] # type: ignore
-
-            for benefit, net in zip(benefits_cols, net_benefit_cols):
-                if restriction in restriction_values:
-                    self.gdf.loc[self.gdf[benefit] < 0, net] = np.nan
-
+            value_prefix = 'net_benefit_'
             result_tech = 'max_benefit_tech'
             result_value = 'maximum_net_benefit'
-
-        elif target == 'cost_income_ratio':
-            value_cols = [col for col in self.gdf if 'cost_income_ratio_' in col] # type: ignore
-            benefit_cols = [col.replace('cost_income_ratio_', benefit_prefix) for col in value_cols] # type: ignore
-            for cost_col, ben_col in zip(value_cols, benefit_cols):
-                if restriction in restriction_values:
-                    if ben_col in self.gdf.columns:
-                        self.gdf.loc[self.gdf[ben_col] < 0, cost_col] = np.nan
-
+        else:  # cost_income_ratio
+            value_prefix = 'cost_income_ratio_'
             result_tech = 'most_affordable_tech'
             result_value = 'most_affordable_cost_income_ratio'
+
+        # Compute all masks before any value column is NaN-ed (the affordability mask reads cost_income_ratio_*).
+        restrict_masks = {}
+        for col in [c for c in self.gdf if c.startswith(value_prefix)]:
+            restrict_masks[col] = self._restriction_mask(col[len(value_prefix):], benefit_prefix, use_aff, threshold)
+        for col, mask in restrict_masks.items():
+            self.gdf.loc[mask, col] = np.nan
 
         def _best_value_and_index(member_values: pd.DataFrame, pick_highest: bool) -> tuple[pd.Series, pd.Series]:
             """Return best value and winning column per row, skipping all-NaN rows."""
@@ -3061,19 +3157,12 @@ class OnStove(DataProcessor):
                 if col.startswith(f'{target}_') and col.replace(f'{target}_', '') in active_tech_names
             ]
             
-            # Get corresponding benefits columns for gating (benefits_* or health_benefits_* per
-            # health_only, regardless of target) — allows high-cost high-benefit technologies
-            benefits_cols = [col.replace('net_benefit_', benefit_prefix) if 'net_benefit_' in col
-                             else col.replace('cost_income_ratio_', benefit_prefix)
-                             for col in value_cols]
-            
-            # Only consider technologies where benefits > 0 (restrictions already set NaN for negative benefits earlier)
-            if restriction in restriction_values:
-                for val_col, benefits_col in zip(value_cols, benefits_cols):
-                    if benefits_col in self.gdf.columns:
-                        # Set to NaN where benefits is not positive (includes NaN and <=0)
-                        are_none.loc[are_none[benefits_col] <= 0, val_col] = np.nan
-            
+            # Apply the same restriction used in the main assignment (masks read the benefit / cost-income
+            # columns, which are independent of the target value column)
+            for val_col in value_cols:
+                mask = self._restriction_mask(val_col[len(target) + 1:], benefit_prefix, use_aff, threshold, df=are_none)
+                are_none.loc[mask, val_col] = np.nan
+
             are_none, _ = _assign_best_available(
                 are_none,
                 value_cols,
@@ -3213,6 +3302,9 @@ class OnStove(DataProcessor):
                 cost_ratio_col = f'cost_income_ratio_{tech_name}'
                 if cost_ratio_col in self.gdf.columns:
                     self.gdf.loc[mask, 'most_affordable_cost_income_ratio'] = self.gdf.loc[mask, cost_ratio_col]
+
+        # Cells with no allowed technology (e.g. all options restricted) are labelled 'None'
+        self.gdf[result_tech] = self.gdf[result_tech].fillna('None')
 
 
     def _add_admin_names(self, admin, column_name):
